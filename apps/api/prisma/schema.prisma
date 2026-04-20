@@ -1,0 +1,1024 @@
+// Legacy-compatible relational mirror of the confirmed SQL Server catalog.
+// The foreign-key graph, composite keys and referential actions are mirrored from the SQL Server metadata.
+// Objects missing from the source catalog, such as MOVAJUSTES, FISICOLOGICO, SALDODIARIO and related modules,
+// are intentionally excluded until their real definitions are recovered.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuarios {
+  CodUsuario       String         @id
+  NombreUsuario    String?
+  Pasword          String?
+  Status           Int?
+  compras          Compras[]
+  depositos        Depositos[]
+  depositosDolares DepositosDolares[]
+  devCompras       DevCompras[]
+  devVentas        DevVentas[]
+  listaPrecios     ListaPrecio[]
+  lotes            Lotes[]
+  transferencias   Transferencias[]
+  usuarioGrupos    UsuarioGrupo[]
+  ventas           Ventas[]
+
+  @@map("USUARIOS")
+}
+
+model ImpresoraFiscal {
+  ID                     Int               @id
+  NombreImpresora        String?
+  Status                 Int?
+  IdProcesoImpresion     Int?
+  MontoMaximoDiario      Decimal?
+  IncluyeIGTF            Boolean?
+  selfRef                ImpresoraFiscal   @relation("ImpresoraFiscalSelf", fields: [ID], references: [ID], onDelete: NoAction, onUpdate: NoAction)
+  selfRefInverse         ImpresoraFiscal[] @relation("ImpresoraFiscalSelf")
+  cajas                  Cajas[]
+
+  @@map("IMPRESORAFISCAL")
+}
+
+model Cajas {
+  Serie                  String               @id
+  Numero                 Int
+  FondoCaja              Decimal
+  TipoListaPrecio        Int
+  TipoVenta              Int
+  TipoReporte            Int
+  UltimaFactura          BigInt
+  UltimaDevolucion       BigInt
+  PermiteDescuento       Int
+  PermiteFacturasExentas Int
+  PermiteAlternarListas  Int
+  CambiarPrecios         Int
+  RequerirAutorizacion   Int
+  IdImpresoraFiscal      Int
+  NombreImpresora        String?
+  NumeroCopias           Int?
+  IncluirIGTF            Boolean?
+  impresoraFiscal        ImpresoraFiscal      @relation(fields: [IdImpresoraFiscal], references: [ID], onDelete: NoAction, onUpdate: NoAction)
+  depositos              Depositos[]
+  depositosDolares       DepositosDolares[]
+  devVentas              DevVentas[]
+  diarioCaja             DiarioCaja[]
+  salidasCaja            SalidasCaja[]
+  salidasCajaDolares     SalidasCajaDolares[]
+  ventas                 Ventas[]
+
+  @@map("CAJAS")
+}
+
+model TiposCliente {
+  Codigo      Int        @id
+  Descripcion String?
+  Status      Int?
+  clientes    Clientes[]
+
+  @@map("TIPOSCLIENTE")
+}
+
+model TiposContribuyente {
+  Codigo      Int        @id
+  Descripcion String?
+  Status      Int?
+  clientes    Clientes[]
+
+  @@map("TIPOSCONTRIBUYENTE")
+}
+
+model Clientes {
+  Codigo            String               @id
+  Nombre            String
+  FechaIngreso      DateTime
+  Telefono          String
+  Direccion         String
+  Status            Int
+  Tipo              Int
+  TipoContribuyente Int
+  tipoCliente       TiposCliente         @relation(fields: [Tipo], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  contribuyenteTipo TiposContribuyente   @relation(fields: [TipoContribuyente], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  devVentas         DevVentas[]
+  ventas            Ventas[]
+
+  @@map("CLIENTES")
+}
+
+model TiposProveedor {
+  Codigo      Int            @id
+  Descripcion String?
+  Status      Int?
+  proveedores Proveedores[]
+
+  @@map("TIPOSPROVEEDOR")
+}
+
+model Proveedores {
+  Codigo        String          @id
+  Nombre        String
+  Tipo          Int
+  Contacto      String?
+  FechaIngreso  DateTime
+  Pais          String
+  Estado        String
+  Ciudad        String
+  CodigoPostal  String
+  Direccion     String
+  Telefono      String
+  Fax           String
+  Status        Int
+  tipoProveedor TiposProveedor  @relation(fields: [Tipo], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  compras       Compras[]
+
+  @@map("PROVEEDORES")
+}
+
+model Cargos {
+  Codigo       String          @id
+  Nombre       String?
+  Status       Int?
+  trabajadores Trabajadores[]
+
+  @@map("CARGOS")
+}
+
+model Trabajadores {
+  Cedula             String      @id
+  Codigo             Int
+  Nombre             String
+  Cargo              String
+  FechaIngreso       DateTime
+  FechaNacimiento    DateTime?
+  Direccion          String?
+  Telefono           String?
+  Celular            String?
+  Status             Int
+  MarcajeInterDiario Boolean?
+  IndUsarCarnet      Int?
+  cargoRef           Cargos      @relation(fields: [Cargo], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  devVentas          DevVentas[]
+  ventas             Ventas[]
+
+  @@map("TRABAJADORES")
+}
+
+model Lotes {
+  ID                 Int                  @id
+  Lote               String               @unique
+  Descripcion        String?
+  Estado             Int?
+  FechaRegistro      DateTime?
+  UsuarioCreacion    String?
+  usuario            Usuarios?            @relation(fields: [UsuarioCreacion], references: [CodUsuario], onDelete: NoAction, onUpdate: Cascade)
+  compras            Compras[]
+  transferencias     Transferencias[]
+  iTransferencias    ITransferencias[]
+  devTransferencias  DevTransferencias[]
+  iDevTransferencias IDevTransferencias[]
+
+  @@map("LOTES")
+}
+
+model TipoDespacho {
+  ID              Int               @id
+  Descripcion     String            @unique
+  Estado          Int?
+  transferencias  Transferencias[]
+  iTransferencias ITransferencias[]
+
+  @@map("TIPO_DESPACHO")
+}
+
+model Sucursales {
+  Codigo               String                @id
+  Nombre               String
+  Direccion            String?
+  Telefono             String?
+  Status               Int
+  PorcentajeDeRedondeo Decimal?
+  transferencias       Transferencias[]
+  iTransferencias      ITransferencias[]
+  devTransferencias    DevTransferencias[]
+  iDevTransferencias   IDevTransferencias[]
+
+  @@map("SUCURSALES")
+}
+
+model FormaPago {
+  Codigo     Int          @id
+  Nombre     String?
+  Status     Int?
+  Orden      Int?
+  pagosVenta PagosVenta[]
+
+  @@map("FORMAPAGO")
+}
+
+model Bancos {
+  Codigo     String       @id
+  Nombre     String
+  Status     Int
+  pagosVenta PagosVenta[]
+
+  @@map("BANCOS")
+}
+
+model CtaContable {
+  Codigo               String                 @id
+  Nombre               String?
+  ManejaDocumentos     Int?
+  TieneAcreedor        Int?
+  CuentaDevolucion     Int?
+  Status               Int?
+  salidasCaja          SalidasCaja[]
+  salidasCajaDolares   SalidasCajaDolares[]
+
+  @@map("CTACONTABLE")
+}
+
+model CtaBancos {
+  Codigo      String        @id
+  Nombre      String?
+  PuntoVenta  Int?
+  Status      Int?
+  depositos   Depositos[]
+  pagosVenta  PagosVenta[]
+
+  @@map("CTABANCOS")
+}
+
+model CtaBancosDolares {
+  Codigo           String               @id
+  Nombre           String?
+  PuntoVenta       Int?
+  Status           Int?
+  depositosDolares DepositosDolares[]
+
+  @@map("CTABANCOS_DOLARES")
+}
+
+model Categorias {
+  Codigo     String        @id
+  Nombre     String?
+  Status     Int?
+  inventario Inventario[]
+
+  @@map("CATEGORIAS")
+}
+
+model Colores {
+  Codigo     String        @id
+  Nombre     String?
+  Status     Int?
+  inventario Inventario[]
+
+  @@map("COLORES")
+}
+
+model Fabricantes {
+  Codigo     String        @id
+  Nombre     String?
+  Status     Int?
+  inventario Inventario[]
+
+  @@map("FABRICANTES")
+}
+
+model Impuestos {
+  Codigo             Int           @id
+  Nombre             String?
+  PorcentajeImpuesto Decimal?
+  inventario         Inventario[]
+
+  @@map("IMPUESTOS")
+}
+
+model Marcas {
+  Codigo          String            @id
+  Nombre          String?
+  Status          Int?
+  inventario      Inventario[]
+  movListaPrecios MovListaPrecio[]
+
+  @@map("MARCAS")
+}
+
+model Tallas {
+  Codigo     String        @id
+  inventario Inventario[]
+
+  @@map("TALLAS")
+}
+
+model Inventario {
+  CodigoBarra           String                  @id
+  Referencia            String
+  CodigoMarca           String
+  Nombre                String
+  Talla                 String
+  CodigoColor           String
+  Fabricante            String
+  Categoria             String
+  Nota                  String?
+  TipoImpuesto          Int
+  PrecioDetal           Decimal
+  PrecioMayor           Decimal
+  PrecioAfiliado        Decimal
+  PrecioPromocion       Decimal
+  Promocion             Boolean
+  FechaInicial          DateTime
+  FechaFinal            DateTime
+  CostoInicial          Decimal
+  CostoPromedio         Decimal
+  UltimoCosto           Decimal
+  CostoDolar            Decimal
+  ExistenciaInicial     Decimal
+  Existencia            Decimal
+  PuntoReorden          Decimal
+  FechaPrimerMovimiento DateTime?
+  UltimaActualizacion   DateTime?
+  Tipo                  Int
+  Status                Int
+  Serializado           Int
+  CodigoBarraAnt        String
+  categoriaRef          Categorias             @relation(fields: [Categoria], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  colorRef              Colores                @relation(fields: [CodigoColor], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  fabricanteRef         Fabricantes            @relation(fields: [Fabricante], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  impuestoRef           Impuestos              @relation(fields: [TipoImpuesto], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  marcaRef              Marcas                 @relation(fields: [CodigoMarca], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  tallaRef              Tallas                 @relation(fields: [Talla], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  movCompras            MovCompras[]
+  movDevCompras         MovDevCompras[]
+  movDevTransferencias  MovDevTransferencias[]
+  movDevVentas          MovDevVentas[]
+  movTransferencias     MovTransferencias[]
+  movVentas             MovVentas[]
+  iMovTransferencias    IMovTransferencias[]
+  iMovDevTransferencias IMovDevTransferencias[]
+
+  @@map("INVENTARIO")
+}
+
+model Compras {
+  Documento             String
+  Proveedor             String
+  Fecha                 DateTime
+  FechaFactura          DateTime
+  PorcentajeDescuento   Decimal
+  TipoPago              Int
+  DiasCredito           Decimal
+  Expediente            String
+  Observacion           String
+  TotalMercancia        Decimal
+  TotalImpuesto         Decimal
+  TotalImpuestoContable Decimal
+  TotalDescuento        Decimal
+  TasaCambio            Decimal
+  Recargos              Decimal
+  TasaServicio          Decimal
+  OtrosImpuestos        Decimal
+  Flete                 Decimal
+  Seguro                Decimal
+  PorcImpuestoGeneral   Decimal
+  Usuario               String
+  MetodoValorizacion    Int
+  InterContable         Int
+  Status                Int
+  BodegaExterna         Int
+  IDLote                Int
+  UsaFechaVencimiento   Boolean?
+  lote                  Lotes        @relation(fields: [IDLote], references: [ID], onDelete: NoAction, onUpdate: NoAction)
+  proveedorRef          Proveedores  @relation(fields: [Proveedor], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  usuarioRef            Usuarios     @relation(fields: [Usuario], references: [CodUsuario], onDelete: NoAction, onUpdate: Cascade)
+  movCompras            MovCompras[]
+
+  @@id([Documento, Proveedor])
+  @@map("COMPRAS")
+}
+
+model MovCompras {
+  Documento          String
+  Proveedor          String
+  CodigoBarra        String
+  Cantidad           Decimal
+  CantidadDevuelta   Decimal
+  PrecioFactura      Decimal
+  PrecioProrrateado  Decimal
+  PorcentajeImpuesto Decimal
+  Impuesto           Decimal
+  Item               Int
+  compra             Compras      @relation(fields: [Documento, Proveedor], references: [Documento, Proveedor], onDelete: Cascade, onUpdate: Cascade)
+  inventarioRef      Inventario   @relation(fields: [CodigoBarra], references: [CodigoBarra], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([Documento, Proveedor, Item])
+  @@map("MOVCOMPRAS")
+}
+
+model Ventas {
+  NumeroFactura     BigInt
+  Serie             String
+  Fecha             DateTime
+  Vendedor          String
+  Cliente           String
+  TipoVenta         Int
+  FormaPago         Int
+  DiasCredito       Int
+  TotalMercancia    Decimal
+  TotalDescuento    Decimal
+  TotalImpuesto     Decimal
+  TotalCosto        Decimal
+  InterContable     Int
+  Usuario           String
+  Status            Int
+  NumeroOrden       BigInt
+  TotalPago         Decimal
+  TotalDolares      Decimal?
+  TasaCambio        Decimal?
+  Estacion          String?
+  TotalDolaresE     Decimal?
+  TasaIGTF          Decimal?
+  MontoIGTF         Decimal?
+  BaseImponibleIGTF Decimal?
+  caja              Cajas         @relation(fields: [Serie], references: [Serie], onDelete: NoAction, onUpdate: Cascade)
+  clienteRef        Clientes      @relation(fields: [Cliente], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  trabajadorRef     Trabajadores  @relation(fields: [Vendedor], references: [Cedula], onDelete: NoAction, onUpdate: Cascade)
+  usuarioRef        Usuarios      @relation(fields: [Usuario], references: [CodUsuario], onDelete: NoAction, onUpdate: Cascade)
+  movVentas         MovVentas[]
+  pagosVenta        PagosVenta[]
+
+  @@id([NumeroFactura, Serie])
+  @@map("VENTAS")
+}
+
+model MovVentas {
+  NumeroFactura       BigInt
+  Serie               String
+  Hora                DateTime
+  TipoLista           String
+  CodigoBarra         String
+  Precio              Decimal
+  PrecioLista         Decimal
+  Costo               Decimal
+  Impuesto            Decimal
+  PorcentajeImpuesto  Decimal
+  Cantidad            Decimal
+  CantidadDevuelta    Decimal
+  Item                Int
+  PorcentajeDescuento Decimal
+  PrecioDetal         Decimal
+  Regla               String
+  IDRegla             Int
+  venta               Ventas       @relation(fields: [NumeroFactura, Serie], references: [NumeroFactura, Serie], onDelete: Cascade, onUpdate: Cascade)
+  inventarioRef       Inventario   @relation(fields: [CodigoBarra], references: [CodigoBarra], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([NumeroFactura, Serie, Item])
+  @@map("MOVVENTAS")
+}
+
+model PagosVenta {
+  NumeroFactura     BigInt
+  Serie             String
+  Item              Int
+  FormaPago         Int
+  Fecha             DateTime
+  Documento         String
+  Aprobacion        String
+  Banco             String
+  PuntoVenta        String
+  Monto             Decimal
+  Status            Int
+  JSON_Merchant     String?
+  MontoDivisa       Decimal?
+  FormaPagoOriginal Int?
+  bancoRef          Bancos        @relation(fields: [Banco], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  puntoVentaRef     CtaBancos     @relation(fields: [PuntoVenta], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  formaPagoRef      FormaPago     @relation(fields: [FormaPago], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  venta             Ventas        @relation(fields: [NumeroFactura, Serie], references: [NumeroFactura, Serie], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([NumeroFactura, Serie, Item])
+  @@map("PAGOSVENTA")
+}
+
+model DevVentas {
+  NumeroDevolucion  BigInt
+  Serie             String
+  NumeroFactura     BigInt
+  Fecha             DateTime
+  Vendedor          String
+  Cliente           String
+  TipoVenta         Int
+  TotalMercancia    Decimal
+  TotalDescuento    Decimal
+  TotalImpuesto     Decimal
+  TotalCosto        Decimal
+  InterContable     Int
+  Usuario           String
+  Status            Int
+  SerieFactura      String
+  Estacion          String?
+  TasaIGTF          Decimal?
+  MontoIGTF         Decimal?
+  BaseImponibleIGTF Decimal?
+  caja              Cajas         @relation(fields: [Serie], references: [Serie], onDelete: NoAction, onUpdate: Cascade)
+  clienteRef        Clientes      @relation(fields: [Cliente], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  trabajadorRef     Trabajadores  @relation(fields: [Vendedor], references: [Cedula], onDelete: NoAction, onUpdate: Cascade)
+  usuarioRef        Usuarios      @relation(fields: [Usuario], references: [CodUsuario], onDelete: NoAction, onUpdate: Cascade)
+  movDevVentas      MovDevVentas[]
+
+  @@id([NumeroDevolucion, Serie])
+  @@map("DEVVENTAS")
+}
+
+model MovDevVentas {
+  NumeroDevolucion    BigInt
+  Serie               String
+  Item                Int
+  Hora                DateTime
+  TipoLista           String
+  CodigoBarra         String
+  Precio              Decimal
+  PrecioLista         Decimal
+  Costo               Decimal
+  Impuesto            Decimal
+  PorcentajeImpuesto  Decimal
+  Cantidad            Decimal
+  Medida              String?
+  PorcentajeDescuento Decimal
+  devVenta            DevVentas    @relation(fields: [NumeroDevolucion, Serie], references: [NumeroDevolucion, Serie], onDelete: Cascade, onUpdate: Cascade)
+  inventarioRef       Inventario   @relation(fields: [CodigoBarra], references: [CodigoBarra], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([NumeroDevolucion, Serie, Item])
+  @@map("MOVDEVVENTAS")
+}
+
+model DevCompras {
+  Numero              BigInt         @id
+  Fecha               DateTime
+  Documento           String
+  Proveedor           String
+  TotalMercancia      Decimal
+  TotalImpuesto       Decimal
+  PorcentajeDescuento Decimal
+  TotalDescuento      Decimal
+  Observacion         String
+  Usuario             String
+  InterContable       Int
+  Status              Int
+  usuarioRef          Usuarios       @relation(fields: [Usuario], references: [CodUsuario], onDelete: NoAction, onUpdate: Cascade)
+  movDevCompras       MovDevCompras[]
+
+  @@map("DEVCOMPRAS")
+}
+
+model MovDevCompras {
+  Numero              BigInt
+  Item                Int
+  CodigoBarra         String
+  Cantidad            Decimal
+  Precio              Decimal
+  PorcentajeImpuesto  Decimal
+  Impuesto            Decimal
+  devCompra           DevCompras   @relation(fields: [Numero], references: [Numero], onDelete: Cascade, onUpdate: Cascade)
+  inventarioRef       Inventario   @relation(fields: [CodigoBarra], references: [CodigoBarra], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([Numero, Item])
+  @@map("MOVDEVCOMPRAS")
+}
+
+model Transferencias {
+  Numero            Int
+  Fecha             DateTime
+  CodigoRecibe      String
+  CodigoEnvia       String
+  DocumentoOrigen   String
+  TotalValor        Decimal
+  Observacion       String
+  Status            Int
+  Usuario           String
+  InterContable     Int
+  FechaEmision      DateTime
+  IDLote            Int
+  IDDespacho        Int
+  Correccion        Boolean
+  Zona              String
+  lote              Lotes              @relation(fields: [IDLote], references: [ID], onDelete: NoAction, onUpdate: NoAction)
+  sucursalRecibe    Sucursales         @relation(fields: [CodigoRecibe], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  tipoDespacho      TipoDespacho       @relation(fields: [IDDespacho], references: [ID], onDelete: NoAction, onUpdate: NoAction)
+  usuarioRef        Usuarios           @relation(fields: [Usuario], references: [CodUsuario], onDelete: NoAction, onUpdate: Cascade)
+  movTransferencias MovTransferencias[]
+
+  @@id([Numero])
+  @@map("TRANSFERENCIAS")
+}
+
+model MovTransferencias {
+  Numero          Int
+  CodigoBarra     String
+  NumeroCaja      Int
+  Item            Int
+  Fecha           DateTime?
+  Cantidad        Decimal
+  Valor           Decimal
+  UltimoCosto     Decimal?
+  CostoInicial    Decimal?
+  CostoDolar      Decimal?
+  transferencia   Transferencias  @relation(fields: [Numero], references: [Numero], onDelete: Cascade, onUpdate: Cascade)
+  inventarioRef   Inventario      @relation(fields: [CodigoBarra], references: [CodigoBarra], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([Numero, CodigoBarra, NumeroCaja, Item])
+  @@map("MOVTRANSFERENCIAS")
+}
+
+model ITransferencias {
+  Numero              Int
+  CodigoEnvia         String
+  CodigoRecibe        String
+  Fecha               DateTime
+  FechaEmision        DateTime
+  TotalValor          Decimal
+  Observacion         String
+  Status              Int
+  Usuario             String?
+  InterContable       Int?
+  IDLote              Int
+  IDDespacho          Int
+  Correccion          Boolean
+  lote                Lotes                 @relation(fields: [IDLote], references: [ID], onDelete: NoAction, onUpdate: NoAction)
+  sucursalEnvia       Sucursales            @relation(fields: [CodigoEnvia], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  tipoDespacho        TipoDespacho          @relation(fields: [IDDespacho], references: [ID], onDelete: NoAction, onUpdate: NoAction)
+  iMovTransferencias  IMovTransferencias[]
+
+  @@id([Numero, CodigoEnvia])
+  @@map("ITRANSFERENCIAS")
+}
+
+model IMovTransferencias {
+  Numero          Int
+  CodigoEnvia     String
+  Item            Int
+  Fecha           DateTime?
+  CodigoBarra     String
+  Cantidad        Decimal
+  Valor           Decimal
+  NumeroCaja      Int
+  UltimoCosto     Decimal?
+  CostoInicial    Decimal?
+  CostoDolar      Decimal?
+  iTransferencia  ITransferencias  @relation(fields: [Numero, CodigoEnvia], references: [Numero, CodigoEnvia], onDelete: Cascade, onUpdate: Cascade)
+  inventarioRef   Inventario       @relation(fields: [CodigoBarra], references: [CodigoBarra], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([Numero, CodigoEnvia, Item, CodigoBarra, NumeroCaja])
+  @@map("IMOVTRANSFERENCIAS")
+}
+
+model DevTransferencias {
+  Numero                 Int
+  Fecha                  DateTime
+  CodigoEnvia            String
+  CodigoRecibe           String
+  DocumentoOrigen        String?
+  TotalValor             Decimal
+  Observacion            String?
+  Status                 Int
+  Usuario                String?
+  FechaEmision           DateTime?
+  InterContable          Int?
+  IDLote                 Int
+  lote                   Lotes                   @relation(fields: [IDLote], references: [ID], onDelete: NoAction, onUpdate: NoAction)
+  sucursalRecibe         Sucursales              @relation(fields: [CodigoRecibe], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  movDevTransferencias   MovDevTransferencias[]
+
+  @@id([Numero])
+  @@map("DEVTRANSFERENCIAS")
+}
+
+model MovDevTransferencias {
+  Numero          Int
+  Fecha           DateTime
+  CodigoBarra     String
+  Cantidad        Decimal
+  Valor           Decimal
+  NumeroCaja      Int
+  Item            Int
+  UltimoCosto     Decimal?
+  CostoInicial    Decimal?
+  CostoDolar      Decimal?
+  devTransferencia DevTransferencias @relation(fields: [Numero], references: [Numero], onDelete: Cascade, onUpdate: Cascade)
+  inventarioRef   Inventario         @relation(fields: [CodigoBarra], references: [CodigoBarra], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([Numero, CodigoBarra, NumeroCaja, Item])
+  @@map("MOVDEVTRANSFERENCIAS")
+}
+
+model IDevTransferencias {
+  Numero                Int
+  CodigoEnvia           String
+  CodigoRecibe          String
+  Fecha                 DateTime
+  FechaEmision          DateTime
+  TotalValor            Decimal
+  Observacion           String
+  Status                Int
+  Usuario               String?
+  InterContable         Int?
+  IDLote                Int
+  lote                  Lotes                    @relation(fields: [IDLote], references: [ID], onDelete: NoAction, onUpdate: NoAction)
+  sucursalEnvia         Sucursales               @relation(fields: [CodigoEnvia], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+  iMovDevTransferencias IMovDevTransferencias[]
+
+  @@id([Numero, CodigoEnvia])
+  @@map("IDEVTRANSFERENCIAS")
+}
+
+model IMovDevTransferencias {
+  Numero            Int
+  CodigoEnvia       String
+  Item              Int
+  Fecha             DateTime?
+  CodigoBarra       String
+  Cantidad          Decimal
+  Valor             Decimal
+  NumeroCaja        Int
+  UltimoCosto       Decimal?
+  CostoInicial      Decimal?
+  CostoDolar        Decimal?
+  iDevTransferencia IDevTransferencias @relation(fields: [Numero, CodigoEnvia], references: [Numero, CodigoEnvia], onDelete: Cascade, onUpdate: Cascade)
+  inventarioRef     Inventario         @relation(fields: [CodigoBarra], references: [CodigoBarra], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([Numero, CodigoEnvia, Item, CodigoBarra, NumeroCaja])
+  @@map("IMOVDEVTRANSFERENCIAS")
+}
+
+model Depositos {
+  NumeroDeposito String
+  CuentaBanco    String
+  Serie          String
+  Fecha          DateTime
+  TotalEfectivo  Decimal
+  TotalCheques   Decimal
+  Observacion    String
+  Usuario        String
+  Status         Int
+  InterContable  Int
+  TasaCambio     Decimal?
+  caja           Cajas       @relation(fields: [Serie], references: [Serie], onDelete: NoAction, onUpdate: Cascade)
+  cuentaBancoRef CtaBancos   @relation(fields: [CuentaBanco], references: [Codigo], onDelete: Cascade, onUpdate: Cascade)
+  usuarioRef     Usuarios    @relation(fields: [Usuario], references: [CodUsuario], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([NumeroDeposito, CuentaBanco, Serie])
+  @@map("DEPOSITOS")
+}
+
+model DepositosDolares {
+  NumeroDeposito String
+  CuentaBanco    String
+  Serie          String
+  Fecha          DateTime
+  TotalEfectivo  Decimal
+  TotalCheques   Decimal
+  Observacion    String
+  Usuario        String
+  Status         Int
+  InterContable  Int
+  TasaCambio     Decimal?
+  caja           Cajas              @relation(fields: [Serie], references: [Serie], onDelete: Cascade, onUpdate: Cascade)
+  cuentaBancoRef CtaBancosDolares   @relation(fields: [CuentaBanco], references: [Codigo], onDelete: Cascade, onUpdate: Cascade)
+  usuarioRef     Usuarios           @relation(fields: [Usuario], references: [CodUsuario], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([NumeroDeposito, CuentaBanco, Serie])
+  @@map("DEPOSITOS_DOLARES")
+}
+
+model DiarioCaja {
+  Serie               String
+  Fecha               DateTime
+  Numero              Int
+  FacturaInicial      BigInt?
+  FacturaFinal        BigInt?
+  PorcentajeImpuesto  Decimal?
+  HoraApertura        DateTime?
+  HoraCierre          DateTime?
+  NumeroReporteZ      Decimal?
+  Status              Int
+  ReporteZTexto       String?
+  Acumulado           Decimal?
+  caja                Cajas       @relation(fields: [Serie], references: [Serie], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([Serie, Fecha])
+  @@map("DIARIOCAJA")
+}
+
+model SalidasCaja {
+  Numero          BigInt
+  Serie           String
+  Fecha           DateTime
+  CodigoContable  String
+  Acreedor        String
+  Documento       String
+  Descripcion     String
+  Monto           Decimal
+  Usuario         String
+  Status          Int
+  InterContable   Int
+  TasaCambio      Decimal?
+  caja            Cajas         @relation(fields: [Serie], references: [Serie], onDelete: NoAction, onUpdate: Cascade)
+  cuentaContable  CtaContable   @relation(fields: [CodigoContable], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([Numero, Serie])
+  @@map("SALIDASCAJA")
+}
+
+model SalidasCajaDolares {
+  Numero          BigInt
+  Serie           String
+  Fecha           DateTime
+  CodigoContable  String
+  Acreedor        String
+  Documento       String
+  Descripcion     String
+  Monto           Decimal
+  Usuario         String
+  Status          Int
+  InterContable   Int
+  TasaCambio      Decimal?
+  caja            Cajas         @relation(fields: [Serie], references: [Serie], onDelete: NoAction, onUpdate: Cascade)
+  cuentaContable  CtaContable   @relation(fields: [CodigoContable], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([Numero, Serie])
+  @@map("SALIDASCAJA_DOLARES")
+}
+
+model Parametros {
+  Nombre                             String?
+  Codigo                             String?
+  NombreIdFiscal                     String?
+  IDEmpresa                          String?
+  Telefono                           String?
+  Direccion                          String?
+  CorreoElectronico                  String?
+  Tipo                               Int?
+  SimboloMoneda                      String?
+  Nota1                              String?
+  Nota2                              String?
+  ControlFactura                     Int?
+  UltimaFactura                      BigInt
+  UltimaDevolucion                   BigInt
+  RutaReporte                        String?
+  CongelarFacturas                   Int?
+  MostrarBalanceDiario               Int?
+  DiscriminarImpuestoPrecios         Int?
+  ManejarClientesAfiliadosEspeciales Int?
+  MargenAuxFact                      Decimal
+  LineasDisponibles                  Int?
+  LineasReservadas                   Int?
+  ItemsPorFactura                    Int
+  ActualizarPreciosArchivosExternos  Int?
+  DejarEditar                        Int?
+  ManejarCantidadesDecimales         Int?
+  IdPais                             String?
+  AutorizarEliminarItemFactura       Int?
+  VisualizarPromocion                Int?
+  VerificarCasaMatriz                Int?
+  IDPARAMETROS                       Int                @id
+
+  @@map("PARAMETROS")
+}
+
+model Ajustes {
+  Numero        BigInt   @id
+  TipoAjuste    Int
+  Signo         Int
+  Fecha         DateTime
+  TotalValor    Decimal
+  Observacion   String
+  Usuario       String
+  InterContable Int
+  Status        Int
+  IDLote        Int
+
+  @@map("AJUSTES")
+}
+
+model Grupos {
+  CodGrupo      String          @id
+  NombreGrupo   String
+  grupoSeg      GrupoSeg[]
+  usuarioGrupo  UsuarioGrupo[]
+
+  @@map("GRUPOS")
+}
+
+model Seg {
+  Nivel       Int
+  NumNodo     Int
+  NodoPadre   String
+  CodNodo     String      @id
+  NomNodo     String
+  Imagen      BigInt
+  Forma       String
+  Orden       Int
+  EsPadre     String
+  grupoSeg    GrupoSeg[]
+
+  @@map("SEG")
+}
+
+model GrupoSeg {
+  CodGrupo    String
+  CodNodo     String
+  Ver         String?
+  grupo       Grupos      @relation(fields: [CodGrupo], references: [CodGrupo], onDelete: Cascade, onUpdate: Cascade)
+  seg         Seg         @relation(fields: [CodNodo], references: [CodNodo], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([CodGrupo, CodNodo])
+  @@map("GRUPOSEG")
+}
+
+model UsuarioGrupo {
+  CodUsuario  String
+  CodGrupo    String
+  usuario     Usuarios    @relation(fields: [CodUsuario], references: [CodUsuario], onDelete: Cascade, onUpdate: Cascade)
+  grupo       Grupos      @relation(fields: [CodGrupo], references: [CodGrupo], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([CodUsuario, CodGrupo])
+  @@map("USUARIOGRUPO")
+}
+
+model ListaPrecio {
+  Numero         Int             @id
+  Fecha          DateTime
+  FactorDetal    Decimal
+  FactorMayor    Decimal
+  FactorAfiliado Decimal
+  Observacion    String?
+  Usuario        String
+  Status         Int
+  usuarioRef     Usuarios        @relation(fields: [Usuario], references: [CodUsuario], onDelete: NoAction, onUpdate: Cascade)
+  movimientos    MovListaPrecio[]
+
+  @@map("LISTAPRECIO")
+}
+
+model MovListaPrecio {
+  Numero                 Int
+  Referencia             String
+  CodigoMarca            String
+  Costo                  Decimal
+  Descuento              Decimal
+  PrecioDetalSugerido    Decimal
+  PrecioDetal            Decimal
+  PrecioMayorSugerido    Decimal
+  PrecioMayor            Decimal
+  PrecioAfiliadoSugerido Decimal
+  PrecioAfiliado         Decimal
+  PrecioPromocion        Decimal
+  Promocion              Boolean
+  FechaInicial           DateTime
+  FechaFinal             DateTime
+  UltimoCosto            Decimal?
+  CostoInicial           Decimal?
+  CostoDolar             Decimal?
+  listaPrecio            ListaPrecio   @relation(fields: [Numero], references: [Numero], onDelete: Cascade, onUpdate: Cascade)
+  marcaRef               Marcas        @relation(fields: [CodigoMarca], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
+
+  @@id([Numero, Referencia, CodigoMarca])
+  @@map("MOVLISTAPRECIO")
+}
+
+model MovDevBorrador {
+  Numero      BigInt
+  CodigoBarra String
+  Cantidad    Decimal
+  NumeroCaja  Int
+  Item        Int
+  Costo       Decimal
+
+  @@id([Numero, CodigoBarra, Item])
+  @@map("MOVDEVBORRADOR")
+}
+
+model TasaCambio {
+  ID     BigInt   @id
+  Fecha  DateTime
+  Valor  Decimal
+
+  @@map("TASA_CAMBIO")
+}
+
+model TasaCambioM {
+  ID     BigInt   @id
+  Fecha  DateTime
+  Valor  Decimal
+
+  @@map("TASA_CAMBIO_M")
+}
+
+
+
+

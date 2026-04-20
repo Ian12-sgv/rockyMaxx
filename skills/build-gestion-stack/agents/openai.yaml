@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Gestion Stack"
+  short_description: "Arquitectura ERP NestJS Prisma Electron"
+  default_prompt: "Use $build-gestion-stack to architect or implement a PostgreSQL, NestJS, Prisma, TypeScript, and Electron management system."

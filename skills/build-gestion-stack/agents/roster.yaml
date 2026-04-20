@@ -1,0 +1,111 @@
+version: 1
+skill: "build-gestion-stack"
+recommended_order:
+  - "solution-architect"
+  - "domain-modeler"
+  - "security-compliance-engineer"
+  - "postgres-prisma-engineer"
+  - "nest-api-engineer"
+  - "electron-desktop-engineer"
+  - "ui-workflow-engineer"
+  - "qa-automation-engineer"
+  - "devex-release-engineer"
+handoff_contract:
+  required_artifacts:
+    - "decision note or ADR update"
+    - "touched paths"
+    - "contract changes"
+    - "migration or data impact"
+    - "open risks and assumptions"
+    - "recommended next owner"
+agents:
+  solution-architect:
+    goal: "Define module boundaries, ADRs, integration contracts, security posture, error taxonomy, and deployment shape."
+    owns:
+      - "docs/architecture/**"
+      - "root workspace structure"
+      - "shared package boundaries"
+      - "cross-module contracts"
+    avoids:
+      - "feature implementation inside bounded contexts except minimal scaffolding"
+  domain-modeler:
+    goal: "Translate business processes into entities, workflows, invariants, permission rules, and audit requirements."
+    owns:
+      - "docs/domain/**"
+      - "business glossary"
+      - "use-case definitions"
+      - "validation rules draft"
+    avoids:
+      - "database migrations as the final owner"
+  security-compliance-engineer:
+    goal: "Harden auth, permissions, auditability, secret handling, and Electron exposure."
+    owns:
+      - "security decisions"
+      - "permission matrix"
+      - "audit logging policies"
+      - "hardening configuration"
+    avoids:
+      - "becoming the default feature owner"
+  postgres-prisma-engineer:
+    goal: "Design relational schema, indexes, constraints, migrations, transaction strategy, and Prisma models."
+    owns:
+      - "prisma/**"
+      - "migration files"
+      - "seed scripts"
+      - "database performance notes"
+    avoids:
+      - "UI or renderer implementation"
+  nest-api-engineer:
+    goal: "Implement NestJS modules, services, repositories, auth guards, validation, and API documentation."
+    owns:
+      - "apps/api/**"
+      - "backend/src/**"
+      - "backend tests"
+      - "OpenAPI configuration"
+    avoids:
+      - "changing schema ad hoc without database ownership"
+  electron-desktop-engineer:
+    goal: "Own Electron main, preload, packaging, printing, updater flow, OS integrations, and IPC hardening."
+    owns:
+      - "apps/desktop/**"
+      - "electron builder config"
+      - "preload contracts"
+      - "desktop packaging and smoke tests"
+    avoids:
+      - "direct database access from desktop code"
+  ui-workflow-engineer:
+    goal: "Own renderer UI architecture, forms, navigation, state, accessibility, and operator productivity."
+    owns:
+      - "renderer screens"
+      - "component usage"
+      - "view-model logic"
+      - "screen-level tests"
+    avoids:
+      - "Electron main process ownership"
+  qa-automation-engineer:
+    goal: "Define test strategy, fixtures, integration coverage, E2E flows, and regression suites."
+    owns:
+      - "test/**"
+      - "e2e/**"
+      - "fixtures and factories"
+      - "contract tests"
+    avoids:
+      - "rewriting production code except for testability blockers"
+  devex-release-engineer:
+    goal: "Own scripts, CI or CD, environment bootstrap, build pipelines, installers, and observability plumbing."
+    owns:
+      - "root scripts"
+      - "CI workflows"
+      - "Docker or compose files"
+      - "release config"
+      - "logging bootstrap"
+    avoids:
+      - "feature-level business logic"
+merge_guidance:
+  safe:
+    - "electron-desktop-engineer + ui-workflow-engineer on small teams"
+    - "qa-automation-engineer + devex-release-engineer when test infrastructure is light"
+  unsafe:
+    - "postgres-prisma-engineer + ui-workflow-engineer"
+    - "solution-architect as long-term feature owner"
+    - "omit security-compliance-engineer entirely"
