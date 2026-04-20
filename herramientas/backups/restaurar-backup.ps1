@@ -1,6 +1,6 @@
 param(
   [string]$BackupFile,
-  [string]$Host = "localhost",
+  [string]$DbHost = "localhost",
   [int]$Port = 5432,
   [string]$User = "postgres",
   [string]$TargetDatabase = "rocky_maxx_restored",
@@ -35,16 +35,16 @@ if (-not $env:PGPASSWORD) {
 }
 
 if ($DropAndRecreate) {
-  & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -h $Host -p $Port -U $User -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS `"$TargetDatabase`";"
+  & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -h $DbHost -p $Port -U $User -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS `"$TargetDatabase`";"
   if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
   }
 
-  & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -h $Host -p $Port -U $User -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE `"$TargetDatabase`";"
+  & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -h $DbHost -p $Port -U $User -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE `"$TargetDatabase`";"
   if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
   }
 }
 
-& "C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" -h $Host -p $Port -U $User -d $TargetDatabase --clean --if-exists --no-owner --no-privileges $BackupFile
+& "C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" -h $DbHost -p $Port -U $User -d $TargetDatabase --clean --if-exists --no-owner --no-privileges $BackupFile
 exit $LASTEXITCODE

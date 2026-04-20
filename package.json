@@ -1,12 +1,16 @@
 {
   "name": "sistema-arabe",
+  "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "apps/api"
+    "apps/api",
+    "apps/desktop"
   ],
   "scripts": {
     "dev:api": "npm run start:dev --workspace=@sistema-arabe/api",
     "build:api": "npm run build --workspace=@sistema-arabe/api",
+    "desktop:start": "npm run build --workspace=@sistema-arabe/api && npm run start --workspace=@sistema-arabe/desktop",
+    "desktop:start:direct": "npm run start --workspace=@sistema-arabe/desktop",
     "typecheck:api": "npm run typecheck --workspace=@sistema-arabe/api",
     "prisma:generate": "npm run prisma:generate --workspace=@sistema-arabe/api",
     "prisma:validate": "npm run prisma:validate --workspace=@sistema-arabe/api"

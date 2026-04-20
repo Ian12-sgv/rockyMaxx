@@ -10,6 +10,7 @@ Esta carpeta concentra lo minimo util para que otra IA entienda como instalar, v
 - `scripts/arrancar-api.ps1`: ejecuta el flujo anterior y luego arranca la API en modo `dev` o `prod`.
 - `scripts/*.cmd`: wrappers para lanzar los `.ps1` con `ExecutionPolicy Bypass` en Windows.
 - `referencias/`: copias de los manifiestos y archivos tecnicos clave que explican como funciona el arranque.
+- `..\docs\api\inventory-merchandise-contract.md`: contrato del backend para crear, editar, buscar y eliminar mercancia.
 
 ## Flujo recomendado
 

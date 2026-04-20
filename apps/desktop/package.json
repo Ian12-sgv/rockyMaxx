@@ -1,0 +1,12 @@
+{
+  "name": "@sistema-arabe/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "node start-electron.js"
+  },
+  "devDependencies": {
+    "electron": "^41.2.1"
+  }
+}
