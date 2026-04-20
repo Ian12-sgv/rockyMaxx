@@ -1,0 +1,116 @@
+{
+  "projectName": "rockyMaxx",
+  "repoRoot": "..",
+  "verifiedOn": "2026-04-19",
+  "runtime": {
+    "node": "v24.14.1",
+    "npm": "10.8.3",
+    "backend": "NestJS",
+    "orm": "Prisma",
+    "database": "PostgreSQL",
+    "apiPrefix": "/api",
+    "healthEndpoint": "/api/health"
+  },
+  "packageManager": {
+    "tool": "npm",
+    "workspaceRootManifest": "package.json",
+    "lockfile": "package-lock.json",
+    "workspaces": [
+      "apps/api"
+    ]
+  },
+  "projects": {
+    "root": {
+      "name": "sistema-arabe",
+      "scripts": {
+        "dev:api": "npm run start:dev --workspace=@sistema-arabe/api",
+        "build:api": "npm run build --workspace=@sistema-arabe/api",
+        "typecheck:api": "npm run typecheck --workspace=@sistema-arabe/api",
+        "prisma:generate": "npm run prisma:generate --workspace=@sistema-arabe/api",
+        "prisma:validate": "npm run prisma:validate --workspace=@sistema-arabe/api"
+      }
+    },
+    "api": {
+      "name": "@sistema-arabe/api",
+      "path": "apps/api",
+      "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "start": "node dist/main.js",
+        "start:dev": "ts-node-dev --respawn --transpile-only --exit-child src/main.ts",
+        "typecheck": "tsc --noEmit",
+        "prisma:generate": "prisma generate",
+        "prisma:validate": "prisma validate"
+      },
+      "dependencies": {
+        "@nestjs/common": "^11.0.11",
+        "@nestjs/config": "^4.0.2",
+        "@nestjs/core": "^11.0.11",
+        "@nestjs/jwt": "^11.0.2",
+        "@nestjs/platform-express": "^11.0.11",
+        "@prisma/client": "^6.7.0",
+        "bcryptjs": "^3.0.3",
+        "class-transformer": "^0.5.1",
+        "class-validator": "^0.15.1",
+        "reflect-metadata": "^0.2.2",
+        "rxjs": "^7.8.1"
+      },
+      "devDependencies": {
+        "@types/node": "^22.14.1",
+        "prisma": "^6.7.0",
+        "ts-node": "^10.9.2",
+        "ts-node-dev": "^2.0.0",
+        "typescript": "^5.8.3"
+      }
+    }
+  },
+  "environment": {
+    "scriptPreferredEnvFile": "apps/api/.env",
+    "fallbackEnvFile": ".env",
+    "exampleFiles": [
+      ".env.example",
+      "apps/api/.env.example"
+    ],
+    "requiredVariables": [
+      "DATABASE_URL",
+      "API_PORT",
+      "JWT_SECRET",
+      "JWT_EXPIRES_IN",
+      "AUTH_PASSWORD_PEPPER",
+      "AUTH_BOOTSTRAP_ADMIN_ENABLED",
+      "AUTH_BOOTSTRAP_ADMIN_USERNAME",
+      "AUTH_BOOTSTRAP_ADMIN_NAME",
+      "AUTH_BOOTSTRAP_ADMIN_PASSWORD",
+      "AUTH_BOOTSTRAP_ADMIN_GROUP"
+    ]
+  },
+  "startupFacts": [
+    "PrismaService ejecuta $connect() en onModuleInit, asi que la base debe estar disponible antes de arrancar la API.",
+    "AppModule carga ConfigModule.forRoot con envFilePath ['../../.env', '.env']; los scripts de herrmaineats trabajan con apps/api/.env para evitar ambiguedad.",
+    "main.ts fija el prefijo global a /api y habilita CORS.",
+    "health.controller.ts consulta current_database(), current_schema() y current_user contra PostgreSQL."
+  ],
+  "criticalFiles": [
+    "package.json",
+    "package-lock.json",
+    ".env.example",
+    "apps/api/package.json",
+    "apps/api/.env.example",
+    "apps/api/prisma/schema.prisma",
+    "apps/api/src/main.ts",
+    "apps/api/src/app.module.ts",
+    "apps/api/src/prisma/prisma.service.ts",
+    "apps/api/src/health/health.controller.ts"
+  ],
+  "copiedReferences": [
+    "referencias/root.package.json",
+    "referencias/root.package-lock.json",
+    "referencias/root.env.example",
+    "referencias/api.package.json",
+    "referencias/api.env.example",
+    "referencias/api.schema.prisma",
+    "referencias/api.main.ts",
+    "referencias/api.app.module.ts",
+    "referencias/api.prisma.service.ts",
+    "referencias/api.health.controller.ts"
+  ]
+}

@@ -1,0 +1,8616 @@
+--
+-- PostgreSQL database dump
+--
+
+\restrict osSNtjQshZ9ebRagXB0nzYspNmiXee1FW6eN3TnSvhfCh3Yy0wXpqTz4lvO06rk
+
+-- Dumped from database version 18.1
+-- Dumped by pg_dump version 18.1
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+ALTER TABLE IF EXISTS ONLY dbo."VENTAS" DROP CONSTRAINT IF EXISTS "FK_VENTAS_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."VENTAS" DROP CONSTRAINT IF EXISTS "FK_VENTAS_TRABAJADORES";
+ALTER TABLE IF EXISTS ONLY dbo."VENTAS" DROP CONSTRAINT IF EXISTS "FK_VENTAS_CLIENTES";
+ALTER TABLE IF EXISTS ONLY dbo."VENTAS" DROP CONSTRAINT IF EXISTS "FK_VENTAS_CAJAS";
+ALTER TABLE IF EXISTS ONLY dbo."USUARIOGRUPO" DROP CONSTRAINT IF EXISTS "FK_USUARIOGRUPO_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."USUARIOGRUPO" DROP CONSTRAINT IF EXISTS "FK_USUARIOGRUPO_GRUPOS";
+ALTER TABLE IF EXISTS ONLY dbo."TRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_TRANSFERENCIAS_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."TRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_TRANSFERENCIAS_TIPO_DESPACHO";
+ALTER TABLE IF EXISTS ONLY dbo."TRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_TRANSFERENCIAS_SUCURSALES";
+ALTER TABLE IF EXISTS ONLY dbo."TRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_TRANSFERENCIAS_LOTES";
+ALTER TABLE IF EXISTS ONLY dbo."TRABAJADORES" DROP CONSTRAINT IF EXISTS "FK_TRABAJADORES_CARGOS";
+ALTER TABLE IF EXISTS ONLY dbo."SALIDASCAJA_DOLARES" DROP CONSTRAINT IF EXISTS "FK_SALIDASCAJA_DOLARES_CTACONTABLE";
+ALTER TABLE IF EXISTS ONLY dbo."SALIDASCAJA_DOLARES" DROP CONSTRAINT IF EXISTS "FK_SALIDASCAJA_DOLARES_CAJAS";
+ALTER TABLE IF EXISTS ONLY dbo."SALIDASCAJA" DROP CONSTRAINT IF EXISTS "FK_SALIDASCAJA_CTACONTABLE";
+ALTER TABLE IF EXISTS ONLY dbo."SALIDASCAJA" DROP CONSTRAINT IF EXISTS "FK_SALIDASCAJA_CAJAS";
+ALTER TABLE IF EXISTS ONLY dbo."PROVEEDORES" DROP CONSTRAINT IF EXISTS "FK_PROVEEDORES_TIPOSPROVEEDOR";
+ALTER TABLE IF EXISTS ONLY dbo."PATRON" DROP CONSTRAINT IF EXISTS "FK_PATRON_TRABAJADORES_INFERRED";
+ALTER TABLE IF EXISTS ONLY dbo."PAGOSVENTA" DROP CONSTRAINT IF EXISTS "FK_PAGOSVENTA_VENTAS";
+ALTER TABLE IF EXISTS ONLY dbo."PAGOSVENTA" DROP CONSTRAINT IF EXISTS "FK_PAGOSVENTA_FORMAPAGO";
+ALTER TABLE IF EXISTS ONLY dbo."PAGOSVENTA" DROP CONSTRAINT IF EXISTS "FK_PAGOSVENTA_CTABANCOS";
+ALTER TABLE IF EXISTS ONLY dbo."PAGOSVENTA" DROP CONSTRAINT IF EXISTS "FK_PAGOSVENTA_BANCOS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVVENTAS" DROP CONSTRAINT IF EXISTS "FK_MOVVENTAS_VENTAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVVENTAS" DROP CONSTRAINT IF EXISTS "FK_MOVVENTAS_INVENTARIO";
+ALTER TABLE IF EXISTS ONLY dbo."MOVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_MOVTRANSFERENCIAS_TRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_MOVTRANSFERENCIAS_INVENTARIO";
+ALTER TABLE IF EXISTS ONLY dbo."MOVTOMAFISICA1" DROP CONSTRAINT IF EXISTS "FK_MOVTOMAFISICA1_TOMAFISICA1_INFERRED";
+ALTER TABLE IF EXISTS ONLY dbo."MOVTOMAFISICA1" DROP CONSTRAINT IF EXISTS "FK_MOVTOMAFISICA1_INVENTARIO_INFERRED";
+ALTER TABLE IF EXISTS ONLY dbo."MOVLISTAPRECIO" DROP CONSTRAINT IF EXISTS "FK_MOVLISTAPRECIO_MARCAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVLISTAPRECIO" DROP CONSTRAINT IF EXISTS "FK_MOVLISTAPRECIO_LISTAPRECIO";
+ALTER TABLE IF EXISTS ONLY dbo."MOVDEVVENTAS" DROP CONSTRAINT IF EXISTS "FK_MOVDEVVENTAS_INVENTARIO";
+ALTER TABLE IF EXISTS ONLY dbo."MOVDEVVENTAS" DROP CONSTRAINT IF EXISTS "FK_MOVDEVVENTAS_DEVVENTAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVDEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_MOVDEVTRANSFERENCIAS_INVENTARIO";
+ALTER TABLE IF EXISTS ONLY dbo."MOVDEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_MOVDEVTRANSFERENCIAS_DEVTRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVDEVCOMPRAS" DROP CONSTRAINT IF EXISTS "FK_MOVDEVCOMPRAS_INVENTARIO";
+ALTER TABLE IF EXISTS ONLY dbo."MOVDEVCOMPRAS" DROP CONSTRAINT IF EXISTS "FK_MOVDEVCOMPRAS_DEVCOMPRAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVCOMPRAS" DROP CONSTRAINT IF EXISTS "FK_MOVCOMPRAS_INVENTARIO";
+ALTER TABLE IF EXISTS ONLY dbo."MOVCOMPRAS" DROP CONSTRAINT IF EXISTS "FK_MOVCOMPRAS_COMPRAS";
+ALTER TABLE IF EXISTS ONLY dbo."LOTES" DROP CONSTRAINT IF EXISTS "FK_LOTES_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."LISTAPRECIO" DROP CONSTRAINT IF EXISTS "FK_LISTAPRECIO_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."IMPRESORAFISCAL" DROP CONSTRAINT IF EXISTS "FK_ImpresoraFiscal_ImpresoraFiscal";
+ALTER TABLE IF EXISTS ONLY dbo."ITRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_ITRANSFERENCIAS_TIPO_DESPACHO";
+ALTER TABLE IF EXISTS ONLY dbo."ITRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_ITRANSFERENCIAS_SUCURSALES";
+ALTER TABLE IF EXISTS ONLY dbo."ITRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_ITRANSFERENCIAS_LOTES";
+ALTER TABLE IF EXISTS ONLY dbo."INVENTARIO" DROP CONSTRAINT IF EXISTS "FK_INVENTARIO_TALLAS";
+ALTER TABLE IF EXISTS ONLY dbo."INVENTARIO" DROP CONSTRAINT IF EXISTS "FK_INVENTARIO_MARCAS";
+ALTER TABLE IF EXISTS ONLY dbo."INVENTARIO" DROP CONSTRAINT IF EXISTS "FK_INVENTARIO_IMPUESTOS";
+ALTER TABLE IF EXISTS ONLY dbo."INVENTARIO" DROP CONSTRAINT IF EXISTS "FK_INVENTARIO_FABRICANTES";
+ALTER TABLE IF EXISTS ONLY dbo."INVENTARIO" DROP CONSTRAINT IF EXISTS "FK_INVENTARIO_COLORES";
+ALTER TABLE IF EXISTS ONLY dbo."INVENTARIO" DROP CONSTRAINT IF EXISTS "FK_INVENTARIO_CATEGORIAS";
+ALTER TABLE IF EXISTS ONLY dbo."IMOVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_IMOVTRANSFERENCIAS_ITRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."IMOVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_IMOVTRANSFERENCIAS_INVENTARIO";
+ALTER TABLE IF EXISTS ONLY dbo."IMOVDEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_IMOVDEVTRANSFERENCIAS_INVENTARIO";
+ALTER TABLE IF EXISTS ONLY dbo."IMOVDEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_IMOVDEVTRANSFERENCIAS_IDEVTRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."IDEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_IDEVTRANSFERENCIAS_SUCURSALES";
+ALTER TABLE IF EXISTS ONLY dbo."IDEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_IDEVTRANSFERENCIAS_LOTES";
+ALTER TABLE IF EXISTS ONLY dbo."GRUPOSEG" DROP CONSTRAINT IF EXISTS "FK_GRUPOSEG_SEG";
+ALTER TABLE IF EXISTS ONLY dbo."GRUPOSEG" DROP CONSTRAINT IF EXISTS "FK_GRUPOSEG_GRUPOS";
+ALTER TABLE IF EXISTS ONLY dbo."DIARIOCAJA" DROP CONSTRAINT IF EXISTS "FK_DIARIOCAJA_CAJAS";
+ALTER TABLE IF EXISTS ONLY dbo."DEVVENTAS" DROP CONSTRAINT IF EXISTS "FK_DEVVENTAS_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."DEVVENTAS" DROP CONSTRAINT IF EXISTS "FK_DEVVENTAS_TRABAJADORES";
+ALTER TABLE IF EXISTS ONLY dbo."DEVVENTAS" DROP CONSTRAINT IF EXISTS "FK_DEVVENTAS_CLIENTES";
+ALTER TABLE IF EXISTS ONLY dbo."DEVVENTAS" DROP CONSTRAINT IF EXISTS "FK_DEVVENTAS_CAJAS";
+ALTER TABLE IF EXISTS ONLY dbo."DEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_DEVTRANSFERENCIAS_SUCURSALES";
+ALTER TABLE IF EXISTS ONLY dbo."DEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "FK_DEVTRANSFERENCIAS_LOTES";
+ALTER TABLE IF EXISTS ONLY dbo."DEVCOMPRAS" DROP CONSTRAINT IF EXISTS "FK_DEVCOMPRAS_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."DETALLECONTROLACCESO" DROP CONSTRAINT IF EXISTS "FK_DETALLECONTROLACCESO_TRABAJADORES_INFERRED";
+ALTER TABLE IF EXISTS ONLY dbo."DETALLECONTROLACCESO" DROP CONSTRAINT IF EXISTS "FK_DETALLECONTROLACCESO_PATRON_INFERRED";
+ALTER TABLE IF EXISTS ONLY dbo."DEPOSITOS" DROP CONSTRAINT IF EXISTS "FK_DEPOSITOS_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."DEPOSITOS_DOLARES" DROP CONSTRAINT IF EXISTS "FK_DEPOSITOS_DOLARES_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."DEPOSITOS_DOLARES" DROP CONSTRAINT IF EXISTS "FK_DEPOSITOS_DOLARES_CTABANCOS";
+ALTER TABLE IF EXISTS ONLY dbo."DEPOSITOS_DOLARES" DROP CONSTRAINT IF EXISTS "FK_DEPOSITOS_DOLARES_CAJAS";
+ALTER TABLE IF EXISTS ONLY dbo."DEPOSITOS" DROP CONSTRAINT IF EXISTS "FK_DEPOSITOS_CTABANCOS";
+ALTER TABLE IF EXISTS ONLY dbo."DEPOSITOS" DROP CONSTRAINT IF EXISTS "FK_DEPOSITOS_CAJAS";
+ALTER TABLE IF EXISTS ONLY dbo."CONTROLACCESO" DROP CONSTRAINT IF EXISTS "FK_CONTROLACCESO_TRABAJADORES_INFERRED";
+ALTER TABLE IF EXISTS ONLY dbo."CONFIGURACIONMARCAJE" DROP CONSTRAINT IF EXISTS "FK_CONFIGURACIONMARCAJE_DISPOSITIVOSMARCAJE_INFERRED";
+ALTER TABLE IF EXISTS ONLY dbo."COMPRAS" DROP CONSTRAINT IF EXISTS "FK_COMPRAS_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."COMPRAS" DROP CONSTRAINT IF EXISTS "FK_COMPRAS_PROVEEDORES";
+ALTER TABLE IF EXISTS ONLY dbo."COMPRAS" DROP CONSTRAINT IF EXISTS "FK_COMPRAS_LOTES";
+ALTER TABLE IF EXISTS ONLY dbo."CLIENTES" DROP CONSTRAINT IF EXISTS "FK_CLIENTES_TIPOSCONTRIBUYENTE";
+ALTER TABLE IF EXISTS ONLY dbo."CLIENTES" DROP CONSTRAINT IF EXISTS "FK_CLIENTES_TIPOSCLIENTE";
+ALTER TABLE IF EXISTS ONLY dbo."CAJAS" DROP CONSTRAINT IF EXISTS "FK_CAJAS_ImpresoraFiscal";
+DROP INDEX IF EXISTS dbo."UX_TABLA_VALORES_IdTabla_Codigo";
+DROP INDEX IF EXISTS dbo."UX_MOVTOMAFISICA2_NumeroPagina_CodigoBarra";
+DROP INDEX IF EXISTS dbo."UX_MOVTOMAFISICA1_NumeroPagina_CodigoBarra";
+DROP INDEX IF EXISTS dbo."UX_INVENTARIO_CodigoBarra_Normalized";
+DROP INDEX IF EXISTS dbo."UX_CODIGOSCONVENIOS_Codigo";
+DROP INDEX IF EXISTS dbo."IX_grupo_cupones_ref_marca";
+DROP INDEX IF EXISTS dbo."IX_TRANSACCIONESCUPONES_Factura";
+DROP INDEX IF EXISTS dbo."IX_SALDODIARIO_Fecha_CodigoBarra";
+DROP INDEX IF EXISTS dbo."IX_REGLASCONVENIOS_TIPOCONVENIO";
+DROP INDEX IF EXISTS dbo."IX_REGLASCONVENIOS_IDREGLA";
+DROP INDEX IF EXISTS dbo."IX_MOVAJUSTES_Numero";
+DROP INDEX IF EXISTS dbo."IX_MOVAJUSTES_CodigoBarra";
+DROP INDEX IF EXISTS dbo."IX_GRUPO_REGLAS_Grupo";
+DROP INDEX IF EXISTS dbo."IX_GRUPO_REGLAS_CodigoBarra";
+DROP INDEX IF EXISTS dbo."IX_FISICOLOGICO_FechaAjuste";
+DROP INDEX IF EXISTS dbo."IX_FISICOLOGICO_CodigoBarra";
+DROP INDEX IF EXISTS dbo."IX_DETALLECONTROLACCESO_IdPersonal_Fecha";
+DROP INDEX IF EXISTS dbo."IX_CUPONES_Status_Fechas";
+DROP INDEX IF EXISTS dbo."IX_CONTROLACCESO_Cedula_Fecha";
+DROP INDEX IF EXISTS dbo."IX_CODIGOSCONVENIOS_IdCupon_Status";
+ALTER TABLE IF EXISTS ONLY dbo."PARAMETROS" DROP CONSTRAINT IF EXISTS "uqIDPARAMETROS";
+ALTER TABLE IF EXISTS ONLY dbo."PARAMETROS" DROP CONSTRAINT IF EXISTS "pkIDPARAMETROS";
+ALTER TABLE IF EXISTS ONLY dbo.sysdiagrams DROP CONSTRAINT IF EXISTS "UK_principal_name";
+ALTER TABLE IF EXISTS ONLY dbo."TRANSACCIONESCUPONES" DROP CONSTRAINT IF EXISTS "TRANSACCIONESCUPONES_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."TOMAFISICA1" DROP CONSTRAINT IF EXISTS "TOMAFISICA1_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."TABLA_PARAMETROS" DROP CONSTRAINT IF EXISTS "TABLA_PARAMETROS_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."RESPALDOS_PENDIENTES" DROP CONSTRAINT IF EXISTS "RESPALDOS_PENDIENTES_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."REGLAS" DROP CONSTRAINT IF EXISTS "REGLAS_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."REGLASCONVENIOS" DROP CONSTRAINT IF EXISTS "REGLASCONVENIOS_pkey";
+ALTER TABLE IF EXISTS ONLY dbo.sysdiagrams DROP CONSTRAINT IF EXISTS "PK__sysdiagrams__014935CB";
+ALTER TABLE IF EXISTS ONLY dbo."VENTAS" DROP CONSTRAINT IF EXISTS "PK_VENTAS";
+ALTER TABLE IF EXISTS ONLY dbo."USUARIOS" DROP CONSTRAINT IF EXISTS "PK_USUARIOS";
+ALTER TABLE IF EXISTS ONLY dbo."USUARIOGRUPO" DROP CONSTRAINT IF EXISTS "PK_USUARIOGRUPO";
+ALTER TABLE IF EXISTS ONLY dbo."TRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "PK_TRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."TRABAJADORES" DROP CONSTRAINT IF EXISTS "PK_TRABAJADORES";
+ALTER TABLE IF EXISTS ONLY dbo."TIPO_DESPACHO" DROP CONSTRAINT IF EXISTS "PK_TIPO_DESPACHO";
+ALTER TABLE IF EXISTS ONLY dbo."TIPOSPROVEEDOR" DROP CONSTRAINT IF EXISTS "PK_TIPOSPROVEEDOR";
+ALTER TABLE IF EXISTS ONLY dbo."TIPOSCONTRIBUYENTE" DROP CONSTRAINT IF EXISTS "PK_TIPOSCONTRIBUYENTE";
+ALTER TABLE IF EXISTS ONLY dbo."TIPOSCLIENTE" DROP CONSTRAINT IF EXISTS "PK_TIPOSCLIENTE";
+ALTER TABLE IF EXISTS ONLY dbo."TASA_CAMBIO_M" DROP CONSTRAINT IF EXISTS "PK_TASA_CAMBIO_M";
+ALTER TABLE IF EXISTS ONLY dbo."TASA_CAMBIO" DROP CONSTRAINT IF EXISTS "PK_TASA_CAMBIO";
+ALTER TABLE IF EXISTS ONLY dbo."TALLAS" DROP CONSTRAINT IF EXISTS "PK_TALLAS";
+ALTER TABLE IF EXISTS ONLY dbo."SUCURSALES" DROP CONSTRAINT IF EXISTS "PK_SUCURSALES";
+ALTER TABLE IF EXISTS ONLY dbo."SEG" DROP CONSTRAINT IF EXISTS "PK_SEG";
+ALTER TABLE IF EXISTS ONLY dbo."SALIDASCAJA_DOLARES" DROP CONSTRAINT IF EXISTS "PK_SALIDASCAJA_DOLARES";
+ALTER TABLE IF EXISTS ONLY dbo."SALIDASCAJA" DROP CONSTRAINT IF EXISTS "PK_SALIDASCAJA";
+ALTER TABLE IF EXISTS ONLY dbo."PROVEEDORES" DROP CONSTRAINT IF EXISTS "PK_PROVEEDORES";
+ALTER TABLE IF EXISTS ONLY dbo."PAGOSVENTA" DROP CONSTRAINT IF EXISTS "PK_PAGOSVENTA";
+ALTER TABLE IF EXISTS ONLY dbo."MOVVENTAS" DROP CONSTRAINT IF EXISTS "PK_MOVVENTAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "PK_MOVTRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVTOMAFISICA2" DROP CONSTRAINT IF EXISTS "PK_MOVTOMAFISICA2_INFERRED";
+ALTER TABLE IF EXISTS ONLY dbo."MOVTOMAFISICA1" DROP CONSTRAINT IF EXISTS "PK_MOVTOMAFISICA1_INFERRED";
+ALTER TABLE IF EXISTS ONLY dbo."MOVLISTAPRECIO" DROP CONSTRAINT IF EXISTS "PK_MOVLISTAPRECIO_1";
+ALTER TABLE IF EXISTS ONLY dbo."MOVDEVVENTAS" DROP CONSTRAINT IF EXISTS "PK_MOVDEVVENTAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVDEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "PK_MOVDEVTRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVDEVCOMPRAS" DROP CONSTRAINT IF EXISTS "PK_MOVDEVCOMPRAS";
+ALTER TABLE IF EXISTS ONLY dbo."MOVDEVBORRADOR" DROP CONSTRAINT IF EXISTS "PK_MOVDEVBORRADOR";
+ALTER TABLE IF EXISTS ONLY dbo."MOVCOMPRAS" DROP CONSTRAINT IF EXISTS "PK_MOVCOMPRAS";
+ALTER TABLE IF EXISTS ONLY dbo."MARCAS" DROP CONSTRAINT IF EXISTS "PK_MARCAS";
+ALTER TABLE IF EXISTS ONLY dbo."LOTES" DROP CONSTRAINT IF EXISTS "PK_LOTES";
+ALTER TABLE IF EXISTS ONLY dbo."LISTAPRECIO" DROP CONSTRAINT IF EXISTS "PK_LISTAPRECIO";
+ALTER TABLE IF EXISTS ONLY dbo."IMPRESORAFISCAL" DROP CONSTRAINT IF EXISTS "PK_ImpresoraFiscal";
+ALTER TABLE IF EXISTS ONLY dbo."ITRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "PK_ITRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."INVENTARIO" DROP CONSTRAINT IF EXISTS "PK_INVENTARIO";
+ALTER TABLE IF EXISTS ONLY dbo."IMPUESTOS" DROP CONSTRAINT IF EXISTS "PK_IMPUESTOS";
+ALTER TABLE IF EXISTS ONLY dbo."IMOVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "PK_IMOVTRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."IMOVDEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "PK_IMOVDEVTRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."IDEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "PK_IDEVTRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."GRUPOSEG" DROP CONSTRAINT IF EXISTS "PK_GRUPOSEG";
+ALTER TABLE IF EXISTS ONLY dbo."GRUPOS" DROP CONSTRAINT IF EXISTS "PK_GRUPOS";
+ALTER TABLE IF EXISTS ONLY dbo."FORMAPAGO" DROP CONSTRAINT IF EXISTS "PK_FORMAPAGO";
+ALTER TABLE IF EXISTS ONLY dbo."FABRICANTES" DROP CONSTRAINT IF EXISTS "PK_FABRICANTES";
+ALTER TABLE IF EXISTS ONLY dbo."DIARIOCAJA" DROP CONSTRAINT IF EXISTS "PK_DIARIOCAJA_1";
+ALTER TABLE IF EXISTS ONLY dbo."DEVVENTAS" DROP CONSTRAINT IF EXISTS "PK_DEVVENTAS";
+ALTER TABLE IF EXISTS ONLY dbo."DEVTRANSFERENCIAS" DROP CONSTRAINT IF EXISTS "PK_DEVTRANSFERENCIAS";
+ALTER TABLE IF EXISTS ONLY dbo."DEVCOMPRAS" DROP CONSTRAINT IF EXISTS "PK_DEVCOMPRAS";
+ALTER TABLE IF EXISTS ONLY dbo."DEPOSITOS_DOLARES" DROP CONSTRAINT IF EXISTS "PK_DEPOSITOS_DOLARES";
+ALTER TABLE IF EXISTS ONLY dbo."DEPOSITOS" DROP CONSTRAINT IF EXISTS "PK_DEPOSITOS";
+ALTER TABLE IF EXISTS ONLY dbo."CTACONTABLE" DROP CONSTRAINT IF EXISTS "PK_CTACONTABLE";
+ALTER TABLE IF EXISTS ONLY dbo."CTABANCOS_DOLARES" DROP CONSTRAINT IF EXISTS "PK_CTABANCOS_DOLARES";
+ALTER TABLE IF EXISTS ONLY dbo."CTABANCOS" DROP CONSTRAINT IF EXISTS "PK_CTABANCOS";
+ALTER TABLE IF EXISTS ONLY dbo."COMPRAS" DROP CONSTRAINT IF EXISTS "PK_COMPRAS";
+ALTER TABLE IF EXISTS ONLY dbo."COLORES" DROP CONSTRAINT IF EXISTS "PK_COLORES";
+ALTER TABLE IF EXISTS ONLY dbo."CLIENTES" DROP CONSTRAINT IF EXISTS "PK_CLIENTES";
+ALTER TABLE IF EXISTS ONLY dbo."CATEGORIAS" DROP CONSTRAINT IF EXISTS "PK_CATEGORIAS";
+ALTER TABLE IF EXISTS ONLY dbo."CARGOS" DROP CONSTRAINT IF EXISTS "PK_CARGOS";
+ALTER TABLE IF EXISTS ONLY dbo."CAJAS" DROP CONSTRAINT IF EXISTS "PK_CAJAS";
+ALTER TABLE IF EXISTS ONLY dbo."BANCOS" DROP CONSTRAINT IF EXISTS "PK_BANCOS";
+ALTER TABLE IF EXISTS ONLY dbo."AJUSTES" DROP CONSTRAINT IF EXISTS "PK_AJUSTES";
+ALTER TABLE IF EXISTS ONLY dbo."PATRON" DROP CONSTRAINT IF EXISTS "PATRON_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."TIPO_DESPACHO" DROP CONSTRAINT IF EXISTS "IX_TIPO_DESPACHO";
+ALTER TABLE IF EXISTS ONLY dbo."LOTES" DROP CONSTRAINT IF EXISTS "IX_LOTES";
+ALTER TABLE IF EXISTS ONLY dbo."GRUPO_REGLAS" DROP CONSTRAINT IF EXISTS "GRUPO_REGLAS_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."DISPOSITIVOSMARCAJE" DROP CONSTRAINT IF EXISTS "DISPOSITIVOSMARCAJE_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."DISPOSITIVOGRUPO" DROP CONSTRAINT IF EXISTS "DISPOSITIVOGRUPO_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."DETALLECONTROLACCESO" DROP CONSTRAINT IF EXISTS "DETALLECONTROLACCESO_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."CUPONES" DROP CONSTRAINT IF EXISTS "CUPONES_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."CONTROLACCESO" DROP CONSTRAINT IF EXISTS "CONTROLACCESO_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."CONFIGURACIONMARCAJE" DROP CONSTRAINT IF EXISTS "CONFIGURACIONMARCAJE_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."CODIGOS_RECARGOS" DROP CONSTRAINT IF EXISTS "CODIGOS_RECARGOS_pkey";
+ALTER TABLE IF EXISTS ONLY dbo."CODIGOSCONVENIOS" DROP CONSTRAINT IF EXISTS "CODIGOSCONVENIOS_pkey";
+ALTER TABLE IF EXISTS dbo.sysdiagrams ALTER COLUMN diagram_id DROP DEFAULT;
+ALTER TABLE IF EXISTS dbo."TASA_CAMBIO_M" ALTER COLUMN "ID" DROP DEFAULT;
+ALTER TABLE IF EXISTS dbo."TASA_CAMBIO" ALTER COLUMN "ID" DROP DEFAULT;
+ALTER TABLE IF EXISTS dbo."LOTES" ALTER COLUMN "ID" DROP DEFAULT;
+ALTER TABLE IF EXISTS dbo."IMPRESORAFISCAL" ALTER COLUMN "ID" DROP DEFAULT;
+DROP TABLE IF EXISTS dbo.grupo_cupones;
+DROP VIEW IF EXISTS dbo."VW_TRANSFERENCIAS";
+DROP VIEW IF EXISTS dbo."VW_SECCION";
+DROP VIEW IF EXISTS dbo."VW_FAMILIA";
+DROP VIEW IF EXISTS dbo."VW_DispositivoMarcaje";
+DROP VIEW IF EXISTS dbo."VW_DispositivoGrupo";
+DROP VIEW IF EXISTS dbo."VW_DIVISION";
+DROP VIEW IF EXISTS dbo."VW_DEVTRANSFERENCIAS";
+DROP VIEW IF EXISTS dbo."VW_DEVCOMPRASXPROVEEDOR";
+DROP VIEW IF EXISTS dbo."VW_ConfiguracionMarcaje";
+DROP VIEW IF EXISTS dbo."VW_COMPRAS_REFERENCIA_MARCA";
+DROP VIEW IF EXISTS dbo."VW_COMPRASXPROVEEDOR";
+DROP VIEW IF EXISTS dbo."VW_AJUSTESPOSITIVOS";
+DROP VIEW IF EXISTS dbo."VW_AJUSTESNEGATIVOS";
+DROP TABLE IF EXISTS dbo."VENTAS";
+DROP TABLE IF EXISTS dbo."USUARIOS";
+DROP TABLE IF EXISTS dbo."USUARIOGRUPO";
+DROP TABLE IF EXISTS dbo."TRANSFERENCIAS";
+DROP TABLE IF EXISTS dbo."TRANSACCIONESCUPONES";
+DROP TABLE IF EXISTS dbo."TRABAJADORES";
+DROP TABLE IF EXISTS dbo."TOMAFISICA1";
+DROP TABLE IF EXISTS dbo."TIPO_DESPACHO";
+DROP TABLE IF EXISTS dbo."TIPOSPROVEEDOR";
+DROP TABLE IF EXISTS dbo."TIPOSCONTRIBUYENTE";
+DROP TABLE IF EXISTS dbo."TIPOSCLIENTE";
+DROP TABLE IF EXISTS dbo."TALLAS";
+DROP TABLE IF EXISTS dbo."TABLA_VALORES";
+DROP TABLE IF EXISTS dbo."TABLA_PARAMETROS";
+DROP TABLE IF EXISTS dbo."SUCURSALES";
+DROP SEQUENCE IF EXISTS dbo."SQ_sysdiagrams_diagram_id";
+DROP TABLE IF EXISTS dbo.sysdiagrams;
+DROP SEQUENCE IF EXISTS dbo."SQ_TASA_CAMBIO_M_ID";
+DROP TABLE IF EXISTS dbo."TASA_CAMBIO_M";
+DROP SEQUENCE IF EXISTS dbo."SQ_TASA_CAMBIO_ID";
+DROP TABLE IF EXISTS dbo."TASA_CAMBIO";
+DROP SEQUENCE IF EXISTS dbo."SQ_LOTES_ID";
+DROP SEQUENCE IF EXISTS dbo."SQ_IMPRESORAFISCAL_ID";
+DROP TABLE IF EXISTS dbo."SEG";
+DROP TABLE IF EXISTS dbo."SALIDASCAJA_DOLARES";
+DROP TABLE IF EXISTS dbo."SALIDASCAJA";
+DROP TABLE IF EXISTS dbo."SALDODIARIO";
+DROP TABLE IF EXISTS dbo."RESPALDOS_PENDIENTES";
+DROP TABLE IF EXISTS dbo."REGLASCONVENIOS";
+DROP TABLE IF EXISTS dbo."REGLAS";
+DROP TABLE IF EXISTS dbo."REFERENCIAS_MAYORISTAS";
+DROP TABLE IF EXISTS dbo."PROVEEDORES";
+DROP TABLE IF EXISTS dbo."PATRON";
+DROP TABLE IF EXISTS dbo."PARAMETROS";
+DROP TABLE IF EXISTS dbo."PAGOSVENTA";
+DROP TABLE IF EXISTS dbo."MOVVENTAS";
+DROP TABLE IF EXISTS dbo."MOVTRANSFERENCIAS";
+DROP TABLE IF EXISTS dbo."MOVTOMAFISICA2";
+DROP TABLE IF EXISTS dbo."MOVTOMAFISICA1";
+DROP TABLE IF EXISTS dbo."MOVLISTAPRECIO";
+DROP TABLE IF EXISTS dbo."MOVDEVVENTAS";
+DROP TABLE IF EXISTS dbo."MOVDEVTRANSFERENCIAS";
+DROP TABLE IF EXISTS dbo."MOVDEVCOMPRAS";
+DROP TABLE IF EXISTS dbo."MOVDEVBORRADOR";
+DROP TABLE IF EXISTS dbo."MOVCOMPRAS";
+DROP TABLE IF EXISTS dbo."MOVAJUSTES";
+DROP TABLE IF EXISTS dbo."MARCAS";
+DROP TABLE IF EXISTS dbo."LOTES";
+DROP TABLE IF EXISTS dbo."LISTAPRECIO";
+DROP TABLE IF EXISTS dbo."ITRANSFERENCIAS";
+DROP TABLE IF EXISTS dbo."INVENTARIO";
+DROP TABLE IF EXISTS dbo."IMPUESTOS";
+DROP TABLE IF EXISTS dbo."IMPRESORAFISCAL";
+DROP TABLE IF EXISTS dbo."IMOVTRANSFERENCIAS";
+DROP TABLE IF EXISTS dbo."IMOVDEVTRANSFERENCIAS";
+DROP TABLE IF EXISTS dbo."IDEVTRANSFERENCIAS";
+DROP TABLE IF EXISTS dbo."GRUPO_REGLAS";
+DROP TABLE IF EXISTS dbo."GRUPOSEG";
+DROP TABLE IF EXISTS dbo."GRUPOS";
+DROP TABLE IF EXISTS dbo."FORMAPAGO";
+DROP TABLE IF EXISTS dbo."FISICOLOGICO";
+DROP TABLE IF EXISTS dbo."FABRICANTES";
+DROP TABLE IF EXISTS dbo."DISPOSITIVOSMARCAJE";
+DROP TABLE IF EXISTS dbo."DISPOSITIVOGRUPO";
+DROP TABLE IF EXISTS dbo."DIARIOCAJA";
+DROP TABLE IF EXISTS dbo."DEVVENTAS";
+DROP TABLE IF EXISTS dbo."DEVTRANSFERENCIAS";
+DROP TABLE IF EXISTS dbo."DEVCOMPRAS";
+DROP TABLE IF EXISTS dbo."DETALLECONTROLACCESO";
+DROP TABLE IF EXISTS dbo."DESCUENTO_MAYORISTA";
+DROP TABLE IF EXISTS dbo."DEPOSITOS_DOLARES";
+DROP TABLE IF EXISTS dbo."DEPOSITOS";
+DROP TABLE IF EXISTS dbo."CUPONES";
+DROP TABLE IF EXISTS dbo."CTACONTABLE";
+DROP TABLE IF EXISTS dbo."CTABANCOS_DOLARES";
+DROP TABLE IF EXISTS dbo."CTABANCOS";
+DROP TABLE IF EXISTS dbo."CONTROLACCESO";
+DROP TABLE IF EXISTS dbo."CONFIGURACIONMARCAJE";
+DROP TABLE IF EXISTS dbo."COMPRAS";
+DROP TABLE IF EXISTS dbo."COLORES";
+DROP TABLE IF EXISTS dbo."CODIGOS_RECARGOS";
+DROP TABLE IF EXISTS dbo."CODIGOSCONVENIOS";
+DROP TABLE IF EXISTS dbo."CLIENTES";
+DROP TABLE IF EXISTS dbo."CATEGORIAS";
+DROP TABLE IF EXISTS dbo."CARGOS";
+DROP TABLE IF EXISTS dbo."CAJAS";
+DROP TABLE IF EXISTS dbo."BANCOS";
+DROP TABLE IF EXISTS dbo."AJUSTES";
+DROP FUNCTION IF EXISTS dbo.sp_upgraddiagrams();
+DROP FUNCTION IF EXISTS dbo.sp_renamediagram(p_diagramname character varying, p_owner_id integer, p_new_diagramname character varying);
+DROP FUNCTION IF EXISTS dbo.sp_helpdiagrams(p_diagramname character varying, p_owner_id integer);
+DROP FUNCTION IF EXISTS dbo.sp_helpdiagramdefinition(p_diagramname character varying, p_owner_id integer);
+DROP FUNCTION IF EXISTS dbo.sp_dropdiagram(p_diagramname character varying, p_owner_id integer);
+DROP FUNCTION IF EXISTS dbo.sp_creatediagram(p_diagramname character varying, p_owner_id integer, p_version integer, p_definition bytea);
+DROP FUNCTION IF EXISTS dbo.sp_alterdiagram(p_diagramname character varying, p_owner_id integer, p_version integer, p_definition bytea);
+DROP FUNCTION IF EXISTS dbo."sp_CompararTomasFisicas"();
+DROP FUNCTION IF EXISTS dbo."fntReglasPrenda"(p_codigobarra character varying, p_activa smallint);
+DROP FUNCTION IF EXISTS dbo."fntPrendasGrupoRegla"(p_idgrupo integer);
+DROP FUNCTION IF EXISTS dbo.fn_diagramobjects();
+DROP FUNCTION IF EXISTS dbo."fSALDODIARIO_InventarioDiario"(p_fecha_referencia character varying);
+DROP FUNCTION IF EXISTS dbo._compat_upsert_result(p_table text, p_codigobarra character varying, p_tipolista character varying, p_preciolista numeric, p_precio numeric, p_cantidad numeric, p_impuesto numeric, p_porcentajeimpuesto numeric, p_costo numeric, p_porcentajedescuento numeric, p_regla character varying, p_idregla bigint);
+DROP FUNCTION IF EXISTS dbo._compat_upsert_pasoa(p_codigobarra character varying, p_tipolista character varying, p_preciolista numeric, p_precio numeric, p_cantidad numeric, p_impuesto numeric, p_porcentajeimpuesto numeric, p_costo numeric, p_porcentajedescuento numeric);
+DROP FUNCTION IF EXISTS dbo._compat_rule_active_today(p_lunes smallint, p_martes smallint, p_miercoles smallint, p_jueves smallint, p_viernes smallint, p_sabado smallint, p_domingo smallint);
+DROP FUNCTION IF EXISTS dbo._compat_resolve_table(p_name text);
+DROP FUNCTION IF EXISTS dbo._compat_reset_temp_facturacion();
+DROP FUNCTION IF EXISTS dbo._compat_normalize_table_name(p_name text);
+DROP FUNCTION IF EXISTS dbo._compat_load_temp_facturacion_pasoa(p_tablafacturacion text);
+DROP FUNCTION IF EXISTS dbo._compat_ensure_result_table(p_name text);
+DROP FUNCTION IF EXISTS dbo._compat_calcular_descuento(p_precio numeric, p_porcdesc numeric, p_preciovalor numeric, p_tiporegla integer);
+DROP PROCEDURE IF EXISTS dbo."UpdateDispositivoMarcajeConf"(IN p_id integer, IN p_iddispositivo integer, IN p_dispositivo character varying);
+DROP PROCEDURE IF EXISTS dbo."UpdateDispositivoMarcaje"(IN p_id integer, IN p_modelo character varying, IN p_marca character varying, IN p_tipo character varying, IN p_imagen bytea, IN p_idgrupo integer);
+DROP FUNCTION IF EXISTS dbo."UltimaTasaCambio"();
+DROP FUNCTION IF EXISTS dbo."Selector_Reglas"(p_tablafacturacion character varying, p_convenio character varying);
+DROP FUNCTION IF EXISTS dbo."RespaldoBD"(p_bd character varying, p_nombredispositivo character varying, p_ubicacionnombrefisico text);
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_SelectorDeReglas_Convenios"(p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying);
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_SelectorDeReglas"(p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_escredito character varying, p_esmayorista character varying, p_grupo integer);
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_InsertarRestosFacturacion"(p_tablaresultado character varying);
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_DevolverRemanente"();
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_DescuentosMismoGrupo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupo integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer);
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_DescuentosDistintoGrupo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupoa integer, p_grupob integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer);
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_Descuento_MAYORISTAS"(p_codreferencia character varying, p_esreferencia integer, p_lleve integer, p_descuento numeric, p_tablafacturacion character varying, p_tablaresultado character varying);
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_DescuentoGeneralMismoGrupo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupo integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer);
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_DescuentoGeneralEnSiMismo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupo integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer);
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_DescuentoEnSiMismo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupo integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer);
+DROP FUNCTION IF EXISTS dbo."PromocionesYOfertas_DescuentoCatalogo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupo integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer);
+DROP FUNCTION IF EXISTS dbo."PROCESAR_MOVITRAN"(p_strxml text, p_strproceso character varying, p_creararticulo character varying);
+DROP FUNCTION IF EXISTS dbo."ObtenerUltimosAccesos"(p_idpersonal integer);
+DROP FUNCTION IF EXISTS dbo."ObtenerUltimoAccesoMarcaje"();
+DROP FUNCTION IF EXISTS dbo."ObtenerAccesoPorFecha"(p_idpersonal character varying, p_fecha timestamp without time zone);
+DROP FUNCTION IF EXISTS dbo."ListarPersonal"(p_idpersonal character varying);
+DROP FUNCTION IF EXISTS dbo."ListarPatronesEmpleado"(p_idpersonal character varying);
+DROP FUNCTION IF EXISTS dbo."ListarPatron"(p_idpersonal character varying, p_idmano smallint, p_iddedo smallint);
+DROP FUNCTION IF EXISTS dbo."ListarCarnetEmpleado"(p_idpersonal character varying);
+DROP FUNCTION IF EXISTS dbo."InsertarPatron"(p_idpersonal character varying, p_idmano smallint, p_iddedo smallint, p_patron bytea);
+DROP FUNCTION IF EXISTS dbo."InsertarDispositivoMarcajeConf"(p_iddispositivo integer, p_dispositivo character varying);
+DROP FUNCTION IF EXISTS dbo."InsertarDispositivoMarcaje"(p_modelo character varying, p_marca character varying, p_tipo character varying, p_imagen bytea, p_idgrupo integer);
+DROP PROCEDURE IF EXISTS dbo."InsertarDetalleControlAcceso"(IN p_idpersonal character varying, IN p_fecha timestamp without time zone, IN p_idpatron bigint, IN p_indtipomarcaje smallint, IN p_indusocarnet smallint);
+DROP PROCEDURE IF EXISTS dbo."InsertarControlAccesoSelectivo"(IN p_idpersonal character varying, IN p_fecha timestamp without time zone, IN p_idpatron bigint, IN p_fotografia bytea, IN p_idzonahoraria character varying, IN p_indusocarnet smallint, IN p_indtipomarcaje smallint);
+DROP FUNCTION IF EXISTS dbo."InsertarControlAcceso"(p_idpersonal character varying, p_fecha timestamp without time zone, p_idpatron bigint, p_fotografia bytea, p_idzonahoraria character varying, p_indusocarnet smallint, p_marcajeinterdiario boolean);
+DROP FUNCTION IF EXISTS dbo."ExtraerEnteros"(p_string character varying);
+DROP PROCEDURE IF EXISTS dbo."EliminarPatron"(IN p_idpatron bigint);
+DROP FUNCTION IF EXISTS dbo."Cupones_SelectorDeImpresion"(p_monto numeric, p_cliente character varying, p_numerofactura bigint, p_tablaresultado character varying, p_serie character varying);
+DROP FUNCTION IF EXISTS dbo."CONSULTAS_ENTRADASYSALIDAS"(p_mes integer, p_ano integer);
+DROP FUNCTION IF EXISTS dbo."BuscarCantidadMarcajeDia"(p_fechadia timestamp without time zone, p_cedula character varying, p_idpersonal integer);
+DROP PROCEDURE IF EXISTS dbo."ApiProcesarToma"(IN p_codigobarra character varying, IN p_numeropagina integer, IN p_observacion character varying, IN p_cantidad integer, IN p_valor boolean);
+DROP FUNCTION IF EXISTS dbo."ApiBuscarValores"();
+DROP FUNCTION IF EXISTS dbo."ApiBuscarTomaFisicaTotal"(p_numpagina integer);
+DROP FUNCTION IF EXISTS dbo."ApiBuscarTomaFisicaPost"(p_numeropagina integer, p_codigobarra character varying);
+DROP FUNCTION IF EXISTS dbo."ApiBuscarTomaFisicaMae"();
+DROP FUNCTION IF EXISTS dbo."ApiBuscarTomaFisicaDetalle"(p_numeropagina integer);
+DROP PROCEDURE IF EXISTS dbo."ApiBuscarTomaFisica"(IN p_codigobarra character varying, IN p_numeropagina integer, IN p_observacion character varying);
+DROP FUNCTION IF EXISTS dbo."ApiBuscarTest"();
+DROP PROCEDURE IF EXISTS dbo."ActualizarMovimientoFisicologico"();
+DROP SCHEMA IF EXISTS dbo;
+--
+-- Name: dbo; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA dbo;
+
+
+--
+-- Name: ActualizarMovimientoFisicologico(); Type: PROCEDURE; Schema: dbo; Owner: -
+--
+
+CREATE PROCEDURE dbo."ActualizarMovimientoFisicologico"()
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_fechahasta date;
+  v_fechadesde date;
+BEGIN
+  SELECT coalesce(max(x."FechaAjuste"), DATE '1900-01-01') INTO v_fechahasta
+  FROM (SELECT DISTINCT "FechaAjuste" FROM dbo."FISICOLOGICO") x;
+
+  SELECT coalesce(max(x."FechaAjuste"), DATE '1900-01-01') INTO v_fechadesde
+  FROM (
+    SELECT DISTINCT "FechaAjuste"
+    FROM dbo."FISICOLOGICO"
+    WHERE "FechaAjuste" < v_fechahasta
+  ) x;
+
+  IF to_char(v_fechadesde, 'YYYYMMDD') <> '19000101' THEN
+    v_fechadesde := v_fechadesde + 1;
+  END IF;
+
+  UPDATE dbo."FISICOLOGICO"
+  SET "ConMovimiento" = 0
+  WHERE "FechaAjuste" BETWEEN (v_fechadesde - 1) AND v_fechahasta;
+
+  UPDATE dbo."FISICOLOGICO" fs
+  SET "ConMovimiento" = 1
+  WHERE fs."FechaAjuste" BETWEEN (v_fechadesde - 1) AND v_fechahasta
+    AND EXISTS (
+      SELECT 1
+      FROM (
+        SELECT DISTINCT mv."CodigoBarra"
+        FROM dbo."MOVVENTAS" mv
+        INNER JOIN dbo."FISICOLOGICO" f1
+          ON f1."CodigoBarra" = mv."CodigoBarra"
+         AND f1."FechaAjuste" BETWEEN (v_fechadesde - 1) AND v_fechahasta
+        WHERE mv."Hora"::date BETWEEN v_fechadesde AND v_fechahasta
+
+        UNION
+
+        SELECT DISTINCT mv."CodigoBarra"
+        FROM dbo."MOVDEVVENTAS" mv
+        INNER JOIN dbo."FISICOLOGICO" f2
+          ON f2."CodigoBarra" = mv."CodigoBarra"
+         AND f2."FechaAjuste" BETWEEN (v_fechadesde - 1) AND v_fechahasta
+        WHERE mv."Hora"::date BETWEEN v_fechadesde AND v_fechahasta
+
+        UNION
+
+        SELECT DISTINCT ma."CodigoBarra"
+        FROM dbo."AJUSTES" aj
+        INNER JOIN dbo."MOVAJUSTES" ma ON aj."Numero" = ma."Numero"
+        INNER JOIN dbo."FISICOLOGICO" f3
+          ON f3."CodigoBarra" = ma."CodigoBarra"
+         AND f3."FechaAjuste" BETWEEN (v_fechadesde - 1) AND v_fechahasta
+        WHERE aj."Fecha"::date BETWEEN v_fechadesde AND v_fechahasta
+
+        UNION
+
+        SELECT DISTINCT mc."CodigoBarra"
+        FROM dbo."COMPRAS" co
+        INNER JOIN dbo."MOVCOMPRAS" mc ON co."Documento" = mc."Documento" AND co."Proveedor" = mc."Proveedor"
+        INNER JOIN dbo."FISICOLOGICO" f4
+          ON f4."CodigoBarra" = mc."CodigoBarra"
+         AND f4."FechaAjuste" BETWEEN (v_fechadesde - 1) AND v_fechahasta
+        WHERE co."Fecha"::date BETWEEN v_fechadesde AND v_fechahasta
+
+        UNION
+
+        SELECT DISTINCT mt."CodigoBarra"
+        FROM dbo."TRANSFERENCIAS" tr
+        INNER JOIN dbo."MOVTRANSFERENCIAS" mt ON tr."Numero" = mt."Numero"
+        INNER JOIN dbo."FISICOLOGICO" f5
+          ON f5."CodigoBarra" = mt."CodigoBarra"
+         AND f5."FechaAjuste" BETWEEN (v_fechadesde - 1) AND v_fechahasta
+        WHERE tr."Fecha"::date BETWEEN v_fechadesde AND v_fechahasta
+
+        UNION
+
+        SELECT DISTINCT mt."CodigoBarra"
+        FROM dbo."ITRANSFERENCIAS" tr
+        INNER JOIN dbo."IMOVTRANSFERENCIAS" mt ON tr."Numero" = mt."Numero" AND tr."CodigoEnvia" = mt."CodigoEnvia"
+        INNER JOIN dbo."FISICOLOGICO" f6
+          ON f6."CodigoBarra" = mt."CodigoBarra"
+         AND f6."FechaAjuste" BETWEEN (v_fechadesde - 1) AND v_fechahasta
+        WHERE tr."Fecha"::date BETWEEN v_fechadesde AND v_fechahasta
+      ) data
+      WHERE data."CodigoBarra" = fs."CodigoBarra"
+    );
+END;
+$$;
+
+
+--
+-- Name: ApiBuscarTest(); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ApiBuscarTest"() RETURNS TABLE("Nombre" text)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT p."Nombre"::text
+  FROM dbo."PARAMETROS" p;
+$$;
+
+
+--
+-- Name: ApiBuscarTomaFisica(character varying, integer, character varying); Type: PROCEDURE; Schema: dbo; Owner: -
+--
+
+CREATE PROCEDURE dbo."ApiBuscarTomaFisica"(IN p_codigobarra character varying, IN p_numeropagina integer, IN p_observacion character varying)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_existearticulo integer := 0;
+  v_existearticulotoma integer := 0;
+  v_existetoma integer := 0;
+  v_id integer := 0;
+BEGIN
+  SELECT coalesce(count(*), 0) INTO v_existearticulo
+  FROM dbo."INVENTARIO"
+  WHERE "CodigoBarra" = p_codigobarra;
+
+  IF v_existearticulo > 0 THEN
+    SELECT coalesce(count("NumeroPagina"), 0) INTO v_existetoma
+    FROM dbo."TOMAFISICA1"
+    WHERE "NumeroPagina" = p_numeropagina;
+
+    IF v_existetoma > 0 THEN
+      UPDATE dbo."TOMAFISICA1"
+      SET "Observacion" = p_observacion
+      WHERE "NumeroPagina" = p_numeropagina;
+    ELSE
+      INSERT INTO dbo."TOMAFISICA1" ("NumeroPagina", "Fecha", "Observacion", "Usuario", "Status")
+      VALUES (p_numeropagina, CURRENT_TIMESTAMP, p_observacion, 'INVE', 1);
+    END IF;
+
+    SELECT coalesce((SELECT "NumeroPagina" FROM dbo."MOVTOMAFISICA1" WHERE "CodigoBarra" = p_codigobarra LIMIT 1), 0)
+      INTO v_existearticulotoma;
+
+    IF v_existearticulotoma > 0 THEN
+      UPDATE dbo."MOVTOMAFISICA1"
+      SET "Cantidad" = "Cantidad" + 1
+      WHERE "CodigoBarra" = p_codigobarra
+        AND "NumeroPagina" = p_numeropagina;
+    ELSE
+      SELECT coalesce(max("Item"), 0) + 1 INTO v_id
+      FROM dbo."MOVTOMAFISICA1"
+      WHERE "NumeroPagina" = p_numeropagina;
+
+      INSERT INTO dbo."MOVTOMAFISICA1" ("NumeroPagina", "Item", "CodigoBarra", "Cantidad", "Fecha")
+      VALUES (p_numeropagina, v_id, p_codigobarra, 1, CURRENT_TIMESTAMP);
+    END IF;
+  END IF;
+END;
+$$;
+
+
+--
+-- Name: ApiBuscarTomaFisicaDetalle(integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ApiBuscarTomaFisicaDetalle"(p_numeropagina integer) RETURNS TABLE("NumeroPagina" integer, "Nombre" text, "Item" integer, "CodigoBarra" character varying, "Cantidad" numeric)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT m."NumeroPagina", i."Nombre"::text, m."Item", m."CodigoBarra", m."Cantidad"
+  FROM dbo."MOVTOMAFISICA1" m
+  INNER JOIN dbo."INVENTARIO" i ON m."CodigoBarra" = i."CodigoBarra"
+  WHERE m."NumeroPagina" = p_numeropagina
+  ORDER BY m."Item" DESC;
+$$;
+
+
+--
+-- Name: ApiBuscarTomaFisicaMae(); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ApiBuscarTomaFisicaMae"() RETURNS TABLE("NumeroPagina" integer, "Fecha" timestamp without time zone, "Observacion" text)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT t."NumeroPagina", t."Fecha", t."Observacion"::text
+  FROM dbo."TOMAFISICA1" t
+  WHERE t."Usuario" = 'INVE' AND t."Status" = 0
+  ORDER BY t."NumeroPagina" DESC, t."Fecha" DESC;
+$$;
+
+
+--
+-- Name: ApiBuscarTomaFisicaPost(integer, character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ApiBuscarTomaFisicaPost"(p_numeropagina integer, p_codigobarra character varying) RETURNS TABLE("Cantidad" numeric, "Nombre" text)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT m."Cantidad", i."Nombre"::text
+  FROM dbo."TOMAFISICA1" t
+  INNER JOIN dbo."MOVTOMAFISICA1" m ON t."NumeroPagina" = m."NumeroPagina"
+  INNER JOIN dbo."INVENTARIO" i ON m."CodigoBarra" = i."CodigoBarra"
+  WHERE m."NumeroPagina" = p_numeropagina
+    AND m."CodigoBarra" = p_codigobarra;
+$$;
+
+
+--
+-- Name: ApiBuscarTomaFisicaTotal(integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ApiBuscarTomaFisicaTotal"(p_numpagina integer) RETURNS TABLE("Cantidad" numeric)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT coalesce(sum(m."Cantidad"), 0)::numeric(24,4) AS "Cantidad"
+  FROM dbo."MOVTOMAFISICA1" m
+  WHERE m."NumeroPagina" = p_numpagina;
+$$;
+
+
+--
+-- Name: ApiBuscarValores(); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ApiBuscarValores"() RETURNS TABLE("IdTabla" character varying, "Descripcion" character varying)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM dbo."TABLA_VALORES" WHERE "IdTabla" = 'ValorLectorScaner'
+  ) THEN
+    INSERT INTO dbo."TABLA_VALORES" ("IdTabla", "Codigo", "Descripcion")
+    VALUES ('ValorLectorScaner', 99, 'FALSE');
+  END IF;
+
+  RETURN QUERY
+  SELECT v."IdTabla", v."Descripcion"
+  FROM dbo."TABLA_VALORES" v
+  WHERE v."IdTabla" = 'ValorLectorScaner';
+END;
+$$;
+
+
+--
+-- Name: ApiProcesarToma(character varying, integer, character varying, integer, boolean); Type: PROCEDURE; Schema: dbo; Owner: -
+--
+
+CREATE PROCEDURE dbo."ApiProcesarToma"(IN p_codigobarra character varying, IN p_numeropagina integer, IN p_observacion character varying, IN p_cantidad integer, IN p_valor boolean)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_existearticulo integer := 0;
+  v_existearticulotoma integer := 0;
+  v_existetoma integer := 0;
+  v_id integer := 0;
+BEGIN
+  SELECT coalesce(count("CodigoBarra"), 0) INTO v_existearticulo
+  FROM dbo."INVENTARIO"
+  WHERE "CodigoBarra" = p_codigobarra;
+
+  IF v_existearticulo > 0 THEN
+    SELECT coalesce(count("NumeroPagina"), 0) INTO v_existetoma
+    FROM dbo."TOMAFISICA1"
+    WHERE "NumeroPagina" = p_numeropagina;
+
+    IF v_existetoma > 0 THEN
+      UPDATE dbo."TOMAFISICA1"
+      SET "Observacion" = p_observacion
+      WHERE "NumeroPagina" = p_numeropagina;
+    ELSE
+      INSERT INTO dbo."TOMAFISICA1" ("NumeroPagina", "Fecha", "Observacion", "Usuario", "Status")
+      VALUES (p_numeropagina, CURRENT_TIMESTAMP, p_observacion, 'INVE', 0);
+    END IF;
+
+    SELECT coalesce(count("NumeroPagina"), 0) INTO v_existearticulotoma
+    FROM dbo."MOVTOMAFISICA1"
+    WHERE "CodigoBarra" = p_codigobarra
+      AND "NumeroPagina" = p_numeropagina;
+
+    IF v_existearticulotoma > 0 THEN
+      IF coalesce(p_valor, FALSE) = FALSE THEN
+        UPDATE dbo."MOVTOMAFISICA1"
+        SET "Cantidad" = "Cantidad" + 1
+        WHERE "CodigoBarra" = p_codigobarra
+          AND "NumeroPagina" = p_numeropagina;
+      ELSE
+        UPDATE dbo."MOVTOMAFISICA1"
+        SET "Cantidad" = p_cantidad
+        WHERE "CodigoBarra" = p_codigobarra
+          AND "NumeroPagina" = p_numeropagina;
+      END IF;
+    ELSE
+      SELECT coalesce(max("Item"), 0) + 1 INTO v_id
+      FROM dbo."MOVTOMAFISICA1"
+      WHERE "NumeroPagina" = p_numeropagina;
+
+      INSERT INTO dbo."MOVTOMAFISICA1" ("NumeroPagina", "Item", "CodigoBarra", "Cantidad", "Fecha")
+      VALUES (p_numeropagina, v_id, p_codigobarra, p_cantidad, CURRENT_TIMESTAMP);
+    END IF;
+  END IF;
+END;
+$$;
+
+
+--
+-- Name: BuscarCantidadMarcajeDia(timestamp without time zone, character varying, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."BuscarCantidadMarcajeDia"(p_fechadia timestamp without time zone, p_cedula character varying, p_idpersonal integer) RETURNS TABLE(valor bigint)
+    LANGUAGE plpgsql STABLE
+    AS $$
+BEGIN
+  IF (p_cedula IS NOT NULL OR p_cedula <> '') THEN
+    RETURN QUERY
+    SELECT count(d."IdDetalleControlAcceso")::bigint AS valor
+    FROM dbo."DETALLECONTROLACCESO" d
+    INNER JOIN dbo."TRABAJADORES" t ON t."Cedula" = d."IdPersonal"
+    WHERE t."Cedula" = p_cedula
+      AND d."Fecha"::date = p_fechadia::date;
+  ELSE
+    RETURN QUERY
+    SELECT count(d."IdDetalleControlAcceso")::bigint AS valor
+    FROM dbo."DETALLECONTROLACCESO" d
+    WHERE d."IdPersonal" = p_idpersonal::text
+      AND d."Fecha"::date = p_fechadia::date;
+  END IF;
+END;
+$$;
+
+
+--
+-- Name: CONSULTAS_ENTRADASYSALIDAS(integer, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."CONSULTAS_ENTRADASYSALIDAS"(p_mes integer, p_ano integer) RETURNS TABLE("Nombre" text, "Referencia" character varying, "CodigoMarca" character varying, "ExistenciasInicial" numeric, "Entradas" numeric, "Salidas" numeric, "ExistenciaFinal" numeric)
+    LANGUAGE plpgsql STABLE
+    AS $$
+DECLARE
+  v_iniciodelmes date;
+  v_findelmes date;
+BEGIN
+  v_iniciodelmes := to_date('01/' || lpad(p_mes::text, 2, '0') || '/' || p_ano::text, 'DD/MM/YYYY');
+  v_findelmes := (date_trunc('month', v_iniciodelmes + interval '1 month') - interval '1 day')::date;
+
+  RETURN QUERY
+  SELECT
+    CASE
+      WHEN position('T:' IN max(data."Nombre")) = 0 THEN max(data."Nombre")
+      ELSE substring(max(data."Nombre") FROM 1 FOR position('T:' IN max(data."Nombre")) - 1)
+    END::text AS "Nombre",
+    data."Referencia",
+    data."CodigoMarca",
+    sum(data."ExistenciasInicial")::numeric(24,4) AS "ExistenciasInicial",
+    sum(data."Entradas")::numeric(24,4) AS "Entradas",
+    sum(data."Salidas")::numeric(24,4) AS "Salidas",
+    sum(data."ExistenciasFinal")::numeric(24,4) AS "ExistenciaFinal"
+  FROM (
+    SELECT
+      i."CodigoBarra",
+      i."Nombre",
+      i."Referencia",
+      i."CodigoMarca",
+      i."Talla",
+      i."CodigoColor",
+      coalesce(s_i."Existencia", 0)::numeric(24,4) AS "ExistenciasInicial",
+      coalesce(mov."Entradas", 0)::numeric(24,4) AS "Entradas",
+      coalesce(mov."Salidas", 0)::numeric(24,4) AS "Salidas",
+      coalesce(s_f."Existencia", 0)::numeric(24,4) AS "ExistenciasFinal"
+    FROM (
+      SELECT "CodigoBarra", "Nombre", "Referencia", "CodigoMarca", "Talla", "CodigoColor"
+      FROM dbo."INVENTARIO"
+    ) i
+    LEFT JOIN dbo."fSALDODIARIO_InventarioDiario"(to_char(v_iniciodelmes - interval '1 day', 'DD/MM/YYYY')) s_i
+      ON i."CodigoBarra" = s_i."CodigoBarra"
+    LEFT JOIN (
+      SELECT
+        s."CodigoBarra",
+        sum(coalesce(s."TotalDevVentasCant", 0) + coalesce(s."TotalTransferenciasRecCant", 0) + coalesce(s."TotalDevTransferenciasCant", 0) + coalesce(s."TotalComprasCant", 0) + coalesce(s."TotalAjustesPositivosCant", 0) + coalesce(s."TotalAFSPositivosCant", 0))::numeric(24,4) AS "Entradas",
+        sum(coalesce(s."TotalVentasCant", 0) + coalesce(s."TotalDevTransferenciasRecCant", 0) + coalesce(s."TotalTransferenciasCant", 0) + coalesce(s."TotalDevComprasCant", 0) + coalesce(s."TotalAjustesNegativosCant", 0) + coalesce(s."TotalAFSNegativosCant", 0))::numeric(24,4) * (-1) AS "Salidas"
+      FROM dbo."SALDODIARIO" s
+      WHERE s."Fecha" BETWEEN v_iniciodelmes AND v_findelmes
+      GROUP BY s."CodigoBarra"
+    ) mov ON i."CodigoBarra" = mov."CodigoBarra"
+    LEFT JOIN dbo."fSALDODIARIO_InventarioDiario"(to_char(v_findelmes, 'DD/MM/YYYY')) s_f
+      ON i."CodigoBarra" = s_f."CodigoBarra"
+  ) data
+  GROUP BY data."Referencia", data."CodigoMarca";
+END;
+$$;
+
+
+--
+-- Name: Cupones_SelectorDeImpresion(numeric, character varying, bigint, character varying, character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."Cupones_SelectorDeImpresion"(p_monto numeric, p_cliente character varying, p_numerofactura bigint, p_tablaresultado character varying, p_serie character varying) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_result regclass;
+  v_cupon record;
+  v_codigo_convenio varchar(10);
+  v_id_convenio bigint;
+  v_validar boolean;
+  v_validar_ref boolean;
+  v_monto1 numeric(15,2);
+  v_cantidad_ref numeric(15,2);
+  v_secuencia integer;
+BEGIN
+  v_result := dbo."_compat_resolve_table"(p_tablaresultado);
+  IF v_result IS NULL THEN
+    RETURN;
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp.temp_impresion_bono;
+  CREATE TEMP TABLE pg_temp.temp_impresion_bono (
+    codigobarra varchar(15),
+    tipolista varchar(3),
+    preciolista numeric(18,4),
+    precio numeric(18,4),
+    cantidad numeric(18,4),
+    impuesto numeric(18,4),
+    porcentajeimpuesto numeric(18,4),
+    costo numeric(18,4),
+    porcentajedescuento numeric(7,4),
+    idregla integer,
+    regla varchar(15)
+  ) ON COMMIT DROP;
+
+  EXECUTE format(
+    'INSERT INTO pg_temp.temp_impresion_bono (codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento, idregla, regla)
+     SELECT codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento, coalesce(idregla, 0), regla
+     FROM %s',
+    v_result
+  );
+
+  FOR v_cupon IN
+    SELECT *
+    FROM dbo."CUPONES"
+    WHERE "Status" = 1
+      AND current_date BETWEEN coalesce("FechaInicial"::date, current_date) AND coalesce("FechaFinal"::date, current_date)
+  LOOP
+    v_validar := false;
+    v_validar_ref := false;
+    v_monto1 := 0;
+    v_cantidad_ref := 0;
+    v_secuencia := 0;
+    v_codigo_convenio := NULL;
+    v_id_convenio := NULL;
+
+    IF coalesce(v_cupon."UsaReferencias", 0) = 1 THEN
+      SELECT coalesce(sum((t.precio + t.impuesto) * t.cantidad), 0), coalesce(sum(t.cantidad), 0)
+        INTO v_monto1, v_cantidad_ref
+      FROM pg_temp.temp_impresion_bono t
+      INNER JOIN dbo."INVENTARIO" i ON i."CodigoBarra" = t.codigobarra
+      INNER JOIN dbo."grupo_cupones" g
+        ON i."Referencia" = g."Referencia"
+       AND i."CodigoMarca" = g."CodigoMarca"
+      WHERE g."ProductosActivan" = v_cupon."ProductosActivan"::varchar(10);
+
+      v_validar_ref := v_monto1 BETWEEN coalesce(v_cupon."MontoDesde", 0) AND coalesce(v_cupon."MontoHasta", 0)
+                       AND v_cantidad_ref >= coalesce(v_cupon."MinimoCantidad", 0);
+    ELSE
+      SELECT coalesce(sum(t.cantidad), 0)
+        INTO v_cantidad_ref
+      FROM pg_temp.temp_impresion_bono t
+      WHERE t.codigobarra NOT IN (SELECT "CodigoBarra" FROM dbo."CODIGOS_RECARGOS");
+
+      v_validar_ref := p_monto BETWEEN coalesce(v_cupon."MontoDesde", 0) AND coalesce(v_cupon."MontoHasta", 0)
+                       AND v_cantidad_ref >= coalesce(v_cupon."MinimoCantidad", 0);
+    END IF;
+
+    IF coalesce(v_cupon."UsaCodigo", 0) = 1 THEN
+      SELECT c."Codigo", c."IdCodigo"
+        INTO v_codigo_convenio, v_id_convenio
+      FROM dbo."CODIGOSCONVENIOS" c
+      WHERE c."Status" = 1
+        AND c."IdCupon" = v_cupon."IdCupon"
+      ORDER BY c."IdCodigo"
+      LIMIT 1;
+
+      IF coalesce(v_codigo_convenio, '') <> '' AND v_validar_ref THEN
+        v_validar := true;
+        UPDATE dbo."CODIGOSCONVENIOS"
+        SET "Status" = 2
+        WHERE "IdCodigo" = v_id_convenio;
+      END IF;
+    ELSE
+      v_validar := true;
+    END IF;
+
+    IF coalesce(v_cupon."Acumulativo", 0) = 1 THEN
+      v_secuencia := CASE v_cupon."Tipo"
+        WHEN 2 THEN floor((CASE WHEN coalesce(v_cupon."UsaReferencias", 0) = 1 AND v_validar_ref THEN nullif(v_monto1, 0) ELSE nullif(p_monto, 0) END) / NULLIF(v_cupon."MontoDesde", 0))::integer
+        WHEN 6 THEN floor(p_monto / 1000)::integer
+        WHEN 3 THEN floor(p_monto / NULLIF(v_cupon."MontoDesde", 0))::integer * 3
+        WHEN 4 THEN floor(p_monto / NULLIF(v_cupon."MontoDesde", 0))::integer * 4
+        ELSE 0
+      END;
+    END IF;
+
+    IF v_validar AND v_validar_ref THEN
+      INSERT INTO dbo."TRANSACCIONESCUPONES" (
+        "NumeroFactura", "Serie", "Fecha", "MontoFactura", "IdCupon", "CodigoConvenio", "Cliente", "FechaCanjeInicial", "FechaCanjeFinal", "Acumula"
+      ) VALUES (
+        p_numerofactura, p_serie, CURRENT_TIMESTAMP, p_monto, v_cupon."IdCupon", v_codigo_convenio, p_cliente,
+        v_cupon."FechaCanjeInicial", v_cupon."FechaCanjeFinal", coalesce(v_secuencia, 0)
+      );
+    END IF;
+  END LOOP;
+END;
+$$;
+
+
+--
+-- Name: EliminarPatron(bigint); Type: PROCEDURE; Schema: dbo; Owner: -
+--
+
+CREATE PROCEDURE dbo."EliminarPatron"(IN p_idpatron bigint)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  DELETE FROM dbo."PATRON"
+  WHERE "IdPatron" = p_idpatron;
+END;
+$$;
+
+
+--
+-- Name: ExtraerEnteros(character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ExtraerEnteros"(p_string character varying) RETURNS character varying
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  SELECT left(regexp_replace(coalesce(p_string, ''), '[^0-9]', '', 'g'), 1000)::varchar(1000);
+$$;
+
+
+--
+-- Name: InsertarControlAcceso(character varying, timestamp without time zone, bigint, bytea, character varying, smallint, boolean); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."InsertarControlAcceso"(p_idpersonal character varying, p_fecha timestamp without time zone, p_idpatron bigint DEFAULT NULL::bigint, p_fotografia bytea DEFAULT NULL::bytea, p_idzonahoraria character varying DEFAULT NULL::character varying, p_indusocarnet smallint DEFAULT 0, p_marcajeinterdiario boolean DEFAULT false) RETURNS smallint
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_horaentrada timestamp(0) without time zone;
+  v_horasalida timestamp(0) without time zone;
+  v_fechaanterior date;
+  v_numero integer := 0;
+  v_numeroupdate integer := 0;
+BEGIN
+  SELECT coalesce(max("Numero"), 0) INTO v_numero FROM dbo."CONTROLACCESO";
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM dbo."CONTROLACCESO"
+    WHERE "Cedula" = p_idpersonal
+      AND "Fecha" = p_fecha::date
+  ) THEN
+    v_fechaanterior := (p_fecha::date - 1);
+
+    IF p_marcajeinterdiario THEN
+      IF EXISTS (
+        SELECT 1
+        FROM dbo."CONTROLACCESO"
+        WHERE "Cedula" = p_idpersonal
+          AND "Fecha" = v_fechaanterior
+          AND "HoraSalida" IS NULL
+      ) THEN
+        UPDATE dbo."CONTROLACCESO"
+        SET "HoraSalida" = p_fecha
+        WHERE "Cedula" = p_idpersonal
+          AND "Fecha" = v_fechaanterior
+          AND "Numero" = (
+            SELECT c."Numero"
+            FROM dbo."CONTROLACCESO" c
+            WHERE c."Cedula" = p_idpersonal
+              AND c."Fecha" = v_fechaanterior
+            ORDER BY c."Numero" DESC
+            LIMIT 1
+          );
+        RETURN 1;
+      ELSE
+        INSERT INTO dbo."CONTROLACCESO" ("Numero", "Cedula", "Fecha", "HoraEntrada")
+        VALUES (v_numero + 1, p_idpersonal, p_fecha::date, p_fecha);
+        RETURN 0;
+      END IF;
+    ELSE
+      INSERT INTO dbo."CONTROLACCESO" ("Numero", "Cedula", "Fecha", "HoraEntrada")
+      VALUES (v_numero + 1, p_idpersonal, p_fecha::date, p_fecha);
+      RETURN 0;
+    END IF;
+  ELSE
+    SELECT c."Numero", c."HoraEntrada", c."HoraSalida"
+      INTO v_numeroupdate, v_horaentrada, v_horasalida
+    FROM dbo."CONTROLACCESO" c
+    WHERE c."Cedula" = p_idpersonal
+      AND c."Fecha" = p_fecha::date
+    ORDER BY c."Numero" DESC
+    LIMIT 1;
+
+    IF v_horasalida IS NULL THEN
+      UPDATE dbo."CONTROLACCESO"
+      SET "HoraSalida" = p_fecha
+      WHERE "Numero" = v_numeroupdate;
+      RETURN 1;
+    ELSIF v_horaentrada IS NOT NULL AND v_horasalida IS NOT NULL THEN
+      INSERT INTO dbo."CONTROLACCESO" ("Numero", "Cedula", "Fecha", "HoraEntrada")
+      VALUES (v_numero + 1, p_idpersonal, p_fecha::date, p_fecha);
+      RETURN 0;
+    END IF;
+  END IF;
+
+  RETURN 0;
+END;
+$$;
+
+
+--
+-- Name: InsertarControlAccesoSelectivo(character varying, timestamp without time zone, bigint, bytea, character varying, smallint, smallint); Type: PROCEDURE; Schema: dbo; Owner: -
+--
+
+CREATE PROCEDURE dbo."InsertarControlAccesoSelectivo"(IN p_idpersonal character varying, IN p_fecha timestamp without time zone, IN p_idpatron bigint DEFAULT NULL::bigint, IN p_fotografia bytea DEFAULT NULL::bytea, IN p_idzonahoraria character varying DEFAULT NULL::character varying, IN p_indusocarnet smallint DEFAULT 0, IN p_indtipomarcaje smallint DEFAULT 0)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_numero integer := 0;
+BEGIN
+  SELECT coalesce(max("Numero"), 0) INTO v_numero
+  FROM dbo."CONTROLACCESO";
+
+  IF p_indtipomarcaje = 0 THEN
+    INSERT INTO dbo."CONTROLACCESO" ("Numero", "Cedula", "Fecha", "HoraEntrada")
+    VALUES (v_numero + 1, p_idpersonal, p_fecha::date, p_fecha);
+  ELSE
+    INSERT INTO dbo."CONTROLACCESO" ("Numero", "Cedula", "Fecha", "HoraSalida")
+    VALUES (v_numero + 1, p_idpersonal, p_fecha::date, p_fecha);
+  END IF;
+END;
+$$;
+
+
+--
+-- Name: InsertarDetalleControlAcceso(character varying, timestamp without time zone, bigint, smallint, smallint); Type: PROCEDURE; Schema: dbo; Owner: -
+--
+
+CREATE PROCEDURE dbo."InsertarDetalleControlAcceso"(IN p_idpersonal character varying, IN p_fecha timestamp without time zone, IN p_idpatron bigint DEFAULT NULL::bigint, IN p_indtipomarcaje smallint DEFAULT 0, IN p_indusocarnet smallint DEFAULT 0)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO dbo."DETALLECONTROLACCESO" ("IdPersonal", "IdPatron", "Fecha", "IndTipoMarcaje", "IndUsoCarnet")
+  VALUES (p_idpersonal, p_idpatron, p_fecha, p_indtipomarcaje, p_indusocarnet);
+END;
+$$;
+
+
+--
+-- Name: InsertarDispositivoMarcaje(character varying, character varying, character varying, bytea, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."InsertarDispositivoMarcaje"(p_modelo character varying, p_marca character varying, p_tipo character varying, p_imagen bytea, p_idgrupo integer) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_id integer;
+BEGIN
+  INSERT INTO dbo."DISPOSITIVOSMARCAJE" ("Modelo", "Marca", "Tipo", "Imagen", "IdGrupo")
+  VALUES (p_modelo, p_marca, p_tipo, p_imagen, p_idgrupo)
+  RETURNING "Id" INTO v_id;
+
+  RETURN v_id;
+END;
+$$;
+
+
+--
+-- Name: InsertarDispositivoMarcajeConf(integer, character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."InsertarDispositivoMarcajeConf"(p_iddispositivo integer, p_dispositivo character varying) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_id integer;
+BEGIN
+  INSERT INTO dbo."CONFIGURACIONMARCAJE" ("IdDispositivo", "Dispositivo")
+  VALUES (p_iddispositivo, p_dispositivo)
+  RETURNING "Id" INTO v_id;
+
+  RETURN v_id;
+END;
+$$;
+
+
+--
+-- Name: InsertarPatron(character varying, smallint, smallint, bytea); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."InsertarPatron"(p_idpersonal character varying, p_idmano smallint, p_iddedo smallint, p_patron bytea) RETURNS bigint
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_idpatron bigint;
+BEGIN
+  INSERT INTO dbo."PATRON" ("IdPersonal", "IdMano", "IdDedo", "Patron", "FechaRegistro", "IndEstatus")
+  VALUES (p_idpersonal, p_idmano, p_iddedo, p_patron, CURRENT_TIMESTAMP, 1)
+  RETURNING "IdPatron" INTO v_idpatron;
+
+  RETURN v_idpatron;
+END;
+$$;
+
+
+--
+-- Name: ListarCarnetEmpleado(character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ListarCarnetEmpleado"(p_idpersonal character varying DEFAULT NULL::character varying) RETURNS TABLE("IdPersonal" integer, "Cedula" character varying, "Nombres" text, "Apellidos" text, "FechaIngreso" timestamp without time zone, "FechaNacimiento" timestamp without time zone, "Direccion" text, "Telefono" text, "Celular" text, "IndEstatus" smallint, "IndUsarCarnet" integer, "Fotografia" bytea, "IdCargo" integer, "NumeroCarnet" character varying, "Nacionalidad" text, "MarcajeInterDiario" boolean)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT
+    0 AS "IdPersonal",
+    t."Cedula",
+    t."Nombre"::text AS "Nombres",
+    ''::text AS "Apellidos",
+    t."FechaIngreso",
+    t."FechaNacimiento",
+    t."Direccion"::text,
+    t."Telefono"::text,
+    t."Celular"::text,
+    t."Status" AS "IndEstatus",
+    t."IndUsarCarnet",
+    NULL::bytea AS "Fotografia",
+    0 AS "IdCargo",
+    t."Cedula" AS "NumeroCarnet",
+    ''::text AS "Nacionalidad",
+    t."MarcajeInterDiario"
+  FROM dbo."TRABAJADORES" t
+  WHERE t."Status" = 1
+    AND t."Cedula" = coalesce(t."Cedula", p_idpersonal)
+    AND t."IndUsarCarnet" = 1;
+$$;
+
+
+--
+-- Name: ListarPatron(character varying, smallint, smallint); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ListarPatron"(p_idpersonal character varying, p_idmano smallint DEFAULT NULL::smallint, p_iddedo smallint DEFAULT NULL::smallint) RETURNS TABLE("IdPatron" bigint, "IdPersonal" character varying, "IdMano" smallint, "IdDedo" smallint, "Patron" bytea)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT p."IdPatron", p."IdPersonal", p."IdMano", p."IdDedo", p."Patron"
+  FROM dbo."PATRON" p
+  WHERE p."IdPersonal" = p_idpersonal
+    AND p."IdMano" = coalesce(p_idmano, p."IdMano")
+    AND p."IdDedo" = coalesce(p_iddedo, p."IdDedo")
+    AND p."IndEstatus" = 1
+  ORDER BY p."IdMano", p."IdDedo";
+$$;
+
+
+--
+-- Name: ListarPatronesEmpleado(character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ListarPatronesEmpleado"(p_idpersonal character varying DEFAULT NULL::character varying) RETURNS TABLE("IdPersonal" integer, "Cedula" character varying, "Nombres" text, "Apellidos" text, "FechaIngreso" timestamp without time zone, "FechaNacimiento" timestamp without time zone, "Direccion" text, "Telefono" text, "Celular" text, "IndEstatus" smallint, "IndUsarCarnet" integer, "Fotografia" bytea, "IdCargo" integer, "IdPatron" bigint, "IdMano" smallint, "IdDedo" smallint, "Patron" bytea, "NumeroCarnet" text, "Nacionalidad" integer, "MarcajeInterDiario" boolean)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT
+    0 AS "IdPersonal",
+    t."Cedula",
+    t."Nombre"::text AS "Nombres",
+    ''::text AS "Apellidos",
+    t."FechaIngreso",
+    t."FechaNacimiento",
+    t."Direccion"::text,
+    t."Telefono"::text,
+    t."Celular"::text,
+    t."Status" AS "IndEstatus",
+    0 AS "IndUsarCarnet",
+    NULL::bytea AS "Fotografia",
+    0 AS "IdCargo",
+    p."IdPatron",
+    p."IdMano",
+    p."IdDedo",
+    p."Patron",
+    ''::text AS "NumeroCarnet",
+    0 AS "Nacionalidad",
+    t."MarcajeInterDiario"
+  FROM dbo."TRABAJADORES" t
+  INNER JOIN dbo."PATRON" p ON t."Cedula" = p."IdPersonal"
+  WHERE p."IndEstatus" = 1
+    AND t."Status" = 1
+    AND t."Cedula" = coalesce(t."Cedula", p_idpersonal);
+$$;
+
+
+--
+-- Name: ListarPersonal(character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ListarPersonal"(p_idpersonal character varying DEFAULT NULL::character varying) RETURNS TABLE("Cedula" character varying, "Codigo" integer, "Nombres" text, "Apellidos" text, "FechaIngreso" timestamp without time zone, "FechaNacimiento" timestamp without time zone, "Direccion" text, "Telefono" text, "Celular" text, "IdPersonal" integer, "IndEstatus" integer, "IndUsarCarnet" integer, "Fotografia" bytea, "IdCargo" integer, "NumeroCarnet" text, "Nacionalidad" text, "IndUsuarioAplicacion" text, "MarcajeInterDiario" boolean)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT
+    t."Cedula",
+    t."Codigo",
+    t."Nombre"::text AS "Nombres",
+    ''::text AS "Apellidos",
+    t."FechaIngreso",
+    t."FechaNacimiento",
+    t."Direccion"::text,
+    t."Telefono"::text,
+    t."Celular"::text,
+    0 AS "IdPersonal",
+    0 AS "IndEstatus",
+    0 AS "IndUsarCarnet",
+    NULL::bytea AS "Fotografia",
+    0 AS "IdCargo",
+    NULL::text AS "NumeroCarnet",
+    NULL::text AS "Nacionalidad",
+    NULL::text AS "IndUsuarioAplicacion",
+    t."MarcajeInterDiario"
+  FROM dbo."TRABAJADORES" t
+  WHERE t."Status" = 1
+    AND t."Cedula" = coalesce(p_idpersonal, t."Cedula");
+$$;
+
+
+--
+-- Name: ObtenerAccesoPorFecha(character varying, timestamp without time zone); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ObtenerAccesoPorFecha"(p_idpersonal character varying, p_fecha timestamp without time zone) RETURNS TABLE("IdControlAcceso" integer, "Cedula" character varying, "Fecha" date, "HoraEntrada" timestamp without time zone, "IdPatronEntrada" integer, "FotografiaEntrada" bytea, "HoraSalida" timestamp without time zone, "IdPatronSalida" integer, "FotografiaSalida" bytea, "IdZonaHoraria" integer, "IndUsoCarnet" integer)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT
+    c."Numero" AS "IdControlAcceso",
+    c."Cedula",
+    c."Fecha",
+    c."HoraEntrada",
+    0 AS "IdPatronEntrada",
+    NULL::bytea AS "FotografiaEntrada",
+    c."HoraSalida",
+    0 AS "IdPatronSalida",
+    NULL::bytea AS "FotografiaSalida",
+    0 AS "IdZonaHoraria",
+    0 AS "IndUsoCarnet"
+  FROM dbo."CONTROLACCESO" c
+  WHERE c."Cedula" = p_idpersonal
+  ORDER BY "IdControlAcceso" DESC
+  LIMIT 1;
+$$;
+
+
+--
+-- Name: ObtenerUltimoAccesoMarcaje(); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ObtenerUltimoAccesoMarcaje"() RETURNS TABLE("IdControlAcceso" integer, "HoraEntrada" timestamp without time zone, "HoraSalida" timestamp without time zone)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT c."Numero" AS "IdControlAcceso", c."HoraEntrada", c."HoraSalida"
+  FROM dbo."CONTROLACCESO" c
+  ORDER BY c."Numero" DESC
+  LIMIT 1;
+$$;
+
+
+--
+-- Name: ObtenerUltimosAccesos(integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."ObtenerUltimosAccesos"(p_idpersonal integer) RETURNS TABLE("IdDetalleControlAcceso" bigint, "Nombres" text, "TipoMarcaje" text, "Fecha" timestamp without time zone)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT
+    d."IdDetalleControlAcceso",
+    trim(t."Nombre")::text AS "Nombres",
+    CASE WHEN d."IndTipoMarcaje" = 0 THEN 'ENTRADA' ELSE 'SALIDA' END::text AS "TipoMarcaje",
+    d."Fecha"
+  FROM dbo."DETALLECONTROLACCESO" d
+  INNER JOIN dbo."TRABAJADORES" t ON t."Cedula" = d."IdPersonal"
+  WHERE d."Fecha"::date = CURRENT_DATE
+    AND (d."IdPersonal" = p_idpersonal::text OR t."Cedula" = p_idpersonal::text)
+  ORDER BY d."Fecha" DESC
+  LIMIT 4;
+$$;
+
+
+--
+-- Name: PROCESAR_MOVITRAN(text, character varying, character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PROCESAR_MOVITRAN"(p_strxml text, p_strproceso character varying, p_creararticulo character varying DEFAULT NULL::character varying) RETURNS TABLE("Categoria" text, "CodigoBarra" character varying, "Nombre" text, "Cantidad" numeric, "Referencia" character varying, "CodigoMarca" character varying, "Mensaje" text)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_xml_text text;
+  v_xml xml;
+  v_crear text := upper(coalesce(p_creararticulo, 'NO'));
+BEGIN
+  v_xml_text := replace(coalesce(p_strxml, ''), '<xml xmlns:rs="urn:schemas-microsoft-com:rowset" xmlns:z="#RowsetSchema">', '<?xml version="1.0" encoding="ISO-8859-1"?><root>');
+  v_xml_text := replace(v_xml_text, 'rs:data', 'root');
+  v_xml_text := replace(v_xml_text, 'z:row', 'MOVITRAN');
+  v_xml_text := replace(v_xml_text, '</xml>', '</root>');
+  IF position('<?xml' IN v_xml_text) = 0 THEN
+    v_xml_text := '<?xml version="1.0" encoding="UTF-8"?><root>' || v_xml_text || '</root>';
+  END IF;
+
+  v_xml := xmlparse(document v_xml_text);
+
+  DROP TABLE IF EXISTS pg_temp.temp_movitran_xml;
+  CREATE TEMP TABLE pg_temp.temp_movitran_xml AS
+  SELECT coalesce(nullif(trim(codbarra), ''), nullif(trim(codbarraant), ''))::varchar(15) AS codigobarra,
+         trim(nomb)::varchar(60) AS nombre,
+         coalesce(cant, canti, 0)::numeric(24,4) AS cantidad,
+         trim(refer)::varchar(10) AS referencia,
+         trim(marc)::varchar(3) AS codigomarca,
+         trim(nombmarca)::varchar(20) AS nombremarca,
+         trim(talla)::varchar(3) AS talla,
+         trim(color)::varchar(3) AS codigocolor,
+         trim(nombcolor)::varchar(30) AS nombrecolor,
+         trim(fabricante)::varchar(12) AS codigofabricante,
+         trim(nombfabric)::varchar(50) AS nombrefabricante,
+         trim(categoria)::varchar(6) AS codigocategoria,
+         trim(nombcateg)::varchar(60) AS nombrecategoria,
+         numt::numeric(18,0) AS numerotransferencia,
+         trim(numtra)::varchar(15) AS codigobarraant
+  FROM XMLTABLE('/root/MOVITRAN'
+    PASSING v_xml
+    COLUMNS
+      codbarra text PATH '@CODBARRA',
+      codbarraant text PATH '@CODBARRAANT',
+      nomb text PATH '@NOMB',
+      cant numeric PATH '@CANT',
+      canti numeric PATH '@CANTI',
+      refer text PATH '@REFER',
+      marc text PATH '@MARC',
+      nombmarca text PATH '@NOMBMARCA',
+      talla text PATH '@TALLA',
+      color text PATH '@COLOR',
+      nombcolor text PATH '@NOMBCOLOR',
+      fabricante text PATH '@FABRICANTE',
+      nombfabric text PATH '@NOMBFABRIC',
+      categoria text PATH '@CATEGORIA',
+      nombcateg text PATH '@NOMBCATEG',
+      numt numeric PATH '@NUMT',
+      numtra text PATH '@NUMTRA'
+  ) x;
+
+  IF upper(coalesce(p_strproceso, '')) = 'REMISION' THEN
+    RETURN QUERY
+    SELECT 'VALIDO'::text,
+           x.codigobarra,
+           i."Nombre"::text,
+           x.cantidad,
+           i."Referencia"::varchar(10),
+           i."CodigoMarca"::varchar(3),
+           NULL::text
+    FROM pg_temp.temp_movitran_xml x
+    INNER JOIN dbo."INVENTARIO" i ON i."CodigoBarra" = x.codigobarra
+    WHERE coalesce(i."CostoPromedio", 0) > 0
+      AND coalesce(i."PrecioDetal", 0) > 0
+      AND coalesce(i."Status", 0) <> 0;
+
+    RETURN QUERY
+    SELECT 'ERROR'::text,
+           x.codigobarra,
+           x.nombre::text,
+           x.cantidad,
+           x.referencia,
+           x.codigomarca,
+           CASE
+             WHEN i."CodigoBarra" IS NULL THEN 'Articulo No Existe'
+             WHEN coalesce(i."CostoPromedio", 0) <= 0 THEN 'Costo Promedio del Articulo No Valido'
+             WHEN coalesce(i."PrecioDetal", 0) <= 0 THEN 'Precio Detal del Articulo No Valido'
+             WHEN coalesce(i."Status", 0) = 0 THEN 'Articulo No Activo'
+             ELSE 'Articulo No Valido'
+           END::text
+    FROM pg_temp.temp_movitran_xml x
+    LEFT JOIN dbo."INVENTARIO" i ON i."CodigoBarra" = x.codigobarra
+    WHERE i."CodigoBarra" IS NULL
+       OR coalesce(i."CostoPromedio", 0) <= 0
+       OR coalesce(i."PrecioDetal", 0) <= 0
+       OR coalesce(i."Status", 0) = 0;
+    RETURN;
+  END IF;
+
+  IF upper(coalesce(p_strproceso, '')) IN ('COMPRAS', 'IMPORTAR_TRANSFERENCIA') THEN
+    IF (v_crear = 'SI' AND upper(coalesce(p_strproceso, '')) = 'COMPRAS') OR upper(coalesce(p_strproceso, '')) = 'IMPORTAR_TRANSFERENCIA' THEN
+      INSERT INTO dbo."MARCAS" ("Codigo", "Nombre", "Status")
+      SELECT DISTINCT codigomarca, coalesce(nombremarca, codigomarca), 1
+      FROM pg_temp.temp_movitran_xml x
+      WHERE coalesce(codigomarca, '') <> ''
+        AND NOT EXISTS (SELECT 1 FROM dbo."MARCAS" m WHERE m."Codigo" = x.codigomarca);
+
+      INSERT INTO dbo."TALLAS" ("Codigo")
+      SELECT DISTINCT talla
+      FROM pg_temp.temp_movitran_xml x
+      WHERE coalesce(talla, '') <> ''
+        AND NOT EXISTS (SELECT 1 FROM dbo."TALLAS" t WHERE t."Codigo" = x.talla);
+
+      INSERT INTO dbo."COLORES" ("Codigo", "Nombre", "Status")
+      SELECT DISTINCT codigocolor, coalesce(nombrecolor, codigocolor), 1
+      FROM pg_temp.temp_movitran_xml x
+      WHERE coalesce(codigocolor, '') <> ''
+        AND NOT EXISTS (SELECT 1 FROM dbo."COLORES" c WHERE c."Codigo" = x.codigocolor);
+
+      INSERT INTO dbo."FABRICANTES" ("Codigo", "Nombre", "Status")
+      SELECT DISTINCT codigofabricante, coalesce(nombrefabricante, codigofabricante), 1
+      FROM pg_temp.temp_movitran_xml x
+      WHERE coalesce(codigofabricante, '') <> ''
+        AND NOT EXISTS (SELECT 1 FROM dbo."FABRICANTES" f WHERE f."Codigo" = x.codigofabricante);
+
+      INSERT INTO dbo."CATEGORIAS" ("Codigo", "Nombre", "Status")
+      SELECT DISTINCT codigocategoria, coalesce(nombrecategoria, codigocategoria), 1
+      FROM pg_temp.temp_movitran_xml x
+      WHERE coalesce(codigocategoria, '') <> ''
+        AND NOT EXISTS (SELECT 1 FROM dbo."CATEGORIAS" c WHERE c."Codigo" = x.codigocategoria);
+
+      INSERT INTO dbo."INVENTARIO" (
+        "CodigoBarra", "Referencia", "CodigoMarca", "Nombre", "Talla", "CodigoColor", "Categoria",
+        "PrecioDetal", "PrecioMayor", "PrecioAfiliado", "Promocion", "PrecioPromocion", "FechaInicial", "FechaFinal",
+        "CostoInicial", "CostoPromedio", "UltimoCosto", "PuntoReorden", "ExistenciaInicial", "Existencia",
+        "FechaPrimerMovimiento", "UltimaActualizacion", "Fabricante", "TipoImpuesto", "Tipo", "Nota", "Status", "CodigoBarraAnt"
+      )
+      SELECT x.codigobarra,
+             x.referencia,
+             x.codigomarca,
+             x.nombre,
+             x.talla,
+             x.codigocolor,
+             coalesce(NULLIF(x.codigocategoria, ''), '00'),
+             coalesce((SELECT max(i2."PrecioDetal") FROM dbo."INVENTARIO" i2 WHERE i2."Referencia" = x.referencia AND i2."CodigoMarca" = x.codigomarca AND i2."CodigoBarra" <> x.codigobarra), 0),
+             coalesce((SELECT max(i2."PrecioMayor") FROM dbo."INVENTARIO" i2 WHERE i2."Referencia" = x.referencia AND i2."CodigoMarca" = x.codigomarca AND i2."CodigoBarra" <> x.codigobarra), 0),
+             coalesce((SELECT max(i2."PrecioAfiliado") FROM dbo."INVENTARIO" i2 WHERE i2."Referencia" = x.referencia AND i2."CodigoMarca" = x.codigomarca AND i2."CodigoBarra" <> x.codigobarra), 0),
+             coalesce((SELECT max(i2."Promocion") FROM dbo."INVENTARIO" i2 WHERE i2."Referencia" = x.referencia AND i2."CodigoMarca" = x.codigomarca AND i2."CodigoBarra" <> x.codigobarra), 0),
+             coalesce((SELECT max(i2."PrecioPromocion") FROM dbo."INVENTARIO" i2 WHERE i2."Referencia" = x.referencia AND i2."CodigoMarca" = x.codigomarca AND i2."CodigoBarra" <> x.codigobarra), 0),
+             coalesce((SELECT max(i2."FechaInicial") FROM dbo."INVENTARIO" i2 WHERE i2."Referencia" = x.referencia AND i2."CodigoMarca" = x.codigomarca AND i2."CodigoBarra" <> x.codigobarra), DATE '2000-01-01'),
+             coalesce((SELECT max(i2."FechaFinal") FROM dbo."INVENTARIO" i2 WHERE i2."Referencia" = x.referencia AND i2."CodigoMarca" = x.codigomarca AND i2."CodigoBarra" <> x.codigobarra), DATE '2000-01-01'),
+             coalesce((SELECT max(i2."CostoInicial") FROM dbo."INVENTARIO" i2 WHERE i2."Referencia" = x.referencia AND i2."CodigoMarca" = x.codigomarca AND i2."CodigoBarra" <> x.codigobarra), 0),
+             coalesce((SELECT max(i2."CostoPromedio") FROM dbo."INVENTARIO" i2 WHERE i2."Referencia" = x.referencia AND i2."CodigoMarca" = x.codigomarca AND i2."CodigoBarra" <> x.codigobarra), 0),
+             coalesce((SELECT max(i2."UltimoCosto") FROM dbo."INVENTARIO" i2 WHERE i2."Referencia" = x.referencia AND i2."CodigoMarca" = x.codigomarca AND i2."CodigoBarra" <> x.codigobarra), 0),
+             0,
+             0,
+             0,
+             CURRENT_TIMESTAMP,
+             CURRENT_TIMESTAMP,
+             x.codigofabricante,
+             1,
+             0,
+             '',
+             1,
+             coalesce(NULLIF(x.codigobarraant, ''), x.codigobarra)
+      FROM pg_temp.temp_movitran_xml x
+      WHERE x.codigobarra IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM dbo."INVENTARIO" i WHERE i."CodigoBarra" = x.codigobarra);
+    END IF;
+
+    RETURN QUERY
+    SELECT CASE WHEN i."CodigoBarra" IS NULL THEN 'CREADO_O_PENDIENTE' ELSE 'EXISTENTE' END::text,
+           x.codigobarra,
+           coalesce(i."Nombre", x.nombre)::text,
+           x.cantidad,
+           coalesce(i."Referencia", x.referencia)::varchar(10),
+           coalesce(i."CodigoMarca", x.codigomarca)::varchar(3),
+           NULL::text
+    FROM pg_temp.temp_movitran_xml x
+    LEFT JOIN dbo."INVENTARIO" i ON i."CodigoBarra" = x.codigobarra;
+    RETURN;
+  END IF;
+
+  RETURN QUERY
+  SELECT 'RECIBIDO'::text, x.codigobarra, x.nombre::text, x.cantidad, x.referencia, x.codigomarca, NULL::text
+  FROM pg_temp.temp_movitran_xml x;
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_DescuentoCatalogo(integer, integer, integer, numeric, integer, character varying, character varying, character varying, character varying, numeric, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_DescuentoCatalogo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupo integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_row record;
+  v_montoref numeric(24,2) := 0;
+  v_tbase numeric(24,2) := 0;
+  v_timpuesto numeric(24,2) := 0;
+  v_incluirimp boolean := false;
+  v_descpct numeric(24,2) := 0;
+  v_contador integer;
+BEGIN
+  PERFORM dbo."_compat_reset_temp_facturacion"();
+  INSERT INTO pg_temp.temp_facturacion (
+    item, codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento, agrupacion
+  )
+  SELECT row_number() OVER (ORDER BY precio ASC, codigobarra ASC, cantidad ASC),
+         codigobarra, tipolista, preciolista, precio, 1, impuesto, porcentajeimpuesto, costo, porcentajedescuento, NULL
+  FROM (
+    SELECT f.codigobarra,
+           f.tipolista,
+           f.preciolista,
+           coalesce(i."PrecioDetal", f.precio) AS precio,
+           coalesce((i."PrecioDetal" * imp."PorcentajeImpuesto" / 100.0), f.impuesto) AS impuesto,
+           f.porcentajeimpuesto,
+           f.costo,
+           f.porcentajedescuento,
+           f.cantidad
+    FROM pg_temp.temp_facturacion_pasoa f
+    LEFT JOIN dbo."INVENTARIO" i ON i."CodigoBarra" = f.codigobarra
+    LEFT JOIN dbo."IMPUESTOS" imp ON imp."Codigo" = i."TipoImpuesto"
+    , generate_series(1, GREATEST(CEIL(coalesce(f.cantidad, 0))::integer, 0)) gs(n)
+  ) expanded;
+
+  SELECT coalesce(sum(precio), 0), coalesce(sum(impuesto), 0)
+    INTO v_tbase, v_timpuesto
+  FROM pg_temp.temp_facturacion;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM dbo."TABLA_VALORES"
+    WHERE "IdTabla" = 'IncluirIVADescCat'
+      AND upper(trim("Descripcion")) = 'TRUE'
+  ) INTO v_incluirimp;
+
+  IF v_incluirimp THEN
+    v_montoref := v_tbase + v_timpuesto;
+  ELSE
+    v_montoref := v_tbase;
+  END IF;
+
+  SELECT coalesce(dm."PorcentajeDescuento", 0)
+    INTO v_descpct
+  FROM dbo."DESCUENTO_MAYORISTA" dm
+  WHERE dm."MontoMinimo" <= v_montoref
+  ORDER BY dm."MontoMinimo" DESC
+  LIMIT 1;
+
+  SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+  WHILE v_contador >= 1 LOOP
+    SELECT * INTO v_row FROM pg_temp.temp_facturacion ORDER BY item ASC LIMIT 1;
+    EXIT WHEN NOT FOUND;
+
+    PERFORM dbo."_compat_upsert_result"(
+      p_tablaresultado,
+      v_row.codigobarra,
+      'M',
+      round(v_row.precio - (v_row.precio * coalesce(v_descpct, 0) / 100.0), 4),
+      v_row.precio,
+      1,
+      v_row.impuesto,
+      v_row.porcentajeimpuesto,
+      v_row.costo,
+      coalesce(v_descpct, 0),
+      '',
+      0
+    );
+
+    DELETE FROM pg_temp.temp_facturacion WHERE item = v_row.item;
+    SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+  END LOOP;
+
+  DELETE FROM pg_temp.temp_facturacion_pasoa
+  WHERE codigobarra NOT IN (SELECT "CodigoBarra" FROM dbo."CODIGOS_RECARGOS");
+
+  PERFORM dbo."PromocionesYOfertas_DevolverRemanente"();
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_DescuentoEnSiMismo(integer, integer, integer, numeric, integer, character varying, character varying, character varying, character varying, numeric, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_DescuentoEnSiMismo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupo integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_row record;
+  v_desc record;
+  v_contador integer;
+  v_ciclo integer;
+BEGIN
+  IF p_lleve <= 0 THEN
+    RETURN;
+  END IF;
+
+  PERFORM dbo."_compat_reset_temp_facturacion"();
+  INSERT INTO pg_temp.temp_facturacion (
+    item, codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento, agrupacion
+  )
+  SELECT row_number() OVER (ORDER BY precio ASC, codigobarra ASC, cantidad ASC),
+         codigobarra, tipolista, preciolista, precio, 1, impuesto, porcentajeimpuesto, costo, porcentajedescuento, NULL
+  FROM (
+    SELECT f.codigobarra, f.tipolista, f.preciolista, f.precio, f.impuesto, f.porcentajeimpuesto, f.costo, f.porcentajedescuento, f.cantidad
+    FROM pg_temp.temp_facturacion_pasoa f
+    INNER JOIN dbo."fntPrendasGrupoRegla"(p_grupo) g
+      ON g."CodigoBarra" = f.codigobarra
+     AND g."IDGrupoRegla" = p_grupo
+    , generate_series(1, GREATEST(CEIL(coalesce(f.cantidad, 0))::integer, 0)) gs(n)
+  ) expanded;
+
+  SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+  v_ciclo := 0;
+  WHILE v_contador >= p_lleve LOOP
+    v_ciclo := v_ciclo + 1;
+    SELECT * INTO v_row FROM pg_temp.temp_facturacion ORDER BY item DESC LIMIT 1;
+    EXIT WHEN NOT FOUND;
+
+    SELECT * INTO v_desc
+    FROM dbo."_compat_calcular_descuento"(v_row.precio, p_porcdesc, p_preciovalor, p_tiporegla);
+
+    PERFORM dbo."_compat_upsert_result"(
+      p_tablaresultado,
+      v_row.codigobarra,
+      'R',
+      v_desc.nuevo_precio,
+      v_row.precio,
+      1,
+      v_row.impuesto,
+      v_row.porcentajeimpuesto,
+      v_row.costo,
+      v_desc.nuevo_porcentaje,
+      p_imprimir,
+      p_id_regla
+    );
+
+    DELETE FROM pg_temp.temp_facturacion WHERE item = v_row.item;
+
+    IF p_convenio IN ('1', '2') AND v_ciclo >= p_pague THEN
+      EXIT;
+    END IF;
+
+    IF v_ciclo >= p_lleve THEN
+      v_ciclo := 0;
+      SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+    END IF;
+  END LOOP;
+
+  DELETE FROM pg_temp.temp_facturacion_pasoa
+  WHERE codigobarra IN (
+    SELECT "CodigoBarra" FROM dbo."fntPrendasGrupoRegla"(p_grupo)
+  );
+
+  PERFORM dbo."PromocionesYOfertas_DevolverRemanente"();
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_DescuentoGeneralEnSiMismo(integer, integer, integer, numeric, integer, character varying, character varying, character varying, character varying, numeric, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_DescuentoGeneralEnSiMismo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupo integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_row record;
+  v_desc record;
+  v_contador integer;
+  v_ciclo integer;
+BEGIN
+  IF p_lleve <= 0 THEN
+    RETURN;
+  END IF;
+
+  PERFORM dbo."_compat_reset_temp_facturacion"();
+  INSERT INTO pg_temp.temp_facturacion (
+    item, codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento, agrupacion
+  )
+  SELECT row_number() OVER (ORDER BY precio ASC, codigobarra ASC, cantidad ASC),
+         codigobarra, tipolista, preciolista, precio, 1, impuesto, porcentajeimpuesto, costo, porcentajedescuento, NULL
+  FROM (
+    SELECT f.codigobarra, f.tipolista, f.preciolista, f.precio, f.impuesto, f.porcentajeimpuesto, f.costo, f.porcentajedescuento, f.cantidad
+    FROM pg_temp.temp_facturacion_pasoa f
+    , generate_series(1, GREATEST(CEIL(coalesce(f.cantidad, 0))::integer, 0)) gs(n)
+  ) expanded;
+
+  SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+  v_ciclo := 0;
+  WHILE v_contador >= p_lleve LOOP
+    v_ciclo := v_ciclo + 1;
+    SELECT * INTO v_row FROM pg_temp.temp_facturacion ORDER BY item DESC LIMIT 1;
+    EXIT WHEN NOT FOUND;
+
+    SELECT * INTO v_desc
+    FROM dbo."_compat_calcular_descuento"(v_row.precio, p_porcdesc, p_preciovalor, p_tiporegla);
+
+    PERFORM dbo."_compat_upsert_result"(
+      p_tablaresultado,
+      v_row.codigobarra,
+      'R',
+      v_desc.nuevo_precio,
+      v_row.precio,
+      1,
+      v_row.impuesto,
+      v_row.porcentajeimpuesto,
+      v_row.costo,
+      v_desc.nuevo_porcentaje,
+      p_imprimir,
+      p_id_regla
+    );
+
+    DELETE FROM pg_temp.temp_facturacion WHERE item = v_row.item;
+
+    IF v_ciclo >= p_lleve THEN
+      v_ciclo := 0;
+      SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+    END IF;
+  END LOOP;
+
+  DELETE FROM pg_temp.temp_facturacion_pasoa
+  WHERE codigobarra NOT IN (SELECT "CodigoBarra" FROM dbo."CODIGOS_RECARGOS");
+
+  PERFORM dbo."PromocionesYOfertas_DevolverRemanente"();
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_DescuentoGeneralMismoGrupo(integer, integer, integer, numeric, integer, character varying, character varying, character varying, character varying, numeric, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_DescuentoGeneralMismoGrupo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupo integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_row record;
+  v_desc record;
+  v_contador integer;
+  v_ciclo integer;
+BEGIN
+  IF p_lleve <= 0 THEN
+    RETURN;
+  END IF;
+
+  PERFORM dbo."_compat_reset_temp_facturacion"();
+  INSERT INTO pg_temp.temp_facturacion (
+    item, codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento, agrupacion
+  )
+  SELECT row_number() OVER (ORDER BY precio ASC, codigobarra ASC, cantidad ASC),
+         codigobarra, tipolista, preciolista, precio, 1, impuesto, porcentajeimpuesto, costo, porcentajedescuento, NULL
+  FROM (
+    SELECT f.codigobarra, f.tipolista, f.preciolista, f.precio, f.impuesto, f.porcentajeimpuesto, f.costo, f.porcentajedescuento, f.cantidad
+    FROM pg_temp.temp_facturacion_pasoa f
+    , generate_series(1, GREATEST(CEIL(coalesce(f.cantidad, 0))::integer, 0)) gs(n)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM dbo."CODIGOS_RECARGOS" cr WHERE cr."CodigoBarra" = f.codigobarra
+    )
+  ) expanded;
+
+  SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+  WHILE v_contador >= p_lleve LOOP
+    v_ciclo := 0;
+
+    WHILE v_ciclo < p_pague LOOP
+      SELECT * INTO v_row FROM pg_temp.temp_facturacion ORDER BY item DESC LIMIT 1;
+      EXIT WHEN NOT FOUND;
+
+      PERFORM dbo."_compat_upsert_result"(
+        p_tablaresultado,
+        v_row.codigobarra,
+        'R',
+        v_row.precio,
+        v_row.precio,
+        1,
+        v_row.impuesto,
+        v_row.porcentajeimpuesto,
+        v_row.costo,
+        0,
+        p_imprimir,
+        p_id_regla
+      );
+      DELETE FROM pg_temp.temp_facturacion WHERE item = v_row.item;
+      v_ciclo := v_ciclo + 1;
+    END LOOP;
+
+    WHILE v_ciclo < p_lleve LOOP
+      SELECT * INTO v_row FROM pg_temp.temp_facturacion ORDER BY item ASC LIMIT 1;
+      EXIT WHEN NOT FOUND;
+
+      SELECT * INTO v_desc
+      FROM dbo."_compat_calcular_descuento"(v_row.precio, p_porcdesc, p_preciovalor, p_tiporegla);
+
+      PERFORM dbo."_compat_upsert_result"(
+        p_tablaresultado,
+        v_row.codigobarra,
+        'R',
+        CASE WHEN coalesce(p_tiporegla, 0) = 0 THEN v_desc.nuevo_precio ELSE p_preciovalor END,
+        v_row.precio,
+        1,
+        v_row.impuesto,
+        v_row.porcentajeimpuesto,
+        v_row.costo,
+        v_desc.nuevo_porcentaje,
+        p_imprimir,
+        p_id_regla
+      );
+      DELETE FROM pg_temp.temp_facturacion WHERE item = v_row.item;
+      v_ciclo := v_ciclo + 1;
+    END LOOP;
+
+    SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+  END LOOP;
+
+  DELETE FROM pg_temp.temp_facturacion_pasoa
+  WHERE codigobarra NOT IN (SELECT "CodigoBarra" FROM dbo."CODIGOS_RECARGOS");
+
+  PERFORM dbo."PromocionesYOfertas_DevolverRemanente"();
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_Descuento_MAYORISTAS(character varying, integer, integer, numeric, character varying, character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_Descuento_MAYORISTAS"(p_codreferencia character varying, p_esreferencia integer, p_lleve integer, p_descuento numeric, p_tablafacturacion character varying, p_tablaresultado character varying) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_row record;
+  v_contador integer;
+BEGIN
+  IF p_lleve <= 0 THEN
+    RETURN;
+  END IF;
+
+  PERFORM dbo."_compat_reset_temp_facturacion"();
+  INSERT INTO pg_temp.temp_facturacion (
+    item, codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento, agrupacion
+  )
+  SELECT row_number() OVER (ORDER BY precio ASC, codigobarra ASC, cantidad ASC),
+         codigobarra, tipolista, preciolista, precio, GREATEST(coalesce(cantidad, 0), 1), impuesto, porcentajeimpuesto, costo, porcentajedescuento, NULL
+  FROM (
+    SELECT f.codigobarra, f.tipolista, f.preciolista, f.precio, f.impuesto, f.porcentajeimpuesto, f.costo, f.porcentajedescuento, f.cantidad
+    FROM pg_temp.temp_facturacion_pasoa f
+    WHERE (
+      (coalesce(p_esreferencia, 0) = 1 AND f.codigobarra IN (
+        SELECT i."CodigoBarra"
+        FROM dbo."INVENTARIO" i
+        WHERE trim(i."Referencia") || trim(i."CodigoMarca") = p_codreferencia
+      ))
+      OR (coalesce(p_esreferencia, 0) = 0 AND f.codigobarra = p_codreferencia)
+    )
+      AND f.codigobarra NOT IN (
+        SELECT rm."Codigo" FROM dbo."REFERENCIAS_MAYORISTAS" rm WHERE rm."EsExcepcion" = 1
+      )
+  ) expanded;
+
+  SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+  IF v_contador >= p_lleve THEN
+    WHILE v_contador >= 1 LOOP
+      SELECT * INTO v_row FROM pg_temp.temp_facturacion ORDER BY item ASC LIMIT 1;
+      EXIT WHEN NOT FOUND;
+
+      PERFORM dbo."_compat_upsert_result"(
+        p_tablaresultado,
+        v_row.codigobarra,
+        'T',
+        round(v_row.precio - (v_row.precio * coalesce(p_descuento, 0) / 100.0), 4),
+        v_row.precio,
+        1,
+        v_row.impuesto,
+        v_row.porcentajeimpuesto,
+        v_row.costo,
+        coalesce(p_descuento, 0),
+        'MAYORISTA',
+        0
+      );
+
+      DELETE FROM pg_temp.temp_facturacion WHERE item = v_row.item;
+      SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+    END LOOP;
+  END IF;
+
+  IF coalesce(p_esreferencia, 0) = 1 THEN
+    DELETE FROM pg_temp.temp_facturacion_pasoa
+    WHERE codigobarra IN (
+      SELECT i."CodigoBarra"
+      FROM dbo."INVENTARIO" i
+      WHERE trim(i."Referencia") || trim(i."CodigoMarca") = p_codreferencia
+    );
+  ELSE
+    DELETE FROM pg_temp.temp_facturacion_pasoa WHERE codigobarra = p_codreferencia;
+  END IF;
+
+  PERFORM dbo."PromocionesYOfertas_DevolverRemanente"();
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_DescuentosDistintoGrupo(integer, integer, integer, numeric, integer, integer, character varying, character varying, character varying, character varying, numeric, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_DescuentosDistintoGrupo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupoa integer, p_grupob integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_row record;
+  v_desc record;
+  v_contabc integer;
+  v_contac integer;
+  v_contbc integer;
+  v_ciclo integer;
+BEGIN
+  IF p_lleve <= 0 THEN
+    RETURN;
+  END IF;
+
+  PERFORM dbo."_compat_reset_temp_facturacion"();
+
+  INSERT INTO pg_temp.temp_facturacion (
+    item, codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento, agrupacion
+  )
+  SELECT row_number() OVER (ORDER BY agrupacion, precio ASC, codigobarra ASC),
+         codigobarra, tipolista, preciolista, precio, GREATEST(coalesce(cantidad, 0), 1), impuesto, porcentajeimpuesto, costo, porcentajedescuento, agrupacion
+  FROM (
+    SELECT f.codigobarra, f.tipolista, f.preciolista, f.precio, f.impuesto, f.porcentajeimpuesto, f.costo, f.porcentajedescuento, f.cantidad,
+           CASE
+             WHEN EXISTS (SELECT 1 FROM dbo."fntPrendasGrupoRegla"(p_grupoa) ga WHERE ga."CodigoBarra" = f.codigobarra)
+              AND EXISTS (SELECT 1 FROM dbo."fntPrendasGrupoRegla"(p_grupob) gb WHERE gb."CodigoBarra" = f.codigobarra) THEN 'C'
+             WHEN EXISTS (SELECT 1 FROM dbo."fntPrendasGrupoRegla"(p_grupoa) ga WHERE ga."CodigoBarra" = f.codigobarra) THEN 'A'
+             WHEN EXISTS (SELECT 1 FROM dbo."fntPrendasGrupoRegla"(p_grupob) gb WHERE gb."CodigoBarra" = f.codigobarra) THEN 'B'
+             ELSE NULL
+           END AS agrupacion
+    FROM pg_temp.temp_facturacion_pasoa f
+  ) expanded
+  WHERE agrupacion IS NOT NULL;
+
+  SELECT count(*),
+         count(*) FILTER (WHERE agrupacion IN ('A', 'C')),
+         count(*) FILTER (WHERE agrupacion IN ('B', 'C'))
+    INTO v_contabc, v_contac, v_contbc
+  FROM pg_temp.temp_facturacion;
+
+  WHILE v_contabc >= p_lleve AND v_contac >= p_pague AND v_contbc >= greatest(p_lleve - p_pague, 0) LOOP
+    v_ciclo := 0;
+
+    WHILE v_ciclo < p_pague LOOP
+      SELECT * INTO v_row
+      FROM pg_temp.temp_facturacion
+      WHERE agrupacion IN ('A', 'C')
+      ORDER BY item DESC
+      LIMIT 1;
+      EXIT WHEN NOT FOUND;
+
+      PERFORM dbo."_compat_upsert_result"(
+        p_tablaresultado,
+        v_row.codigobarra,
+        'R',
+        v_row.precio,
+        v_row.precio,
+        1,
+        v_row.impuesto,
+        v_row.porcentajeimpuesto,
+        v_row.costo,
+        0,
+        p_imprimir,
+        p_id_regla
+      );
+      DELETE FROM pg_temp.temp_facturacion WHERE item = v_row.item;
+      v_ciclo := v_ciclo + 1;
+    END LOOP;
+
+    WHILE v_ciclo < p_lleve LOOP
+      SELECT * INTO v_row
+      FROM pg_temp.temp_facturacion
+      WHERE agrupacion IN ('B', 'C')
+      ORDER BY item ASC
+      LIMIT 1;
+      EXIT WHEN NOT FOUND;
+
+      SELECT * INTO v_desc
+      FROM dbo."_compat_calcular_descuento"(v_row.precio, p_porcdesc, p_preciovalor, p_tiporegla);
+
+      PERFORM dbo."_compat_upsert_result"(
+        p_tablaresultado,
+        v_row.codigobarra,
+        'R',
+        v_desc.nuevo_precio,
+        v_row.precio,
+        1,
+        v_row.impuesto,
+        v_row.porcentajeimpuesto,
+        v_row.costo,
+        v_desc.nuevo_porcentaje,
+        p_imprimir,
+        p_id_regla
+      );
+      DELETE FROM pg_temp.temp_facturacion WHERE item = v_row.item;
+      v_ciclo := v_ciclo + 1;
+    END LOOP;
+
+    IF p_convenio IN ('1', '2') THEN
+      EXIT;
+    END IF;
+
+    SELECT count(*),
+           count(*) FILTER (WHERE agrupacion IN ('A', 'C')),
+           count(*) FILTER (WHERE agrupacion IN ('B', 'C'))
+      INTO v_contabc, v_contac, v_contbc
+    FROM pg_temp.temp_facturacion;
+  END LOOP;
+
+  DELETE FROM pg_temp.temp_facturacion_pasoa
+  WHERE codigobarra IN (
+    SELECT "CodigoBarra" FROM dbo."fntPrendasGrupoRegla"(p_grupoa)
+    UNION
+    SELECT "CodigoBarra" FROM dbo."fntPrendasGrupoRegla"(p_grupob)
+  );
+
+  PERFORM dbo."PromocionesYOfertas_DevolverRemanente"();
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_DescuentosMismoGrupo(integer, integer, integer, numeric, integer, character varying, character varying, character varying, character varying, numeric, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_DescuentosMismoGrupo"(p_id_regla integer, p_lleve integer, p_pague integer, p_porcdesc numeric, p_grupo integer, p_imprimir character varying, p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_preciovalor numeric, p_tiporegla integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_row record;
+  v_desc record;
+  v_contador integer;
+  v_ciclo integer;
+BEGIN
+  IF p_lleve <= 0 THEN
+    RETURN;
+  END IF;
+
+  PERFORM dbo."_compat_reset_temp_facturacion"();
+  INSERT INTO pg_temp.temp_facturacion (
+    item, codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento, agrupacion
+  )
+  SELECT row_number() OVER (ORDER BY precio ASC, codigobarra ASC, cantidad ASC),
+         codigobarra, tipolista, preciolista, precio, 1, impuesto, porcentajeimpuesto, costo, porcentajedescuento, NULL
+  FROM (
+    SELECT f.codigobarra, f.tipolista, f.preciolista, f.precio, f.impuesto, f.porcentajeimpuesto, f.costo, f.porcentajedescuento, f.cantidad
+    FROM pg_temp.temp_facturacion_pasoa f
+    INNER JOIN dbo."fntPrendasGrupoRegla"(p_grupo) g
+      ON g."CodigoBarra" = f.codigobarra
+     AND g."IDGrupoRegla" = p_grupo
+    , generate_series(1, GREATEST(CEIL(coalesce(f.cantidad, 0))::integer, 0)) gs(n)
+  ) expanded;
+
+  SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+  WHILE v_contador >= p_lleve LOOP
+    v_ciclo := 0;
+
+    WHILE v_ciclo < p_pague LOOP
+      SELECT * INTO v_row FROM pg_temp.temp_facturacion ORDER BY item DESC LIMIT 1;
+      EXIT WHEN NOT FOUND;
+
+      PERFORM dbo."_compat_upsert_result"(
+        p_tablaresultado,
+        v_row.codigobarra,
+        'R',
+        v_row.precio,
+        v_row.precio,
+        1,
+        v_row.impuesto,
+        v_row.porcentajeimpuesto,
+        v_row.costo,
+        0,
+        p_imprimir,
+        p_id_regla
+      );
+      DELETE FROM pg_temp.temp_facturacion WHERE item = v_row.item;
+      v_ciclo := v_ciclo + 1;
+    END LOOP;
+
+    WHILE v_ciclo < p_lleve LOOP
+      SELECT * INTO v_row FROM pg_temp.temp_facturacion ORDER BY item ASC LIMIT 1;
+      EXIT WHEN NOT FOUND;
+
+      SELECT * INTO v_desc
+      FROM dbo."_compat_calcular_descuento"(v_row.precio, p_porcdesc, p_preciovalor, p_tiporegla);
+
+      PERFORM dbo."_compat_upsert_result"(
+        p_tablaresultado,
+        v_row.codigobarra,
+        'R',
+        v_desc.nuevo_precio,
+        v_row.precio,
+        1,
+        v_row.impuesto,
+        v_row.porcentajeimpuesto,
+        v_row.costo,
+        v_desc.nuevo_porcentaje,
+        p_imprimir,
+        p_id_regla
+      );
+      DELETE FROM pg_temp.temp_facturacion WHERE item = v_row.item;
+      v_ciclo := v_ciclo + 1;
+    END LOOP;
+
+    IF p_convenio IN ('1', '2') AND v_ciclo >= p_lleve THEN
+      EXIT;
+    END IF;
+
+    SELECT count(*) INTO v_contador FROM pg_temp.temp_facturacion;
+  END LOOP;
+
+  DELETE FROM pg_temp.temp_facturacion_pasoa
+  WHERE codigobarra IN (
+    SELECT "CodigoBarra" FROM dbo."fntPrendasGrupoRegla"(p_grupo)
+  );
+
+  PERFORM dbo."PromocionesYOfertas_DevolverRemanente"();
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_DevolverRemanente(); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_DevolverRemanente"() RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_row record;
+BEGIN
+  IF to_regclass('pg_temp.temp_facturacion') IS NULL OR to_regclass('pg_temp.temp_facturacion_pasoa') IS NULL THEN
+    RETURN;
+  END IF;
+
+  FOR v_row IN
+    SELECT *
+    FROM pg_temp.temp_facturacion
+    ORDER BY item
+  LOOP
+    PERFORM dbo."_compat_upsert_pasoa"(
+      v_row.codigobarra,
+      v_row.tipolista,
+      v_row.preciolista,
+      v_row.precio,
+      1,
+      v_row.impuesto,
+      v_row.porcentajeimpuesto,
+      v_row.costo,
+      v_row.porcentajedescuento
+    );
+  END LOOP;
+
+  DELETE FROM pg_temp.temp_facturacion;
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_InsertarRestosFacturacion(character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_InsertarRestosFacturacion"(p_tablaresultado character varying) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_row record;
+BEGIN
+  IF to_regclass('pg_temp.temp_facturacion_pasoa') IS NULL THEN
+    RETURN;
+  END IF;
+
+  FOR v_row IN
+    SELECT *
+    FROM pg_temp.temp_facturacion_pasoa
+  LOOP
+    PERFORM dbo."_compat_upsert_result"(
+      p_tablaresultado,
+      v_row.codigobarra,
+      v_row.tipolista,
+      v_row.preciolista,
+      v_row.precio,
+      v_row.cantidad,
+      v_row.impuesto,
+      v_row.porcentajeimpuesto,
+      v_row.costo,
+      v_row.porcentajedescuento,
+      NULL,
+      NULL
+    );
+  END LOOP;
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_SelectorDeReglas(character varying, character varying, character varying, character varying, character varying, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_SelectorDeReglas"(p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying, p_escredito character varying, p_esmayorista character varying DEFAULT NULL::character varying, p_grupo integer DEFAULT NULL::integer) RETURNS TABLE("CodigoBarra" character varying, "Nombre" text, "Precio" numeric, "Cantidad" numeric, "PrecioLista" numeric, "Descuento" numeric, "TotalDescuento" numeric, "Impuesto" numeric, "TotalImpuesto" numeric, "PorcentajeImpuesto" numeric, "Costo" numeric, "TotalCosto" numeric, "Referencia" character varying, "CodigoMarca" character varying, "PorcentajeDescuento" numeric, "Regla" character varying, "IDRegla" bigint, "TipoLista" character varying)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_rule record;
+  v_descuentogeneral integer;
+  v_result regclass;
+  v_ref record;
+BEGIN
+  PERFORM dbo."_compat_ensure_result_table"(p_tablaresultado);
+  PERFORM dbo."_compat_load_temp_facturacion_pasoa"(p_tablafacturacion);
+
+  IF upper(coalesce(p_esmayorista, 'N')) = 'S' THEN
+    PERFORM dbo."PromocionesYOfertas_DescuentoCatalogo"(0, 0, 0, 0, 0, '', p_tablafacturacion, p_tablaresultado, '', 0, 0);
+  END IF;
+
+  IF coalesce(p_convenio, '0') <> '0' THEN
+    PERFORM dbo."PromocionesYOfertas_SelectorDeReglas_Convenios"(p_tablafacturacion, p_tablaresultado, p_convenio);
+  END IF;
+
+  FOR v_rule IN
+    SELECT DISTINCT r.*
+    FROM dbo."REGLAS" r
+    WHERE r."Activa" = 0
+      AND current_date BETWEEN r."FechaInicio" AND r."FechaFin"
+      AND current_time BETWEEN r."HoraInicio" AND r."HoraFin"
+      AND dbo."_compat_rule_active_today"(r."Lunes", r."Martes", r."Miercoles", r."Jueves", r."Viernes", r."Sabado", r."Domingo")
+      AND (coalesce(p_grupo, 0) = 0 OR r."ProductosActivan" = p_grupo)
+      AND EXISTS (
+        SELECT 1
+        FROM pg_temp.temp_facturacion_pasoa f
+        INNER JOIN dbo."fntPrendasGrupoRegla"(r."ProductosActivan"::integer) g
+          ON g."CodigoBarra" = f.codigobarra
+      )
+    ORDER BY r."Prioridad", r."ID"
+  LOOP
+    SELECT count(*) INTO v_descuentogeneral
+    FROM dbo."GRUPO_REGLAS"
+    WHERE "IDGrupoRegla" = v_rule."ProductosActivan"
+      AND "CodigoBarra" = '+++';
+
+    IF v_rule."Lleve" = v_rule."Pague" AND v_rule."ProductosActivan" = v_rule."ProductosAfectados" AND v_descuentogeneral <> 0 THEN
+      PERFORM dbo."PromocionesYOfertas_DescuentoGeneralEnSiMismo"(v_rule."ID"::integer, v_rule."Lleve", v_rule."Pague", coalesce(v_rule."PorcDescuento", 0), v_rule."ProductosActivan"::integer, v_rule."Imprimir", p_tablafacturacion, p_tablaresultado, '0', v_rule."Precio", v_rule."Tipo");
+    ELSIF v_rule."Lleve" <> v_rule."Pague" AND v_rule."ProductosActivan" = v_rule."ProductosAfectados" AND v_descuentogeneral <> 0 THEN
+      PERFORM dbo."PromocionesYOfertas_DescuentoGeneralMismoGrupo"(v_rule."ID"::integer, v_rule."Lleve", v_rule."Pague", coalesce(v_rule."PorcDescuento", 0), v_rule."ProductosActivan"::integer, v_rule."Imprimir", p_tablafacturacion, p_tablaresultado, '0', v_rule."Precio", v_rule."Tipo");
+    ELSIF v_rule."Lleve" <> v_rule."Pague" AND v_rule."ProductosActivan" = v_rule."ProductosAfectados" AND v_descuentogeneral = 0 THEN
+      PERFORM dbo."PromocionesYOfertas_DescuentosMismoGrupo"(v_rule."ID"::integer, v_rule."Lleve", v_rule."Pague", coalesce(v_rule."PorcDescuento", 0), v_rule."ProductosActivan"::integer, v_rule."Imprimir", p_tablafacturacion, p_tablaresultado, '0', v_rule."Precio", v_rule."Tipo");
+    ELSIF v_rule."Lleve" <> v_rule."Pague" AND v_rule."ProductosActivan" <> v_rule."ProductosAfectados" AND v_descuentogeneral = 0 THEN
+      PERFORM dbo."PromocionesYOfertas_DescuentosDistintoGrupo"(v_rule."ID"::integer, v_rule."Lleve", v_rule."Pague", coalesce(v_rule."PorcDescuento", 0), v_rule."ProductosActivan"::integer, v_rule."ProductosAfectados"::integer, v_rule."Imprimir", p_tablafacturacion, p_tablaresultado, '0', v_rule."Precio", v_rule."Tipo");
+    ELSIF v_rule."Lleve" = v_rule."Pague" AND v_rule."ProductosActivan" = v_rule."ProductosAfectados" AND v_descuentogeneral = 0 THEN
+      PERFORM dbo."PromocionesYOfertas_DescuentoEnSiMismo"(v_rule."ID"::integer, v_rule."Lleve", v_rule."Pague", coalesce(v_rule."PorcDescuento", 0), v_rule."ProductosActivan"::integer, v_rule."Imprimir", p_tablafacturacion, p_tablaresultado, '0', v_rule."Precio", v_rule."Tipo");
+    END IF;
+  END LOOP;
+
+  FOR v_ref IN
+    SELECT DISTINCT rm."Codigo", rm."EsReferencia", rm."Cantidad", rm."PorcentajeDescuento"
+    FROM dbo."REFERENCIAS_MAYORISTAS" rm
+    WHERE rm."EsExcepcion" = 0
+  LOOP
+    PERFORM dbo."PromocionesYOfertas_Descuento_MAYORISTAS"(v_ref."Codigo", v_ref."EsReferencia", v_ref."Cantidad", v_ref."PorcentajeDescuento", p_tablafacturacion, p_tablaresultado);
+  END LOOP;
+
+  PERFORM dbo."PromocionesYOfertas_InsertarRestosFacturacion"(p_tablaresultado);
+
+  v_result := dbo."_compat_resolve_table"(p_tablaresultado);
+  RETURN QUERY EXECUTE format(
+    'SELECT r.codigobarra::varchar(15),
+            i."Nombre"::text,
+            r.precio::numeric(24,2),
+            r.cantidad::numeric(24,4),
+            r.preciolista::numeric(24,4),
+            (r.precio - r.preciolista)::numeric(24,4) AS descuento,
+            (r.cantidad * (r.precio - r.preciolista))::numeric(24,4) AS totaldescuento,
+            ((r.preciolista * r.porcentajeimpuesto) / 100.0)::numeric(24,4) AS impuesto,
+            (r.cantidad * ((r.preciolista * r.porcentajeimpuesto) / 100.0))::numeric(24,4) AS totalimpuesto,
+            r.porcentajeimpuesto::numeric(24,2),
+            coalesce(i."CostoPromedio", r.costo)::numeric(24,2) AS costo,
+            (coalesce(i."CostoPromedio", r.costo) * r.cantidad)::numeric(24,4) AS totalcosto,
+            i."Referencia"::varchar(10),
+            i."CodigoMarca"::varchar(3),
+            r.porcentajedescuento::numeric(7,4),
+            r.regla::varchar(50),
+            r.idregla::bigint,
+            r.tipolista::varchar(3)
+     FROM %s r
+     INNER JOIN dbo."INVENTARIO" i ON i."CodigoBarra" = r.codigobarra',
+    v_result
+  );
+END;
+$$;
+
+
+--
+-- Name: PromocionesYOfertas_SelectorDeReglas_Convenios(character varying, character varying, character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."PromocionesYOfertas_SelectorDeReglas_Convenios"(p_tablafacturacion character varying, p_tablaresultado character varying, p_convenio character varying) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_rule record;
+  v_descuentogeneral integer;
+BEGIN
+  FOR v_rule IN
+    SELECT DISTINCT r.*
+    FROM dbo."REGLAS" r
+    INNER JOIN dbo."REGLASCONVENIOS" c
+      ON c."IDREGLA" = r."ID"
+    WHERE r."Activa" = 0
+      AND c."Activa" = 1
+      AND c."TIPOCONVENIO" = coalesce(nullif(p_convenio, ''), '0')::integer
+      AND current_date BETWEEN r."FechaInicio" AND r."FechaFin"
+      AND current_time BETWEEN r."HoraInicio" AND r."HoraFin"
+      AND dbo."_compat_rule_active_today"(r."Lunes", r."Martes", r."Miercoles", r."Jueves", r."Viernes", r."Sabado", r."Domingo")
+      AND EXISTS (
+        SELECT 1
+        FROM pg_temp.temp_facturacion_pasoa f
+        INNER JOIN dbo."fntPrendasGrupoRegla"(r."ProductosActivan"::integer) g
+          ON g."CodigoBarra" = f.codigobarra
+      )
+    ORDER BY r."Prioridad", r."ID"
+    LIMIT CASE WHEN p_convenio IN ('1', '2') THEN 1 ELSE 2147483647 END
+  LOOP
+    SELECT count(*) INTO v_descuentogeneral
+    FROM dbo."GRUPO_REGLAS"
+    WHERE "IDGrupoRegla" = v_rule."ProductosActivan"
+      AND "CodigoBarra" = '+++';
+
+    IF v_rule."Lleve" = v_rule."Pague" AND v_rule."ProductosActivan" = v_rule."ProductosAfectados" AND v_descuentogeneral <> 0 THEN
+      PERFORM dbo."PromocionesYOfertas_DescuentoGeneralEnSiMismo"(v_rule."ID"::integer, v_rule."Lleve", v_rule."Pague", coalesce(v_rule."PorcDescuento", 0), v_rule."ProductosActivan"::integer, v_rule."Imprimir", p_tablafacturacion, p_tablaresultado, p_convenio, v_rule."Precio", v_rule."Tipo");
+    ELSIF v_rule."Lleve" <> v_rule."Pague" AND v_rule."ProductosActivan" = v_rule."ProductosAfectados" AND v_descuentogeneral <> 0 THEN
+      PERFORM dbo."PromocionesYOfertas_DescuentoGeneralMismoGrupo"(v_rule."ID"::integer, v_rule."Lleve", v_rule."Pague", coalesce(v_rule."PorcDescuento", 0), v_rule."ProductosActivan"::integer, v_rule."Imprimir", p_tablafacturacion, p_tablaresultado, p_convenio, v_rule."Precio", v_rule."Tipo");
+    ELSIF v_rule."Lleve" <> v_rule."Pague" AND v_rule."ProductosActivan" = v_rule."ProductosAfectados" AND v_descuentogeneral = 0 THEN
+      PERFORM dbo."PromocionesYOfertas_DescuentosMismoGrupo"(v_rule."ID"::integer, v_rule."Lleve", v_rule."Pague", coalesce(v_rule."PorcDescuento", 0), v_rule."ProductosActivan"::integer, v_rule."Imprimir", p_tablafacturacion, p_tablaresultado, p_convenio, v_rule."Precio", v_rule."Tipo");
+    ELSIF v_rule."Lleve" <> v_rule."Pague" AND v_rule."ProductosActivan" <> v_rule."ProductosAfectados" AND v_descuentogeneral = 0 THEN
+      PERFORM dbo."PromocionesYOfertas_DescuentosDistintoGrupo"(v_rule."ID"::integer, v_rule."Lleve", v_rule."Pague", coalesce(v_rule."PorcDescuento", 0), v_rule."ProductosActivan"::integer, v_rule."ProductosAfectados"::integer, v_rule."Imprimir", p_tablafacturacion, p_tablaresultado, p_convenio, v_rule."Precio", v_rule."Tipo");
+    ELSIF v_rule."Lleve" = v_rule."Pague" AND v_rule."ProductosActivan" = v_rule."ProductosAfectados" AND v_descuentogeneral = 0 THEN
+      PERFORM dbo."PromocionesYOfertas_DescuentoEnSiMismo"(v_rule."ID"::integer, v_rule."Lleve", v_rule."Pague", coalesce(v_rule."PorcDescuento", 0), v_rule."ProductosActivan"::integer, v_rule."Imprimir", p_tablafacturacion, p_tablaresultado, p_convenio, v_rule."Precio", v_rule."Tipo");
+    END IF;
+  END LOOP;
+END;
+$$;
+
+
+--
+-- Name: RespaldoBD(character varying, character varying, text); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."RespaldoBD"(p_bd character varying, p_nombredispositivo character varying, p_ubicacionnombrefisico text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO dbo."RESPALDOS_PENDIENTES" (
+    "BaseDatos", "NombreDispositivo", "UbicacionArchivo", "Estado", "Observacion"
+  ) VALUES (
+    p_bd,
+    p_nombredispositivo,
+    p_ubicacionnombrefisico,
+    CASE WHEN current_database() = p_bd THEN 'PENDING' ELSE 'DATABASE_MISMATCH' END,
+    'Compatibilidad PostgreSQL: SQL Server BACKUP DATABASE no existe dentro del motor. Use pg_dump o pg_basebackup fuera de SQL.'
+  );
+
+  RAISE NOTICE 'RespaldoBD compat: solicitud registrada en dbo."RESPALDOS_PENDIENTES". PostgreSQL requiere pg_dump/pg_basebackup fuera de SQL.';
+END;
+$$;
+
+
+--
+-- Name: Selector_Reglas(character varying, character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."Selector_Reglas"(p_tablafacturacion character varying, p_convenio character varying) RETURNS TABLE("Prioridad" bigint, "Regla" character varying, "Descripcion" character varying, "Porc" numeric, "Precio" numeric, "Lleve" integer, "Pague" integer, "ProductosActivan" bigint)
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+  v_source regclass;
+  v_cantidadreglas integer := 2;
+BEGIN
+  v_source := dbo."_compat_resolve_table"(p_tablafacturacion);
+  IF v_source IS NULL THEN
+    RETURN;
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp.temp_selector_reglas;
+  CREATE TEMP TABLE pg_temp.temp_selector_reglas (
+    prioridad bigint NOT NULL,
+    productosactivan bigint NOT NULL,
+    imprimir varchar(15) NOT NULL,
+    descripcion varchar(250) NOT NULL,
+    porcdescuento numeric(7,4) NOT NULL,
+    precio numeric(10,2) NOT NULL,
+    lleve integer NOT NULL,
+    pague integer NOT NULL
+  ) ON COMMIT DROP;
+
+  EXECUTE format(
+    'INSERT INTO pg_temp.temp_selector_reglas (prioridad, productosactivan, imprimir, descripcion, porcdescuento, precio, lleve, pague)
+     SELECT r."Prioridad", r."ProductosActivan", r."Imprimir", r."Descripcion", r."PorcDescuento", r."Precio", r."Lleve", r."Pague"
+     FROM %s f
+     CROSS JOIN LATERAL dbo."fntReglasPrenda"(f.codigobarra, coalesce(nullif($1, ''''), ''0'')::smallint) r',
+    v_source
+  ) USING p_convenio;
+
+  IF EXISTS (
+    SELECT 1
+    FROM dbo."TABLA_PARAMETROS" tp
+    WHERE tp."Columna" = 'FACT_Regla_No_Aplicar'
+      AND upper(trim(tp."Valor")) = 'TRUE'
+  ) THEN
+    v_cantidadreglas := 1;
+    INSERT INTO pg_temp.temp_selector_reglas (prioridad, productosactivan, imprimir, descripcion, porcdescuento, precio, lleve, pague)
+    VALUES (0, -1, 'No Aplicar', 'No Aplicar', 0, 0, 0, 0);
+  END IF;
+
+  IF (SELECT count(*) FROM pg_temp.temp_selector_reglas) >= v_cantidadreglas THEN
+    INSERT INTO pg_temp.temp_selector_reglas (prioridad, productosactivan, imprimir, descripcion, porcdescuento, precio, lleve, pague)
+    VALUES (0, 0, 'General', 'Reglas Generales', 0, 0, 0, 0);
+
+    RETURN QUERY
+    SELECT prioridad, imprimir::varchar(15), descripcion::varchar(250), porcdescuento::numeric(7,4), precio::numeric(10,2), lleve, pague, productosactivan
+    FROM pg_temp.temp_selector_reglas
+    GROUP BY prioridad, productosactivan, imprimir, descripcion, porcdescuento, precio, lleve, pague
+    ORDER BY prioridad;
+  END IF;
+END;
+$_$;
+
+
+--
+-- Name: UltimaTasaCambio(); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."UltimaTasaCambio"() RETURNS numeric
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT coalesce((SELECT "Valor"::numeric(18,4) FROM dbo."TASA_CAMBIO" ORDER BY "Fecha" DESC LIMIT 1), 1::numeric(18,4));
+$$;
+
+
+--
+-- Name: UpdateDispositivoMarcaje(integer, character varying, character varying, character varying, bytea, integer); Type: PROCEDURE; Schema: dbo; Owner: -
+--
+
+CREATE PROCEDURE dbo."UpdateDispositivoMarcaje"(IN p_id integer, IN p_modelo character varying, IN p_marca character varying, IN p_tipo character varying, IN p_imagen bytea, IN p_idgrupo integer)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE dbo."DISPOSITIVOSMARCAJE"
+  SET "Modelo" = coalesce(p_modelo, "Modelo"),
+      "Marca" = coalesce(p_marca, "Marca"),
+      "Tipo" = coalesce(p_tipo, "Tipo"),
+      "Imagen" = p_imagen,
+      "IdGrupo" = coalesce(p_idgrupo, "IdGrupo")
+  WHERE "Id" = p_id;
+END;
+$$;
+
+
+--
+-- Name: UpdateDispositivoMarcajeConf(integer, integer, character varying); Type: PROCEDURE; Schema: dbo; Owner: -
+--
+
+CREATE PROCEDURE dbo."UpdateDispositivoMarcajeConf"(IN p_id integer, IN p_iddispositivo integer, IN p_dispositivo character varying)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE dbo."CONFIGURACIONMARCAJE"
+  SET "IdDispositivo" = coalesce(p_iddispositivo, "IdDispositivo"),
+      "Dispositivo" = coalesce(p_dispositivo, "Dispositivo")
+  WHERE "Id" = p_id;
+END;
+$$;
+
+
+--
+-- Name: _compat_calcular_descuento(numeric, numeric, numeric, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo._compat_calcular_descuento(p_precio numeric, p_porcdesc numeric, p_preciovalor numeric, p_tiporegla integer) RETURNS TABLE(nuevo_precio numeric, nuevo_porcentaje numeric)
+    LANGUAGE plpgsql STABLE
+    AS $$
+DECLARE
+  v_tasa numeric(24,4);
+  v_target numeric(24,4);
+BEGIN
+  IF coalesce(p_tiporegla, 0) = 0 THEN
+    nuevo_precio := round(coalesce(p_precio, 0) - (coalesce(p_precio, 0) * coalesce(p_porcdesc, 0) / 100.0), 2);
+    nuevo_porcentaje := round(coalesce(p_porcdesc, 0), 4);
+    RETURN NEXT;
+    RETURN;
+  END IF;
+
+  v_tasa := coalesce(dbo."UltimaTasaCambio"(), 1);
+  v_target := round(coalesce(p_preciovalor, 0) * v_tasa, 2);
+  nuevo_precio := least(coalesce(p_precio, 0), v_target);
+  IF coalesce(p_precio, 0) <= 0 OR coalesce(p_precio, 0) <= v_target THEN
+    nuevo_porcentaje := 0;
+  ELSE
+    nuevo_porcentaje := round((((coalesce(p_precio, 0) - v_target) / p_precio) * 100.0)::numeric, 4);
+  END IF;
+  RETURN NEXT;
+END;
+$$;
+
+
+--
+-- Name: _compat_ensure_result_table(text); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo._compat_ensure_result_table(p_name text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_name text := dbo."_compat_normalize_table_name"(p_name);
+  v_rel regclass;
+BEGIN
+  IF v_name = '' THEN
+    RAISE EXCEPTION 'Nombre de tabla resultado vacio';
+  END IF;
+
+  v_rel := dbo."_compat_resolve_table"(p_name);
+  IF v_rel IS NULL THEN
+    EXECUTE format(
+      'CREATE TEMP TABLE %I (
+         codigobarra varchar(15) NOT NULL,
+         tipolista varchar(3) NOT NULL,
+         preciolista numeric(24,4) NOT NULL DEFAULT 0,
+         precio numeric(24,2) NOT NULL DEFAULT 0,
+         cantidad numeric(24,4) NOT NULL DEFAULT 0,
+         impuesto numeric(24,4) NOT NULL DEFAULT 0,
+         porcentajeimpuesto numeric(24,2) NOT NULL DEFAULT 0,
+         costo numeric(24,2) NOT NULL DEFAULT 0,
+         porcentajedescuento numeric(7,4) NOT NULL DEFAULT 0,
+         regla varchar(50),
+         idregla bigint
+       ) ON COMMIT PRESERVE ROWS',
+      v_name
+    );
+    EXECUTE format('CREATE INDEX %I ON %I (codigobarra)', 'ix_' || v_name || '_codigobarra', v_name);
+  END IF;
+END;
+$$;
+
+
+--
+-- Name: _compat_load_temp_facturacion_pasoa(text); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo._compat_load_temp_facturacion_pasoa(p_tablafacturacion text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_source regclass;
+BEGIN
+  v_source := dbo."_compat_resolve_table"(p_tablafacturacion);
+  IF v_source IS NULL THEN
+    RAISE EXCEPTION 'Tabla de facturacion no encontrada: %', p_tablafacturacion;
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp.temp_facturacion_pasoa;
+  CREATE TEMP TABLE pg_temp.temp_facturacion_pasoa (
+    codigobarra varchar(15) NOT NULL,
+    tipolista varchar(3) NOT NULL,
+    preciolista numeric(24,4) NOT NULL DEFAULT 0,
+    precio numeric(24,2) NOT NULL DEFAULT 0,
+    cantidad numeric(24,4) NOT NULL DEFAULT 0,
+    impuesto numeric(24,4) NOT NULL DEFAULT 0,
+    porcentajeimpuesto numeric(24,2) NOT NULL DEFAULT 0,
+    costo numeric(24,2) NOT NULL DEFAULT 0,
+    porcentajedescuento numeric(7,4) NOT NULL DEFAULT 0
+  ) ON COMMIT DROP;
+  CREATE INDEX ON pg_temp.temp_facturacion_pasoa (codigobarra);
+
+  EXECUTE format(
+    'INSERT INTO pg_temp.temp_facturacion_pasoa (codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento)
+     SELECT codigobarra, tipolista, coalesce(preciolista, 0), coalesce(precio, 0), coalesce(cantidad, 0),
+            coalesce(impuesto, 0), coalesce(porcentajeimpuesto, 0), coalesce(costo, 0), coalesce(porcentajedescuento, 0)
+     FROM %s',
+    v_source
+  );
+END;
+$$;
+
+
+--
+-- Name: _compat_normalize_table_name(text); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo._compat_normalize_table_name(p_name text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  SELECT regexp_replace(replace(replace(trim(coalesce(p_name, '')), '[', ''), ']', ''), '^.*\.', '');
+$$;
+
+
+--
+-- Name: _compat_reset_temp_facturacion(); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo._compat_reset_temp_facturacion() RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  DROP TABLE IF EXISTS pg_temp.temp_facturacion;
+  CREATE TEMP TABLE pg_temp.temp_facturacion (
+    item integer NOT NULL,
+    codigobarra varchar(15) NOT NULL,
+    tipolista varchar(3) NOT NULL,
+    preciolista numeric(24,4) NOT NULL DEFAULT 0,
+    precio numeric(24,2) NOT NULL DEFAULT 0,
+    cantidad numeric(24,4) NOT NULL DEFAULT 1,
+    impuesto numeric(24,4) NOT NULL DEFAULT 0,
+    porcentajeimpuesto numeric(24,2) NOT NULL DEFAULT 0,
+    costo numeric(24,2) NOT NULL DEFAULT 0,
+    porcentajedescuento numeric(7,4) NOT NULL DEFAULT 0,
+    agrupacion varchar(1)
+  ) ON COMMIT DROP;
+  CREATE INDEX ON pg_temp.temp_facturacion (item);
+  CREATE INDEX ON pg_temp.temp_facturacion (codigobarra);
+END;
+$$;
+
+
+--
+-- Name: _compat_resolve_table(text); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo._compat_resolve_table(p_name text) RETURNS regclass
+    LANGUAGE plpgsql STABLE
+    AS $$
+DECLARE
+  v_raw text := trim(coalesce(p_name, ''));
+  v_clean text := dbo."_compat_normalize_table_name"(p_name);
+  v_rel regclass;
+BEGIN
+  IF v_raw = '' THEN
+    RETURN NULL;
+  END IF;
+
+  v_rel := to_regclass(v_raw);
+  IF v_rel IS NOT NULL THEN
+    RETURN v_rel;
+  END IF;
+
+  IF v_clean = '' THEN
+    RETURN NULL;
+  END IF;
+
+  v_rel := to_regclass(format('pg_temp.%I', v_clean));
+  IF v_rel IS NOT NULL THEN
+    RETURN v_rel;
+  END IF;
+
+  v_rel := to_regclass(format('dbo.%I', v_clean));
+  IF v_rel IS NOT NULL THEN
+    RETURN v_rel;
+  END IF;
+
+  v_rel := to_regclass(format('public.%I', v_clean));
+  RETURN v_rel;
+END;
+$$;
+
+
+--
+-- Name: _compat_rule_active_today(smallint, smallint, smallint, smallint, smallint, smallint, smallint); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo._compat_rule_active_today(p_lunes smallint, p_martes smallint, p_miercoles smallint, p_jueves smallint, p_viernes smallint, p_sabado smallint, p_domingo smallint) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT CASE extract(isodow FROM current_date)::integer
+    WHEN 1 THEN coalesce(p_lunes, 0) = 1
+    WHEN 2 THEN coalesce(p_martes, 0) = 1
+    WHEN 3 THEN coalesce(p_miercoles, 0) = 1
+    WHEN 4 THEN coalesce(p_jueves, 0) = 1
+    WHEN 5 THEN coalesce(p_viernes, 0) = 1
+    WHEN 6 THEN coalesce(p_sabado, 0) = 1
+    ELSE coalesce(p_domingo, 0) = 1
+  END;
+$$;
+
+
+--
+-- Name: _compat_upsert_pasoa(character varying, character varying, numeric, numeric, numeric, numeric, numeric, numeric, numeric); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo._compat_upsert_pasoa(p_codigobarra character varying, p_tipolista character varying, p_preciolista numeric, p_precio numeric, p_cantidad numeric, p_impuesto numeric, p_porcentajeimpuesto numeric, p_costo numeric, p_porcentajedescuento numeric) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_rows integer;
+BEGIN
+  UPDATE pg_temp.temp_facturacion_pasoa
+  SET cantidad = coalesce(cantidad, 0) + coalesce(p_cantidad, 0)
+  WHERE codigobarra = p_codigobarra
+    AND tipolista = p_tipolista
+    AND coalesce(preciolista, 0) = coalesce(p_preciolista, 0)
+    AND coalesce(precio, 0) = coalesce(p_precio, 0)
+    AND coalesce(impuesto, 0) = coalesce(p_impuesto, 0)
+    AND coalesce(porcentajeimpuesto, 0) = coalesce(p_porcentajeimpuesto, 0)
+    AND coalesce(costo, 0) = coalesce(p_costo, 0)
+    AND coalesce(porcentajedescuento, 0) = coalesce(p_porcentajedescuento, 0);
+
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+  IF v_rows = 0 THEN
+    INSERT INTO pg_temp.temp_facturacion_pasoa (
+      codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento
+    ) VALUES (
+      p_codigobarra, p_tipolista, coalesce(p_preciolista, 0), coalesce(p_precio, 0), coalesce(p_cantidad, 0),
+      coalesce(p_impuesto, 0), coalesce(p_porcentajeimpuesto, 0), coalesce(p_costo, 0), coalesce(p_porcentajedescuento, 0)
+    );
+  END IF;
+END;
+$$;
+
+
+--
+-- Name: _compat_upsert_result(text, character varying, character varying, numeric, numeric, numeric, numeric, numeric, numeric, numeric, character varying, bigint); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo._compat_upsert_result(p_table text, p_codigobarra character varying, p_tipolista character varying, p_preciolista numeric, p_precio numeric, p_cantidad numeric, p_impuesto numeric, p_porcentajeimpuesto numeric, p_costo numeric, p_porcentajedescuento numeric, p_regla character varying, p_idregla bigint) RETURNS void
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+  v_rel regclass;
+  v_rows integer;
+BEGIN
+  PERFORM dbo."_compat_ensure_result_table"(p_table);
+  v_rel := dbo."_compat_resolve_table"(p_table);
+
+  EXECUTE format(
+    'UPDATE %s
+     SET cantidad = coalesce(cantidad, 0) + $1
+     WHERE codigobarra = $2
+       AND tipolista = $3
+       AND coalesce(preciolista, 0) = coalesce($4, 0)
+       AND coalesce(precio, 0) = coalesce($5, 0)
+       AND coalesce(impuesto, 0) = coalesce($6, 0)
+       AND coalesce(porcentajeimpuesto, 0) = coalesce($7, 0)
+       AND coalesce(costo, 0) = coalesce($8, 0)
+       AND coalesce(porcentajedescuento, 0) = coalesce($9, 0)
+       AND coalesce(regla, '''') = coalesce($10, '''')
+       AND coalesce(idregla, 0) = coalesce($11, 0)',
+    v_rel
+  )
+  USING coalesce(p_cantidad, 0), p_codigobarra, p_tipolista, coalesce(p_preciolista, 0), coalesce(p_precio, 0),
+        coalesce(p_impuesto, 0), coalesce(p_porcentajeimpuesto, 0), coalesce(p_costo, 0), coalesce(p_porcentajedescuento, 0),
+        p_regla, p_idregla;
+
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+  IF v_rows = 0 THEN
+    EXECUTE format(
+      'INSERT INTO %s (codigobarra, tipolista, preciolista, precio, cantidad, impuesto, porcentajeimpuesto, costo, porcentajedescuento, regla, idregla)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+      v_rel
+    )
+    USING p_codigobarra, p_tipolista, coalesce(p_preciolista, 0), coalesce(p_precio, 0), coalesce(p_cantidad, 0),
+          coalesce(p_impuesto, 0), coalesce(p_porcentajeimpuesto, 0), coalesce(p_costo, 0), coalesce(p_porcentajedescuento, 0),
+          p_regla, p_idregla;
+  END IF;
+END;
+$_$;
+
+
+--
+-- Name: fSALDODIARIO_InventarioDiario(character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."fSALDODIARIO_InventarioDiario"(p_fecha_referencia character varying) RETURNS TABLE("CodigoBarra" character varying, "Existencia" numeric)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT i."CodigoBarra", coalesce(i."Existencia", 0)::numeric(24,4)
+  FROM dbo."INVENTARIO" i;
+$$;
+
+
+--
+-- Name: fn_diagramobjects(); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo.fn_diagramobjects() RETURNS integer
+    LANGUAGE plpgsql STABLE
+    AS $$
+DECLARE
+  installed integer := 0;
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'dbo' AND p.proname = 'sp_upgraddiagrams') THEN
+    installed := installed + 1;
+  END IF;
+  IF to_regclass('dbo.sysdiagrams') IS NOT NULL THEN
+    installed := installed + 2;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'dbo' AND p.proname = 'sp_helpdiagrams') THEN
+    installed := installed + 4;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'dbo' AND p.proname = 'sp_helpdiagramdefinition') THEN
+    installed := installed + 8;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'dbo' AND p.proname = 'sp_creatediagram') THEN
+    installed := installed + 16;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'dbo' AND p.proname = 'sp_renamediagram') THEN
+    installed := installed + 32;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'dbo' AND p.proname = 'sp_alterdiagram') THEN
+    installed := installed + 64;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'dbo' AND p.proname = 'sp_dropdiagram') THEN
+    installed := installed + 128;
+  END IF;
+  RETURN installed;
+END;
+$$;
+
+
+--
+-- Name: fntPrendasGrupoRegla(integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."fntPrendasGrupoRegla"(p_idgrupo integer) RETURNS TABLE("CodigoBarra" character varying, "IDGrupoRegla" integer)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT gr."CodigoBarra"::varchar(15), gr."IDGrupoRegla"::integer
+  FROM dbo."GRUPO_REGLAS" gr
+  WHERE gr."IDGrupoRegla" = p_idgrupo
+    AND gr."EsReferencia" = 0
+    AND gr."EsExcepcion" = 0
+
+  UNION
+
+  SELECT inv."CodigoBarra"::varchar(15), gr."IDGrupoRegla"::integer
+  FROM dbo."GRUPO_REGLAS" gr
+  INNER JOIN dbo."INVENTARIO" inv
+    ON trim(inv."Referencia") || trim(inv."CodigoMarca") = gr."CodigoBarra"
+   AND gr."EsReferencia" = 1
+   AND gr."EsExcepcion" = 0
+  WHERE gr."IDGrupoRegla" = p_idgrupo
+
+  UNION
+
+  SELECT i."CodigoBarra"::varchar(15), p_idgrupo::integer
+  FROM dbo."INVENTARIO" i
+  LEFT JOIN (
+    SELECT i2."CodigoBarra"
+    FROM dbo."INVENTARIO" i2
+    INNER JOIN dbo."GRUPO_REGLAS" gr2
+      ON gr2."CodigoBarra" = trim(i2."Referencia") || trim(i2."CodigoMarca")
+     AND gr2."IDGrupoRegla" = p_idgrupo
+     AND gr2."EsReferencia" = 1
+     AND gr2."EsExcepcion" = 1
+
+    UNION
+
+    SELECT gr3."CodigoBarra"
+    FROM dbo."GRUPO_REGLAS" gr3
+    WHERE gr3."IDGrupoRegla" = p_idgrupo
+      AND gr3."EsReferencia" = 0
+      AND gr3."EsExcepcion" = 1
+  ) res
+    ON i."CodigoBarra" = res."CodigoBarra"
+  WHERE res."CodigoBarra" IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM dbo."GRUPO_REGLAS" gr4
+      WHERE gr4."IDGrupoRegla" = p_idgrupo
+        AND gr4."EsExcepcion" = 1
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM dbo."CODIGOS_RECARGOS" cr
+      WHERE cr."CodigoBarra" = i."CodigoBarra"
+    )
+
+  UNION
+
+  SELECT i."CodigoBarra"::varchar(15), p_idgrupo::integer
+  FROM dbo."INVENTARIO" i
+  WHERE EXISTS (
+      SELECT 1
+      FROM dbo."GRUPO_REGLAS" gr5
+      WHERE gr5."CodigoBarra" = '+++'
+        AND gr5."IDGrupoRegla" = p_idgrupo
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM dbo."CODIGOS_RECARGOS" cr
+      WHERE cr."CodigoBarra" = i."CodigoBarra"
+    );
+$$;
+
+
+--
+-- Name: fntReglasPrenda(character varying, smallint); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."fntReglasPrenda"(p_codigobarra character varying, p_activa smallint) RETURNS TABLE("ID" bigint, "Descripcion" character varying, "Imprimir" character varying, "Lleve" integer, "Pague" integer, "PorcDescuento" numeric, "ProductosActivan" bigint, "ProductosAfectados" bigint, "FechaInicio" date, "FechaFin" date, "HoraInicio" time without time zone, "HoraFin" time without time zone, "Lunes" smallint, "Martes" smallint, "Miercoles" smallint, "Jueves" smallint, "Viernes" smallint, "Sabado" smallint, "Domingo" smallint, "Prioridad" bigint, "Activa" smallint, "FechaCreacion" timestamp without time zone, "Precio" numeric, "Tipo" integer)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT
+    r."ID",
+    r."Descripcion",
+    r."Imprimir",
+    r."Lleve",
+    r."Pague",
+    r."PorcDescuento",
+    r."ProductosActivan",
+    r."ProductosAfectados",
+    r."FechaInicio",
+    r."FechaFin",
+    r."HoraInicio",
+    r."HoraFin",
+    r."Lunes",
+    r."Martes",
+    r."Miercoles",
+    r."Jueves",
+    r."Viernes",
+    r."Sabado",
+    r."Domingo",
+    r."Prioridad",
+    r."Activa",
+    r."FechaCreacion",
+    r."Precio",
+    r."Tipo"
+  FROM dbo."REGLAS" r
+  INNER JOIN (
+    SELECT gr."IDGrupoRegla"
+    FROM dbo."GRUPO_REGLAS" gr
+    WHERE gr."CodigoBarra" = p_codigobarra
+      AND gr."EsReferencia" = 0
+      AND gr."EsExcepcion" = 0
+    GROUP BY gr."IDGrupoRegla"
+
+    UNION
+
+    SELECT gr."IDGrupoRegla"
+    FROM dbo."GRUPO_REGLAS" gr
+    INNER JOIN dbo."INVENTARIO" inv
+      ON trim(inv."Referencia") || trim(inv."CodigoMarca") = gr."CodigoBarra"
+     AND inv."CodigoBarra" = p_codigobarra
+    WHERE gr."EsReferencia" = 1
+      AND gr."EsExcepcion" = 0
+    GROUP BY gr."IDGrupoRegla"
+
+    UNION
+
+    SELECT gr."IDGrupoRegla"
+    FROM dbo."INVENTARIO" i
+    INNER JOIN dbo."GRUPO_REGLAS" gr
+      ON gr."CodigoBarra" = trim(i."Referencia") || trim(i."CodigoMarca")
+     AND gr."EsReferencia" = 1
+     AND gr."EsExcepcion" = 1
+    WHERE gr."CodigoBarra" NOT IN (
+        SELECT trim(i2."Referencia") || trim(i2."CodigoMarca")
+        FROM dbo."INVENTARIO" i2
+        WHERE i2."CodigoBarra" = p_codigobarra
+    )
+      AND EXISTS (
+        SELECT 1
+        FROM dbo."INVENTARIO" i3
+        LEFT JOIN dbo."GRUPO_REGLAS" grx
+          ON grx."CodigoBarra" = trim(i3."Referencia") || trim(i3."CodigoMarca")
+         AND grx."EsReferencia" = 1
+         AND grx."EsExcepcion" = 1
+         AND grx."CodigoBarra" NOT IN (
+            SELECT trim(i4."Referencia") || trim(i4."CodigoMarca")
+            FROM dbo."INVENTARIO" i4
+            WHERE i4."CodigoBarra" = p_codigobarra
+         )
+        WHERE grx."ID" IS NULL
+          AND i3."CodigoBarra" = p_codigobarra
+      )
+    GROUP BY gr."IDGrupoRegla"
+
+    UNION
+
+    SELECT gr."IDGrupoRegla"
+    FROM dbo."INVENTARIO" i
+    INNER JOIN dbo."GRUPO_REGLAS" gr
+      ON gr."CodigoBarra" = i."CodigoBarra"
+     AND gr."EsReferencia" = 0
+     AND gr."EsExcepcion" = 1
+    WHERE gr."CodigoBarra" <> p_codigobarra
+      AND EXISTS (
+        SELECT 1
+        FROM dbo."INVENTARIO" i5
+        LEFT JOIN dbo."GRUPO_REGLAS" gry
+          ON gry."CodigoBarra" = i5."CodigoBarra"
+         AND gry."EsReferencia" = 0
+         AND gry."EsExcepcion" = 1
+         AND gry."CodigoBarra" <> p_codigobarra
+        WHERE gry."ID" IS NULL
+          AND i5."CodigoBarra" = p_codigobarra
+      )
+    GROUP BY gr."IDGrupoRegla"
+
+    UNION
+
+    SELECT gr."IDGrupoRegla"
+    FROM dbo."GRUPO_REGLAS" gr
+    WHERE gr."CodigoBarra" = '+++'
+    GROUP BY gr."IDGrupoRegla"
+  ) res
+    ON r."ProductosActivan" = res."IDGrupoRegla"
+  WHERE r."Activa" = p_activa
+    AND CURRENT_DATE BETWEEN r."FechaInicio" AND r."FechaFin"
+    AND LOCALTIME >= r."HoraInicio"
+    AND LOCALTIME <= r."HoraFin";
+$$;
+
+
+--
+-- Name: sp_CompararTomasFisicas(); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo."sp_CompararTomasFisicas"() RETURNS TABLE("TipoDiferencia" text, "CodigoBarra" character varying, "Nombre" text, "TotalRegistrosEnToma1" bigint, "TotalRegistrosEnToma2" bigint, "TotalCantidadEnToma1" numeric, "TotalCantidadEnToma2" numeric, "DiferenciaDeConteoDeFilas" bigint, "DiferenciaDeCantidad" numeric, "PaginasEnToma1" text, "PaginasEnToma2" text)
+    LANGUAGE sql STABLE
+    AS $$
+  WITH m1 AS (
+    SELECT
+      m."CodigoBarra",
+      count(*)::bigint AS "TotalRows",
+      coalesce(sum(m."Cantidad"), 0)::numeric(24,4) AS "TotalQuantity",
+      string_agg(DISTINCT m."NumeroPagina"::text, ', ' ORDER BY m."NumeroPagina"::text) AS "Paginas"
+    FROM dbo."MOVTOMAFISICA1" m
+    GROUP BY m."CodigoBarra"
+  ),
+  m2 AS (
+    SELECT
+      m."CodigoBarra",
+      count(*)::bigint AS "TotalRows",
+      coalesce(sum(m."Cantidad"), 0)::numeric(24,4) AS "TotalQuantity",
+      string_agg(DISTINCT m."NumeroPagina"::text, ', ' ORDER BY m."NumeroPagina"::text) AS "Paginas"
+    FROM dbo."MOVTOMAFISICA2" m
+    GROUP BY m."CodigoBarra"
+  )
+  SELECT
+    'Solo en Toma Fisica 1'::text AS "TipoDiferencia",
+    m1."CodigoBarra",
+    coalesce(i."Nombre", 'NO EXISTEN EN INVENTARIO')::text AS "Nombre",
+    m1."TotalRows" AS "TotalRegistrosEnToma1",
+    m2."TotalRows" AS "TotalRegistrosEnToma2",
+    m1."TotalQuantity" AS "TotalCantidadEnToma1",
+    m2."TotalQuantity" AS "TotalCantidadEnToma2",
+    NULL::bigint AS "DiferenciaDeConteoDeFilas",
+    NULL::numeric(24,4) AS "DiferenciaDeCantidad",
+    m1."Paginas" AS "PaginasEnToma1",
+    m2."Paginas" AS "PaginasEnToma2"
+  FROM m1
+  LEFT JOIN m2 ON m1."CodigoBarra" = m2."CodigoBarra"
+  LEFT JOIN dbo."INVENTARIO" i ON m1."CodigoBarra" = i."CodigoBarra"
+  WHERE m2."CodigoBarra" IS NULL
+
+  UNION ALL
+
+  SELECT
+    'Solo en Toma Fisica 2'::text AS "TipoDiferencia",
+    m2."CodigoBarra",
+    coalesce(i."Nombre", 'NO EXISTEN EN INVENTARIO')::text AS "Nombre",
+    coalesce(m1."TotalRows", 0) AS "TotalRegistrosEnToma1",
+    m2."TotalRows" AS "TotalRegistrosEnToma2",
+    coalesce(m1."TotalQuantity", 0)::numeric(24,4) AS "TotalCantidadEnToma1",
+    m2."TotalQuantity" AS "TotalCantidadEnToma2",
+    NULL::bigint AS "DiferenciaDeConteoDeFilas",
+    NULL::numeric(24,4) AS "DiferenciaDeCantidad",
+    m1."Paginas" AS "PaginasEnToma1",
+    m2."Paginas" AS "PaginasEnToma2"
+  FROM m1
+  RIGHT JOIN m2 ON m1."CodigoBarra" = m2."CodigoBarra"
+  LEFT JOIN dbo."INVENTARIO" i ON m2."CodigoBarra" = i."CodigoBarra"
+  WHERE m1."CodigoBarra" IS NULL
+
+  UNION ALL
+
+  SELECT
+    'Desajuste'::text AS "TipoDiferencia",
+    m1."CodigoBarra",
+    coalesce(i."Nombre", 'NO EXISTEN EN INVENTARIO')::text AS "Nombre",
+    m1."TotalRows" AS "TotalRegistrosEnToma1",
+    m2."TotalRows" AS "TotalRegistrosEnToma2",
+    m1."TotalQuantity" AS "TotalCantidadEnToma1",
+    m2."TotalQuantity" AS "TotalCantidadEnToma2",
+    (m1."TotalRows" - m2."TotalRows")::bigint AS "DiferenciaDeConteoDeFilas",
+    (m1."TotalQuantity" - m2."TotalQuantity")::numeric(24,4) AS "DiferenciaDeCantidad",
+    m1."Paginas" AS "PaginasEnToma1",
+    m2."Paginas" AS "PaginasEnToma2"
+  FROM m1
+  INNER JOIN m2 ON m1."CodigoBarra" = m2."CodigoBarra"
+  LEFT JOIN dbo."INVENTARIO" i ON m1."CodigoBarra" = i."CodigoBarra"
+  WHERE m1."TotalRows" <> m2."TotalRows"
+     OR coalesce(m1."TotalQuantity", 0) <> coalesce(m2."TotalQuantity", 0)
+  ORDER BY 1, 2;
+$$;
+
+
+--
+-- Name: sp_alterdiagram(character varying, integer, integer, bytea); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo.sp_alterdiagram(p_diagramname character varying, p_owner_id integer DEFAULT NULL::integer, p_version integer DEFAULT NULL::integer, p_definition bytea DEFAULT NULL::bytea) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_owner_id integer := coalesce(p_owner_id, 1);
+BEGIN
+  IF p_diagramname IS NULL THEN
+    RETURN -1;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM dbo."sysdiagrams"
+    WHERE "principal_id" = v_owner_id
+      AND "name" = p_diagramname
+  ) THEN
+    RETURN -3;
+  END IF;
+
+  UPDATE dbo."sysdiagrams"
+  SET "definition" = coalesce(p_definition, "definition"),
+      "version" = coalesce(p_version, "version")
+  WHERE "principal_id" = v_owner_id
+    AND "name" = p_diagramname;
+
+  RETURN 0;
+END;
+$$;
+
+
+--
+-- Name: sp_creatediagram(character varying, integer, integer, bytea); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo.sp_creatediagram(p_diagramname character varying, p_owner_id integer DEFAULT NULL::integer, p_version integer DEFAULT NULL::integer, p_definition bytea DEFAULT NULL::bytea) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_owner_id integer := coalesce(p_owner_id, 1);
+  v_retval integer;
+BEGIN
+  IF p_version IS NULL OR p_diagramname IS NULL THEN
+    RETURN -1;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM dbo."sysdiagrams"
+    WHERE "principal_id" = v_owner_id
+      AND "name" = p_diagramname
+  ) THEN
+    RETURN -2;
+  END IF;
+
+  INSERT INTO dbo."sysdiagrams" ("name", "principal_id", "version", "definition")
+  VALUES (p_diagramname, v_owner_id, p_version, p_definition)
+  RETURNING "diagram_id" INTO v_retval;
+
+  RETURN v_retval;
+END;
+$$;
+
+
+--
+-- Name: sp_dropdiagram(character varying, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo.sp_dropdiagram(p_diagramname character varying, p_owner_id integer DEFAULT NULL::integer) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_owner_id integer := coalesce(p_owner_id, 1);
+BEGIN
+  IF p_diagramname IS NULL THEN
+    RETURN -1;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM dbo."sysdiagrams"
+    WHERE "principal_id" = v_owner_id
+      AND "name" = p_diagramname
+  ) THEN
+    RETURN -3;
+  END IF;
+
+  DELETE FROM dbo."sysdiagrams"
+  WHERE "principal_id" = v_owner_id
+    AND "name" = p_diagramname;
+
+  RETURN 0;
+END;
+$$;
+
+
+--
+-- Name: sp_helpdiagramdefinition(character varying, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo.sp_helpdiagramdefinition(p_diagramname character varying, p_owner_id integer DEFAULT NULL::integer) RETURNS TABLE(version integer, definition bytea)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT s."version", s."definition"
+  FROM dbo."sysdiagrams" s
+  WHERE s."name" = p_diagramname
+    AND s."principal_id" = coalesce(p_owner_id, 1)
+  LIMIT 1;
+$$;
+
+
+--
+-- Name: sp_helpdiagrams(character varying, integer); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo.sp_helpdiagrams(p_diagramname character varying DEFAULT NULL::character varying, p_owner_id integer DEFAULT NULL::integer) RETURNS TABLE("Database" text, "Name" character varying, "ID" integer, "Owner" text, "OwnerID" integer)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT
+    current_database()::text AS "Database",
+    s."name" AS "Name",
+    s."diagram_id" AS "ID",
+    s."principal_id"::text AS "Owner",
+    s."principal_id" AS "OwnerID"
+  FROM dbo."sysdiagrams" s
+  WHERE (p_diagramname IS NULL OR s."name" = p_diagramname)
+    AND (p_owner_id IS NULL OR s."principal_id" = p_owner_id)
+  ORDER BY 4, 5, 1;
+$$;
+
+
+--
+-- Name: sp_renamediagram(character varying, integer, character varying); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo.sp_renamediagram(p_diagramname character varying, p_owner_id integer DEFAULT NULL::integer, p_new_diagramname character varying DEFAULT NULL::character varying) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_owner_id integer := coalesce(p_owner_id, 1);
+  v_diag_id integer;
+  v_target_id integer;
+BEGIN
+  IF p_diagramname IS NULL OR p_new_diagramname IS NULL THEN
+    RETURN -1;
+  END IF;
+
+  SELECT s."diagram_id" INTO v_diag_id
+  FROM dbo."sysdiagrams" s
+  WHERE s."principal_id" = v_owner_id
+    AND s."name" = p_diagramname
+  LIMIT 1;
+
+  IF v_diag_id IS NULL THEN
+    RETURN -3;
+  END IF;
+
+  SELECT s."diagram_id" INTO v_target_id
+  FROM dbo."sysdiagrams" s
+  WHERE s."principal_id" = v_owner_id
+    AND s."name" = p_new_diagramname
+  LIMIT 1;
+
+  IF v_target_id IS NOT NULL AND v_target_id <> v_diag_id THEN
+    RETURN -2;
+  END IF;
+
+  UPDATE dbo."sysdiagrams"
+  SET "name" = p_new_diagramname
+  WHERE "diagram_id" = v_diag_id;
+
+  RETURN 0;
+END;
+$$;
+
+
+--
+-- Name: sp_upgraddiagrams(); Type: FUNCTION; Schema: dbo; Owner: -
+--
+
+CREATE FUNCTION dbo.sp_upgraddiagrams() RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF to_regclass('dbo.sysdiagrams') IS NOT NULL THEN
+    RETURN 0;
+  END IF;
+
+  EXECUTE '
+    CREATE TABLE dbo."sysdiagrams" (
+      "name" varchar(128) NOT NULL,
+      "principal_id" integer NOT NULL,
+      "diagram_id" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+      "version" integer,
+      "definition" bytea
+    )';
+
+  EXECUTE 'CREATE UNIQUE INDEX "UK_principal_name" ON dbo."sysdiagrams" ("principal_id", "name")';
+  RETURN 1;
+END;
+$$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: AJUSTES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."AJUSTES" (
+    "Numero" bigint NOT NULL,
+    "TipoAjuste" integer NOT NULL,
+    "Signo" smallint NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "TotalValor" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Observacion" character varying(250) NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "InterContable" integer DEFAULT 0 NOT NULL,
+    "Status" integer DEFAULT 0 NOT NULL,
+    "IDLote" integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: BANCOS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."BANCOS" (
+    "Codigo" character varying(12) NOT NULL,
+    "Nombre" character varying(30) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: CAJAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CAJAS" (
+    "Serie" character varying(15) NOT NULL,
+    "Numero" smallint NOT NULL,
+    "FondoCaja" numeric(24,8) NOT NULL,
+    "TipoListaPrecio" smallint NOT NULL,
+    "TipoVenta" smallint NOT NULL,
+    "TipoReporte" smallint NOT NULL,
+    "UltimaFactura" bigint DEFAULT 0 NOT NULL,
+    "UltimaDevolucion" bigint DEFAULT 0 NOT NULL,
+    "PermiteDescuento" smallint NOT NULL,
+    "PermiteFacturasExentas" smallint DEFAULT 0 NOT NULL,
+    "PermiteAlternarListas" smallint DEFAULT 0 NOT NULL,
+    "CambiarPrecios" smallint DEFAULT 0 NOT NULL,
+    "RequerirAutorizacion" smallint DEFAULT 0 NOT NULL,
+    "IdImpresoraFiscal" numeric(2,0) DEFAULT 0 NOT NULL,
+    "NombreImpresora" character varying(100) DEFAULT ''::character varying,
+    "NumeroCopias" integer DEFAULT 1,
+    "IncluirIGTF" boolean
+);
+
+
+--
+-- Name: CARGOS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CARGOS" (
+    "Codigo" character varying(3) NOT NULL,
+    "Nombre" character varying(25) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: CATEGORIAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CATEGORIAS" (
+    "Codigo" character varying(6) NOT NULL,
+    "Nombre" character varying(60) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: CLIENTES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CLIENTES" (
+    "Codigo" character varying(15) NOT NULL,
+    "Nombre" character varying(120) NOT NULL,
+    "FechaIngreso" timestamp(0) without time zone NOT NULL,
+    "Telefono" character varying(15) NOT NULL,
+    "Direccion" character varying(300) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "Tipo" smallint NOT NULL,
+    "TipoContribuyente" smallint NOT NULL
+);
+
+
+--
+-- Name: CODIGOSCONVENIOS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CODIGOSCONVENIOS" (
+    "IdCodigo" bigint NOT NULL,
+    "Codigo" character varying(10) NOT NULL,
+    "IdCupon" integer NOT NULL,
+    "Status" smallint DEFAULT 1 NOT NULL
+);
+
+
+--
+-- Name: TABLE "CODIGOSCONVENIOS"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."CODIGOSCONVENIOS" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: CODIGOSCONVENIOS_IdCodigo_seq; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+ALTER TABLE dbo."CODIGOSCONVENIOS" ALTER COLUMN "IdCodigo" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME dbo."CODIGOSCONVENIOS_IdCodigo_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: CODIGOS_RECARGOS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CODIGOS_RECARGOS" (
+    "CodigoBarra" character varying(15) NOT NULL
+);
+
+
+--
+-- Name: TABLE "CODIGOS_RECARGOS"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."CODIGOS_RECARGOS" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: COLORES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."COLORES" (
+    "Codigo" character varying(3) NOT NULL,
+    "Nombre" character varying(30) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: COMPRAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."COMPRAS" (
+    "Documento" character varying(12) NOT NULL,
+    "Proveedor" character varying(15) NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "FechaFactura" timestamp(0) without time zone NOT NULL,
+    "PorcentajeDescuento" numeric(5,2) NOT NULL,
+    "TipoPago" smallint NOT NULL,
+    "DiasCredito" numeric(18,0) DEFAULT 0 NOT NULL,
+    "Expediente" character varying(12) NOT NULL,
+    "Observacion" character varying(100) NOT NULL,
+    "TotalMercancia" numeric(24,8) NOT NULL,
+    "TotalImpuesto" numeric(24,8) NOT NULL,
+    "TotalImpuestoContable" numeric(24,8) NOT NULL,
+    "TotalDescuento" numeric(24,8) NOT NULL,
+    "TasaCambio" numeric(24,8) DEFAULT 1 NOT NULL,
+    "Recargos" numeric(24,8) DEFAULT 0 NOT NULL,
+    "TasaServicio" numeric(24,8) DEFAULT 0 NOT NULL,
+    "OtrosImpuestos" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Flete" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Seguro" numeric(24,8) DEFAULT 0 NOT NULL,
+    "PorcImpuestoGeneral" numeric(5,2) NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "MetodoValorizacion" smallint DEFAULT 0 NOT NULL,
+    "InterContable" smallint DEFAULT 0 NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "BodegaExterna" smallint DEFAULT 0 NOT NULL,
+    "IDLote" integer DEFAULT 0 NOT NULL,
+    "UsaFechaVencimiento" boolean
+);
+
+
+--
+-- Name: CONFIGURACIONMARCAJE; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CONFIGURACIONMARCAJE" (
+    "Id" integer NOT NULL,
+    "IdDispositivo" integer NOT NULL,
+    "Dispositivo" character varying(500) NOT NULL,
+    "FechaRegistro" timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: TABLE "CONFIGURACIONMARCAJE"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."CONFIGURACIONMARCAJE" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: CONFIGURACIONMARCAJE_Id_seq; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+ALTER TABLE dbo."CONFIGURACIONMARCAJE" ALTER COLUMN "Id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME dbo."CONFIGURACIONMARCAJE_Id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: CONTROLACCESO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CONTROLACCESO" (
+    "Numero" integer NOT NULL,
+    "Cedula" character varying(15) NOT NULL,
+    "Fecha" date NOT NULL,
+    "HoraEntrada" timestamp(0) without time zone,
+    "HoraSalida" timestamp(0) without time zone
+);
+
+
+--
+-- Name: TABLE "CONTROLACCESO"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."CONTROLACCESO" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: CTABANCOS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CTABANCOS" (
+    "Codigo" character varying(12) NOT NULL,
+    "Nombre" character varying(60) NOT NULL,
+    "PuntoVenta" smallint DEFAULT 0 NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: CTABANCOS_DOLARES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CTABANCOS_DOLARES" (
+    "Codigo" character varying(12) NOT NULL,
+    "Nombre" character varying(60) NOT NULL,
+    "PuntoVenta" smallint DEFAULT 0 NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: CTACONTABLE; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CTACONTABLE" (
+    "Codigo" character varying(12) NOT NULL,
+    "Nombre" character varying(50) NOT NULL,
+    "ManejaDocumentos" smallint NOT NULL,
+    "TieneAcreedor" smallint NOT NULL,
+    "CuentaDevolucion" smallint DEFAULT 0 NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: CUPONES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."CUPONES" (
+    "IdCupon" integer NOT NULL,
+    "Nombre" character varying(50) DEFAULT ''::character varying NOT NULL,
+    "Tipo" integer DEFAULT 0 NOT NULL,
+    "UsaCodigo" integer DEFAULT 0 NOT NULL,
+    "Acumulativo" integer DEFAULT 0 NOT NULL,
+    "UsaReferencias" integer DEFAULT 0 NOT NULL,
+    "FechaInicial" timestamp(0) without time zone,
+    "FechaFinal" timestamp(0) without time zone,
+    "FechaCanjeInicial" timestamp(0) without time zone,
+    "FechaCanjeFinal" timestamp(0) without time zone,
+    "MontoDesde" numeric(15,2) DEFAULT 0 NOT NULL,
+    "MontoHasta" numeric(15,2) DEFAULT 0 NOT NULL,
+    "Mensaje" character varying(500) DEFAULT ''::character varying NOT NULL,
+    "ProductosActivan" integer DEFAULT 0 NOT NULL,
+    "MinimoCantidad" integer DEFAULT 0 NOT NULL,
+    "Status" smallint DEFAULT 1 NOT NULL
+);
+
+
+--
+-- Name: TABLE "CUPONES"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."CUPONES" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: DEPOSITOS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."DEPOSITOS" (
+    "NumeroDeposito" character varying(15) NOT NULL,
+    "CuentaBanco" character varying(12) NOT NULL,
+    "Serie" character varying(15) NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "TotalEfectivo" numeric(24,8) NOT NULL,
+    "TotalCheques" numeric(24,8) NOT NULL,
+    "Observacion" character varying(50) NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "Status" smallint NOT NULL,
+    "InterContable" smallint DEFAULT 0 NOT NULL,
+    "TasaCambio" numeric(24,2) DEFAULT 0
+);
+
+
+--
+-- Name: DEPOSITOS_DOLARES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."DEPOSITOS_DOLARES" (
+    "NumeroDeposito" character varying(15) NOT NULL,
+    "CuentaBanco" character varying(12) NOT NULL,
+    "Serie" character varying(15) NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "TotalEfectivo" numeric(24,8) NOT NULL,
+    "TotalCheques" numeric(24,8) NOT NULL,
+    "Observacion" character varying(50) NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "Status" smallint NOT NULL,
+    "InterContable" smallint DEFAULT 0 NOT NULL,
+    "TasaCambio" numeric(24,2) DEFAULT 0
+);
+
+
+--
+-- Name: DESCUENTO_MAYORISTA; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."DESCUENTO_MAYORISTA" (
+    "MontoMinimo" numeric(24,2) NOT NULL,
+    "PorcentajeDescuento" numeric(5,2) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TABLE "DESCUENTO_MAYORISTA"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."DESCUENTO_MAYORISTA" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: DETALLECONTROLACCESO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."DETALLECONTROLACCESO" (
+    "IdDetalleControlAcceso" bigint NOT NULL,
+    "IdPersonal" character varying(15) NOT NULL,
+    "IdPatron" bigint,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "IndTipoMarcaje" smallint NOT NULL,
+    "IndUsoCarnet" smallint NOT NULL
+);
+
+
+--
+-- Name: TABLE "DETALLECONTROLACCESO"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."DETALLECONTROLACCESO" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: DETALLECONTROLACCESO_IdDetalleControlAcceso_seq; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+ALTER TABLE dbo."DETALLECONTROLACCESO" ALTER COLUMN "IdDetalleControlAcceso" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME dbo."DETALLECONTROLACCESO_IdDetalleControlAcceso_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: DEVCOMPRAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."DEVCOMPRAS" (
+    "Numero" bigint NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "Documento" character varying(12) NOT NULL,
+    "Proveedor" character varying(15) NOT NULL,
+    "TotalMercancia" numeric(24,8) NOT NULL,
+    "TotalImpuesto" numeric(24,8) DEFAULT 0 NOT NULL,
+    "PorcentajeDescuento" numeric(18,4) DEFAULT 0 NOT NULL,
+    "TotalDescuento" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Observacion" character varying(250) NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "InterContable" integer NOT NULL,
+    "Status" integer NOT NULL
+);
+
+
+--
+-- Name: DEVTRANSFERENCIAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."DEVTRANSFERENCIAS" (
+    "Numero" integer NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "CodigoEnvia" character varying(12) NOT NULL,
+    "CodigoRecibe" character varying(15) NOT NULL,
+    "DocumentoOrigen" character varying(12) DEFAULT ''::character varying NOT NULL,
+    "TotalValor" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Observacion" character varying(100) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "FechaEmision" timestamp(0) without time zone NOT NULL,
+    "InterContable" smallint DEFAULT 0 NOT NULL,
+    "IDLote" integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: DEVVENTAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."DEVVENTAS" (
+    "NumeroDevolucion" bigint NOT NULL,
+    "Serie" character varying(15) NOT NULL,
+    "NumeroFactura" bigint NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "Vendedor" character varying(15) NOT NULL,
+    "Cliente" character varying(15) NOT NULL,
+    "TipoVenta" smallint NOT NULL,
+    "TotalMercancia" numeric(24,8) NOT NULL,
+    "TotalDescuento" numeric(24,8) NOT NULL,
+    "TotalImpuesto" numeric(24,8) NOT NULL,
+    "TotalCosto" numeric(24,8) NOT NULL,
+    "InterContable" smallint NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "Status" smallint NOT NULL,
+    "SerieFactura" character varying(15) DEFAULT ' '::character varying NOT NULL,
+    "Estacion" character varying(50),
+    "TasaIGTF" numeric(24,2),
+    "MontoIGTF" numeric(24,8),
+    "BaseImponibleIGTF" numeric(24,8)
+);
+
+
+--
+-- Name: DIARIOCAJA; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."DIARIOCAJA" (
+    "Serie" character varying(15) NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "Numero" smallint DEFAULT 0 NOT NULL,
+    "FacturaInicial" bigint NOT NULL,
+    "FacturaFinal" bigint NOT NULL,
+    "PorcentajeImpuesto" numeric(10,2) DEFAULT 0 NOT NULL,
+    "HoraApertura" timestamp(0) without time zone NOT NULL,
+    "HoraCierre" timestamp(0) without time zone,
+    "NumeroReporteZ" numeric(18,0) DEFAULT 0 NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "ReporteZTexto" text DEFAULT ''::text,
+    "Acumulado" numeric(18,2) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: DISPOSITIVOGRUPO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."DISPOSITIVOGRUPO" (
+    "Id" integer NOT NULL,
+    "Nombre" character varying(500) NOT NULL
+);
+
+
+--
+-- Name: TABLE "DISPOSITIVOGRUPO"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."DISPOSITIVOGRUPO" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: DISPOSITIVOGRUPO_Id_seq; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+ALTER TABLE dbo."DISPOSITIVOGRUPO" ALTER COLUMN "Id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME dbo."DISPOSITIVOGRUPO_Id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: DISPOSITIVOSMARCAJE; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."DISPOSITIVOSMARCAJE" (
+    "Id" integer NOT NULL,
+    "Modelo" character varying(500) NOT NULL,
+    "Marca" character varying(500) NOT NULL,
+    "Tipo" character varying(500) NOT NULL,
+    "Imagen" bytea,
+    "IdGrupo" integer
+);
+
+
+--
+-- Name: TABLE "DISPOSITIVOSMARCAJE"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."DISPOSITIVOSMARCAJE" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: DISPOSITIVOSMARCAJE_Id_seq; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+ALTER TABLE dbo."DISPOSITIVOSMARCAJE" ALTER COLUMN "Id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME dbo."DISPOSITIVOSMARCAJE_Id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: FABRICANTES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."FABRICANTES" (
+    "Codigo" character varying(12) NOT NULL,
+    "Nombre" character varying(50) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: FISICOLOGICO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."FISICOLOGICO" (
+    "FechaAjuste" date NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "ConMovimiento" smallint
+);
+
+
+--
+-- Name: TABLE "FISICOLOGICO"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."FISICOLOGICO" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: FORMAPAGO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."FORMAPAGO" (
+    "Codigo" smallint NOT NULL,
+    "Nombre" character varying(20) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "Orden" integer
+);
+
+
+--
+-- Name: GRUPOS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."GRUPOS" (
+    "CodGrupo" character varying(10) NOT NULL,
+    "NombreGrupo" character varying(50) NOT NULL
+);
+
+
+--
+-- Name: GRUPOSEG; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."GRUPOSEG" (
+    "CodGrupo" character varying(10) NOT NULL,
+    "CodNodo" character varying(50) NOT NULL,
+    "Ver" character varying(1)
+);
+
+
+--
+-- Name: GRUPO_REGLAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."GRUPO_REGLAS" (
+    "ID" bigint NOT NULL,
+    "IDGrupoRegla" integer NOT NULL,
+    "CodigoBarra" character varying(18) NOT NULL,
+    "EsReferencia" smallint DEFAULT 0 NOT NULL,
+    "EsExcepcion" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TABLE "GRUPO_REGLAS"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."GRUPO_REGLAS" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: GRUPO_REGLAS_ID_seq; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+ALTER TABLE dbo."GRUPO_REGLAS" ALTER COLUMN "ID" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME dbo."GRUPO_REGLAS_ID_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: IDEVTRANSFERENCIAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."IDEVTRANSFERENCIAS" (
+    "Numero" integer NOT NULL,
+    "CodigoEnvia" character varying(15) NOT NULL,
+    "CodigoRecibe" character varying(12) NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "FechaEmision" timestamp(0) without time zone NOT NULL,
+    "TotalValor" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Observacion" character varying(100) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "InterContable" smallint DEFAULT 0 NOT NULL,
+    "IDLote" integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: IMOVDEVTRANSFERENCIAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."IMOVDEVTRANSFERENCIAS" (
+    "Numero" integer NOT NULL,
+    "CodigoEnvia" character varying(15) NOT NULL,
+    "Item" integer NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Cantidad" numeric(18,2) DEFAULT 0 NOT NULL,
+    "Valor" numeric(24,8) DEFAULT 0 NOT NULL,
+    "NumeroCaja" integer DEFAULT 0 NOT NULL,
+    "UltimoCosto" numeric(24,8),
+    "CostoInicial" numeric(24,8),
+    "CostoDolar" numeric(24,8)
+);
+
+
+--
+-- Name: IMOVTRANSFERENCIAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."IMOVTRANSFERENCIAS" (
+    "Numero" integer NOT NULL,
+    "CodigoEnvia" character varying(15) NOT NULL,
+    "Item" integer NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Cantidad" numeric(18,2) DEFAULT 0 NOT NULL,
+    "Valor" numeric(24,8) DEFAULT 0 NOT NULL,
+    "NumeroCaja" integer DEFAULT 0 NOT NULL,
+    "UltimoCosto" numeric(24,8),
+    "CostoInicial" numeric(24,8),
+    "CostoDolar" numeric(24,8)
+);
+
+
+--
+-- Name: IMPRESORAFISCAL; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."IMPRESORAFISCAL" (
+    "ID" numeric(2,0) NOT NULL,
+    "NombreImpresora" character varying(50) NOT NULL,
+    "Status" smallint NOT NULL,
+    "IdProcesoImpresion" numeric(2,0) DEFAULT 0,
+    "MontoMaximoDiario" numeric(18,2) DEFAULT 0 NOT NULL,
+    "IncluyeIGTF" boolean
+);
+
+
+--
+-- Name: IMPUESTOS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."IMPUESTOS" (
+    "Codigo" smallint NOT NULL,
+    "Nombre" character varying(20) NOT NULL,
+    "PorcentajeImpuesto" numeric(10,2) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: INVENTARIO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."INVENTARIO" (
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Referencia" character varying(15) NOT NULL,
+    "CodigoMarca" character varying(3) NOT NULL,
+    "Nombre" character varying(150) NOT NULL,
+    "Talla" character varying(6) NOT NULL,
+    "CodigoColor" character varying(3) NOT NULL,
+    "Fabricante" character varying(12) NOT NULL,
+    "Categoria" character varying(6) NOT NULL,
+    "Nota" character varying(255),
+    "TipoImpuesto" smallint DEFAULT 1 NOT NULL,
+    "PrecioDetal" numeric(24,8) DEFAULT 0 NOT NULL,
+    "PrecioMayor" numeric(24,8) DEFAULT 0 NOT NULL,
+    "PrecioAfiliado" numeric(24,8) DEFAULT 0 NOT NULL,
+    "PrecioPromocion" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Promocion" boolean DEFAULT false NOT NULL,
+    "FechaInicial" timestamp(0) without time zone NOT NULL,
+    "FechaFinal" timestamp(0) without time zone NOT NULL,
+    "CostoInicial" numeric(24,8) DEFAULT 0 NOT NULL,
+    "CostoPromedio" numeric(24,8) DEFAULT 0 NOT NULL,
+    "UltimoCosto" numeric(24,8) DEFAULT 0 NOT NULL,
+    "CostoDolar" numeric(24,8) DEFAULT 0 NOT NULL,
+    "ExistenciaInicial" numeric(18,2) DEFAULT 0 NOT NULL,
+    "Existencia" numeric(18,2) DEFAULT 0 NOT NULL,
+    "PuntoReorden" numeric(18,2) DEFAULT 0 NOT NULL,
+    "FechaPrimerMovimiento" timestamp(0) without time zone,
+    "UltimaActualizacion" timestamp(0) without time zone,
+    "Tipo" smallint DEFAULT 0 NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "Serializado" smallint DEFAULT 0 NOT NULL,
+    "CodigoBarraAnt" character varying(15) NOT NULL
+);
+
+
+--
+-- Name: ITRANSFERENCIAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."ITRANSFERENCIAS" (
+    "Numero" integer NOT NULL,
+    "CodigoEnvia" character varying(15) NOT NULL,
+    "CodigoRecibe" character varying(12) NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "FechaEmision" timestamp(0) without time zone NOT NULL,
+    "TotalValor" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Observacion" character varying(100) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "InterContable" smallint DEFAULT 0 NOT NULL,
+    "IDLote" integer DEFAULT 0 NOT NULL,
+    "IDDespacho" integer DEFAULT 0 NOT NULL,
+    "Correccion" boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: LISTAPRECIO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."LISTAPRECIO" (
+    "Numero" integer NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "FactorDetal" numeric(5,2) NOT NULL,
+    "FactorMayor" numeric(5,2) NOT NULL,
+    "FactorAfiliado" numeric(5,2) NOT NULL,
+    "Observacion" character varying(250),
+    "Usuario" character varying(15) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: LOTES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."LOTES" (
+    "ID" integer NOT NULL,
+    "Lote" character varying(10) NOT NULL,
+    "Descripcion" character varying(200) NOT NULL,
+    "Estado" smallint NOT NULL,
+    "FechaRegistro" timestamp(3) without time zone NOT NULL,
+    "UsuarioCreacion" character varying(15) DEFAULT 'SISTEMAS'::character varying NOT NULL
+);
+
+
+--
+-- Name: MARCAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MARCAS" (
+    "Codigo" character varying(3) NOT NULL,
+    "Nombre" character varying(20) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: MOVAJUSTES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVAJUSTES" (
+    "Numero" bigint NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Cantidad" numeric(24,4) DEFAULT 0 NOT NULL,
+    "Costo" numeric(24,8) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TABLE "MOVAJUSTES"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."MOVAJUSTES" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: MOVCOMPRAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVCOMPRAS" (
+    "Documento" character varying(12) NOT NULL,
+    "Proveedor" character varying(15) NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Cantidad" numeric(18,2) DEFAULT 0 NOT NULL,
+    "CantidadDevuelta" numeric(18,2) DEFAULT 0 NOT NULL,
+    "PrecioFactura" numeric(24,8) DEFAULT 0 NOT NULL,
+    "PrecioProrrateado" numeric(24,8) DEFAULT 0 NOT NULL,
+    "PorcentajeImpuesto" numeric(5,2) DEFAULT 0 NOT NULL,
+    "Impuesto" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Item" integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: MOVDEVBORRADOR; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVDEVBORRADOR" (
+    "Numero" bigint NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Cantidad" numeric(18,2) NOT NULL,
+    "NumeroCaja" integer NOT NULL,
+    "Item" integer NOT NULL,
+    "Costo" numeric(24,8) NOT NULL
+);
+
+
+--
+-- Name: MOVDEVCOMPRAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVDEVCOMPRAS" (
+    "Numero" bigint NOT NULL,
+    "Item" integer NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Cantidad" numeric(18,2) NOT NULL,
+    "Precio" numeric(24,8) NOT NULL,
+    "PorcentajeImpuesto" numeric(18,2) DEFAULT 0 NOT NULL,
+    "Impuesto" numeric(24,8) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: MOVDEVTRANSFERENCIAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVDEVTRANSFERENCIAS" (
+    "Numero" integer NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Cantidad" numeric(18,2) DEFAULT 0 NOT NULL,
+    "Valor" numeric(24,8) DEFAULT 0 NOT NULL,
+    "NumeroCaja" integer DEFAULT 0 NOT NULL,
+    "Item" integer DEFAULT 0 NOT NULL,
+    "UltimoCosto" numeric(24,8),
+    "CostoInicial" numeric(24,8),
+    "CostoDolar" numeric(24,8)
+);
+
+
+--
+-- Name: MOVDEVVENTAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVDEVVENTAS" (
+    "NumeroDevolucion" bigint NOT NULL,
+    "Serie" character varying(15) NOT NULL,
+    "Item" integer NOT NULL,
+    "Hora" timestamp(0) without time zone NOT NULL,
+    "TipoLista" character varying(1) NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Precio" numeric(24,8) NOT NULL,
+    "PrecioLista" numeric(24,8) NOT NULL,
+    "Costo" numeric(24,8) NOT NULL,
+    "Impuesto" numeric(24,8) NOT NULL,
+    "PorcentajeImpuesto" numeric(5,2) NOT NULL,
+    "Cantidad" numeric(24,8) NOT NULL,
+    "Medida" character varying(24) DEFAULT ' '::character varying NOT NULL,
+    "PorcentajeDescuento" numeric(5,2) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: MOVLISTAPRECIO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVLISTAPRECIO" (
+    "Numero" integer NOT NULL,
+    "Referencia" character varying(50) NOT NULL,
+    "CodigoMarca" character varying(3) NOT NULL,
+    "Costo" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Descuento" numeric(5,2) NOT NULL,
+    "PrecioDetalSugerido" numeric(24,8) NOT NULL,
+    "PrecioDetal" numeric(24,8) DEFAULT 0 NOT NULL,
+    "PrecioMayorSugerido" numeric(24,8) NOT NULL,
+    "PrecioMayor" numeric(24,8) DEFAULT 0 NOT NULL,
+    "PrecioAfiliadoSugerido" numeric(24,8) NOT NULL,
+    "PrecioAfiliado" numeric(24,8) DEFAULT 0 NOT NULL,
+    "PrecioPromocion" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Promocion" boolean DEFAULT false NOT NULL,
+    "FechaInicial" timestamp(0) without time zone NOT NULL,
+    "FechaFinal" timestamp(0) without time zone NOT NULL,
+    "UltimoCosto" numeric(24,8),
+    "CostoInicial" numeric(24,8),
+    "CostoDolar" numeric(24,8)
+);
+
+
+--
+-- Name: MOVTOMAFISICA1; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVTOMAFISICA1" (
+    "NumeroPagina" integer NOT NULL,
+    "Item" integer NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Cantidad" numeric(24,4) DEFAULT 0 NOT NULL,
+    "Fecha" timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: TABLE "MOVTOMAFISICA1"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."MOVTOMAFISICA1" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: MOVTOMAFISICA2; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVTOMAFISICA2" (
+    "NumeroPagina" integer NOT NULL,
+    "Item" integer NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Cantidad" numeric(24,4) DEFAULT 0 NOT NULL,
+    "Fecha" timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: TABLE "MOVTOMAFISICA2"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."MOVTOMAFISICA2" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: MOVTRANSFERENCIAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVTRANSFERENCIAS" (
+    "Numero" integer NOT NULL,
+    "Fecha" timestamp(0) without time zone,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Cantidad" numeric(18,2) NOT NULL,
+    "Valor" numeric(24,8) NOT NULL,
+    "NumeroCaja" integer NOT NULL,
+    "Item" integer NOT NULL,
+    "UltimoCosto" numeric(24,8),
+    "CostoInicial" numeric(24,8),
+    "CostoDolar" numeric(24,8)
+);
+
+
+--
+-- Name: MOVVENTAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."MOVVENTAS" (
+    "NumeroFactura" bigint NOT NULL,
+    "Serie" character varying(15) NOT NULL,
+    "Hora" timestamp(0) without time zone NOT NULL,
+    "TipoLista" character varying(1) NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "Precio" numeric(24,8) NOT NULL,
+    "PrecioLista" numeric(24,8) NOT NULL,
+    "Costo" numeric(24,8) NOT NULL,
+    "Impuesto" numeric(24,8) NOT NULL,
+    "PorcentajeImpuesto" numeric(5,2) NOT NULL,
+    "Cantidad" numeric(24,8) NOT NULL,
+    "CantidadDevuelta" numeric(24,8) NOT NULL,
+    "Item" integer NOT NULL,
+    "PorcentajeDescuento" numeric(5,2) DEFAULT 0 NOT NULL,
+    "PrecioDetal" numeric(24,4) DEFAULT 0 NOT NULL,
+    "Regla" character varying(20) DEFAULT ''::character varying NOT NULL,
+    "IDRegla" integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: PAGOSVENTA; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."PAGOSVENTA" (
+    "NumeroFactura" bigint NOT NULL,
+    "Serie" character varying(15) NOT NULL,
+    "Item" integer NOT NULL,
+    "FormaPago" smallint NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "Documento" character varying(40) NOT NULL,
+    "Aprobacion" character varying(12) NOT NULL,
+    "Banco" character varying(12) NOT NULL,
+    "PuntoVenta" character varying(12) NOT NULL,
+    "Monto" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "JSON_Merchant" text,
+    "MontoDivisa" numeric(24,8),
+    "FormaPagoOriginal" smallint
+);
+
+
+--
+-- Name: PARAMETROS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."PARAMETROS" (
+    "Nombre" character varying(40),
+    "Codigo" character varying(15),
+    "NombreIdFiscal" character varying(6),
+    "IDEmpresa" character varying(15),
+    "Telefono" character varying(12),
+    "Direccion" character varying(100),
+    "CorreoElectronico" character varying(40),
+    "Tipo" smallint NOT NULL,
+    "SimboloMoneda" character varying(3),
+    "Nota1" character varying(200),
+    "Nota2" character varying(200),
+    "ControlFactura" smallint NOT NULL,
+    "UltimaFactura" bigint DEFAULT 0 NOT NULL,
+    "UltimaDevolucion" bigint DEFAULT 0 NOT NULL,
+    "RutaReporte" character varying(100),
+    "CongelarFacturas" smallint NOT NULL,
+    "MostrarBalanceDiario" smallint NOT NULL,
+    "DiscriminarImpuestoPrecios" smallint NOT NULL,
+    "ManejarClientesAfiliadosEspeciales" smallint DEFAULT 0 NOT NULL,
+    "MargenAuxFact" numeric(18,2) DEFAULT 0 NOT NULL,
+    "LineasDisponibles" smallint NOT NULL,
+    "LineasReservadas" smallint NOT NULL,
+    "ItemsPorFactura" integer DEFAULT 0 NOT NULL,
+    "ActualizarPreciosArchivosExternos" smallint DEFAULT 1 NOT NULL,
+    "DejarEditar" smallint DEFAULT 0 NOT NULL,
+    "ManejarCantidadesDecimales" smallint DEFAULT 1 NOT NULL,
+    "IdPais" character varying(2),
+    "AutorizarEliminarItemFactura" smallint DEFAULT 0 NOT NULL,
+    "VisualizarPromocion" smallint DEFAULT 0 NOT NULL,
+    "VerificarCasaMatriz" smallint DEFAULT 1 NOT NULL,
+    "IDPARAMETROS" integer DEFAULT 1 NOT NULL
+);
+
+
+--
+-- Name: PATRON; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."PATRON" (
+    "IdPatron" bigint NOT NULL,
+    "IdPersonal" character varying(15) NOT NULL,
+    "IdMano" smallint NOT NULL,
+    "IdDedo" smallint NOT NULL,
+    "Patron" bytea NOT NULL,
+    "FechaRegistro" timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "IndEstatus" smallint DEFAULT 1 NOT NULL
+);
+
+
+--
+-- Name: TABLE "PATRON"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."PATRON" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: PATRON_IdPatron_seq; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+ALTER TABLE dbo."PATRON" ALTER COLUMN "IdPatron" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME dbo."PATRON_IdPatron_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: PROVEEDORES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."PROVEEDORES" (
+    "Codigo" character varying(15) NOT NULL,
+    "Nombre" character varying(120) NOT NULL,
+    "Tipo" smallint NOT NULL,
+    "Contacto" character varying(30),
+    "FechaIngreso" timestamp(0) without time zone NOT NULL,
+    "Pais" character varying(20) NOT NULL,
+    "Estado" character varying(20) NOT NULL,
+    "Ciudad" character varying(20) NOT NULL,
+    "CodigoPostal" character varying(10) NOT NULL,
+    "Direccion" character varying(250) NOT NULL,
+    "Telefono" character varying(15) NOT NULL,
+    "Fax" character varying(15) NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: REFERENCIAS_MAYORISTAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."REFERENCIAS_MAYORISTAS" (
+    "Codigo" character varying(18) NOT NULL,
+    "EsExcepcion" smallint DEFAULT 0 NOT NULL,
+    "EsReferencia" smallint DEFAULT 0 NOT NULL,
+    "Cantidad" integer DEFAULT 0 NOT NULL,
+    "PorcentajeDescuento" numeric(24,2) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TABLE "REFERENCIAS_MAYORISTAS"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."REFERENCIAS_MAYORISTAS" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: REGLAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."REGLAS" (
+    "ID" bigint NOT NULL,
+    "Descripcion" character varying(250) NOT NULL,
+    "Imprimir" character varying(10) NOT NULL,
+    "Lleve" integer NOT NULL,
+    "Pague" integer NOT NULL,
+    "PorcDescuento" numeric(7,4),
+    "ProductosActivan" bigint NOT NULL,
+    "ProductosAfectados" bigint NOT NULL,
+    "FechaInicio" date NOT NULL,
+    "FechaFin" date NOT NULL,
+    "HoraInicio" time without time zone NOT NULL,
+    "HoraFin" time without time zone NOT NULL,
+    "Lunes" smallint DEFAULT 0 NOT NULL,
+    "Martes" smallint DEFAULT 0 NOT NULL,
+    "Miercoles" smallint DEFAULT 0 NOT NULL,
+    "Jueves" smallint DEFAULT 0 NOT NULL,
+    "Viernes" smallint DEFAULT 0 NOT NULL,
+    "Sabado" smallint DEFAULT 0 NOT NULL,
+    "Domingo" smallint DEFAULT 0 NOT NULL,
+    "Prioridad" bigint DEFAULT 0 NOT NULL,
+    "Activa" smallint DEFAULT 0 NOT NULL,
+    "FechaCreacion" timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "Precio" numeric(10,2) DEFAULT 0 NOT NULL,
+    "Tipo" integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TABLE "REGLAS"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."REGLAS" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: REGLASCONVENIOS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."REGLASCONVENIOS" (
+    "ID" bigint NOT NULL,
+    "IDREGLA" bigint NOT NULL,
+    "TIPOCONVENIO" integer NOT NULL,
+    "Activa" smallint DEFAULT 1 NOT NULL
+);
+
+
+--
+-- Name: TABLE "REGLASCONVENIOS"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."REGLASCONVENIOS" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: REGLASCONVENIOS_ID_seq; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+ALTER TABLE dbo."REGLASCONVENIOS" ALTER COLUMN "ID" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME dbo."REGLASCONVENIOS_ID_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: RESPALDOS_PENDIENTES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."RESPALDOS_PENDIENTES" (
+    "Id" bigint NOT NULL,
+    "BaseDatos" character varying(150) NOT NULL,
+    "NombreDispositivo" character varying(200) NOT NULL,
+    "UbicacionArchivo" text NOT NULL,
+    "FechaSolicitud" timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "Estado" character varying(30) DEFAULT 'PENDING'::character varying NOT NULL,
+    "Observacion" text
+);
+
+
+--
+-- Name: TABLE "RESPALDOS_PENDIENTES"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."RESPALDOS_PENDIENTES" IS 'PostgreSQL compatibility queue for the legacy SQL Server backup procedure.';
+
+
+--
+-- Name: RESPALDOS_PENDIENTES_Id_seq; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+ALTER TABLE dbo."RESPALDOS_PENDIENTES" ALTER COLUMN "Id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME dbo."RESPALDOS_PENDIENTES_Id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: SALDODIARIO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."SALDODIARIO" (
+    "Fecha" date NOT NULL,
+    "CodigoBarra" character varying(15) NOT NULL,
+    "TotalDevVentasCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalTransferenciasRecCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalDevTransferenciasCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalComprasCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalAjustesPositivosCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalAFSPositivosCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalVentasCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalDevTransferenciasRecCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalTransferenciasCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalDevComprasCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalAjustesNegativosCant" numeric(24,4) DEFAULT 0 NOT NULL,
+    "TotalAFSNegativosCant" numeric(24,4) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TABLE "SALDODIARIO"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."SALDODIARIO" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: SALIDASCAJA; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."SALIDASCAJA" (
+    "Numero" bigint NOT NULL,
+    "Serie" character varying(15) NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "CodigoContable" character varying(12) NOT NULL,
+    "Acreedor" character varying(15) NOT NULL,
+    "Documento" character varying(15) NOT NULL,
+    "Descripcion" character varying(100) NOT NULL,
+    "Monto" numeric(24,8) NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "Status" smallint NOT NULL,
+    "InterContable" smallint DEFAULT 0 NOT NULL,
+    "TasaCambio" numeric(24,2) DEFAULT 0
+);
+
+
+--
+-- Name: SALIDASCAJA_DOLARES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."SALIDASCAJA_DOLARES" (
+    "Numero" bigint NOT NULL,
+    "Serie" character varying(15) NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "CodigoContable" character varying(12) NOT NULL,
+    "Acreedor" character varying(15) NOT NULL,
+    "Documento" character varying(15) NOT NULL,
+    "Descripcion" character varying(100) NOT NULL,
+    "Monto" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "Status" smallint NOT NULL,
+    "InterContable" smallint DEFAULT 0 NOT NULL,
+    "TasaCambio" numeric(24,2) DEFAULT 0
+);
+
+
+--
+-- Name: SEG; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."SEG" (
+    "Nivel" integer NOT NULL,
+    "NumNodo" integer NOT NULL,
+    "NodoPadre" character varying(50) NOT NULL,
+    "CodNodo" character varying(50) NOT NULL,
+    "NomNodo" character varying(80) NOT NULL,
+    "Imagen" bigint DEFAULT 0 NOT NULL,
+    "Forma" character varying(50) NOT NULL,
+    "Orden" integer DEFAULT 0 NOT NULL,
+    "EsPadre" character varying(1) DEFAULT 'N'::character varying NOT NULL
+);
+
+
+--
+-- Name: SQ_IMPRESORAFISCAL_ID; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+CREATE SEQUENCE dbo."SQ_IMPRESORAFISCAL_ID"
+    START WITH 0
+    INCREMENT BY 1
+    MINVALUE 0
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: SQ_IMPRESORAFISCAL_ID; Type: SEQUENCE OWNED BY; Schema: dbo; Owner: -
+--
+
+ALTER SEQUENCE dbo."SQ_IMPRESORAFISCAL_ID" OWNED BY dbo."IMPRESORAFISCAL"."ID";
+
+
+--
+-- Name: SQ_LOTES_ID; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+CREATE SEQUENCE dbo."SQ_LOTES_ID"
+    START WITH 0
+    INCREMENT BY 1
+    MINVALUE 0
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: SQ_LOTES_ID; Type: SEQUENCE OWNED BY; Schema: dbo; Owner: -
+--
+
+ALTER SEQUENCE dbo."SQ_LOTES_ID" OWNED BY dbo."LOTES"."ID";
+
+
+--
+-- Name: TASA_CAMBIO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TASA_CAMBIO" (
+    "ID" bigint NOT NULL,
+    "Fecha" timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "Valor" numeric(24,2) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: SQ_TASA_CAMBIO_ID; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+CREATE SEQUENCE dbo."SQ_TASA_CAMBIO_ID"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: SQ_TASA_CAMBIO_ID; Type: SEQUENCE OWNED BY; Schema: dbo; Owner: -
+--
+
+ALTER SEQUENCE dbo."SQ_TASA_CAMBIO_ID" OWNED BY dbo."TASA_CAMBIO"."ID";
+
+
+--
+-- Name: TASA_CAMBIO_M; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TASA_CAMBIO_M" (
+    "ID" bigint NOT NULL,
+    "Fecha" timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "Valor" numeric(24,2) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: SQ_TASA_CAMBIO_M_ID; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+CREATE SEQUENCE dbo."SQ_TASA_CAMBIO_M_ID"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: SQ_TASA_CAMBIO_M_ID; Type: SEQUENCE OWNED BY; Schema: dbo; Owner: -
+--
+
+ALTER SEQUENCE dbo."SQ_TASA_CAMBIO_M_ID" OWNED BY dbo."TASA_CAMBIO_M"."ID";
+
+
+--
+-- Name: sysdiagrams; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo.sysdiagrams (
+    name character varying(128) NOT NULL,
+    principal_id integer NOT NULL,
+    diagram_id integer NOT NULL,
+    version integer,
+    definition bytea
+);
+
+
+--
+-- Name: SQ_sysdiagrams_diagram_id; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+CREATE SEQUENCE dbo."SQ_sysdiagrams_diagram_id"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: SQ_sysdiagrams_diagram_id; Type: SEQUENCE OWNED BY; Schema: dbo; Owner: -
+--
+
+ALTER SEQUENCE dbo."SQ_sysdiagrams_diagram_id" OWNED BY dbo.sysdiagrams.diagram_id;
+
+
+--
+-- Name: SUCURSALES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."SUCURSALES" (
+    "Codigo" character varying(15) NOT NULL,
+    "Nombre" character varying(100) DEFAULT ''::character varying NOT NULL,
+    "Direccion" character varying(100) DEFAULT ''::character varying NOT NULL,
+    "Telefono" character varying(15) DEFAULT ''::character varying NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "PorcentajeDeRedondeo" numeric(5,2) DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TABLA_PARAMETROS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TABLA_PARAMETROS" (
+    "Columna" character varying(100) NOT NULL,
+    "Valor" character varying(500) DEFAULT ''::character varying NOT NULL
+);
+
+
+--
+-- Name: TABLE "TABLA_PARAMETROS"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."TABLA_PARAMETROS" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: TABLA_VALORES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TABLA_VALORES" (
+    "IdTabla" character varying(100) NOT NULL,
+    "Codigo" integer DEFAULT 0 NOT NULL,
+    "Descripcion" character varying(500) DEFAULT ''::character varying NOT NULL
+);
+
+
+--
+-- Name: TABLE "TABLA_VALORES"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."TABLA_VALORES" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: TALLAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TALLAS" (
+    "Codigo" character varying(6) NOT NULL
+);
+
+
+--
+-- Name: TIPOSCLIENTE; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TIPOSCLIENTE" (
+    "Codigo" smallint NOT NULL,
+    "Descripcion" character varying(20) DEFAULT ''::character varying NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TIPOSCONTRIBUYENTE; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TIPOSCONTRIBUYENTE" (
+    "Codigo" smallint NOT NULL,
+    "Descripcion" character varying(20) DEFAULT ''::character varying NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TIPOSPROVEEDOR; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TIPOSPROVEEDOR" (
+    "Codigo" smallint NOT NULL,
+    "Descripcion" character varying(20) DEFAULT ''::character varying NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TIPO_DESPACHO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TIPO_DESPACHO" (
+    "ID" integer NOT NULL,
+    "Descripcion" character varying(50) NOT NULL,
+    "Estado" smallint DEFAULT 1 NOT NULL
+);
+
+
+--
+-- Name: TOMAFISICA1; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TOMAFISICA1" (
+    "NumeroPagina" integer NOT NULL,
+    "Fecha" timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "Observacion" character varying(500) DEFAULT ''::character varying NOT NULL,
+    "Usuario" character varying(15) DEFAULT 'INVE'::character varying NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TABLE "TOMAFISICA1"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."TOMAFISICA1" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: TRABAJADORES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TRABAJADORES" (
+    "Cedula" character varying(15) NOT NULL,
+    "Codigo" integer NOT NULL,
+    "Nombre" character varying(70) DEFAULT ''::character varying NOT NULL,
+    "Cargo" character varying(3) NOT NULL,
+    "FechaIngreso" timestamp(0) without time zone NOT NULL,
+    "FechaNacimiento" timestamp(0) without time zone NOT NULL,
+    "Direccion" character varying(200) DEFAULT ''::character varying NOT NULL,
+    "Telefono" character varying(15) DEFAULT ''::character varying NOT NULL,
+    "Celular" character varying(15) DEFAULT ''::character varying NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "MarcajeInterDiario" boolean DEFAULT false,
+    "IndUsarCarnet" integer DEFAULT 0
+);
+
+
+--
+-- Name: TRANSACCIONESCUPONES; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TRANSACCIONESCUPONES" (
+    "Id" bigint NOT NULL,
+    "NumeroFactura" bigint NOT NULL,
+    "Serie" character varying(15) NOT NULL,
+    "Fecha" timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "MontoFactura" numeric(15,2) DEFAULT 0 NOT NULL,
+    "IdCupon" integer NOT NULL,
+    "CodigoConvenio" character varying(10),
+    "Cliente" character varying(20),
+    "FechaCanjeInicial" timestamp(0) without time zone,
+    "FechaCanjeFinal" timestamp(0) without time zone,
+    "Acumula" integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: TABLE "TRANSACCIONESCUPONES"; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo."TRANSACCIONESCUPONES" IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: TRANSACCIONESCUPONES_Id_seq; Type: SEQUENCE; Schema: dbo; Owner: -
+--
+
+ALTER TABLE dbo."TRANSACCIONESCUPONES" ALTER COLUMN "Id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME dbo."TRANSACCIONESCUPONES_Id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: TRANSFERENCIAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."TRANSFERENCIAS" (
+    "Numero" integer NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "CodigoRecibe" character varying(15) NOT NULL,
+    "CodigoEnvia" character varying(12) NOT NULL,
+    "DocumentoOrigen" character varying(12) DEFAULT ''::character varying NOT NULL,
+    "TotalValor" numeric(24,8) DEFAULT 0 NOT NULL,
+    "Observacion" character varying(100) DEFAULT ''::character varying NOT NULL,
+    "Status" smallint DEFAULT 0 NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "InterContable" smallint DEFAULT 0 NOT NULL,
+    "FechaEmision" timestamp(0) without time zone NOT NULL,
+    "IDLote" integer DEFAULT 0 NOT NULL,
+    "IDDespacho" integer DEFAULT 0 NOT NULL,
+    "Correccion" boolean DEFAULT false NOT NULL,
+    "Zona" character varying(50) NOT NULL
+);
+
+
+--
+-- Name: USUARIOGRUPO; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."USUARIOGRUPO" (
+    "CodUsuario" character varying(15) NOT NULL,
+    "CodGrupo" character varying(10) NOT NULL
+);
+
+
+--
+-- Name: USUARIOS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."USUARIOS" (
+    "CodUsuario" character varying(15) NOT NULL,
+    "NombreUsuario" character varying(50),
+    "Pasword" character varying(50),
+    "Status" smallint
+);
+
+
+--
+-- Name: VENTAS; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo."VENTAS" (
+    "NumeroFactura" bigint NOT NULL,
+    "Serie" character varying(15) NOT NULL,
+    "Fecha" timestamp(0) without time zone NOT NULL,
+    "Vendedor" character varying(15) NOT NULL,
+    "Cliente" character varying(15) NOT NULL,
+    "TipoVenta" smallint NOT NULL,
+    "FormaPago" smallint NOT NULL,
+    "DiasCredito" smallint DEFAULT 0 NOT NULL,
+    "TotalMercancia" numeric(24,8) NOT NULL,
+    "TotalDescuento" numeric(24,8) NOT NULL,
+    "TotalImpuesto" numeric(24,8) NOT NULL,
+    "TotalCosto" numeric(24,8) NOT NULL,
+    "InterContable" smallint NOT NULL,
+    "Usuario" character varying(15) NOT NULL,
+    "Status" smallint NOT NULL,
+    "NumeroOrden" bigint DEFAULT 0 NOT NULL,
+    "TotalPago" numeric(24,8) DEFAULT 0 NOT NULL,
+    "TotalDolares" numeric(24,2) DEFAULT 0,
+    "TasaCambio" numeric(24,2),
+    "Estacion" character varying(50),
+    "TotalDolaresE" numeric(24,2) DEFAULT 0,
+    "TasaIGTF" numeric(24,2),
+    "MontoIGTF" numeric(24,8),
+    "BaseImponibleIGTF" numeric(24,8)
+);
+
+
+--
+-- Name: VW_AJUSTESNEGATIVOS; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_AJUSTESNEGATIVOS" AS
+ WITH "AJUSTESNEGATIVOS_CTE" AS (
+         SELECT a."Fecha",
+            m."CodigoBarra",
+            sum(m."Cantidad") AS "UND_AJUSTESNEGATIVOS",
+            sum((m."Cantidad" * m."Costo")) AS "COSTO_AJUSTESNEGATIVOS"
+           FROM (dbo."AJUSTES" a
+             JOIN dbo."MOVAJUSTES" m ON ((a."Numero" = m."Numero")))
+          WHERE ((a."Status" <> 0) AND (a."Signo" = '-1'::integer))
+          GROUP BY a."Fecha", m."CodigoBarra"
+        )
+ SELECT "Fecha",
+    "CodigoBarra",
+    "UND_AJUSTESNEGATIVOS",
+    "COSTO_AJUSTESNEGATIVOS"
+   FROM "AJUSTESNEGATIVOS_CTE";
+
+
+--
+-- Name: VW_AJUSTESPOSITIVOS; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_AJUSTESPOSITIVOS" AS
+ WITH "AJUSTESPOSITIVOS_CTE" AS (
+         SELECT a."Fecha",
+            m."CodigoBarra",
+            sum(m."Cantidad") AS "UND_AJUSTESPOSITIVOS",
+            sum((m."Cantidad" * m."Costo")) AS "COSTO_AJUSTEPOSITIVO"
+           FROM (dbo."AJUSTES" a
+             JOIN dbo."MOVAJUSTES" m ON ((a."Numero" = m."Numero")))
+          WHERE ((a."Status" <> 0) AND (a."Signo" = 1))
+          GROUP BY a."Fecha", m."CodigoBarra"
+        )
+ SELECT "Fecha",
+    "CodigoBarra",
+    "UND_AJUSTESPOSITIVOS",
+    "COSTO_AJUSTEPOSITIVO"
+   FROM "AJUSTESPOSITIVOS_CTE";
+
+
+--
+-- Name: VW_COMPRASXPROVEEDOR; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_COMPRASXPROVEEDOR" AS
+ WITH "COMPRAS_CTE" AS (
+         SELECT c."Fecha",
+            c."Proveedor",
+            mc."CodigoBarra",
+            sum(mc."Cantidad") AS "UND_COMPRADAS",
+            sum((mc."Cantidad" * mc."PrecioFactura")) AS "COSTO_COMPRA"
+           FROM (dbo."COMPRAS" c
+             JOIN dbo."MOVCOMPRAS" mc ON ((((c."Proveedor")::text = (mc."Proveedor")::text) AND ((c."Documento")::text = (mc."Documento")::text))))
+          WHERE (c."Status" <> 0)
+          GROUP BY c."Fecha", c."Proveedor", mc."CodigoBarra"
+        )
+ SELECT "Fecha",
+    "Proveedor",
+    "CodigoBarra",
+    "UND_COMPRADAS",
+    "COSTO_COMPRA"
+   FROM "COMPRAS_CTE";
+
+
+--
+-- Name: VW_COMPRAS_REFERENCIA_MARCA; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_COMPRAS_REFERENCIA_MARCA" AS
+ SELECT DISTINCT xxx."Documento",
+    xxx."Fecha_Factura",
+    xxx."PrecioProrrateado",
+    xxx."Nombre",
+    xxx."Referencia",
+    xxx."CodigoMarca"
+   FROM (( SELECT DISTINCT max((c."Documento")::text) AS "Documento",
+            max(c."FechaFactura") AS "Fecha_Factura",
+            max(mc."PrecioProrrateado") AS "PrecioProrrateado",
+            pr."Nombre",
+            i."Referencia",
+            i."CodigoMarca"
+           FROM (((dbo."COMPRAS" c
+             JOIN dbo."MOVCOMPRAS" mc ON ((((mc."Documento")::text = (c."Documento")::text) AND ((c."Proveedor")::text = (mc."Proveedor")::text))))
+             JOIN dbo."PROVEEDORES" pr ON (((pr."Codigo")::text = (mc."Proveedor")::text)))
+             JOIN dbo."INVENTARIO" i ON (((i."CodigoBarra")::text = (mc."CodigoBarra")::text)))
+          GROUP BY pr."Nombre", i."Referencia", i."CodigoMarca") xxx
+     JOIN ( SELECT DISTINCT max(c."FechaFactura") AS "Fecha_Factura",
+            i."Referencia",
+            i."CodigoMarca"
+           FROM (((dbo."COMPRAS" c
+             JOIN dbo."MOVCOMPRAS" mc ON ((((mc."Documento")::text = (c."Documento")::text) AND ((c."Proveedor")::text = (mc."Proveedor")::text))))
+             JOIN dbo."PROVEEDORES" pr ON (((pr."Codigo")::text = (mc."Proveedor")::text)))
+             JOIN dbo."INVENTARIO" i ON (((i."CodigoBarra")::text = (mc."CodigoBarra")::text)))
+          GROUP BY i."Referencia", i."CodigoMarca") aa ON (((aa."Fecha_Factura" = xxx."Fecha_Factura") AND ((xxx."Referencia")::text = (aa."Referencia")::text) AND ((xxx."CodigoMarca")::text = (aa."CodigoMarca")::text))));
+
+
+--
+-- Name: VW_ConfiguracionMarcaje; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_ConfiguracionMarcaje" AS
+ SELECT "Id",
+    "IdDispositivo",
+    "Dispositivo",
+    "FechaRegistro"
+   FROM dbo."CONFIGURACIONMARCAJE";
+
+
+--
+-- Name: VW_DEVCOMPRASXPROVEEDOR; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_DEVCOMPRASXPROVEEDOR" AS
+ WITH "DEVCOMPRAS_CTE" AS (
+         SELECT d."Fecha",
+            m."CodigoBarra",
+            sum(m."Cantidad") AS "UND_DEVCOMPRADAS",
+            sum((m."Cantidad" * m."Precio")) AS "COSTO_DEVCOMPRA"
+           FROM (dbo."DEVCOMPRAS" d
+             JOIN dbo."MOVDEVCOMPRAS" m ON ((d."Numero" = m."Numero")))
+          WHERE (d."Status" <> 0)
+          GROUP BY d."Fecha", d."Proveedor", m."CodigoBarra"
+        )
+ SELECT "Fecha",
+    "CodigoBarra",
+    "UND_DEVCOMPRADAS",
+    "COSTO_DEVCOMPRA"
+   FROM "DEVCOMPRAS_CTE";
+
+
+--
+-- Name: VW_DEVTRANSFERENCIAS; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_DEVTRANSFERENCIAS" AS
+ WITH "DEVTRANSFERENCIAS_CTE" AS (
+         SELECT d."Fecha",
+            d."CodigoRecibe",
+            m."CodigoBarra",
+            sum(m."Cantidad") AS "UND_DEVTRANSFERIDAS",
+            sum((m."Cantidad" * m."Valor")) AS "COSTO_DEVTRANSFERENCIA"
+           FROM (dbo."DEVTRANSFERENCIAS" d
+             JOIN dbo."MOVDEVTRANSFERENCIAS" m ON ((d."Numero" = m."Numero")))
+          WHERE (d."Status" <> 0)
+          GROUP BY d."Fecha", d."CodigoRecibe", m."CodigoBarra"
+        )
+ SELECT "Fecha",
+    "CodigoRecibe",
+    "CodigoBarra",
+    "UND_DEVTRANSFERIDAS",
+    "COSTO_DEVTRANSFERENCIA"
+   FROM "DEVTRANSFERENCIAS_CTE";
+
+
+--
+-- Name: VW_DIVISION; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_DIVISION" AS
+ SELECT "Codigo" AS "CodigoDivision",
+    "Nombre" AS "Division"
+   FROM dbo."CATEGORIAS"
+  WHERE (length(("Codigo")::text) = 2);
+
+
+--
+-- Name: VW_DispositivoGrupo; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_DispositivoGrupo" AS
+ SELECT "Id",
+    "Nombre"
+   FROM dbo."DISPOSITIVOGRUPO";
+
+
+--
+-- Name: VW_DispositivoMarcaje; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_DispositivoMarcaje" AS
+ SELECT "Id",
+    "Modelo",
+    "Marca",
+    "Tipo",
+    "Imagen",
+    "IdGrupo"
+   FROM dbo."DISPOSITIVOSMARCAJE";
+
+
+--
+-- Name: VW_FAMILIA; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_FAMILIA" AS
+ SELECT "Codigo" AS "CodigoFamilia",
+    "Nombre" AS "Familia",
+    SUBSTRING("Codigo" FROM 1 FOR 2) AS "CodigoDivision",
+    SUBSTRING("Codigo" FROM 1 FOR 4) AS "CodigoSeccion"
+   FROM dbo."CATEGORIAS"
+  WHERE (length(("Codigo")::text) = 6);
+
+
+--
+-- Name: VW_SECCION; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_SECCION" AS
+ SELECT "Codigo" AS "CodigoSeccion",
+    "Nombre" AS "Seccion",
+    SUBSTRING("Codigo" FROM 1 FOR 2) AS "CodigoDivision"
+   FROM dbo."CATEGORIAS"
+  WHERE (length(("Codigo")::text) = 4);
+
+
+--
+-- Name: VW_TRANSFERENCIAS; Type: VIEW; Schema: dbo; Owner: -
+--
+
+CREATE VIEW dbo."VW_TRANSFERENCIAS" AS
+ WITH "TRANSFERENCIAS_CTE" AS (
+         SELECT t."Fecha",
+            t."CodigoRecibe",
+            m."CodigoBarra",
+            sum(m."Cantidad") AS "UND_TRANSFERIDAS",
+            sum((m."Cantidad" * m."Valor")) AS "COSTO_TRANSFERENCIA"
+           FROM (dbo."TRANSFERENCIAS" t
+             JOIN dbo."MOVTRANSFERENCIAS" m ON ((t."Numero" = m."Numero")))
+          WHERE (t."Status" <> 0)
+          GROUP BY t."Fecha", t."CodigoRecibe", m."CodigoBarra"
+        )
+ SELECT "Fecha",
+    "CodigoRecibe",
+    "CodigoBarra",
+    "UND_TRANSFERIDAS",
+    "COSTO_TRANSFERENCIA"
+   FROM "TRANSFERENCIAS_CTE";
+
+
+--
+-- Name: grupo_cupones; Type: TABLE; Schema: dbo; Owner: -
+--
+
+CREATE TABLE dbo.grupo_cupones (
+    "Referencia" character varying(10) NOT NULL,
+    "CodigoMarca" character varying(3) NOT NULL,
+    "ProductosActivan" character varying(10) NOT NULL
+);
+
+
+--
+-- Name: TABLE grupo_cupones; Type: COMMENT; Schema: dbo; Owner: -
+--
+
+COMMENT ON TABLE dbo.grupo_cupones IS 'Inferred compatibility table. Columns reconstructed from SQL module usage.';
+
+
+--
+-- Name: IMPRESORAFISCAL ID; Type: DEFAULT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IMPRESORAFISCAL" ALTER COLUMN "ID" SET DEFAULT nextval('dbo."SQ_IMPRESORAFISCAL_ID"'::regclass);
+
+
+--
+-- Name: LOTES ID; Type: DEFAULT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."LOTES" ALTER COLUMN "ID" SET DEFAULT nextval('dbo."SQ_LOTES_ID"'::regclass);
+
+
+--
+-- Name: TASA_CAMBIO ID; Type: DEFAULT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TASA_CAMBIO" ALTER COLUMN "ID" SET DEFAULT nextval('dbo."SQ_TASA_CAMBIO_ID"'::regclass);
+
+
+--
+-- Name: TASA_CAMBIO_M ID; Type: DEFAULT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TASA_CAMBIO_M" ALTER COLUMN "ID" SET DEFAULT nextval('dbo."SQ_TASA_CAMBIO_M_ID"'::regclass);
+
+
+--
+-- Name: sysdiagrams diagram_id; Type: DEFAULT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo.sysdiagrams ALTER COLUMN diagram_id SET DEFAULT nextval('dbo."SQ_sysdiagrams_diagram_id"'::regclass);
+
+
+--
+-- Data for Name: AJUSTES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."AJUSTES" ("Numero", "TipoAjuste", "Signo", "Fecha", "TotalValor", "Observacion", "Usuario", "InterContable", "Status", "IDLote") FROM stdin;
+\.
+
+
+--
+-- Data for Name: BANCOS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."BANCOS" ("Codigo", "Nombre", "Status") FROM stdin;
+\.
+
+
+--
+-- Data for Name: CAJAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CAJAS" ("Serie", "Numero", "FondoCaja", "TipoListaPrecio", "TipoVenta", "TipoReporte", "UltimaFactura", "UltimaDevolucion", "PermiteDescuento", "PermiteFacturasExentas", "PermiteAlternarListas", "CambiarPrecios", "RequerirAutorizacion", "IdImpresoraFiscal", "NombreImpresora", "NumeroCopias", "IncluirIGTF") FROM stdin;
+\.
+
+
+--
+-- Data for Name: CARGOS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CARGOS" ("Codigo", "Nombre", "Status") FROM stdin;
+001	ADMINISTRADOR	1
+002	CAJERO	1
+003	VENDEDOR	1
+004	SURTIDOR	1
+005	ALMACENISTA	1
+006	VIGILANTE	1
+007	AUXILIAR DE TIENDA	1
+008	SISTEMAS	1
+\.
+
+
+--
+-- Data for Name: CATEGORIAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CATEGORIAS" ("Codigo", "Nombre", "Status") FROM stdin;
+0001	TAZAS	1
+000101	TAZAS	1
+000102	LIMPIEZA DE HOGAR	1
+000103	TERMOS	1
+000104	TODO PARA FIESTAS	1
+000105	PAPELERIA	1
+000107	BANDEJAS	1
+000108	BOWLS	1
+000109	CUBIERTOS - UTENSILIOS	1
+000110	ENVASES	1
+000111	JARRAS	1
+000112	PASAPALERA	1
+000113	PLATOS	1
+000114	TABLAS PARA PICAR	1
+000115	VASOS	1
+000116	ACCESORIOS DE COCINA	1
+000117	ORGANIZACION HOGAR	1
+000118	PAPELERA - BASURA	1
+000121	SOPERA	1
+000122	SET DE VAJILLAS	1
+000123	COPAS	1
+000124	PARAGUAS/SOMBRILLAS	1
+0002	BOLSO GRANDE	1
+000201	BOLSO GRANDE	1
+000202	BOLSO PEQUEÑO	1
+000203	BOLSA GRANDE	1
+000204	MALETA ESCOLAR	1
+000205	BOLSO MEDIANO	1
+000206	CARTERAS PEQUEÑAS	1
+000208	BOLSOS DEPORTIVOS	1
+000209	BOLSOS  DE VERANO	1
+000210	ACCESORIOS	1
+000301	LENTES DEPORTIVOS	1
+000302	LENTES FASHION	1
+000303	LENTES DE LECTURA	1
+000304	LENTES DE SOL	1
+0004	CUIDADO DE CABELLO	1
+000401	CREMA HUMECTANTE	1
+000402	CUIDADO DE CABELLO	1
+000403	CUIDADO FACIAL	1
+000405	PAÑOS HUMEDOS	1
+000406	AFEITADORA	1
+000408	PROTECTOR SOLAR	1
+000410	DESODORANTE	1
+000411	PRODUCTOS BEBE	1
+000415	SET DE CUIDADO PERSONAL	1
+000417	PEINES/CEPILLOS	1
+000418	PROTECTOR SOLAR FACIAL	1
+0005	GORRAS > CABALLERO	1
+000501	GORRAS > DAMA	1
+000502	GORRAS > CABALLERO	1
+000503	GORRAS > NIÑO/A	1
+000504	PASAMONTAÑAS	1
+000505	SOMBREROS DAMA	1
+000506	SOMBREROS CABALLERO	1
+000507	GORRO CASUAL	1
+000508	VISERAS	1
+000509	SOMBREROS VAQUEROS	1
+0006	BALONES	1
+000601	BALON DE FUTBOL	1
+000602	BALON DE VOLEIBOL	1
+000603	BALONES BASKETBALL	1
+000604	PELOTAS DE GOMA	1
+0007	COSM TICOS	1
+000701	PERFUMES	1
+000702	SPLASH	1
+000703	TINTES	1
+000704	ACCESORIOS DE COSMETICOS	1
+000705	CREMAS PERFUMADAS	1
+000706	KIT DE PERFUMERIA	1
+000707	LACAS PARA EL CABELLO	1
+0008	CHEMISSE	1
+000801	CHEMISSE	1
+000802	CARTUCHERAS	1
+000803	MONO ESCOLAR	1
+000804	SHORT ESCOLAR	1
+0009	TOALLAS	1
+000901	TOALLAS	1
+000902	SABANAS	1
+000903	ALFOMBRAS P/BAÑO	1
+000905	CORTINAS P/BAÑO	1
+000906	COBIJAS	1
+000907	ALMOHADAS	1
+001001	ANILLOS	1
+001002	PULCERAS	1
+001003	ZARCILLOS	1
+001004	COLLARES	1
+001006	TOBILLERAS	1
+001101	GANCHOS	1
+001102	COLAS	1
+001103	PINZAS	1
+001104	MO OS	1
+001105	LIGAS	1
+001106	CINTILLOS	1
+001107	BANDANAS	1
+0012	REMATES	1
+001201	REF EN REMATES	1
+0013	BOLSAS DE REGALO	1
+001301	PEQUEÑAS	1
+001302	MEDIANAS	1
+001303	GRANDES	1
+0014	PAPELERIA ESCOLAR	1
+001401	LIBRETAS	1
+001402	RESALTADORES	1
+001403	MARCADORES	1
+001404	GOMAS DE BORRAR	1
+001405	COLORES	1
+001406	LAPICES	1
+001407	LAPICEROS	1
+001408	NOTAS ADHESIVAS	1
+001409	PEGAS ESCOLARES	1
+001410	TIJERAS	1
+001411	ACCESORIOS ESCOLAR	1
+001412	CARTUCHERAS	1
+001505	ROLLO TERMICO	1
+001508	ALARMAS	1
+001517	HUELLEROS	1
+001518	INFLADOR DE BALONES	1
+001520	CESTAS USO EN TIENDAS	1
+001601	PELUCHES SURTIDOS	1
+001701	CARTERAS PEQUEÑAS	1
+001702	CARTERAS GRANDES	1
+001703	CARTERAS DE NIÑA	1
+001704	BANDOLEROS	1
+001705	BOLSOS	1
+001706	CORREAS CON BRILLOS	1
+001707	CORREAS CON BRILLOS	1
+001801	CORREAS CON BRILLOS	1
+001802	CORREAS CUERO	1
+001803	CORREAS TACTICA	1
+01	LIGUERO	1
+0101	COPA B MEDIO ENCAJE	1
+010101	COPA B LISO	1
+010102	COPA B ENCAJE	1
+010103	COPA C LISO	1
+010104	COPA D	1
+010105	PUSH UP LISO	1
+010106	SEÑORERO	1
+010107	TOP DE ENCAJES	1
+010109	CONJUNTOS INTIMOS	1
+010110	TOP MEDIO ENCAJE	1
+010111	TOP LISO	1
+010112	COPA B MEDIO ENCAJE	1
+010113	COPA E	1
+010114	COPA C ENCAJE	1
+010115	COPA C MEDIO ENCAJE	1
+010116	PUSH UP ENCAJE	1
+010117	PUSH UP MEDIO ENCAJE	1
+010118	MATERNO	1
+010119	COPA C SIN VARILLA	1
+010120	COPA B LISO STRAPLESS	1
+010121	COPA C LISO STRAPLESS	1
+010122	COPA D	1
+0102	SE ORERO	1
+010201	PANTY	1
+010202	HILO	1
+010204	CACHETEROS	1
+010205	SEÑORERO	1
+010206	SIN CLASIFICAR	1
+010208	SIN CLASIFICAR	1
+010209	SIN CLASIFICAR	1
+010214	MEDIA CASUAL	1
+010215	SHORTS	1
+0103	PIJAMA BATA	1
+010310	PIJAMA SHORES	1
+010311	PIJAMA CAPRI	1
+010312	PIJAMA PANTALON	1
+010313	PIJAMA BATA	1
+0104	MEDIAS PANTYS	1
+010412	MEDIAS TOBILLERAS PX3	1
+010413	SIN CLASIFICAR	1
+010414	MEDIAS INDIVIDUAL	1
+010415	MEDIAS DE PAÑO 3/4	1
+010416	MEDIAS TUBULAR PX3	1
+010417	PLANTILLAS	1
+010418	MEDIAS PANTYS	1
+010419	SIN CLASIFICAR	1
+010421	MEDIAS PLANTILLAS	1
+0105	FAJAS PANTY	1
+010516	FAJAS CINTURILLAS	1
+010517	FAJAS CHALECO	1
+010518	FAJAS BRAGA	1
+010519	FAJAS PESCADOR / SHORT	1
+010520	FAJAS PANTY	1
+0106	LIGUERO	1
+010620	BODYS	1
+010623	LIGUERO	1
+0107	TRAJES DE BA O	1
+010721	TRAJES DE BAÑO	1
+010722	ACCESORIOS PLAYEROS	1
+010723	SIN CLASIFICAR	1
+0108	ROPA EXTERIOR	1
+010824	BLUSAS / CAMISAS	1
+010825	PANTALONES / JEANS	1
+010826	CONJUNTOS - FALDAS - VESTIDOS	1
+010827	SUETER	1
+010829	SHORES	1
+0109	TOP DEPORTIVO	1
+010919	CONJUNTOS DEPORTIVOS	1
+010927	JOGGER	1
+010928	LICRAS	1
+010930	TOP DEPORTIVO	1
+010931	SUETER	1
+010932	SHORT	1
+010933	FALDA SHORT DEPORTIVA	1
+0110	TIRAS  DE BRASSIER	1
+011028	FONDOS	1
+011029	BRASSIERES DESECHABLES	1
+011030	EXTENSORES  DE BRASSIER	1
+011031	TIRAS  DE BRASSIER	1
+011033	LIGAS / LIGUEROS	1
+011045	SIN CLASIFICAR	1
+011047	BANDA	1
+0111	MAQUILLAJE	1
+011101	ACCESORIOS	1
+011102	SOMBRA DE OJOS	1
+011103	BROCHAS	1
+011104	BASE LIQUIDA	1
+011105	CORRECTOR	1
+011106	PESTAÑAS	1
+011107	POLVO COMPACTO	1
+011108	ILUMINADOR	1
+011110	PESTAÑINAS	1
+011111	LABIAL LIQUIDO	1
+011112	LABIAL EN BARRA	1
+011113	RUBOR	1
+011114	DELINEADOR DE OJO	1
+011115	PREPARACI N DE ROSTRO	1
+011116	LAPIZ DE LABIOS	1
+011117	CEJAS	1
+011118	POLVO SUELTO	1
+011119	BRILLO LABIAL	1
+011120	CONTORNO	1
+011124	TINTA LABIAL	1
+0112	CALZADOS	1
+011201	CHANCLA PLAYERA	1
+011202	CHANCLA METE PIE	1
+011203	SANDALIA (CON CORREA)	1
+011204	SUECO DOBLE	1
+011205	SUECO SENCILLO	1
+011206	SUECO DE BANDA	1
+011207	ZAPATO DEPORTIVO	1
+011208	ZAPATO CASUAL	1
+011210	ZAPATILLAS	1
+011211	PANTUFLAS	1
+0113	BISUTERIA - JOYERIA	1
+011301	ANILLOS	1
+011302	PULSERAS	1
+011303	ZARCILLOS	1
+011304	COLLARES	1
+011305	SETS DE BISUTERIA	1
+011306	PLANTILLA	1
+011401	GANCHOS	1
+011402	COLAS	1
+011403	PINZAS	1
+011404	LAZOS	1
+011405	CINTILLO	1
+011501	UTENSILIOS (LIMAS, CARTAUÑAS, LAMPARAS)	1
+011502	KIT DE UÑAS	1
+011503	ESMALTES	1
+011504	LIMPIEZA DE UÑAS	1
+02	BOXER	1
+0201	BOXER	1
+020134	BOXER	1
+020135	INTERIOR	1
+020136	SIN CLASIFICAR	1
+0202	CAMISAS/ FRANELILLA	1
+020234	CAMISAS/ FRANELILLA	1
+020235	PANTAL NES / JEANS	1
+020236	SUETER	1
+020237	CHEMISSE	1
+020238	SHORES	1
+020239	CAMISA DE VESTIR	1
+0203	MEDIAS PX3	1
+020310	MEDIAS TOBILLERAS PX3	1
+020311	MEDIAS DE FUTBOL	1
+020312	MEDIAS TOBILLERAS INDIVIDUAL	1
+020313	MEDIAS DE PAÑO 3/4	1
+020314	MEDIAS TUBULAR Y 3/4 PX3	1
+020315	MEDIAS PLANTILLAS	1
+020318	MEDIAS DE VESTIR	1
+0204	ROPA DE PLAYA	1
+020413	TRAJES DE BAÑO	1
+020414	ACCESORIOS PLAYEROS	1
+020415	SIN CLASIFICAR	1
+020416	SIN CLASIFICAR	1
+0205	ROPA DEPORTIVA	1
+020515	CONJUNTOS DEPORTIVOS	1
+020516	JOGGER	1
+020517	LICRAS	1
+020518	CAMISAS DEPORTIVAS	1
+020519	SUETER	1
+020520	SHORT	1
+0207	CALZADOS	1
+020721	CHANCLA PLAYERA	1
+020722	CHANCLA METE PIE	1
+020723	SUECO DOBLE	1
+020724	SUECO SENCILLO	1
+020725	SUECO DE BANDA	1
+020726	ZAPATO DEPORTIVO	1
+020727	ZAPATO CASUAL	1
+020729	TACOS DE F TBOL	1
+020730	PANTUFLAS	1
+0208	SIN CLASIFICAR	1
+020825	PIJAMA	1
+020837	SIN CLASIFICAR	1
+020838	SIN CLASIFICAR	1
+020844	SIN CLASIFICAR	1
+0209	PAÑUELOS	1
+020927	PA UELOS	1
+020928	SIN CLASIFICAR	1
+0211	SIN CLASIFICAR	1
+021139	SIN CLASIFICAR	1
+0212	SIN CLASIFICAR	1
+021201	SIN CLASIFICAR	1
+021202	SIN CLASIFICAR	1
+021203	BOXER	1
+0213	SIN CLASIFICAR	1
+021301	SIN CLASIFICAR	1
+021302	SIN CLASIFICAR	1
+021303	MEDIA PX3	1
+021304	MEDIA FUTBOL	1
+021305	MEDIA BEBE	1
+03	MEDIAS PANTYS	1
+0312	CONJUNTOS INTIMOS	1
+031240	TOP / BRALETT	1
+031241	ACOSTUMBRADOR	1
+031242	CONJUNTOS INTIMOS	1
+0313	CACHETERO	1
+031343	PANTYS	1
+031344	CACHETERO	1
+031345	PANTY PX3	1
+0314	MEDIAS PANTYS	1
+031446	MEDIAS TOBILLERAS PX3	1
+031447	MEDIAS TOBILLERAS INDIVIDUAL	1
+031449	MEDIAS TUBULAR PX3	1
+031451	MEDIAS ESCOLARES	1
+031452	MEDIAS PX2	1
+031453	MEDIAS DE VESTIR	1
+031454	MEDIAS PANTYS	1
+0315	ROPA DE PLAYA	1
+031547	TRAJES DE BAÑO	1
+0316	BLUSAS / CAMISAS	1
+031601	BLUSAS / CAMISAS	1
+031602	PANTALONES / JEANS	1
+031603	CONJUNTOS - FALDAS - VESTIDOS	1
+031604	SUETER	1
+031606	SHORES	1
+0317	ROPA DEPORTIVA	1
+031701	CONJUNTOS DEPORTIVOS	1
+031702	JOGGER	1
+031703	LICRAS	1
+031704	CAMISAS DEPORTIVAS	1
+031705	SUETER	1
+0318	SIN CLASIFICAR	1
+031801	BOLSO GRANDE	1
+031802	BOLSO PEQUEÑO	1
+031901	PIJAMA SHORES	1
+031902	PIJAMA CAPRI	1
+031903	PIJAMA PANTALON	1
+031904	PIJAMA BATA	1
+0320	CALZADOS	1
+032001	CHANCLA PLAYERA	1
+032002	CHANCLA METE PIE	1
+032003	SANDALIA (CON CORREA)	1
+032004	SUECO DOBLE	1
+032005	SUECO SENCILLO	1
+032006	SUECO DE BANDA	1
+032007	ZAPATO DEPORTIVO	1
+032008	ZAPATO CASUAL	1
+032010	ZAPATILLAS	1
+032101	ANILLOS	1
+032102	PULCERAS	1
+032104	COLLARES	1
+032202	COLAS	1
+032203	PINZAS	1
+032205	LIGAS	1
+032206	MO OS	1
+032207	LAZOS	1
+032208	SET DE BISUTERIA	1
+05	MEDIAS PX3	1
+0501	BOXER	1
+050101	BOXER	1
+050102	INTERIOR	1
+0502	MEDIAS PX3	1
+050201	MEDIAS TOBILLERAS PX3	1
+050202	MEDIAS DE F TBOL	1
+050203	MEDIASTOBILLERAS INDIVIDUAL	1
+050204	MEDIAS DE PA O 3/4	1
+050205	MEDIAS TUBULAR PX3	1
+050206	MEDIAS ESCOLARES	1
+050208	MEDIAS DE VESTIR	1
+050209	MEDIAS INDIVIDUALES P/BEBE	1
+0503	ROPA EXTERIOR	1
+050301	CAMISAS/ FRANELA	1
+050302	PANTALONES / JEANS	1
+050303	CONJUNTOS	1
+050304	ROPA DE BEB	1
+050305	SHORT/ BERMUDA	1
+050306	CHEMISSE	1
+0504	ROPA DE PLAYA	1
+050401	TRAJES DE BA O	1
+050402	DAMA	1
+050502	JOGGER	1
+050505	SHORT	1
+050506	SUETER	1
+0508	CALZADOS	1
+050801	CHANCLA PLAYERA	1
+050802	CHANCLA METE PIE	1
+050803	SUECO DOBLE	1
+050804	SUECO SENCILLO	1
+050805	SUECO DE BANDA	1
+050806	ZAPATO DEPORTIVO	1
+050807	ZAPATO CASUAL	1
+050812	BOTAS DE GOMA	1
+050813	SANDALIAS	1
+050814	PANTUFLAS	1
+06	TOP / BRALETT	1
+0601	TOP / BRALETT	1
+060101	TOP / BRALETT	1
+060102	ACOSTUMBRADOR	1
+060103	CONJUNTOS  NTIMOS	1
+060104	COPA A ENCAJE	1
+060105	COPA A LISO	1
+0602	CACHETERO	1
+060201	PANTYS	1
+060202	CACHETERO	1
+060203	PANTY PX3	1
+0603	MEDIAS PANTYS	1
+060301	MEDIAS TOBILLERAS PX3	1
+060302	MEDIAS TOBILLERAS INDIVIDUAL	1
+060303	MEDIAS DE PA O 3/4	1
+060304	MEDIAS TUBULAR PX3	1
+060305	MEDIAS ESCOLARES	1
+060306	MEDIAS PANTYS	1
+060501	BLUSAS / CAMISAS	1
+060502	PANTALONES / JEANS	1
+060503	CONJUNTOS - FALDAS - VESTIDOS	1
+060504	SUETER	1
+060506	SHORES	1
+060602	JOGGER	1
+060603	LICRAS	1
+060605	SUETER	1
+060701	PIJAMA SHORES	1
+060702	PIJAMA CAPRI	1
+060703	PIJAMA PANTALON	1
+060704	PIJAMA BATA	1
+0608	CALZADOS	1
+060801	CHANCLA PLAYERA	1
+060802	CHANCLA METE PIE	1
+060803	SUECO DOBLE	1
+060804	SUECO SENCILLO	1
+060805	SUECO DE BANDA	1
+060806	ZAPATO DEPORTIVO	1
+060807	ZAPATO CASUAL	1
+060810	BOTAS DE GOMA	1
+060811	SANDALIA (CON CORREA)	1
+060812	PANTUFLAS	1
+07	BOXER	1
+0701	BOXER	1
+070101	BOXER	1
+070103	TOBILLERA	1
+070104	PLANTILLA	1
+0702	MEDIAS PX3	1
+070201	MEDIAS TOBILLERAS PX3	1
+070202	MEDIAS DE FUTBOL	1
+070203	MEDIAS TOBILLERAS INDIVIDUAL	1
+070205	MEDIAS TUBULAR PX3	1
+070206	MEDIAS ESCOLARES	1
+070301	CAMISAS/ FRANELILLA	1
+070302	PANTALONES / JEANS	1
+070305	CHEMISSE	1
+070306	SHORES	1
+070307	CAMISA DE VESTIR	1
+070502	JOGGER	1
+070505	SHORT DEPORTIVO	1
+070506	SUETER	1
+070701	CHANCLA PLAYERA	1
+070702	CHANCLA METE PIE	1
+070703	SUECO DOBLE	1
+070704	SUECO SENCILLO	1
+070706	ZAPATO DEPORTIVO	1
+070707	ZAPATO CASUAL	1
+070709	TACOS DE FUTBOL	1
+99		1
+9901		1
+990101	SHORT, BERMUDA, JOGGER, SUERTER	1
+9903		1
+990301	BOXER, MEDIAS	1
+Codigo	Nombre	0
+00	UNISEX	1
+\.
+
+
+--
+-- Data for Name: CLIENTES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CLIENTES" ("Codigo", "Nombre", "FechaIngreso", "Telefono", "Direccion", "Status", "Tipo", "TipoContribuyente") FROM stdin;
+\.
+
+
+--
+-- Data for Name: CODIGOSCONVENIOS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CODIGOSCONVENIOS" ("IdCodigo", "Codigo", "IdCupon", "Status") FROM stdin;
+\.
+
+
+--
+-- Data for Name: CODIGOS_RECARGOS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CODIGOS_RECARGOS" ("CodigoBarra") FROM stdin;
+\.
+
+
+--
+-- Data for Name: COLORES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."COLORES" ("Codigo", "Nombre", "Status") FROM stdin;
+\.
+
+
+--
+-- Data for Name: COMPRAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."COMPRAS" ("Documento", "Proveedor", "Fecha", "FechaFactura", "PorcentajeDescuento", "TipoPago", "DiasCredito", "Expediente", "Observacion", "TotalMercancia", "TotalImpuesto", "TotalImpuestoContable", "TotalDescuento", "TasaCambio", "Recargos", "TasaServicio", "OtrosImpuestos", "Flete", "Seguro", "PorcImpuestoGeneral", "Usuario", "MetodoValorizacion", "InterContable", "Status", "BodegaExterna", "IDLote", "UsaFechaVencimiento") FROM stdin;
+\.
+
+
+--
+-- Data for Name: CONFIGURACIONMARCAJE; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CONFIGURACIONMARCAJE" ("Id", "IdDispositivo", "Dispositivo", "FechaRegistro") FROM stdin;
+\.
+
+
+--
+-- Data for Name: CONTROLACCESO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CONTROLACCESO" ("Numero", "Cedula", "Fecha", "HoraEntrada", "HoraSalida") FROM stdin;
+\.
+
+
+--
+-- Data for Name: CTABANCOS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CTABANCOS" ("Codigo", "Nombre", "PuntoVenta", "Status") FROM stdin;
+\.
+
+
+--
+-- Data for Name: CTABANCOS_DOLARES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CTABANCOS_DOLARES" ("Codigo", "Nombre", "PuntoVenta", "Status") FROM stdin;
+111005	BANCO DOLARES	0	1
+\.
+
+
+--
+-- Data for Name: CTACONTABLE; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CTACONTABLE" ("Codigo", "Nombre", "ManejaDocumentos", "TieneAcreedor", "CuentaDevolucion", "Status") FROM stdin;
+131001	Cuentas a Cobrar Empleados	1	1	0	1
+132015001	Prestamos a Casa Matriz	1	0	0	1
+133015	Anticipos a Trabajadores	1	1	0	1
+135505	Anticipo de Impuesto Sobre la Renta	1	1	0	1
+220501	Nacionales	1	1	0	1
+233520	Comisiones por Pagar	1	1	0	1
+233595001	Otras Cuentas por Pagar	1	1	0	1
+233595002	Acreedores Varios	1	0	0	1
+236515001	Retencion Sobre Honorarios	1	1	0	1
+236525001	Retencion Sobre Servicios 1%	1	1	0	1
+236525002	Retencion Sobre Servicios 2%	1	1	0	1
+236526001	Retencion Sobre Publicidad Radial	1	1	0	1
+236526002	Retencion Sobre Publicidad Otros	1	1	0	1
+236527001	Retencion Sobre Fletes	1	1	0	1
+236530001	Retencion Sobre Bienes Muebles	1	1	0	1
+236530002	Retencion Sobre Bienes Inmuebles	1	1	0	1
+240802	Creditos Fiscales Nacionales Pagados	1	1	0	1
+240803	Creditos Fiscales Nacionales Alic. 8%	1	1	0	1
+240808	Debito Fiscal	1	0	0	1
+250501	Sueldos y Salarios por Pagar	1	1	0	1
+413524001	Ventas de Mercancia	1	0	0	1
+417501	DEVOLUCION EN VENTAS	1	1	1	1
+520563001	Bienestar Social	1	1	0	1
+520584	Gastos Medicos	1	1	0	1
+521505	Impuestos de Industria y Comercio	1	1	0	1
+521506	Multas e Intereses	1	1	0	1
+522010	Arrendamientos	1	1	0	1
+522011	Gastos de Condominio	1	1	0	1
+523505	Vigilancia	1	1	0	1
+523530	Energia Electrica	1	1	0	1
+523535	Telefono	1	1	0	1
+523536	Servicio de Agua	1	1	0	1
+523540	Portes y Cables	1	1	0	1
+523545	Fax	1	1	0	1
+523556002	Pasajes Aereos Eventos	1	1	0	1
+523560001	Publicidad	1	1	0	1
+523560004	Modelaje Eventos	1	1	0	1
+523565	Material de Empaque	1	1	0	1
+524005	Gastos de Notarias	1	1	0	1
+524010	Gastos de Registro Mercantil	1	1	0	1
+524015	Gastos de Tramites y Licencias	1	1	0	1
+524510	Mantenimiento	1	1	0	1
+524520	Equipo de Oficina	1	1	0	1
+524525	Gastos de Sistematizacion	1	1	0	1
+524540	Gastos de Vehiculo	1	1	0	1
+525005	Remodelac. Instala. Electricas	1	1	0	1
+525015	Remodelac. Reparac. Locativas	1	1	0	1
+525505	Alojamiento y Manutencion	1	1	0	1
+525507	Viaticos	1	1	0	1
+525508	Donaciones	1	1	0	1
+525525	Pasajes Urbanos	1	1	0	1
+529525001	Utiles de Aseo	1	1	0	1
+529525002	Cafeteria y Restaurant	1	1	0	1
+529530	Utiles, Papeleria y Fotocopias	1	1	0	1
+530505	Comisiones Bancarias	1	1	0	1
+\.
+
+
+--
+-- Data for Name: CUPONES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."CUPONES" ("IdCupon", "Nombre", "Tipo", "UsaCodigo", "Acumulativo", "UsaReferencias", "FechaInicial", "FechaFinal", "FechaCanjeInicial", "FechaCanjeFinal", "MontoDesde", "MontoHasta", "Mensaje", "ProductosActivan", "MinimoCantidad", "Status") FROM stdin;
+\.
+
+
+--
+-- Data for Name: DEPOSITOS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."DEPOSITOS" ("NumeroDeposito", "CuentaBanco", "Serie", "Fecha", "TotalEfectivo", "TotalCheques", "Observacion", "Usuario", "Status", "InterContable", "TasaCambio") FROM stdin;
+\.
+
+
+--
+-- Data for Name: DEPOSITOS_DOLARES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."DEPOSITOS_DOLARES" ("NumeroDeposito", "CuentaBanco", "Serie", "Fecha", "TotalEfectivo", "TotalCheques", "Observacion", "Usuario", "Status", "InterContable", "TasaCambio") FROM stdin;
+\.
+
+
+--
+-- Data for Name: DESCUENTO_MAYORISTA; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."DESCUENTO_MAYORISTA" ("MontoMinimo", "PorcentajeDescuento") FROM stdin;
+\.
+
+
+--
+-- Data for Name: DETALLECONTROLACCESO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."DETALLECONTROLACCESO" ("IdDetalleControlAcceso", "IdPersonal", "IdPatron", "Fecha", "IndTipoMarcaje", "IndUsoCarnet") FROM stdin;
+\.
+
+
+--
+-- Data for Name: DEVCOMPRAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."DEVCOMPRAS" ("Numero", "Fecha", "Documento", "Proveedor", "TotalMercancia", "TotalImpuesto", "PorcentajeDescuento", "TotalDescuento", "Observacion", "Usuario", "InterContable", "Status") FROM stdin;
+\.
+
+
+--
+-- Data for Name: DEVTRANSFERENCIAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."DEVTRANSFERENCIAS" ("Numero", "Fecha", "CodigoEnvia", "CodigoRecibe", "DocumentoOrigen", "TotalValor", "Observacion", "Status", "Usuario", "FechaEmision", "InterContable", "IDLote") FROM stdin;
+\.
+
+
+--
+-- Data for Name: DEVVENTAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."DEVVENTAS" ("NumeroDevolucion", "Serie", "NumeroFactura", "Fecha", "Vendedor", "Cliente", "TipoVenta", "TotalMercancia", "TotalDescuento", "TotalImpuesto", "TotalCosto", "InterContable", "Usuario", "Status", "SerieFactura", "Estacion", "TasaIGTF", "MontoIGTF", "BaseImponibleIGTF") FROM stdin;
+\.
+
+
+--
+-- Data for Name: DIARIOCAJA; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."DIARIOCAJA" ("Serie", "Fecha", "Numero", "FacturaInicial", "FacturaFinal", "PorcentajeImpuesto", "HoraApertura", "HoraCierre", "NumeroReporteZ", "Status", "ReporteZTexto", "Acumulado") FROM stdin;
+\.
+
+
+--
+-- Data for Name: DISPOSITIVOGRUPO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."DISPOSITIVOGRUPO" ("Id", "Nombre") FROM stdin;
+\.
+
+
+--
+-- Data for Name: DISPOSITIVOSMARCAJE; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."DISPOSITIVOSMARCAJE" ("Id", "Modelo", "Marca", "Tipo", "Imagen", "IdGrupo") FROM stdin;
+\.
+
+
+--
+-- Data for Name: FABRICANTES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."FABRICANTES" ("Codigo", "Nombre", "Status") FROM stdin;
+\.
+
+
+--
+-- Data for Name: FISICOLOGICO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."FISICOLOGICO" ("FechaAjuste", "CodigoBarra", "ConMovimiento") FROM stdin;
+\.
+
+
+--
+-- Data for Name: FORMAPAGO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."FORMAPAGO" ("Codigo", "Nombre", "Status", "Orden") FROM stdin;
+1	EFECTIVO	1	\N
+2	CHEQUE	1	\N
+3	TARJETA DE DEBITO	1	\N
+4	TARJETA DE CREDITO	1	\N
+5	DEPOSITO	0	\N
+6	CUENTA POR COBRAR	1	\N
+7	MULTIPLE	1	\N
+8	NOTA DE CREDITO	0	\N
+9	CREDITO EMPLEADO	0	\N
+10	EFECTIVO DOLAR	1	\N
+11	DOLAR ELECTRONICO	1	\N
+12	TARJETA REGALO $$$	1	\N
+13	TARJETA REGALO Bs	0	\N
+14	PAGO MOVIL	1	\N
+15	TRANSFERENCIA	1	\N
+16	CASHEA	1	\N
+17	BIOPAGO\\MONEDERO	1	0
+\.
+
+
+--
+-- Data for Name: GRUPOS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."GRUPOS" ("CodGrupo", "NombreGrupo") FROM stdin;
+ADMI	ADMINISTRADOR
+CAJE	CAJERO
+CONS	CONSULTA
+INVE	INVENTARIO
+SINV	SUPERVISOR DE INVENTARIO
+SISTEMAS	SISTEMAS
+\.
+
+
+--
+-- Data for Name: GRUPOSEG; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."GRUPOSEG" ("CodGrupo", "CodNodo", "Ver") FROM stdin;
+ADMI	Mnu_ActualizarTasaCambio	S
+ADMI	mnu_ajustes	S
+ADMI	mnu_AperturaCaja	S
+ADMI	Mnu_Archivos	S
+ADMI	Mnu_CambiarClave	S
+ADMI	mnu_CambiosMercancia	S
+ADMI	Mnu_CargarListadePrecios	S
+ADMI	mnu_CargarTransferencias	S
+ADMI	mnu_CierreCaja	S
+ADMI	Mnu_CierreCajaForanea	S
+ADMI	mnu_clientes	S
+ADMI	Mnu_ConsultarPrecios	S
+ADMI	Mnu_ControlAccceso	S
+ADMI	Mnu_CorregirConsecutivos	S
+ADMI	mnu_Depositos	S
+ADMI	mnu_DescargarDevoluciones	S
+ADMI	Mnu_DevBorrador	S
+ADMI	Mnu_ExportarDatosCasaMatriz	S
+ADMI	mnu_Facturacion	S
+ADMI	Mnu_ImprimirReporteXyZ	S
+ADMI	mnu_lista	S
+ADMI	mnu_pedidos	S
+ADMI	mnu_Personal	S
+ADMI	Mnu_Procesos	S
+ADMI	Mnu_Raya1	S
+ADMI	Mnu_Raya2	S
+ADMI	Mnu_Raya3	S
+ADMI	Mnu_RayaCierreForaneo	S
+ADMI	mnu_registrarpredidos	S
+ADMI	Mnu_ReimprimirDevolucion	S
+ADMI	Mnu_ReimprimirFactura	S
+ADMI	mnu_rekardear	S
+ADMI	Mnu_RepDepositos	S
+ADMI	Mnu_RepDevImpTransferencias	S
+ADMI	Mnu_RepImpTransferencias	S
+ADMI	Mnu_RepInventarioEntrSal	S
+ADMI	Mnu_RepMarcaje	S
+ADMI	mnu_ReporteArticulos	S
+ADMI	mnu_reportekardex	S
+ADMI	Mnu_Reportes	S
+ADMI	mnu_ReporteSalidaCajaDolares	S
+ADMI	mnu_ReportesInventario	S
+ADMI	mnu_reporteventas	S
+ADMI	Mnu_RepSalidasCaja	S
+ADMI	mnu_SalidasCaja	S
+ADMI	Mnu_Seguridad	S
+ADMI	Mnu_Sistema	S
+ADMI	mnu_Trabajadores	S
+ADMI	mnu_transferencias	S
+ADMI	Mnu_Usuario	S
+ADMI	Mnu_Utilidades	S
+ADMI	MnuRaya	S
+ADMI	MnuRepTransferencias	S
+CAJE	Mnu_Archivos	S
+CAJE	Mnu_CambiarClave	S
+CAJE	mnu_CambiosMercancia	S
+CAJE	mnu_clientes	S
+CAJE	Mnu_ConsultarPrecios	S
+CAJE	mnu_Depositos	S
+CAJE	Mnu_ExportarDatosCasaMatriz	S
+CAJE	mnu_Facturacion	S
+CAJE	Mnu_ImprimirReporteXyZ	S
+CAJE	Mnu_Procesos	S
+CAJE	Mnu_Raya2	S
+CAJE	Mnu_ReimprimirFactura	S
+CAJE	Mnu_RepDepositos	S
+CAJE	Mnu_RepInventarioEntrSal	S
+CAJE	mnu_ReporteArticulos	S
+CAJE	mnu_reportekardex	S
+CAJE	Mnu_Reportes	S
+CAJE	mnu_ReportesInventario	S
+CAJE	mnu_reporteventas	S
+CAJE	Mnu_RepSalidasCaja	S
+CAJE	mnu_SalidasCaja	S
+CAJE	Mnu_Sistema	S
+CAJE	Mnu_Utilidades	S
+CONS	Mnu_CambiarClave	S
+CONS	Mnu_Raya10	S
+CONS	Mnu_RepDepositos	S
+CONS	Mnu_RepDevImpTransferencias	S
+CONS	Mnu_RepImpTransferencias	S
+CONS	Mnu_RepInventarioEntrSal	S
+CONS	Mnu_RepMarcaje	S
+CONS	mnu_ReporteArticulos	S
+CONS	mnu_ReporteCriterioFisicoLogico	S
+CONS	mnu_ReporteItemBorrado	S
+CONS	mnu_reportekardex	S
+CONS	Mnu_Reportes	S
+CONS	mnu_ReporteSalidaCajaDolares	S
+CONS	mnu_ReportesInventario	S
+CONS	Mnu_RepSalidasCaja	S
+CONS	Mnu_Utilidades	S
+CONS	MnuRepTransferencias	S
+INVE	mnu_ajustes	S
+INVE	Mnu_CambiarClave	S
+INVE	mnu_entradassalidas	S
+INVE	mnu_PrimerConteo	S
+INVE	Mnu_Procesos	S
+INVE	mnu_rekardear	S
+INVE	mnu_ReporteArticulos	S
+INVE	mnu_reportekardex	S
+INVE	Mnu_Reportes	S
+INVE	mnu_ReportesInventario	S
+INVE	mnu_segundoconteo	S
+INVE	mnu_TomaFisica	S
+INVE	Mnu_Utilidades	S
+SINV	Mnu:ReporteResumenDiario	S
+SINV	mnu_ajustefisicologico	S
+SINV	mnu_ajustes	S
+SINV	mnu_AprobarConteosEnLotes	S
+SINV	Mnu_ArticulosSinVentas	S
+SINV	Mnu_CambiarClave	S
+SINV	Mnu_ConsultarPrecios	S
+SINV	mnu_entradassalidas	S
+SINV	mnu_etiquetas	S
+SINV	Mnu_Facturas	S
+SINV	Mnu_ImprimirReporteXyZ	S
+SINV	mnu_PrimerConteo	S
+SINV	Mnu_Procesos	S
+SINV	mnu_rekardear	S
+SINV	Mnu_RepAjustes	S
+SINV	mnu_ReporteArticulos	S
+SINV	mnu_ReporteItemBorrado	S
+SINV	mnu_reportekardex	S
+SINV	Mnu_Reportes	S
+SINV	mnu_ReportesInventario	S
+SINV	mnu_reporteventas	S
+SINV	Mnu_RepPorTipoPAgo	S
+SINV	mnu_TomaFisica	S
+SINV	Mnu_UnidadesVentidas	S
+SINV	Mnu_Utilidades	S
+SISTEMAS	-	S
+SISTEMAS	Mnu:ReporteResumenDiario	S
+SISTEMAS	mnu_abrirgaveta	S
+SISTEMAS	mnu_ajustefisicologico	S
+SISTEMAS	Mnu_AjusteFisicologicoparcial	S
+SISTEMAS	mnu_ajustes	S
+SISTEMAS	mnu_AperturaCaja	S
+SISTEMAS	mnu_AprobarConteosEnLotes	S
+SISTEMAS	Mnu_Archivos	S
+SISTEMAS	Mnu_Articulo	S
+SISTEMAS	Mnu_ArticulosSinVentas	S
+SISTEMAS	Mnu_Bancos	S
+SISTEMAS	Mnu_CambiarClave	S
+SISTEMAS	Mnu_CambiarConexion	S
+SISTEMAS	mnu_CambiosMercancia	S
+SISTEMAS	Mnu_CargarArticulos	S
+SISTEMAS	mnu_cargarCompras	S
+SISTEMAS	Mnu_CargarListadePrecios	S
+SISTEMAS	Mnu_CargarListPrecioRoque	S
+SISTEMAS	mnu_CargarTransferencias	S
+SISTEMAS	mnu_Cargos	S
+SISTEMAS	mnu_CierreCaja	S
+SISTEMAS	Mnu_CierreCajaForanea	S
+SISTEMAS	mnu_clientes	S
+SISTEMAS	mnu_Colores	S
+SISTEMAS	mnu_compras	S
+SISTEMAS	mnu_configuracioncaja	S
+SISTEMAS	Mnu_ConfirmarDepositos	S
+SISTEMAS	Mnu_ConsultarPrecios	S
+SISTEMAS	Mnu_ControlAccceso	S
+SISTEMAS	Mnu_ConvCompODespacho	S
+SISTEMAS	Mnu_ConvCompTransf	S
+SISTEMAS	Mnu_ConvTransferFact	S
+SISTEMAS	Mnu_CorregirCodigos	S
+SISTEMAS	Mnu_CorregirConsecutivos	S
+SISTEMAS	Mnu_CuadreCierreCaja	S
+SISTEMAS	mnu_cuentasbancos	S
+SISTEMAS	Mnu_CuentasContables	S
+SISTEMAS	Mnu_CuentaXCobrar	S
+SISTEMAS	mnu_Depositos	S
+SISTEMAS	mnu_DepositosDolares	S
+SISTEMAS	mnu_DescargarDevoluciones	S
+SISTEMAS	mnu_DesplazarTransferencias	S
+SISTEMAS	Mnu_DevBorrador	S
+SISTEMAS	MNu_DevCompras	S
+SISTEMAS	mnu_Devolución	S
+SISTEMAS	Mnu_EjecutarConsulta	S
+SISTEMAS	Mnu_EntardaSeriales	S
+SISTEMAS	mnu_entradassalidas	S
+SISTEMAS	mnu_etiquetas	S
+SISTEMAS	Mnu_Exportar2	S
+SISTEMAS	Mnu_ExportarArchivos	S
+SISTEMAS	Mnu_ExportarArticulos	S
+SISTEMAS	Mnu_ExportarDatosCasaMatriz	S
+SISTEMAS	Mnu_Fabricantes	S
+SISTEMAS	mnu_Facturacion	S
+SISTEMAS	Mnu_Facturas	S
+SISTEMAS	Mnu_FormaPago	S
+SISTEMAS	Mnu_GenerarODespachoDesdeDBF	S
+SISTEMAS	Mnu_GenerarTransferDesdeDBF	S
+SISTEMAS	Mnu_GenerarTransferenciasPorCaja	S
+SISTEMAS	Mnu_Grupo	S
+SISTEMAS	Mnu_ImportarDatosSPDV	S
+SISTEMAS	mnu_ImprimirDocumentoFiscal	S
+SISTEMAS	Mnu_ImprimirReporteXyZ	S
+SISTEMAS	Mnu_Impuestos	S
+SISTEMAS	mnu_interfazcontable	S
+SISTEMAS	Mnu_Inventario	S
+SISTEMAS	mnu_lista	S
+SISTEMAS	Mnu_Marcas	S
+SISTEMAS	Mnu_Modelos	S
+SISTEMAS	Mnu_OrdenCompra	S
+SISTEMAS	Mnu_OrdenDespacho	S
+SISTEMAS	mnu_Parametros	S
+SISTEMAS	mnu_pedidos	S
+SISTEMAS	mnu_Personal	S
+SISTEMAS	mnu_PrimerConteo	S
+SISTEMAS	Mnu_Procesos	S
+SISTEMAS	Mnu_ProcesosGenerales	S
+SISTEMAS	Mnu_Promociones	S
+SISTEMAS	mnu_proveedores	S
+SISTEMAS	Mnu_Raya1	S
+SISTEMAS	Mnu_Raya10	S
+SISTEMAS	Mnu_Raya11	S
+SISTEMAS	Mnu_Raya12	S
+SISTEMAS	Mnu_Raya13	S
+SISTEMAS	Mnu_Raya14	S
+SISTEMAS	Mnu_Raya15	S
+SISTEMAS	Mnu_Raya16	S
+SISTEMAS	Mnu_Raya17	S
+SISTEMAS	Mnu_Raya2	S
+SISTEMAS	Mnu_Raya3	S
+SISTEMAS	Mnu_Raya5	S
+SISTEMAS	Mnu_Raya6	S
+SISTEMAS	Mnu_Raya7	S
+SISTEMAS	Mnu_Raya8	S
+SISTEMAS	Mnu_Raya9	S
+SISTEMAS	Mnu_RayaCierreForaneo	S
+SISTEMAS	mnu_recostear	S
+SISTEMAS	mnu_registrarcompras	S
+SISTEMAS	mnu_registrarlistaprecios	S
+SISTEMAS	mnu_registrarpredidos	S
+SISTEMAS	mnu_registrodevtransferencia	S
+SISTEMAS	mnu_registroTransferencia	S
+SISTEMAS	Mnu_ReimprimirDevolucion	S
+SISTEMAS	Mnu_ReimprimirFactura	S
+SISTEMAS	Mnu_ReimprimirFacturaHistorico	S
+SISTEMAS	mnu_rekardear	S
+SISTEMAS	Mnu_RepAjustes	S
+SISTEMAS	Mnu_RepBalanceDiario	S
+SISTEMAS	Mnu_RepCompras	S
+SISTEMAS	Mnu_RepDepositos	S
+SISTEMAS	Mnu_RepDevImpTransferencias	S
+SISTEMAS	Mnu_RepDevolucion	S
+SISTEMAS	Mnu_RepDevolucionCompras	S
+SISTEMAS	Mnu_RepDevTransferencias	S
+SISTEMAS	Mnu_RepFacturasComp	S
+SISTEMAS	Mnu_RepImpTransferencias	S
+SISTEMAS	Mnu_RepInventarioEntrSal	S
+SISTEMAS	Mnu_RepLibroVentas	S
+SISTEMAS	Mnu_RepMarcaje	S
+SISTEMAS	Mnu_RepOrdenDespacho	S
+SISTEMAS	mnu_ReporteArticulos	S
+SISTEMAS	mnu_ReporteCriterioFisicoLogico	S
+SISTEMAS	Mnu_ReporteCxC	S
+SISTEMAS	mnu_ReporteItemBorrado	S
+SISTEMAS	mnu_reportekardex	S
+SISTEMAS	Mnu_Reportes	S
+SISTEMAS	mnu_ReporteSalidaCajaDolares	S
+SISTEMAS	mnu_ReportesInventario	S
+SISTEMAS	mnu_reporteventas	S
+SISTEMAS	Mnu_ReporTransferencias	S
+SISTEMAS	Mnu_RepPorTipoPAgo	S
+SISTEMAS	Mnu_RepPorTipoVenta	S
+SISTEMAS	Mnu_RepRelacionCompODFact	S
+SISTEMAS	Mnu_RepSalidasCaja	S
+SISTEMAS	Mnu_RepVentasVendedor	S
+SISTEMAS	mnu_Respaldo	S
+SISTEMAS	mnu_SalidasCaja	S
+SISTEMAS	mnu_SalidasCajaDolares	S
+SISTEMAS	mnu_segundoconteo	S
+SISTEMAS	Mnu_Seguridad	S
+SISTEMAS	Mnu_Sistema	S
+SISTEMAS	Mnu_Sucursales	S
+SISTEMAS	mnu_tallas	S
+SISTEMAS	mnu_tipoajustes	S
+SISTEMAS	mnu_TomaFisica	S
+SISTEMAS	Mnu_TomaFisicaParcial	S
+SISTEMAS	mnu_Trabajadores	S
+SISTEMAS	mnu_transferencias	S
+SISTEMAS	Mnu_UnidadesVentidas	S
+SISTEMAS	Mnu_Usuario	S
+SISTEMAS	Mnu_Utilidades	S
+SISTEMAS	MnuRaya	S
+SISTEMAS	MnuRepTransferencias	S
+SISTEMAS	MnuTercerConteo	S
+\.
+
+
+--
+-- Data for Name: GRUPO_REGLAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."GRUPO_REGLAS" ("ID", "IDGrupoRegla", "CodigoBarra", "EsReferencia", "EsExcepcion") FROM stdin;
+\.
+
+
+--
+-- Data for Name: IDEVTRANSFERENCIAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."IDEVTRANSFERENCIAS" ("Numero", "CodigoEnvia", "CodigoRecibe", "Fecha", "FechaEmision", "TotalValor", "Observacion", "Status", "Usuario", "InterContable", "IDLote") FROM stdin;
+\.
+
+
+--
+-- Data for Name: IMOVDEVTRANSFERENCIAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."IMOVDEVTRANSFERENCIAS" ("Numero", "CodigoEnvia", "Item", "Fecha", "CodigoBarra", "Cantidad", "Valor", "NumeroCaja", "UltimoCosto", "CostoInicial", "CostoDolar") FROM stdin;
+\.
+
+
+--
+-- Data for Name: IMOVTRANSFERENCIAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."IMOVTRANSFERENCIAS" ("Numero", "CodigoEnvia", "Item", "Fecha", "CodigoBarra", "Cantidad", "Valor", "NumeroCaja", "UltimoCosto", "CostoInicial", "CostoDolar") FROM stdin;
+\.
+
+
+--
+-- Data for Name: IMPRESORAFISCAL; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."IMPRESORAFISCAL" ("ID", "NombreImpresora", "Status", "IdProcesoImpresion", "MontoMaximoDiario", "IncluyeIGTF") FROM stdin;
+0	NO APLICA	1	0	99000000.00	f
+1	BIXOLON SRP-270	1	1	99000000.00	f
+2	OKI DATA	1	1	99000000.00	f
+3	BIXOLON SRP-350	1	1	99000000.00	f
+4	BIXOLON SRP-812	1	2	990000000.00	t
+5	HKA-80	1	2	990000000.00	t
+\.
+
+
+--
+-- Data for Name: IMPUESTOS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."IMPUESTOS" ("Codigo", "Nombre", "PorcentajeImpuesto") FROM stdin;
+1	IVA NORMAL	16.00
+2	IVA REDUCIDO	9.00
+3	EXENTO	7.00
+\.
+
+
+--
+-- Data for Name: INVENTARIO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."INVENTARIO" ("CodigoBarra", "Referencia", "CodigoMarca", "Nombre", "Talla", "CodigoColor", "Fabricante", "Categoria", "Nota", "TipoImpuesto", "PrecioDetal", "PrecioMayor", "PrecioAfiliado", "PrecioPromocion", "Promocion", "FechaInicial", "FechaFinal", "CostoInicial", "CostoPromedio", "UltimoCosto", "CostoDolar", "ExistenciaInicial", "Existencia", "PuntoReorden", "FechaPrimerMovimiento", "UltimaActualizacion", "Tipo", "Status", "Serializado", "CodigoBarraAnt") FROM stdin;
+\.
+
+
+--
+-- Data for Name: ITRANSFERENCIAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."ITRANSFERENCIAS" ("Numero", "CodigoEnvia", "CodigoRecibe", "Fecha", "FechaEmision", "TotalValor", "Observacion", "Status", "Usuario", "InterContable", "IDLote", "IDDespacho", "Correccion") FROM stdin;
+\.
+
+
+--
+-- Data for Name: LISTAPRECIO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."LISTAPRECIO" ("Numero", "Fecha", "FactorDetal", "FactorMayor", "FactorAfiliado", "Observacion", "Usuario", "Status") FROM stdin;
+\.
+
+
+--
+-- Data for Name: LOTES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."LOTES" ("ID", "Lote", "Descripcion", "Estado", "FechaRegistro", "UsuarioCreacion") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MARCAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MARCAS" ("Codigo", "Nombre", "Status") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVAJUSTES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVAJUSTES" ("Numero", "CodigoBarra", "Cantidad", "Costo") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVCOMPRAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVCOMPRAS" ("Documento", "Proveedor", "CodigoBarra", "Cantidad", "CantidadDevuelta", "PrecioFactura", "PrecioProrrateado", "PorcentajeImpuesto", "Impuesto", "Item") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVDEVBORRADOR; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVDEVBORRADOR" ("Numero", "CodigoBarra", "Cantidad", "NumeroCaja", "Item", "Costo") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVDEVCOMPRAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVDEVCOMPRAS" ("Numero", "Item", "CodigoBarra", "Cantidad", "Precio", "PorcentajeImpuesto", "Impuesto") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVDEVTRANSFERENCIAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVDEVTRANSFERENCIAS" ("Numero", "Fecha", "CodigoBarra", "Cantidad", "Valor", "NumeroCaja", "Item", "UltimoCosto", "CostoInicial", "CostoDolar") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVDEVVENTAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVDEVVENTAS" ("NumeroDevolucion", "Serie", "Item", "Hora", "TipoLista", "CodigoBarra", "Precio", "PrecioLista", "Costo", "Impuesto", "PorcentajeImpuesto", "Cantidad", "Medida", "PorcentajeDescuento") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVLISTAPRECIO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVLISTAPRECIO" ("Numero", "Referencia", "CodigoMarca", "Costo", "Descuento", "PrecioDetalSugerido", "PrecioDetal", "PrecioMayorSugerido", "PrecioMayor", "PrecioAfiliadoSugerido", "PrecioAfiliado", "PrecioPromocion", "Promocion", "FechaInicial", "FechaFinal", "UltimoCosto", "CostoInicial", "CostoDolar") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVTOMAFISICA1; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVTOMAFISICA1" ("NumeroPagina", "Item", "CodigoBarra", "Cantidad", "Fecha") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVTOMAFISICA2; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVTOMAFISICA2" ("NumeroPagina", "Item", "CodigoBarra", "Cantidad", "Fecha") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVTRANSFERENCIAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVTRANSFERENCIAS" ("Numero", "Fecha", "CodigoBarra", "Cantidad", "Valor", "NumeroCaja", "Item", "UltimoCosto", "CostoInicial", "CostoDolar") FROM stdin;
+\.
+
+
+--
+-- Data for Name: MOVVENTAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."MOVVENTAS" ("NumeroFactura", "Serie", "Hora", "TipoLista", "CodigoBarra", "Precio", "PrecioLista", "Costo", "Impuesto", "PorcentajeImpuesto", "Cantidad", "CantidadDevuelta", "Item", "PorcentajeDescuento", "PrecioDetal", "Regla", "IDRegla") FROM stdin;
+\.
+
+
+--
+-- Data for Name: PAGOSVENTA; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."PAGOSVENTA" ("NumeroFactura", "Serie", "Item", "FormaPago", "Fecha", "Documento", "Aprobacion", "Banco", "PuntoVenta", "Monto", "Status", "JSON_Merchant", "MontoDivisa", "FormaPagoOriginal") FROM stdin;
+\.
+
+
+--
+-- Data for Name: PARAMETROS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."PARAMETROS" ("Nombre", "Codigo", "NombreIdFiscal", "IDEmpresa", "Telefono", "Direccion", "CorreoElectronico", "Tipo", "SimboloMoneda", "Nota1", "Nota2", "ControlFactura", "UltimaFactura", "UltimaDevolucion", "RutaReporte", "CongelarFacturas", "MostrarBalanceDiario", "DiscriminarImpuestoPrecios", "ManejarClientesAfiliadosEspeciales", "MargenAuxFact", "LineasDisponibles", "LineasReservadas", "ItemsPorFactura", "ActualizarPreciosArchivosExternos", "DejarEditar", "ManejarCantidadesDecimales", "IdPais", "AutorizarEliminarItemFactura", "VisualizarPromocion", "VerificarCasaMatriz", "IDPARAMETROS") FROM stdin;
+\.
+
+
+--
+-- Data for Name: PATRON; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."PATRON" ("IdPatron", "IdPersonal", "IdMano", "IdDedo", "Patron", "FechaRegistro", "IndEstatus") FROM stdin;
+\.
+
+
+--
+-- Data for Name: PROVEEDORES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."PROVEEDORES" ("Codigo", "Nombre", "Tipo", "Contacto", "FechaIngreso", "Pais", "Estado", "Ciudad", "CodigoPostal", "Direccion", "Telefono", "Fax", "Status") FROM stdin;
+001	CASA MATRIZ	1	OFICINA 	2021-06-22 00:00:00	VZLA	ZULIA	MCBO		MARACAIBO 	02617212402		1
+\.
+
+
+--
+-- Data for Name: REFERENCIAS_MAYORISTAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."REFERENCIAS_MAYORISTAS" ("Codigo", "EsExcepcion", "EsReferencia", "Cantidad", "PorcentajeDescuento") FROM stdin;
+\.
+
+
+--
+-- Data for Name: REGLAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."REGLAS" ("ID", "Descripcion", "Imprimir", "Lleve", "Pague", "PorcDescuento", "ProductosActivan", "ProductosAfectados", "FechaInicio", "FechaFin", "HoraInicio", "HoraFin", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo", "Prioridad", "Activa", "FechaCreacion", "Precio", "Tipo") FROM stdin;
+\.
+
+
+--
+-- Data for Name: REGLASCONVENIOS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."REGLASCONVENIOS" ("ID", "IDREGLA", "TIPOCONVENIO", "Activa") FROM stdin;
+\.
+
+
+--
+-- Data for Name: RESPALDOS_PENDIENTES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."RESPALDOS_PENDIENTES" ("Id", "BaseDatos", "NombreDispositivo", "UbicacionArchivo", "FechaSolicitud", "Estado", "Observacion") FROM stdin;
+\.
+
+
+--
+-- Data for Name: SALDODIARIO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."SALDODIARIO" ("Fecha", "CodigoBarra", "TotalDevVentasCant", "TotalTransferenciasRecCant", "TotalDevTransferenciasCant", "TotalComprasCant", "TotalAjustesPositivosCant", "TotalAFSPositivosCant", "TotalVentasCant", "TotalDevTransferenciasRecCant", "TotalTransferenciasCant", "TotalDevComprasCant", "TotalAjustesNegativosCant", "TotalAFSNegativosCant") FROM stdin;
+\.
+
+
+--
+-- Data for Name: SALIDASCAJA; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."SALIDASCAJA" ("Numero", "Serie", "Fecha", "CodigoContable", "Acreedor", "Documento", "Descripcion", "Monto", "Usuario", "Status", "InterContable", "TasaCambio") FROM stdin;
+\.
+
+
+--
+-- Data for Name: SALIDASCAJA_DOLARES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."SALIDASCAJA_DOLARES" ("Numero", "Serie", "Fecha", "CodigoContable", "Acreedor", "Documento", "Descripcion", "Monto", "Usuario", "Status", "InterContable", "TasaCambio") FROM stdin;
+\.
+
+
+--
+-- Data for Name: SEG; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."SEG" ("Nivel", "NumNodo", "NodoPadre", "CodNodo", "NomNodo", "Imagen", "Forma", "Orden", "EsPadre") FROM stdin;
+4	220	mnu_TomaFisica	-	_	1		8	N
+3	211	mnu_reporteventas	Mnu:ReporteResumenDiario	Resumen diario	67	frmreporteventasresumendiario	10	N
+2	116	Mnu_Utilidades	mnu_abrirgaveta	Abrir gaveta registradora	28	frmAbrirGaveta	3	N
+2	226	Mnu_Procesos	Mnu_ActualizarTasaCambio	Actualizar Tasa de Cambio	1	frmRegistrarTasaCambio	27	N
+4	109	mnu_TomaFisica	mnu_ajustefisicologico	Ajuste físico lógico	1	frmAjusteFisicoLogico	6	N
+4	218	mnu_TomaFisica	Mnu_AjusteFisicologicoparcial	Ajuste físico lógico (Parcial)	1	frmajustefisicologicoparcial	7	N
+2	104	Mnu_Procesos	mnu_ajustes	Ajustes de inventario	2		22	S
+2	87	Mnu_Procesos	mnu_AperturaCaja	Apertura de caja	1	frmAperturaCaja	1	N
+4	221	mnu_TomaFisica	mnu_AprobarConteosEnLotes	Aprobar Conteos En Lotes	1	frmAprobarConteosEnLotes	9	N
+1	8	0	Mnu_Archivos	&Archivos	65	N	2	S
+3	79	Mnu_Inventario	Mnu_Articulo	Artículos	1	frmArticulos	1	N
+3	215	mnu_reporteventas	Mnu_ArticulosSinVentas	Articulos sin ventas	67	frmreportearticulossinventa	7	N
+2	175	Mnu_Archivos	Mnu_Bancos	Bancos	1	frmbancos	6	N
+2	71	Mnu_Utilidades	Mnu_CambiarClave	Cambiar clave	27	frmcambiarclave	1	N
+2	170	Mnu_Utilidades	Mnu_CambiarConexion	Configurar conexión	49	frmconfservidor	30	N
+2	89	Mnu_Procesos	mnu_CambiosMercancia	Cambios de mercancía	1	frmCambiosdeMercancia	4	N
+2	172	Mnu_Utilidades	Mnu_CargarArticulos	Cargar articulos	22	frmcargararticulos	15	N
+3	102	mnu_compras	mnu_cargarCompras	Cargar compras nacionales	1	frmImpCompras	5	N
+3	170	mnu_lista	Mnu_CargarListadePrecios	Cargar lista de precios	1	frmimplistaprecios	4	N
+3	169	mnu_lista	Mnu_CargarListPrecioRoque	Cargar lista de precios (ROQUE)	1	frmimplistaprecios	5	N
+3	97	mnu_transferencias	mnu_CargarTransferencias	Cargar transferencia de mercancía	1	frmImpTransferencias	4	N
+3	128	mnu_Personal	mnu_Cargos	Cargos	1	frmCargos	1	N
+2	91	Mnu_Procesos	mnu_CierreCaja	Cierre de caja	1	frmCierreCaja	18	N
+2	213	Mnu_Utilidades	Mnu_CierreCajaForanea	Cierre de caja foranea	1	frmcierrecajaforanea	17	N
+2	126	Mnu_Archivos	mnu_clientes	Clientes	1	frmClientes	2	N
+3	85	Mnu_Inventario	mnu_Colores	Colores	1	frmColores	3	N
+2	99	Mnu_Procesos	mnu_compras	Compras	2		20	S
+3	82	Mnu_Seguridad	mnu_configuracioncaja	Configuración de caja	7	frmConfigurarCaja	2	N
+2	225	Mnu_Procesos	Mnu_ConfirmarDepositos	Confirmar Depositos	10	frmConfirmarDepositos	26	N
+2	182	Mnu_Procesos	Mnu_ConsultarPrecios	Consultar precios	1	frmconsultarprecios	6	N
+2	178	Mnu_Utilidades	Mnu_ControlAccceso	Marcaje	18	frmcontrolacceso	26	N
+3	185	Mnu_ProcesosGenerales	Mnu_ConvCompODespacho	Convertir compra en orden de despacho	1	frmconvcompordendesp	3	N
+3	146	Mnu_ProcesosGenerales	Mnu_ConvCompTransf	Convertir compra en transferencia	1	frmconvcomptransfer	1	N
+3	183	Mnu_ProcesosGenerales	Mnu_ConvTransferFact	Convertir transferencia ó compra en factura(s)	1	frmconvtransferFact	2	N
+2	155	Mnu_Utilidades	Mnu_CorregirCodigos	Corregir codigos de barras	44	frmcambiarcodigos	13	N
+2	180	Mnu_Utilidades	Mnu_CorregirConsecutivos	Corregir consecutivos	1	frmcorregirconsecutivos	14	N
+2	230	Mnu_Procesos	Mnu_CuadreCierreCaja	Cuadre de Caja	1	frmCuadreCierreCaja	17	N
+2	84	Mnu_Archivos	mnu_cuentasbancos	Cuentas - Bancos	1	frmCuentabancos	5	N
+2	156	Mnu_Archivos	Mnu_CuentasContables	Cuentas contables	1	frmcuentascontables	10	N
+2	151	Mnu_Procesos	Mnu_CuentaXCobrar	Abonos a cuentas por cobrar	1	frmcuentasxcobrar	9	N
+2	92	Mnu_Procesos	mnu_Depositos	Depósitos	1	frmDepositos	10	N
+2	227	Mnu_Procesos	mnu_DepositosDolares	Depositos Dolares	1	frmDepositosDolares	11	N
+3	98	mnu_transferencias	mnu_DescargarDevoluciones	Cargar devolución de mercancía	1	frmImpDevTransferencias	5	N
+4	222	mnu_TomaFisica	mnu_DesplazarTransferencias	Desplazar Transferencias	1	frmDesplazarTransferencias	10	N
+2	206	Mnu_Procesos	Mnu_DevBorrador	Borrador de devolución	1	frmdevborrador	15	N
+3	152	mnu_compras	MNu_DevCompras	Devoluciones	1	frmdevcompra	2	N
+2	90	Mnu_Procesos	mnu_Devolución	Devolución de mercancía	1	frmDevolucion	5	N
+2	164	Mnu_Utilidades	Mnu_EjecutarConsulta	Ejecutar consulta	51	frmejecutarconsulta	28	N
+2	165	Mnu_Procesos	Mnu_EntardaSeriales	Serializar	1	frmentradaseriales	8	N
+3	105	mnu_ajustes	mnu_entradassalidas	Entradas y salidas de mercancía	1	frmajustes	1	N
+2	119	Mnu_Utilidades	mnu_etiquetas	Imprimir etiquetas de códigos de barras	52	frmlabel	12	N
+2	152	Mnu_Utilidades	Mnu_Exportar2	Exportar archivos SPDV	31	frmexportararchivosspdv	6	N
+2	171	Mnu_Utilidades	Mnu_ExportarArchivos	Exportar archivos	31	frmexportararchivos	5	N
+2	189	Mnu_Utilidades	Mnu_ExportarArticulos	Exportar articulos	32	frmexportarArticulos	7	N
+2	176	Mnu_Utilidades	Mnu_ExportarDatosCasaMatriz	Exportar información a casa matriz	24	frmexparchivosXML	8	N
+3	140	Mnu_Inventario	Mnu_Fabricantes	Fabricantes	1	frmFabricantes	4	N
+2	88	Mnu_Procesos	mnu_Facturacion	Facturación	1	frmFacturacion	3	N
+3	132	mnu_reporteventas	Mnu_Facturas	Facturas	67	frmReporteVentasPorFactura	1	N
+2	153	Mnu_Archivos	Mnu_FormaPago	Formas de pago	1	frmformapago	8	N
+3	186	Mnu_ProcesosGenerales	Mnu_GenerarODespachoDesdeDBF	Generar orden de despacho (Desde DBF)	1	frmgenerarordendespdesdedbf	5	N
+3	187	Mnu_ProcesosGenerales	Mnu_GenerarTransferDesdeDBF	Generar transferencia (Desde BDF)	1	frmgenerartransferencias	6	N
+3	188	Mnu_ProcesosGenerales	Mnu_GenerarTransferenciasPorCaja	Generar transferencia (Desde DBF por cajas))	1	frmgenerartransferenciasdedbf	7	N
+3	37	Mnu_Seguridad	Mnu_Grupo	Grupos	15	frmgrupousuario	3	N
+2	173	Mnu_Utilidades	Mnu_ImportarDatosSPDV	Cargar datos desde SPDV	36	frmimportardatosspdv	24	N
+2	223	Mnu_Utilidades	mnu_ImprimirDocumentoFiscal	Reimprimir Documento Fiscal	1	frmImprimirDocumentoFiscal	22	N
+3	179	mnu_reporteventas	Mnu_ImprimirReporteXyZ	Reporte X,Z y valores	67	frmreportexyz	11	N
+2	167	Mnu_Archivos	Mnu_Impuestos	Impuestos	1	frmimpuestos	9	N
+2	118	Mnu_Utilidades	mnu_interfazcontable	Interfaz contable	10	frmInterfazContablePuntoDeVenta	10	N
+2	74	Mnu_Archivos	Mnu_Inventario	Inventario	2		1	S
+2	111	Mnu_Procesos	mnu_lista	Lista de precios	2		23	S
+3	80	Mnu_Inventario	Mnu_Marcas	Marcas	1	frmMarcas	5	N
+3	81	Mnu_Inventario	Mnu_Modelos	Categorias	1	frmCategorias	6	N
+3	157	mnu_compras	Mnu_OrdenCompra	Orden de compra	1	frmordencompras	3	N
+2	160	Mnu_Procesos	Mnu_OrdenDespacho	Orden de despacho	1	frmordendespacho	14	N
+3	81	Mnu_Seguridad	mnu_Parametros	Parámetros	8	frmParametros	1	N
+2	114	Mnu_Procesos	mnu_pedidos	Pedidos	2		24	S
+2	127	Mnu_Archivos	mnu_Personal	Personal	2		11	S
+4	107	mnu_TomaFisica	mnu_PrimerConteo	Primer conteo	1	frmTomaFisica1	1	N
+1	16	0	Mnu_Procesos	&Procesos	65		3	S
+2	184	Mnu_Procesos	Mnu_ProcesosGenerales	Generales	2		25	S
+3	158	mnu_lista	Mnu_Promociones	Registrar promociones	1	frmpreciospromocion	2	N
+2	124	Mnu_Archivos	mnu_proveedores	Proveedores	1	frmProveedores	4	N
+2	190	Mnu_Procesos	Mnu_Raya1	_	1		2	N
+2	198	Mnu_Utilidades	Mnu_Raya10	_	1		2	N
+2	199	Mnu_Utilidades	Mnu_Raya11	_	1		4	N
+2	200	Mnu_Utilidades	Mnu_Raya12	_	1		9	N
+2	201	Mnu_Utilidades	Mnu_Raya13	_	1		11	N
+2	202	Mnu_Utilidades	Mnu_Raya14	_	1		23	N
+2	203	Mnu_Utilidades	Mnu_Raya15	_	1		25	N
+2	204	Mnu_Utilidades	Mnu_Raya16	_	1		27	N
+2	205	Mnu_Procesos	Mnu_Raya17	_	1		19	N
+2	191	Mnu_Procesos	Mnu_Raya2	_	1		7	N
+2	192	Mnu_Procesos	Mnu_Raya3	_	1		16	N
+3	193	mnu_compras	Mnu_Raya5	_	1		4	N
+3	194	mnu_transferencias	Mnu_Raya6	_	1		3	N
+4	195	mnu_TomaFisica	Mnu_Raya7	_	1		5	N
+3	196	mnu_lista	Mnu_Raya8	_	1		3	N
+3	197	Mnu_ProcesosGenerales	Mnu_Raya9	_	1		4	N
+2	214	Mnu_Utilidades	Mnu_RayaCierreForaneo	_	1		16	N
+3	116	mnu_ajustes	mnu_recostear	Recostear movimientos	1	frmRecostearMovimiento	4	N
+3	103	mnu_compras	mnu_registrarcompras	Registrar compras	1	frmCompras	1	N
+3	112	mnu_lista	mnu_registrarlistaprecios	Registrar lista de precios	1	frmListaPrecios	1	N
+3	115	mnu_pedidos	mnu_registrarpredidos	Registrar pedidos	1	frmPedidos	1	N
+3	101	mnu_transferencias	mnu_registrodevtransferencia	Registro de devolución de mercancía	1	frmDevTransferencias	2	N
+3	100	mnu_transferencias	mnu_registroTransferencia	Registro de transferencia de mercancía	1	frmTransferencias	1	N
+2	209	Mnu_Utilidades	Mnu_ReimprimirDevolucion	Reimprimir devolución	1	frmreimprimirdevolucion	21	N
+2	208	Mnu_Utilidades	Mnu_ReimprimirFactura	Reimprimir factura	1	frmreimprimirfactura	19	N
+2	212	Mnu_Utilidades	Mnu_ReimprimirFacturaHistorico	Reimprimir historico de facturación	1	frmreimprimirfacturahistorico	20	N
+3	110	mnu_ajustes	mnu_rekardear	Rekardear	1	frmKardex	3	N
+2	137	Mnu_Reportes	Mnu_RepAjustes	Ajustes	67	FrmReporteAjustes	3	N
+3	167	mnu_reporteventas	Mnu_RepBalanceDiario	Balance diario	67	frmReporteBalancediario	9	N
+2	147	Mnu_Reportes	Mnu_RepCompras	Compras	2		11	S
+2	138	Mnu_Reportes	Mnu_RepDepositos	Depositos	67	frmReporteDepositos	4	N
+3	145	MnuRepTransferencias	Mnu_RepDevImpTransferencias	Mercancía devuelta	67	frmReporteTransferencias	4	N
+3	133	mnu_reporteventas	Mnu_RepDevolucion	Devoluciones	67	frmReporteDevolucionesVentas	2	N
+3	163	Mnu_RepCompras	Mnu_RepDevolucionCompras	Devoluciones	67	frmReporteDevCompras	2	N
+3	143	MnuRepTransferencias	Mnu_RepDevTransferencias	Mercancía devuelta de sucursales	67	frmReporteTransferencias	2	N
+3	148	Mnu_RepCompras	Mnu_RepFacturasComp	Facturas	67	frmreportecomprasporfactura	1	N
+3	144	MnuRepTransferencias	Mnu_RepImpTransferencias	Mercancía recibida	67	frmReporteTransferencias	3	N
+3	150	mnu_ReportesInventario	Mnu_RepInventarioEntrSal	Entradas y salidas	67	frmrepentradasysalidas	3	N
+3	166	mnu_reporteventas	Mnu_RepLibroVentas	Libro de ventas	67	frm	8	N
+2	207	Mnu_Reportes	Mnu_RepMarcaje	Marcaje	67	frmReporteMarcaje	8	N
+2	176	Mnu_Reportes	Mnu_RepOrdenDespacho	Orden de despacho	67	frmreporteordendespacho	7	N
+3	123	mnu_ReportesInventario	mnu_ReporteArticulos	Artículos	67	frmReporteArticulos	1	N
+3	224	mnu_ReportesInventario	mnu_ReporteCriterioFisicoLogico	Reporte Fisico Logico	1	frmReporteCriterioFisicoLogico	4	N
+2	164	Mnu_Reportes	Mnu_ReporteCxC	Cuentas por cobrar	67	frmreportecuentasxcobrar	6	N
+2	219	Mnu_Reportes	mnu_ReporteItemBorrado	Reporte Items Borrados	67	frmReporteItemBorrados	12	N
+3	124	mnu_ReportesInventario	mnu_reportekardex	Kardex	67	frmReporteKardex	2	N
+1	20	0	Mnu_Reportes	&Reportes	65	N	4	S
+2	229	Mnu_Reportes	mnu_ReporteSalidaCajaDolares	Salidas Caja (Dolares)	1	frmreportesalidascajadolares	13	N
+2	122	Mnu_Reportes	mnu_ReportesInventario	Inventario	2		1	S
+2	125	Mnu_Reportes	mnu_reporteventas	Ventas	2		2	S
+3	142	MnuRepTransferencias	Mnu_ReporTransferencias	Mercancía enviada a sucursales	67	FrmReporteTransferencias	1	N
+3	134	mnu_reporteventas	Mnu_RepPorTipoPAgo	Por tipo de pago	67	frmReporteVentasporTipoPago	4	N
+3	160	mnu_reporteventas	Mnu_RepPorTipoVenta	Por tipo de venta	67	frmreporteventasportipoventa	5	N
+2	178	Mnu_Reportes	Mnu_RepRelacionCompODFact	Relación compras - despachos - facturas	67	frmreporterelacionCompODFact	9	N
+2	168	Mnu_Reportes	Mnu_RepSalidasCaja	Salidas de caja	67	frmreportesalidascaja	5	N
+3	135	mnu_reporteventas	Mnu_RepVentasVendedor	Por vendedor	67	frmReporteVentasVendedor	3	N
+2	117	Mnu_Utilidades	mnu_Respaldo	Respaldo	47	frmRespaldarbd	29	N
+2	93	Mnu_Procesos	mnu_SalidasCaja	Salidas de caja	1	frmSalidasCaja	12	N
+2	228	Mnu_Procesos	mnu_SalidasCajaDolares	Salidas Caja en Dolares	1	frmSalidasCajaDolares	13	N
+4	108	mnu_TomaFisica	mnu_segundoconteo	Segundo conteo	1	frmTomaFisica2	2	N
+2	2	Mnu_Sistema	Mnu_Seguridad	Seguridad	2		1	S
+1	1	0	Mnu_Sistema	&Sistema	65		1	S
+2	130	Mnu_Archivos	Mnu_Sucursales	Sucursales	1	frmSucursales	3	N
+3	84	Mnu_Inventario	mnu_tallas	Tallas	1	frmTallas	2	N
+2	125	Mnu_Archivos	mnu_tipoajustes	Tipos de ajustes de inventario	1	frmTipoAjustes	7	N
+3	106	mnu_ajustes	mnu_TomaFisica	Toma física de inventario	2		2	S
+4	217	mnu_TomaFisica	Mnu_TomaFisicaParcial	Toma parcial	1	frmtomaparcial	4	N
+3	129	mnu_Personal	mnu_Trabajadores	Trabajadores	1	frmTrabajadores	2	N
+2	94	Mnu_Procesos	mnu_transferencias	Transferencias	2		21	S
+3	216	mnu_reporteventas	Mnu_UnidadesVentidas	Unidades vendidas	67	frmreporteunidadesvendidas	6	N
+3	38	Mnu_Seguridad	Mnu_Usuario	Usuarios	34	frmusuario	4	N
+1	35	0	Mnu_Utilidades	&Utilidades	65	N	5	S
+2	210	Mnu_Utilidades	MnuRaya	_	1		18	N
+2	141	Mnu_Reportes	MnuRepTransferencias	Transferencias	2		10	S
+4	131	mnu_TomaFisica	MnuTercerConteo	Tercer conteo	1	frmTomaFisica3	3	N
+\.
+
+
+--
+-- Data for Name: SUCURSALES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."SUCURSALES" ("Codigo", "Nombre", "Direccion", "Telefono", "Status", "PorcentajeDeRedondeo") FROM stdin;
+\.
+
+
+--
+-- Data for Name: TABLA_PARAMETROS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TABLA_PARAMETROS" ("Columna", "Valor") FROM stdin;
+\.
+
+
+--
+-- Data for Name: TABLA_VALORES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TABLA_VALORES" ("IdTabla", "Codigo", "Descripcion") FROM stdin;
+\.
+
+
+--
+-- Data for Name: TALLAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TALLAS" ("Codigo") FROM stdin;
+\.
+
+
+--
+-- Data for Name: TASA_CAMBIO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TASA_CAMBIO" ("ID", "Fecha", "Valor") FROM stdin;
+\.
+
+
+--
+-- Data for Name: TASA_CAMBIO_M; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TASA_CAMBIO_M" ("ID", "Fecha", "Valor") FROM stdin;
+\.
+
+
+--
+-- Data for Name: TIPOSCLIENTE; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TIPOSCLIENTE" ("Codigo", "Descripcion", "Status") FROM stdin;
+1	NORMAL	1
+2	AFILIADO	1
+3	ESPECIAL	1
+4	MAYORISTA	1
+\.
+
+
+--
+-- Data for Name: TIPOSCONTRIBUYENTE; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TIPOSCONTRIBUYENTE" ("Codigo", "Descripcion", "Status") FROM stdin;
+1	FORMAL	1
+2	ESPECIAL	1
+\.
+
+
+--
+-- Data for Name: TIPOSPROVEEDOR; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TIPOSPROVEEDOR" ("Codigo", "Descripcion", "Status") FROM stdin;
+1	NACIONAL	1
+2	INTERNACIONAL	1
+\.
+
+
+--
+-- Data for Name: TIPO_DESPACHO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TIPO_DESPACHO" ("ID", "Descripcion", "Estado") FROM stdin;
+0	SIN DEFINIR	1
+1	DESDE CASA MATRIZ	1
+2	DIRECTO DE PROVEEDOR	1
+3	DIRECTO DE SUCURSAL (TRASLADO)	1
+4	DESDE CASA MATRIZ (TRASLADO)	1
+\.
+
+
+--
+-- Data for Name: TOMAFISICA1; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TOMAFISICA1" ("NumeroPagina", "Fecha", "Observacion", "Usuario", "Status") FROM stdin;
+\.
+
+
+--
+-- Data for Name: TRABAJADORES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TRABAJADORES" ("Cedula", "Codigo", "Nombre", "Cargo", "FechaIngreso", "FechaNacimiento", "Direccion", "Telefono", "Celular", "Status", "MarcajeInterDiario", "IndUsarCarnet") FROM stdin;
+\.
+
+
+--
+-- Data for Name: TRANSACCIONESCUPONES; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TRANSACCIONESCUPONES" ("Id", "NumeroFactura", "Serie", "Fecha", "MontoFactura", "IdCupon", "CodigoConvenio", "Cliente", "FechaCanjeInicial", "FechaCanjeFinal", "Acumula") FROM stdin;
+\.
+
+
+--
+-- Data for Name: TRANSFERENCIAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."TRANSFERENCIAS" ("Numero", "Fecha", "CodigoRecibe", "CodigoEnvia", "DocumentoOrigen", "TotalValor", "Observacion", "Status", "Usuario", "InterContable", "FechaEmision", "IDLote", "IDDespacho", "Correccion", "Zona") FROM stdin;
+\.
+
+
+--
+-- Data for Name: USUARIOGRUPO; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."USUARIOGRUPO" ("CodUsuario", "CodGrupo") FROM stdin;
+rocky	ADMI
+\.
+
+
+--
+-- Data for Name: USUARIOS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."USUARIOS" ("CodUsuario", "NombreUsuario", "Pasword", "Status") FROM stdin;
+rocky	rocky	h$DlimqJ96YJ52tMvnU0JyiicatFkCISiLKNhXKp2zYHM=	1
+\.
+
+
+--
+-- Data for Name: VENTAS; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo."VENTAS" ("NumeroFactura", "Serie", "Fecha", "Vendedor", "Cliente", "TipoVenta", "FormaPago", "DiasCredito", "TotalMercancia", "TotalDescuento", "TotalImpuesto", "TotalCosto", "InterContable", "Usuario", "Status", "NumeroOrden", "TotalPago", "TotalDolares", "TasaCambio", "Estacion", "TotalDolaresE", "TasaIGTF", "MontoIGTF", "BaseImponibleIGTF") FROM stdin;
+\.
+
+
+--
+-- Data for Name: grupo_cupones; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo.grupo_cupones ("Referencia", "CodigoMarca", "ProductosActivan") FROM stdin;
+\.
+
+
+--
+-- Data for Name: sysdiagrams; Type: TABLE DATA; Schema: dbo; Owner: -
+--
+
+COPY dbo.sysdiagrams (name, principal_id, diagram_id, version, definition) FROM stdin;
+\.
+
+
+--
+-- Name: CODIGOSCONVENIOS_IdCodigo_seq; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."CODIGOSCONVENIOS_IdCodigo_seq"', 1, false);
+
+
+--
+-- Name: CONFIGURACIONMARCAJE_Id_seq; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."CONFIGURACIONMARCAJE_Id_seq"', 1, false);
+
+
+--
+-- Name: DETALLECONTROLACCESO_IdDetalleControlAcceso_seq; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."DETALLECONTROLACCESO_IdDetalleControlAcceso_seq"', 1, false);
+
+
+--
+-- Name: DISPOSITIVOGRUPO_Id_seq; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."DISPOSITIVOGRUPO_Id_seq"', 1, false);
+
+
+--
+-- Name: DISPOSITIVOSMARCAJE_Id_seq; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."DISPOSITIVOSMARCAJE_Id_seq"', 1, false);
+
+
+--
+-- Name: GRUPO_REGLAS_ID_seq; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."GRUPO_REGLAS_ID_seq"', 1, false);
+
+
+--
+-- Name: PATRON_IdPatron_seq; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."PATRON_IdPatron_seq"', 1, false);
+
+
+--
+-- Name: REGLASCONVENIOS_ID_seq; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."REGLASCONVENIOS_ID_seq"', 1, false);
+
+
+--
+-- Name: RESPALDOS_PENDIENTES_Id_seq; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."RESPALDOS_PENDIENTES_Id_seq"', 1, false);
+
+
+--
+-- Name: SQ_IMPRESORAFISCAL_ID; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."SQ_IMPRESORAFISCAL_ID"', 5, true);
+
+
+--
+-- Name: SQ_LOTES_ID; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."SQ_LOTES_ID"', 0, false);
+
+
+--
+-- Name: SQ_TASA_CAMBIO_ID; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."SQ_TASA_CAMBIO_ID"', 1, false);
+
+
+--
+-- Name: SQ_TASA_CAMBIO_M_ID; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."SQ_TASA_CAMBIO_M_ID"', 1, false);
+
+
+--
+-- Name: SQ_sysdiagrams_diagram_id; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."SQ_sysdiagrams_diagram_id"', 1, false);
+
+
+--
+-- Name: TRANSACCIONESCUPONES_Id_seq; Type: SEQUENCE SET; Schema: dbo; Owner: -
+--
+
+SELECT pg_catalog.setval('dbo."TRANSACCIONESCUPONES_Id_seq"', 1, false);
+
+
+--
+-- Name: CODIGOSCONVENIOS CODIGOSCONVENIOS_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CODIGOSCONVENIOS"
+    ADD CONSTRAINT "CODIGOSCONVENIOS_pkey" PRIMARY KEY ("IdCodigo");
+
+
+--
+-- Name: CODIGOS_RECARGOS CODIGOS_RECARGOS_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CODIGOS_RECARGOS"
+    ADD CONSTRAINT "CODIGOS_RECARGOS_pkey" PRIMARY KEY ("CodigoBarra");
+
+
+--
+-- Name: CONFIGURACIONMARCAJE CONFIGURACIONMARCAJE_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CONFIGURACIONMARCAJE"
+    ADD CONSTRAINT "CONFIGURACIONMARCAJE_pkey" PRIMARY KEY ("Id");
+
+
+--
+-- Name: CONTROLACCESO CONTROLACCESO_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CONTROLACCESO"
+    ADD CONSTRAINT "CONTROLACCESO_pkey" PRIMARY KEY ("Numero");
+
+
+--
+-- Name: CUPONES CUPONES_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CUPONES"
+    ADD CONSTRAINT "CUPONES_pkey" PRIMARY KEY ("IdCupon");
+
+
+--
+-- Name: DETALLECONTROLACCESO DETALLECONTROLACCESO_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DETALLECONTROLACCESO"
+    ADD CONSTRAINT "DETALLECONTROLACCESO_pkey" PRIMARY KEY ("IdDetalleControlAcceso");
+
+
+--
+-- Name: DISPOSITIVOGRUPO DISPOSITIVOGRUPO_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DISPOSITIVOGRUPO"
+    ADD CONSTRAINT "DISPOSITIVOGRUPO_pkey" PRIMARY KEY ("Id");
+
+
+--
+-- Name: DISPOSITIVOSMARCAJE DISPOSITIVOSMARCAJE_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DISPOSITIVOSMARCAJE"
+    ADD CONSTRAINT "DISPOSITIVOSMARCAJE_pkey" PRIMARY KEY ("Id");
+
+
+--
+-- Name: GRUPO_REGLAS GRUPO_REGLAS_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."GRUPO_REGLAS"
+    ADD CONSTRAINT "GRUPO_REGLAS_pkey" PRIMARY KEY ("ID");
+
+
+--
+-- Name: LOTES IX_LOTES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."LOTES"
+    ADD CONSTRAINT "IX_LOTES" UNIQUE ("Lote");
+
+
+--
+-- Name: TIPO_DESPACHO IX_TIPO_DESPACHO; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TIPO_DESPACHO"
+    ADD CONSTRAINT "IX_TIPO_DESPACHO" UNIQUE ("Descripcion");
+
+
+--
+-- Name: PATRON PATRON_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PATRON"
+    ADD CONSTRAINT "PATRON_pkey" PRIMARY KEY ("IdPatron");
+
+
+--
+-- Name: AJUSTES PK_AJUSTES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."AJUSTES"
+    ADD CONSTRAINT "PK_AJUSTES" PRIMARY KEY ("Numero");
+
+
+--
+-- Name: BANCOS PK_BANCOS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."BANCOS"
+    ADD CONSTRAINT "PK_BANCOS" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: CAJAS PK_CAJAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CAJAS"
+    ADD CONSTRAINT "PK_CAJAS" PRIMARY KEY ("Serie");
+
+
+--
+-- Name: CARGOS PK_CARGOS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CARGOS"
+    ADD CONSTRAINT "PK_CARGOS" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: CATEGORIAS PK_CATEGORIAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CATEGORIAS"
+    ADD CONSTRAINT "PK_CATEGORIAS" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: CLIENTES PK_CLIENTES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CLIENTES"
+    ADD CONSTRAINT "PK_CLIENTES" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: COLORES PK_COLORES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."COLORES"
+    ADD CONSTRAINT "PK_COLORES" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: COMPRAS PK_COMPRAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."COMPRAS"
+    ADD CONSTRAINT "PK_COMPRAS" PRIMARY KEY ("Documento", "Proveedor");
+
+
+--
+-- Name: CTABANCOS PK_CTABANCOS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CTABANCOS"
+    ADD CONSTRAINT "PK_CTABANCOS" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: CTABANCOS_DOLARES PK_CTABANCOS_DOLARES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CTABANCOS_DOLARES"
+    ADD CONSTRAINT "PK_CTABANCOS_DOLARES" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: CTACONTABLE PK_CTACONTABLE; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CTACONTABLE"
+    ADD CONSTRAINT "PK_CTACONTABLE" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: DEPOSITOS PK_DEPOSITOS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEPOSITOS"
+    ADD CONSTRAINT "PK_DEPOSITOS" PRIMARY KEY ("NumeroDeposito", "CuentaBanco", "Serie");
+
+
+--
+-- Name: DEPOSITOS_DOLARES PK_DEPOSITOS_DOLARES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEPOSITOS_DOLARES"
+    ADD CONSTRAINT "PK_DEPOSITOS_DOLARES" PRIMARY KEY ("NumeroDeposito", "CuentaBanco", "Serie");
+
+
+--
+-- Name: DEVCOMPRAS PK_DEVCOMPRAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEVCOMPRAS"
+    ADD CONSTRAINT "PK_DEVCOMPRAS" PRIMARY KEY ("Numero");
+
+
+--
+-- Name: DEVTRANSFERENCIAS PK_DEVTRANSFERENCIAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEVTRANSFERENCIAS"
+    ADD CONSTRAINT "PK_DEVTRANSFERENCIAS" PRIMARY KEY ("Numero");
+
+
+--
+-- Name: DEVVENTAS PK_DEVVENTAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEVVENTAS"
+    ADD CONSTRAINT "PK_DEVVENTAS" PRIMARY KEY ("NumeroDevolucion", "Serie");
+
+
+--
+-- Name: DIARIOCAJA PK_DIARIOCAJA_1; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DIARIOCAJA"
+    ADD CONSTRAINT "PK_DIARIOCAJA_1" PRIMARY KEY ("Serie", "Fecha");
+
+
+--
+-- Name: FABRICANTES PK_FABRICANTES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."FABRICANTES"
+    ADD CONSTRAINT "PK_FABRICANTES" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: FORMAPAGO PK_FORMAPAGO; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."FORMAPAGO"
+    ADD CONSTRAINT "PK_FORMAPAGO" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: GRUPOS PK_GRUPOS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."GRUPOS"
+    ADD CONSTRAINT "PK_GRUPOS" PRIMARY KEY ("CodGrupo");
+
+
+--
+-- Name: GRUPOSEG PK_GRUPOSEG; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."GRUPOSEG"
+    ADD CONSTRAINT "PK_GRUPOSEG" PRIMARY KEY ("CodGrupo", "CodNodo");
+
+
+--
+-- Name: IDEVTRANSFERENCIAS PK_IDEVTRANSFERENCIAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IDEVTRANSFERENCIAS"
+    ADD CONSTRAINT "PK_IDEVTRANSFERENCIAS" PRIMARY KEY ("Numero", "CodigoEnvia");
+
+
+--
+-- Name: IMOVDEVTRANSFERENCIAS PK_IMOVDEVTRANSFERENCIAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IMOVDEVTRANSFERENCIAS"
+    ADD CONSTRAINT "PK_IMOVDEVTRANSFERENCIAS" PRIMARY KEY ("Numero", "CodigoEnvia", "Item", "CodigoBarra", "NumeroCaja");
+
+
+--
+-- Name: IMOVTRANSFERENCIAS PK_IMOVTRANSFERENCIAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IMOVTRANSFERENCIAS"
+    ADD CONSTRAINT "PK_IMOVTRANSFERENCIAS" PRIMARY KEY ("Numero", "CodigoEnvia", "Item", "CodigoBarra", "NumeroCaja");
+
+
+--
+-- Name: IMPUESTOS PK_IMPUESTOS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IMPUESTOS"
+    ADD CONSTRAINT "PK_IMPUESTOS" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: INVENTARIO PK_INVENTARIO; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."INVENTARIO"
+    ADD CONSTRAINT "PK_INVENTARIO" PRIMARY KEY ("CodigoBarra");
+
+
+--
+-- Name: ITRANSFERENCIAS PK_ITRANSFERENCIAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."ITRANSFERENCIAS"
+    ADD CONSTRAINT "PK_ITRANSFERENCIAS" PRIMARY KEY ("Numero", "CodigoEnvia");
+
+
+--
+-- Name: IMPRESORAFISCAL PK_ImpresoraFiscal; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IMPRESORAFISCAL"
+    ADD CONSTRAINT "PK_ImpresoraFiscal" PRIMARY KEY ("ID");
+
+
+--
+-- Name: LISTAPRECIO PK_LISTAPRECIO; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."LISTAPRECIO"
+    ADD CONSTRAINT "PK_LISTAPRECIO" PRIMARY KEY ("Numero");
+
+
+--
+-- Name: LOTES PK_LOTES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."LOTES"
+    ADD CONSTRAINT "PK_LOTES" PRIMARY KEY ("ID");
+
+
+--
+-- Name: MARCAS PK_MARCAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MARCAS"
+    ADD CONSTRAINT "PK_MARCAS" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: MOVCOMPRAS PK_MOVCOMPRAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVCOMPRAS"
+    ADD CONSTRAINT "PK_MOVCOMPRAS" PRIMARY KEY ("Documento", "Proveedor", "Item");
+
+
+--
+-- Name: MOVDEVBORRADOR PK_MOVDEVBORRADOR; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVDEVBORRADOR"
+    ADD CONSTRAINT "PK_MOVDEVBORRADOR" PRIMARY KEY ("Numero", "CodigoBarra", "Item");
+
+
+--
+-- Name: MOVDEVCOMPRAS PK_MOVDEVCOMPRAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVDEVCOMPRAS"
+    ADD CONSTRAINT "PK_MOVDEVCOMPRAS" PRIMARY KEY ("Numero", "Item");
+
+
+--
+-- Name: MOVDEVTRANSFERENCIAS PK_MOVDEVTRANSFERENCIAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVDEVTRANSFERENCIAS"
+    ADD CONSTRAINT "PK_MOVDEVTRANSFERENCIAS" PRIMARY KEY ("Numero", "CodigoBarra", "NumeroCaja", "Item");
+
+
+--
+-- Name: MOVDEVVENTAS PK_MOVDEVVENTAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVDEVVENTAS"
+    ADD CONSTRAINT "PK_MOVDEVVENTAS" PRIMARY KEY ("NumeroDevolucion", "Serie", "Item");
+
+
+--
+-- Name: MOVLISTAPRECIO PK_MOVLISTAPRECIO_1; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVLISTAPRECIO"
+    ADD CONSTRAINT "PK_MOVLISTAPRECIO_1" PRIMARY KEY ("Numero", "Referencia", "CodigoMarca");
+
+
+--
+-- Name: MOVTOMAFISICA1 PK_MOVTOMAFISICA1_INFERRED; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVTOMAFISICA1"
+    ADD CONSTRAINT "PK_MOVTOMAFISICA1_INFERRED" PRIMARY KEY ("NumeroPagina", "Item");
+
+
+--
+-- Name: MOVTOMAFISICA2 PK_MOVTOMAFISICA2_INFERRED; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVTOMAFISICA2"
+    ADD CONSTRAINT "PK_MOVTOMAFISICA2_INFERRED" PRIMARY KEY ("NumeroPagina", "Item");
+
+
+--
+-- Name: MOVTRANSFERENCIAS PK_MOVTRANSFERENCIAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVTRANSFERENCIAS"
+    ADD CONSTRAINT "PK_MOVTRANSFERENCIAS" PRIMARY KEY ("Numero", "CodigoBarra", "NumeroCaja", "Item");
+
+
+--
+-- Name: MOVVENTAS PK_MOVVENTAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVVENTAS"
+    ADD CONSTRAINT "PK_MOVVENTAS" PRIMARY KEY ("NumeroFactura", "Serie", "Item");
+
+
+--
+-- Name: PAGOSVENTA PK_PAGOSVENTA; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PAGOSVENTA"
+    ADD CONSTRAINT "PK_PAGOSVENTA" PRIMARY KEY ("NumeroFactura", "Serie", "Item");
+
+
+--
+-- Name: PROVEEDORES PK_PROVEEDORES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PROVEEDORES"
+    ADD CONSTRAINT "PK_PROVEEDORES" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: SALIDASCAJA PK_SALIDASCAJA; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."SALIDASCAJA"
+    ADD CONSTRAINT "PK_SALIDASCAJA" PRIMARY KEY ("Numero", "Serie");
+
+
+--
+-- Name: SALIDASCAJA_DOLARES PK_SALIDASCAJA_DOLARES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."SALIDASCAJA_DOLARES"
+    ADD CONSTRAINT "PK_SALIDASCAJA_DOLARES" PRIMARY KEY ("Numero", "Serie");
+
+
+--
+-- Name: SEG PK_SEG; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."SEG"
+    ADD CONSTRAINT "PK_SEG" PRIMARY KEY ("CodNodo");
+
+
+--
+-- Name: SUCURSALES PK_SUCURSALES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."SUCURSALES"
+    ADD CONSTRAINT "PK_SUCURSALES" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: TALLAS PK_TALLAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TALLAS"
+    ADD CONSTRAINT "PK_TALLAS" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: TASA_CAMBIO PK_TASA_CAMBIO; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TASA_CAMBIO"
+    ADD CONSTRAINT "PK_TASA_CAMBIO" PRIMARY KEY ("ID");
+
+
+--
+-- Name: TASA_CAMBIO_M PK_TASA_CAMBIO_M; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TASA_CAMBIO_M"
+    ADD CONSTRAINT "PK_TASA_CAMBIO_M" PRIMARY KEY ("ID");
+
+
+--
+-- Name: TIPOSCLIENTE PK_TIPOSCLIENTE; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TIPOSCLIENTE"
+    ADD CONSTRAINT "PK_TIPOSCLIENTE" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: TIPOSCONTRIBUYENTE PK_TIPOSCONTRIBUYENTE; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TIPOSCONTRIBUYENTE"
+    ADD CONSTRAINT "PK_TIPOSCONTRIBUYENTE" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: TIPOSPROVEEDOR PK_TIPOSPROVEEDOR; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TIPOSPROVEEDOR"
+    ADD CONSTRAINT "PK_TIPOSPROVEEDOR" PRIMARY KEY ("Codigo");
+
+
+--
+-- Name: TIPO_DESPACHO PK_TIPO_DESPACHO; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TIPO_DESPACHO"
+    ADD CONSTRAINT "PK_TIPO_DESPACHO" PRIMARY KEY ("ID");
+
+
+--
+-- Name: TRABAJADORES PK_TRABAJADORES; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TRABAJADORES"
+    ADD CONSTRAINT "PK_TRABAJADORES" PRIMARY KEY ("Cedula");
+
+
+--
+-- Name: TRANSFERENCIAS PK_TRANSFERENCIAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TRANSFERENCIAS"
+    ADD CONSTRAINT "PK_TRANSFERENCIAS" PRIMARY KEY ("Numero");
+
+
+--
+-- Name: USUARIOGRUPO PK_USUARIOGRUPO; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."USUARIOGRUPO"
+    ADD CONSTRAINT "PK_USUARIOGRUPO" PRIMARY KEY ("CodUsuario", "CodGrupo");
+
+
+--
+-- Name: USUARIOS PK_USUARIOS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."USUARIOS"
+    ADD CONSTRAINT "PK_USUARIOS" PRIMARY KEY ("CodUsuario");
+
+
+--
+-- Name: VENTAS PK_VENTAS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."VENTAS"
+    ADD CONSTRAINT "PK_VENTAS" PRIMARY KEY ("NumeroFactura", "Serie");
+
+
+--
+-- Name: sysdiagrams PK__sysdiagrams__014935CB; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo.sysdiagrams
+    ADD CONSTRAINT "PK__sysdiagrams__014935CB" PRIMARY KEY (diagram_id);
+
+
+--
+-- Name: REGLASCONVENIOS REGLASCONVENIOS_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."REGLASCONVENIOS"
+    ADD CONSTRAINT "REGLASCONVENIOS_pkey" PRIMARY KEY ("ID");
+
+
+--
+-- Name: REGLAS REGLAS_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."REGLAS"
+    ADD CONSTRAINT "REGLAS_pkey" PRIMARY KEY ("ID");
+
+
+--
+-- Name: RESPALDOS_PENDIENTES RESPALDOS_PENDIENTES_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."RESPALDOS_PENDIENTES"
+    ADD CONSTRAINT "RESPALDOS_PENDIENTES_pkey" PRIMARY KEY ("Id");
+
+
+--
+-- Name: TABLA_PARAMETROS TABLA_PARAMETROS_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TABLA_PARAMETROS"
+    ADD CONSTRAINT "TABLA_PARAMETROS_pkey" PRIMARY KEY ("Columna");
+
+
+--
+-- Name: TOMAFISICA1 TOMAFISICA1_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TOMAFISICA1"
+    ADD CONSTRAINT "TOMAFISICA1_pkey" PRIMARY KEY ("NumeroPagina");
+
+
+--
+-- Name: TRANSACCIONESCUPONES TRANSACCIONESCUPONES_pkey; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TRANSACCIONESCUPONES"
+    ADD CONSTRAINT "TRANSACCIONESCUPONES_pkey" PRIMARY KEY ("Id");
+
+
+--
+-- Name: sysdiagrams UK_principal_name; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo.sysdiagrams
+    ADD CONSTRAINT "UK_principal_name" UNIQUE (principal_id, name);
+
+
+--
+-- Name: PARAMETROS pkIDPARAMETROS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PARAMETROS"
+    ADD CONSTRAINT "pkIDPARAMETROS" PRIMARY KEY ("IDPARAMETROS");
+
+
+--
+-- Name: PARAMETROS uqIDPARAMETROS; Type: CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PARAMETROS"
+    ADD CONSTRAINT "uqIDPARAMETROS" UNIQUE ("IDPARAMETROS");
+
+
+--
+-- Name: IX_CODIGOSCONVENIOS_IdCupon_Status; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_CODIGOSCONVENIOS_IdCupon_Status" ON dbo."CODIGOSCONVENIOS" USING btree ("IdCupon", "Status");
+
+
+--
+-- Name: IX_CONTROLACCESO_Cedula_Fecha; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_CONTROLACCESO_Cedula_Fecha" ON dbo."CONTROLACCESO" USING btree ("Cedula", "Fecha");
+
+
+--
+-- Name: IX_CUPONES_Status_Fechas; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_CUPONES_Status_Fechas" ON dbo."CUPONES" USING btree ("Status", "FechaInicial", "FechaFinal");
+
+
+--
+-- Name: IX_DETALLECONTROLACCESO_IdPersonal_Fecha; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_DETALLECONTROLACCESO_IdPersonal_Fecha" ON dbo."DETALLECONTROLACCESO" USING btree ("IdPersonal", "Fecha");
+
+
+--
+-- Name: IX_FISICOLOGICO_CodigoBarra; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_FISICOLOGICO_CodigoBarra" ON dbo."FISICOLOGICO" USING btree ("CodigoBarra");
+
+
+--
+-- Name: IX_FISICOLOGICO_FechaAjuste; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_FISICOLOGICO_FechaAjuste" ON dbo."FISICOLOGICO" USING btree ("FechaAjuste");
+
+
+--
+-- Name: IX_GRUPO_REGLAS_CodigoBarra; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_GRUPO_REGLAS_CodigoBarra" ON dbo."GRUPO_REGLAS" USING btree ("CodigoBarra");
+
+
+--
+-- Name: IX_GRUPO_REGLAS_Grupo; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_GRUPO_REGLAS_Grupo" ON dbo."GRUPO_REGLAS" USING btree ("IDGrupoRegla");
+
+
+--
+-- Name: IX_MOVAJUSTES_CodigoBarra; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_MOVAJUSTES_CodigoBarra" ON dbo."MOVAJUSTES" USING btree ("CodigoBarra");
+
+
+--
+-- Name: IX_MOVAJUSTES_Numero; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_MOVAJUSTES_Numero" ON dbo."MOVAJUSTES" USING btree ("Numero");
+
+
+--
+-- Name: IX_REGLASCONVENIOS_IDREGLA; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_REGLASCONVENIOS_IDREGLA" ON dbo."REGLASCONVENIOS" USING btree ("IDREGLA");
+
+
+--
+-- Name: IX_REGLASCONVENIOS_TIPOCONVENIO; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_REGLASCONVENIOS_TIPOCONVENIO" ON dbo."REGLASCONVENIOS" USING btree ("TIPOCONVENIO");
+
+
+--
+-- Name: IX_SALDODIARIO_Fecha_CodigoBarra; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_SALDODIARIO_Fecha_CodigoBarra" ON dbo."SALDODIARIO" USING btree ("Fecha", "CodigoBarra");
+
+
+--
+-- Name: IX_TRANSACCIONESCUPONES_Factura; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_TRANSACCIONESCUPONES_Factura" ON dbo."TRANSACCIONESCUPONES" USING btree ("NumeroFactura", "Serie");
+
+
+--
+-- Name: IX_grupo_cupones_ref_marca; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE INDEX "IX_grupo_cupones_ref_marca" ON dbo.grupo_cupones USING btree ("Referencia", "CodigoMarca", "ProductosActivan");
+
+
+--
+-- Name: UX_CODIGOSCONVENIOS_Codigo; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE UNIQUE INDEX "UX_CODIGOSCONVENIOS_Codigo" ON dbo."CODIGOSCONVENIOS" USING btree ("Codigo");
+
+
+--
+-- Name: UX_INVENTARIO_CodigoBarra_Normalized; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE UNIQUE INDEX "UX_INVENTARIO_CodigoBarra_Normalized" ON dbo."INVENTARIO" USING btree (upper(btrim(("CodigoBarra")::text)));
+
+
+--
+-- Name: UX_MOVTOMAFISICA1_NumeroPagina_CodigoBarra; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE UNIQUE INDEX "UX_MOVTOMAFISICA1_NumeroPagina_CodigoBarra" ON dbo."MOVTOMAFISICA1" USING btree ("NumeroPagina", "CodigoBarra");
+
+
+--
+-- Name: UX_MOVTOMAFISICA2_NumeroPagina_CodigoBarra; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE UNIQUE INDEX "UX_MOVTOMAFISICA2_NumeroPagina_CodigoBarra" ON dbo."MOVTOMAFISICA2" USING btree ("NumeroPagina", "CodigoBarra");
+
+
+--
+-- Name: UX_TABLA_VALORES_IdTabla_Codigo; Type: INDEX; Schema: dbo; Owner: -
+--
+
+CREATE UNIQUE INDEX "UX_TABLA_VALORES_IdTabla_Codigo" ON dbo."TABLA_VALORES" USING btree ("IdTabla", "Codigo");
+
+
+--
+-- Name: CAJAS FK_CAJAS_ImpresoraFiscal; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CAJAS"
+    ADD CONSTRAINT "FK_CAJAS_ImpresoraFiscal" FOREIGN KEY ("IdImpresoraFiscal") REFERENCES dbo."IMPRESORAFISCAL"("ID");
+
+
+--
+-- Name: CLIENTES FK_CLIENTES_TIPOSCLIENTE; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CLIENTES"
+    ADD CONSTRAINT "FK_CLIENTES_TIPOSCLIENTE" FOREIGN KEY ("Tipo") REFERENCES dbo."TIPOSCLIENTE"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: CLIENTES FK_CLIENTES_TIPOSCONTRIBUYENTE; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CLIENTES"
+    ADD CONSTRAINT "FK_CLIENTES_TIPOSCONTRIBUYENTE" FOREIGN KEY ("TipoContribuyente") REFERENCES dbo."TIPOSCONTRIBUYENTE"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: COMPRAS FK_COMPRAS_LOTES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."COMPRAS"
+    ADD CONSTRAINT "FK_COMPRAS_LOTES" FOREIGN KEY ("IDLote") REFERENCES dbo."LOTES"("ID");
+
+
+--
+-- Name: COMPRAS FK_COMPRAS_PROVEEDORES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."COMPRAS"
+    ADD CONSTRAINT "FK_COMPRAS_PROVEEDORES" FOREIGN KEY ("Proveedor") REFERENCES dbo."PROVEEDORES"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: COMPRAS FK_COMPRAS_USUARIOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."COMPRAS"
+    ADD CONSTRAINT "FK_COMPRAS_USUARIOS" FOREIGN KEY ("Usuario") REFERENCES dbo."USUARIOS"("CodUsuario") ON UPDATE CASCADE;
+
+
+--
+-- Name: CONFIGURACIONMARCAJE FK_CONFIGURACIONMARCAJE_DISPOSITIVOSMARCAJE_INFERRED; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CONFIGURACIONMARCAJE"
+    ADD CONSTRAINT "FK_CONFIGURACIONMARCAJE_DISPOSITIVOSMARCAJE_INFERRED" FOREIGN KEY ("IdDispositivo") REFERENCES dbo."DISPOSITIVOSMARCAJE"("Id") ON UPDATE CASCADE;
+
+
+--
+-- Name: CONTROLACCESO FK_CONTROLACCESO_TRABAJADORES_INFERRED; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."CONTROLACCESO"
+    ADD CONSTRAINT "FK_CONTROLACCESO_TRABAJADORES_INFERRED" FOREIGN KEY ("Cedula") REFERENCES dbo."TRABAJADORES"("Cedula") ON UPDATE CASCADE;
+
+
+--
+-- Name: DEPOSITOS FK_DEPOSITOS_CAJAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEPOSITOS"
+    ADD CONSTRAINT "FK_DEPOSITOS_CAJAS" FOREIGN KEY ("Serie") REFERENCES dbo."CAJAS"("Serie") ON UPDATE CASCADE;
+
+
+--
+-- Name: DEPOSITOS FK_DEPOSITOS_CTABANCOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEPOSITOS"
+    ADD CONSTRAINT "FK_DEPOSITOS_CTABANCOS" FOREIGN KEY ("CuentaBanco") REFERENCES dbo."CTABANCOS"("Codigo") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: DEPOSITOS_DOLARES FK_DEPOSITOS_DOLARES_CAJAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEPOSITOS_DOLARES"
+    ADD CONSTRAINT "FK_DEPOSITOS_DOLARES_CAJAS" FOREIGN KEY ("Serie") REFERENCES dbo."CAJAS"("Serie") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: DEPOSITOS_DOLARES FK_DEPOSITOS_DOLARES_CTABANCOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEPOSITOS_DOLARES"
+    ADD CONSTRAINT "FK_DEPOSITOS_DOLARES_CTABANCOS" FOREIGN KEY ("CuentaBanco") REFERENCES dbo."CTABANCOS_DOLARES"("Codigo") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: DEPOSITOS_DOLARES FK_DEPOSITOS_DOLARES_USUARIOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEPOSITOS_DOLARES"
+    ADD CONSTRAINT "FK_DEPOSITOS_DOLARES_USUARIOS" FOREIGN KEY ("Usuario") REFERENCES dbo."USUARIOS"("CodUsuario") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: DEPOSITOS FK_DEPOSITOS_USUARIOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEPOSITOS"
+    ADD CONSTRAINT "FK_DEPOSITOS_USUARIOS" FOREIGN KEY ("Usuario") REFERENCES dbo."USUARIOS"("CodUsuario") ON UPDATE CASCADE;
+
+
+--
+-- Name: DETALLECONTROLACCESO FK_DETALLECONTROLACCESO_PATRON_INFERRED; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DETALLECONTROLACCESO"
+    ADD CONSTRAINT "FK_DETALLECONTROLACCESO_PATRON_INFERRED" FOREIGN KEY ("IdPatron") REFERENCES dbo."PATRON"("IdPatron") ON UPDATE CASCADE;
+
+
+--
+-- Name: DETALLECONTROLACCESO FK_DETALLECONTROLACCESO_TRABAJADORES_INFERRED; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DETALLECONTROLACCESO"
+    ADD CONSTRAINT "FK_DETALLECONTROLACCESO_TRABAJADORES_INFERRED" FOREIGN KEY ("IdPersonal") REFERENCES dbo."TRABAJADORES"("Cedula") ON UPDATE CASCADE;
+
+
+--
+-- Name: DEVCOMPRAS FK_DEVCOMPRAS_USUARIOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEVCOMPRAS"
+    ADD CONSTRAINT "FK_DEVCOMPRAS_USUARIOS" FOREIGN KEY ("Usuario") REFERENCES dbo."USUARIOS"("CodUsuario") ON UPDATE CASCADE;
+
+
+--
+-- Name: DEVTRANSFERENCIAS FK_DEVTRANSFERENCIAS_LOTES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_DEVTRANSFERENCIAS_LOTES" FOREIGN KEY ("IDLote") REFERENCES dbo."LOTES"("ID");
+
+
+--
+-- Name: DEVTRANSFERENCIAS FK_DEVTRANSFERENCIAS_SUCURSALES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_DEVTRANSFERENCIAS_SUCURSALES" FOREIGN KEY ("CodigoRecibe") REFERENCES dbo."SUCURSALES"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: DEVVENTAS FK_DEVVENTAS_CAJAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEVVENTAS"
+    ADD CONSTRAINT "FK_DEVVENTAS_CAJAS" FOREIGN KEY ("Serie") REFERENCES dbo."CAJAS"("Serie") ON UPDATE CASCADE;
+
+
+--
+-- Name: DEVVENTAS FK_DEVVENTAS_CLIENTES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEVVENTAS"
+    ADD CONSTRAINT "FK_DEVVENTAS_CLIENTES" FOREIGN KEY ("Cliente") REFERENCES dbo."CLIENTES"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: DEVVENTAS FK_DEVVENTAS_TRABAJADORES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEVVENTAS"
+    ADD CONSTRAINT "FK_DEVVENTAS_TRABAJADORES" FOREIGN KEY ("Vendedor") REFERENCES dbo."TRABAJADORES"("Cedula") ON UPDATE CASCADE;
+
+
+--
+-- Name: DEVVENTAS FK_DEVVENTAS_USUARIOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DEVVENTAS"
+    ADD CONSTRAINT "FK_DEVVENTAS_USUARIOS" FOREIGN KEY ("Usuario") REFERENCES dbo."USUARIOS"("CodUsuario") ON UPDATE CASCADE;
+
+
+--
+-- Name: DIARIOCAJA FK_DIARIOCAJA_CAJAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."DIARIOCAJA"
+    ADD CONSTRAINT "FK_DIARIOCAJA_CAJAS" FOREIGN KEY ("Serie") REFERENCES dbo."CAJAS"("Serie") ON UPDATE CASCADE;
+
+
+--
+-- Name: GRUPOSEG FK_GRUPOSEG_GRUPOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."GRUPOSEG"
+    ADD CONSTRAINT "FK_GRUPOSEG_GRUPOS" FOREIGN KEY ("CodGrupo") REFERENCES dbo."GRUPOS"("CodGrupo") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: GRUPOSEG FK_GRUPOSEG_SEG; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."GRUPOSEG"
+    ADD CONSTRAINT "FK_GRUPOSEG_SEG" FOREIGN KEY ("CodNodo") REFERENCES dbo."SEG"("CodNodo") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: IDEVTRANSFERENCIAS FK_IDEVTRANSFERENCIAS_LOTES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IDEVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_IDEVTRANSFERENCIAS_LOTES" FOREIGN KEY ("IDLote") REFERENCES dbo."LOTES"("ID");
+
+
+--
+-- Name: IDEVTRANSFERENCIAS FK_IDEVTRANSFERENCIAS_SUCURSALES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IDEVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_IDEVTRANSFERENCIAS_SUCURSALES" FOREIGN KEY ("CodigoEnvia") REFERENCES dbo."SUCURSALES"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: IMOVDEVTRANSFERENCIAS FK_IMOVDEVTRANSFERENCIAS_IDEVTRANSFERENCIAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IMOVDEVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_IMOVDEVTRANSFERENCIAS_IDEVTRANSFERENCIAS" FOREIGN KEY ("Numero", "CodigoEnvia") REFERENCES dbo."IDEVTRANSFERENCIAS"("Numero", "CodigoEnvia") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: IMOVDEVTRANSFERENCIAS FK_IMOVDEVTRANSFERENCIAS_INVENTARIO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IMOVDEVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_IMOVDEVTRANSFERENCIAS_INVENTARIO" FOREIGN KEY ("CodigoBarra") REFERENCES dbo."INVENTARIO"("CodigoBarra") ON UPDATE CASCADE;
+
+
+--
+-- Name: IMOVTRANSFERENCIAS FK_IMOVTRANSFERENCIAS_INVENTARIO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IMOVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_IMOVTRANSFERENCIAS_INVENTARIO" FOREIGN KEY ("CodigoBarra") REFERENCES dbo."INVENTARIO"("CodigoBarra") ON UPDATE CASCADE;
+
+
+--
+-- Name: IMOVTRANSFERENCIAS FK_IMOVTRANSFERENCIAS_ITRANSFERENCIAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IMOVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_IMOVTRANSFERENCIAS_ITRANSFERENCIAS" FOREIGN KEY ("Numero", "CodigoEnvia") REFERENCES dbo."ITRANSFERENCIAS"("Numero", "CodigoEnvia") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: INVENTARIO FK_INVENTARIO_CATEGORIAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."INVENTARIO"
+    ADD CONSTRAINT "FK_INVENTARIO_CATEGORIAS" FOREIGN KEY ("Categoria") REFERENCES dbo."CATEGORIAS"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: INVENTARIO FK_INVENTARIO_COLORES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."INVENTARIO"
+    ADD CONSTRAINT "FK_INVENTARIO_COLORES" FOREIGN KEY ("CodigoColor") REFERENCES dbo."COLORES"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: INVENTARIO FK_INVENTARIO_FABRICANTES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."INVENTARIO"
+    ADD CONSTRAINT "FK_INVENTARIO_FABRICANTES" FOREIGN KEY ("Fabricante") REFERENCES dbo."FABRICANTES"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: INVENTARIO FK_INVENTARIO_IMPUESTOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."INVENTARIO"
+    ADD CONSTRAINT "FK_INVENTARIO_IMPUESTOS" FOREIGN KEY ("TipoImpuesto") REFERENCES dbo."IMPUESTOS"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: INVENTARIO FK_INVENTARIO_MARCAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."INVENTARIO"
+    ADD CONSTRAINT "FK_INVENTARIO_MARCAS" FOREIGN KEY ("CodigoMarca") REFERENCES dbo."MARCAS"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: INVENTARIO FK_INVENTARIO_TALLAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."INVENTARIO"
+    ADD CONSTRAINT "FK_INVENTARIO_TALLAS" FOREIGN KEY ("Talla") REFERENCES dbo."TALLAS"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: ITRANSFERENCIAS FK_ITRANSFERENCIAS_LOTES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."ITRANSFERENCIAS"
+    ADD CONSTRAINT "FK_ITRANSFERENCIAS_LOTES" FOREIGN KEY ("IDLote") REFERENCES dbo."LOTES"("ID");
+
+
+--
+-- Name: ITRANSFERENCIAS FK_ITRANSFERENCIAS_SUCURSALES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."ITRANSFERENCIAS"
+    ADD CONSTRAINT "FK_ITRANSFERENCIAS_SUCURSALES" FOREIGN KEY ("CodigoEnvia") REFERENCES dbo."SUCURSALES"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: ITRANSFERENCIAS FK_ITRANSFERENCIAS_TIPO_DESPACHO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."ITRANSFERENCIAS"
+    ADD CONSTRAINT "FK_ITRANSFERENCIAS_TIPO_DESPACHO" FOREIGN KEY ("IDDespacho") REFERENCES dbo."TIPO_DESPACHO"("ID");
+
+
+--
+-- Name: IMPRESORAFISCAL FK_ImpresoraFiscal_ImpresoraFiscal; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."IMPRESORAFISCAL"
+    ADD CONSTRAINT "FK_ImpresoraFiscal_ImpresoraFiscal" FOREIGN KEY ("ID") REFERENCES dbo."IMPRESORAFISCAL"("ID");
+
+
+--
+-- Name: LISTAPRECIO FK_LISTAPRECIO_USUARIOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."LISTAPRECIO"
+    ADD CONSTRAINT "FK_LISTAPRECIO_USUARIOS" FOREIGN KEY ("Usuario") REFERENCES dbo."USUARIOS"("CodUsuario") ON UPDATE CASCADE;
+
+
+--
+-- Name: LOTES FK_LOTES_USUARIOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."LOTES"
+    ADD CONSTRAINT "FK_LOTES_USUARIOS" FOREIGN KEY ("UsuarioCreacion") REFERENCES dbo."USUARIOS"("CodUsuario") ON UPDATE CASCADE;
+
+
+--
+-- Name: MOVCOMPRAS FK_MOVCOMPRAS_COMPRAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVCOMPRAS"
+    ADD CONSTRAINT "FK_MOVCOMPRAS_COMPRAS" FOREIGN KEY ("Documento", "Proveedor") REFERENCES dbo."COMPRAS"("Documento", "Proveedor") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: MOVCOMPRAS FK_MOVCOMPRAS_INVENTARIO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVCOMPRAS"
+    ADD CONSTRAINT "FK_MOVCOMPRAS_INVENTARIO" FOREIGN KEY ("CodigoBarra") REFERENCES dbo."INVENTARIO"("CodigoBarra") ON UPDATE CASCADE;
+
+
+--
+-- Name: MOVDEVCOMPRAS FK_MOVDEVCOMPRAS_DEVCOMPRAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVDEVCOMPRAS"
+    ADD CONSTRAINT "FK_MOVDEVCOMPRAS_DEVCOMPRAS" FOREIGN KEY ("Numero") REFERENCES dbo."DEVCOMPRAS"("Numero") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: MOVDEVCOMPRAS FK_MOVDEVCOMPRAS_INVENTARIO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVDEVCOMPRAS"
+    ADD CONSTRAINT "FK_MOVDEVCOMPRAS_INVENTARIO" FOREIGN KEY ("CodigoBarra") REFERENCES dbo."INVENTARIO"("CodigoBarra") ON UPDATE CASCADE;
+
+
+--
+-- Name: MOVDEVTRANSFERENCIAS FK_MOVDEVTRANSFERENCIAS_DEVTRANSFERENCIAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVDEVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_MOVDEVTRANSFERENCIAS_DEVTRANSFERENCIAS" FOREIGN KEY ("Numero") REFERENCES dbo."DEVTRANSFERENCIAS"("Numero") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: MOVDEVTRANSFERENCIAS FK_MOVDEVTRANSFERENCIAS_INVENTARIO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVDEVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_MOVDEVTRANSFERENCIAS_INVENTARIO" FOREIGN KEY ("CodigoBarra") REFERENCES dbo."INVENTARIO"("CodigoBarra") ON UPDATE CASCADE;
+
+
+--
+-- Name: MOVDEVVENTAS FK_MOVDEVVENTAS_DEVVENTAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVDEVVENTAS"
+    ADD CONSTRAINT "FK_MOVDEVVENTAS_DEVVENTAS" FOREIGN KEY ("NumeroDevolucion", "Serie") REFERENCES dbo."DEVVENTAS"("NumeroDevolucion", "Serie") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: MOVDEVVENTAS FK_MOVDEVVENTAS_INVENTARIO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVDEVVENTAS"
+    ADD CONSTRAINT "FK_MOVDEVVENTAS_INVENTARIO" FOREIGN KEY ("CodigoBarra") REFERENCES dbo."INVENTARIO"("CodigoBarra") ON UPDATE CASCADE;
+
+
+--
+-- Name: MOVLISTAPRECIO FK_MOVLISTAPRECIO_LISTAPRECIO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVLISTAPRECIO"
+    ADD CONSTRAINT "FK_MOVLISTAPRECIO_LISTAPRECIO" FOREIGN KEY ("Numero") REFERENCES dbo."LISTAPRECIO"("Numero") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: MOVLISTAPRECIO FK_MOVLISTAPRECIO_MARCAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVLISTAPRECIO"
+    ADD CONSTRAINT "FK_MOVLISTAPRECIO_MARCAS" FOREIGN KEY ("CodigoMarca") REFERENCES dbo."MARCAS"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: MOVTOMAFISICA1 FK_MOVTOMAFISICA1_INVENTARIO_INFERRED; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVTOMAFISICA1"
+    ADD CONSTRAINT "FK_MOVTOMAFISICA1_INVENTARIO_INFERRED" FOREIGN KEY ("CodigoBarra") REFERENCES dbo."INVENTARIO"("CodigoBarra") ON UPDATE CASCADE;
+
+
+--
+-- Name: MOVTOMAFISICA1 FK_MOVTOMAFISICA1_TOMAFISICA1_INFERRED; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVTOMAFISICA1"
+    ADD CONSTRAINT "FK_MOVTOMAFISICA1_TOMAFISICA1_INFERRED" FOREIGN KEY ("NumeroPagina") REFERENCES dbo."TOMAFISICA1"("NumeroPagina") ON DELETE CASCADE;
+
+
+--
+-- Name: MOVTRANSFERENCIAS FK_MOVTRANSFERENCIAS_INVENTARIO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_MOVTRANSFERENCIAS_INVENTARIO" FOREIGN KEY ("CodigoBarra") REFERENCES dbo."INVENTARIO"("CodigoBarra") ON UPDATE CASCADE;
+
+
+--
+-- Name: MOVTRANSFERENCIAS FK_MOVTRANSFERENCIAS_TRANSFERENCIAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVTRANSFERENCIAS"
+    ADD CONSTRAINT "FK_MOVTRANSFERENCIAS_TRANSFERENCIAS" FOREIGN KEY ("Numero") REFERENCES dbo."TRANSFERENCIAS"("Numero") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: MOVVENTAS FK_MOVVENTAS_INVENTARIO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVVENTAS"
+    ADD CONSTRAINT "FK_MOVVENTAS_INVENTARIO" FOREIGN KEY ("CodigoBarra") REFERENCES dbo."INVENTARIO"("CodigoBarra") ON UPDATE CASCADE;
+
+
+--
+-- Name: MOVVENTAS FK_MOVVENTAS_VENTAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."MOVVENTAS"
+    ADD CONSTRAINT "FK_MOVVENTAS_VENTAS" FOREIGN KEY ("NumeroFactura", "Serie") REFERENCES dbo."VENTAS"("NumeroFactura", "Serie") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: PAGOSVENTA FK_PAGOSVENTA_BANCOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PAGOSVENTA"
+    ADD CONSTRAINT "FK_PAGOSVENTA_BANCOS" FOREIGN KEY ("Banco") REFERENCES dbo."BANCOS"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: PAGOSVENTA FK_PAGOSVENTA_CTABANCOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PAGOSVENTA"
+    ADD CONSTRAINT "FK_PAGOSVENTA_CTABANCOS" FOREIGN KEY ("PuntoVenta") REFERENCES dbo."CTABANCOS"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: PAGOSVENTA FK_PAGOSVENTA_FORMAPAGO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PAGOSVENTA"
+    ADD CONSTRAINT "FK_PAGOSVENTA_FORMAPAGO" FOREIGN KEY ("FormaPago") REFERENCES dbo."FORMAPAGO"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: PAGOSVENTA FK_PAGOSVENTA_VENTAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PAGOSVENTA"
+    ADD CONSTRAINT "FK_PAGOSVENTA_VENTAS" FOREIGN KEY ("NumeroFactura", "Serie") REFERENCES dbo."VENTAS"("NumeroFactura", "Serie") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: PATRON FK_PATRON_TRABAJADORES_INFERRED; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PATRON"
+    ADD CONSTRAINT "FK_PATRON_TRABAJADORES_INFERRED" FOREIGN KEY ("IdPersonal") REFERENCES dbo."TRABAJADORES"("Cedula") ON UPDATE CASCADE;
+
+
+--
+-- Name: PROVEEDORES FK_PROVEEDORES_TIPOSPROVEEDOR; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."PROVEEDORES"
+    ADD CONSTRAINT "FK_PROVEEDORES_TIPOSPROVEEDOR" FOREIGN KEY ("Tipo") REFERENCES dbo."TIPOSPROVEEDOR"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: SALIDASCAJA FK_SALIDASCAJA_CAJAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."SALIDASCAJA"
+    ADD CONSTRAINT "FK_SALIDASCAJA_CAJAS" FOREIGN KEY ("Serie") REFERENCES dbo."CAJAS"("Serie") ON UPDATE CASCADE;
+
+
+--
+-- Name: SALIDASCAJA FK_SALIDASCAJA_CTACONTABLE; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."SALIDASCAJA"
+    ADD CONSTRAINT "FK_SALIDASCAJA_CTACONTABLE" FOREIGN KEY ("CodigoContable") REFERENCES dbo."CTACONTABLE"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: SALIDASCAJA_DOLARES FK_SALIDASCAJA_DOLARES_CAJAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."SALIDASCAJA_DOLARES"
+    ADD CONSTRAINT "FK_SALIDASCAJA_DOLARES_CAJAS" FOREIGN KEY ("Serie") REFERENCES dbo."CAJAS"("Serie") ON UPDATE CASCADE;
+
+
+--
+-- Name: SALIDASCAJA_DOLARES FK_SALIDASCAJA_DOLARES_CTACONTABLE; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."SALIDASCAJA_DOLARES"
+    ADD CONSTRAINT "FK_SALIDASCAJA_DOLARES_CTACONTABLE" FOREIGN KEY ("CodigoContable") REFERENCES dbo."CTACONTABLE"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: TRABAJADORES FK_TRABAJADORES_CARGOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TRABAJADORES"
+    ADD CONSTRAINT "FK_TRABAJADORES_CARGOS" FOREIGN KEY ("Cargo") REFERENCES dbo."CARGOS"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: TRANSFERENCIAS FK_TRANSFERENCIAS_LOTES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TRANSFERENCIAS"
+    ADD CONSTRAINT "FK_TRANSFERENCIAS_LOTES" FOREIGN KEY ("IDLote") REFERENCES dbo."LOTES"("ID");
+
+
+--
+-- Name: TRANSFERENCIAS FK_TRANSFERENCIAS_SUCURSALES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TRANSFERENCIAS"
+    ADD CONSTRAINT "FK_TRANSFERENCIAS_SUCURSALES" FOREIGN KEY ("CodigoRecibe") REFERENCES dbo."SUCURSALES"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: TRANSFERENCIAS FK_TRANSFERENCIAS_TIPO_DESPACHO; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TRANSFERENCIAS"
+    ADD CONSTRAINT "FK_TRANSFERENCIAS_TIPO_DESPACHO" FOREIGN KEY ("IDDespacho") REFERENCES dbo."TIPO_DESPACHO"("ID");
+
+
+--
+-- Name: TRANSFERENCIAS FK_TRANSFERENCIAS_USUARIOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."TRANSFERENCIAS"
+    ADD CONSTRAINT "FK_TRANSFERENCIAS_USUARIOS" FOREIGN KEY ("Usuario") REFERENCES dbo."USUARIOS"("CodUsuario") ON UPDATE CASCADE;
+
+
+--
+-- Name: USUARIOGRUPO FK_USUARIOGRUPO_GRUPOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."USUARIOGRUPO"
+    ADD CONSTRAINT "FK_USUARIOGRUPO_GRUPOS" FOREIGN KEY ("CodGrupo") REFERENCES dbo."GRUPOS"("CodGrupo") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: USUARIOGRUPO FK_USUARIOGRUPO_USUARIOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."USUARIOGRUPO"
+    ADD CONSTRAINT "FK_USUARIOGRUPO_USUARIOS" FOREIGN KEY ("CodUsuario") REFERENCES dbo."USUARIOS"("CodUsuario") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: VENTAS FK_VENTAS_CAJAS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."VENTAS"
+    ADD CONSTRAINT "FK_VENTAS_CAJAS" FOREIGN KEY ("Serie") REFERENCES dbo."CAJAS"("Serie") ON UPDATE CASCADE;
+
+
+--
+-- Name: VENTAS FK_VENTAS_CLIENTES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."VENTAS"
+    ADD CONSTRAINT "FK_VENTAS_CLIENTES" FOREIGN KEY ("Cliente") REFERENCES dbo."CLIENTES"("Codigo") ON UPDATE CASCADE;
+
+
+--
+-- Name: VENTAS FK_VENTAS_TRABAJADORES; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."VENTAS"
+    ADD CONSTRAINT "FK_VENTAS_TRABAJADORES" FOREIGN KEY ("Vendedor") REFERENCES dbo."TRABAJADORES"("Cedula") ON UPDATE CASCADE;
+
+
+--
+-- Name: VENTAS FK_VENTAS_USUARIOS; Type: FK CONSTRAINT; Schema: dbo; Owner: -
+--
+
+ALTER TABLE ONLY dbo."VENTAS"
+    ADD CONSTRAINT "FK_VENTAS_USUARIOS" FOREIGN KEY ("Usuario") REFERENCES dbo."USUARIOS"("CodUsuario") ON UPDATE CASCADE;
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict osSNtjQshZ9ebRagXB0nzYspNmiXee1FW6eN3TnSvhfCh3Yy0wXpqTz4lvO06rk
+

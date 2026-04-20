@@ -1,0 +1,27 @@
+{
+  "database": "rocky_maxx",
+  "createdAt": "2026-04-19T21:54:05",
+  "databaseSize": "11 MB",
+  "dboTableCount": 97,
+  "artifacts": [
+    {
+      "file": "rocky_maxx-20260419-215404.custom.dump",
+      "format": "custom",
+      "recommendedForRestore": true,
+      "sizeBytes": 310418,
+      "sha256": "289EB4A3D45CEFEE5632941BFA8055B0319BF55856A9D37E9CD86A4D17B0A143"
+    },
+    {
+      "file": "rocky_maxx-20260419-215404.full.sql",
+      "format": "plain-sql",
+      "recommendedForRestore": false,
+      "sizeBytes": 298118,
+      "sha256": "DE6060833004861B017069F1C74FA00B22E4E3DF5CFFCF714D134D49343DD445"
+    }
+  ],
+  "notes": [
+    "El archivo custom es la opcion preferida para restauraciones completas con pg_restore.",
+    "El archivo full.sql sirve para inspeccion por otra IA y tambien puede restaurarse con psql.",
+    "Las credenciales no se guardan en este manifiesto."
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "sistema-arabe",
+  "private": true,
+  "workspaces": [
+    "apps/api"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace=@sistema-arabe/api",
+    "build:api": "npm run build --workspace=@sistema-arabe/api",
+    "typecheck:api": "npm run typecheck --workspace=@sistema-arabe/api",
+    "prisma:generate": "npm run prisma:generate --workspace=@sistema-arabe/api",
+    "prisma:validate": "npm run prisma:validate --workspace=@sistema-arabe/api"
+  }
+}
