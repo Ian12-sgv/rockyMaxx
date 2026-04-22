@@ -5,8 +5,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, PrismaClient } from "@prisma/client";
+import * as XLSX from "xlsx";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { CreateCatalogEntryDto } from "./dto/create-catalog-entry.dto";
 import { CreateMerchandiseDto } from "./dto/create-merchandise.dto";
 import { FindMerchandiseDto } from "./dto/find-merchandise.dto";
 import { ResolveCreationAutofillDto } from "./dto/resolve-creation-autofill.dto";
@@ -102,8 +104,18 @@ type TaxInput = {
   porcentajeImpuesto?: string;
 };
 
+type CatalogImportKind = "categorias" | "marcas" | "tallas" | "colores" | "fabricantes";
+
+type CatalogImportRow = {
+  codigo?: string;
+  nombre?: string;
+  status?: number;
+  rowNumber: number;
+};
+
 type NormalizedMerchandisePayload = {
   codigoBarra?: string;
+  referencia?: string;
   codigoBarraAnt?: string;
   familia?: string;
   nombre?: string;
@@ -136,6 +148,7 @@ type NormalizedMerchandisePayload = {
 
 type CompleteMerchandisePayload = {
   codigoBarra: string;
+  referencia: string;
   codigoBarraAnt: string;
   familia: string;
   nombre: string;
@@ -223,6 +236,317 @@ export class InventoryService {
         })),
       },
     };
+  }
+
+  async importCatalogFromExcel(
+    catalogType: string,
+    file: { buffer?: Buffer; originalname?: string; mimetype?: string } | undefined,
+  ) {
+    const resolvedType = this.resolveCatalogImportKind(catalogType);
+
+    if (!file?.buffer || file.buffer.length === 0) {
+      throw new BadRequestException("Debe adjuntar un archivo Excel valido");
+    }
+
+    let workbook: XLSX.WorkBook;
+    try {
+      workbook = XLSX.read(file.buffer, { type: "buffer", cellDates: false });
+    } catch {
+      throw new BadRequestException("No se pudo leer el archivo Excel");
+    }
+
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) {
+      throw new BadRequestException("El archivo Excel no contiene hojas");
+    }
+
+    const sheet = workbook.Sheets[firstSheetName];
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: "",
+      raw: false,
+    });
+
+    if (rawRows.length === 0) {
+      throw new BadRequestException("El archivo Excel no contiene filas para importar");
+    }
+
+    const rows = rawRows
+      .map((row, index) => this.parseCatalogImportRow(row, index + 2, resolvedType))
+      .filter((row): row is CatalogImportRow => row !== null);
+
+    if (rows.length === 0) {
+      throw new BadRequestException(
+        "El archivo Excel no contiene filas validas. Usa columnas como Codigo, Nombre y Status.",
+      );
+    }
+
+    const result = await this.persistCatalogImportRows(resolvedType, rows);
+
+    return {
+      tipo: resolvedType,
+      archivo: file.originalname ?? "catalogo.xlsx",
+      hoja: firstSheetName,
+      resumen: result,
+    };
+  }
+
+  async getCatalogImportEntries(catalogType: string) {
+    const resolvedType = this.resolveCatalogImportKind(catalogType);
+
+    switch (resolvedType) {
+      case "categorias":
+        return (
+          await this.prisma.categorias.findMany({
+            orderBy: { Codigo: "asc" },
+          })
+        ).map((item) => ({
+          codigo: item.Codigo,
+          nombre: item.Nombre,
+          status: item.Status,
+        }));
+      case "marcas":
+        return (
+          await this.prisma.marcas.findMany({
+            orderBy: { Codigo: "asc" },
+          })
+        ).map((item) => ({
+          codigo: item.Codigo,
+          nombre: item.Nombre,
+          status: item.Status,
+        }));
+      case "tallas":
+        return (
+          await this.prisma.tallas.findMany({
+            orderBy: { Codigo: "asc" },
+          })
+        ).map((item) => ({
+          codigo: item.Codigo,
+        }));
+      case "colores":
+        return (
+          await this.prisma.colores.findMany({
+            orderBy: { Codigo: "asc" },
+          })
+        ).map((item) => ({
+          codigo: item.Codigo,
+          nombre: item.Nombre,
+          status: item.Status,
+        }));
+      case "fabricantes":
+        return (
+          await this.prisma.fabricantes.findMany({
+            orderBy: { Codigo: "asc" },
+          })
+        ).map((item) => ({
+          codigo: item.Codigo,
+          nombre: item.Nombre,
+          status: item.Status,
+        }));
+      default:
+        return [];
+    }
+  }
+
+  async createCatalogEntry(catalogType: string, createCatalogEntryDto: CreateCatalogEntryDto) {
+    const resolvedType = this.resolveCatalogImportKind(catalogType);
+    const config = this.getCatalogImportConfig(resolvedType);
+
+    if (resolvedType === "tallas") {
+      const codigo = this.normalizeOptionalUpper(createCatalogEntryDto.codigo ?? createCatalogEntryDto.nombre);
+
+      if (!codigo) {
+        throw new BadRequestException("Debe indicar el codigo de la talla");
+      }
+
+      this.assertCatalogCodeLength(config.displayName, codigo, config.maxCodeLength);
+
+      const existing = await this.prisma.tallas.findUnique({
+        where: { Codigo: codigo },
+      });
+
+      if (existing) {
+        throw new ConflictException("La talla ya existe");
+      }
+
+      const created = await this.prisma.tallas.create({
+        data: {
+          Codigo: codigo,
+        },
+      });
+
+      return {
+        codigo: created.Codigo,
+      };
+    }
+
+    const nombre = this.normalizeOptionalName(createCatalogEntryDto.nombre);
+    const status = createCatalogEntryDto.status ?? DEFAULT_STATUS;
+    const defaultName = nombre ?? this.normalizeOptionalUpper(createCatalogEntryDto.codigo) ?? config.defaultName;
+    const explicitCode = this.normalizeOptionalUpper(createCatalogEntryDto.codigo);
+
+    if (explicitCode) {
+      this.assertCatalogCodeLength(config.displayName, explicitCode, config.maxCodeLength);
+    }
+
+    if (!nombre) {
+      throw new BadRequestException("Debe indicar el nombre del catalogo");
+    }
+
+    this.assertCatalogNameLength(config.displayName, nombre, config.maxNameLength);
+
+    const codigo =
+      explicitCode ??
+      (await this.generateUniqueCode(defaultName, config.maxCodeLength, async (candidate) => {
+        return this.namedCatalogCodeExists(resolvedType, candidate);
+      }));
+
+    if (await this.namedCatalogCodeExists(resolvedType, codigo)) {
+      throw new ConflictException("El codigo ya existe");
+    }
+
+    if (await this.namedCatalogNameExists(resolvedType, nombre)) {
+      throw new ConflictException("El nombre ya existe");
+    }
+
+    const created = await this.createNamedCatalogRecord(resolvedType, {
+      Codigo: codigo,
+      Nombre: nombre,
+      Status: status,
+    });
+
+    return {
+      codigo: created.Codigo,
+      nombre: created.Nombre,
+      status: created.Status,
+    };
+  }
+
+  async removeCatalogEntry(catalogType: string, codigo: string) {
+    const resolvedType = this.resolveCatalogImportKind(catalogType);
+    const config = this.getCatalogImportConfig(resolvedType);
+    const normalizedCode = this.normalizeOptionalUpper(codigo);
+
+    if (!normalizedCode) {
+      throw new BadRequestException("Debe indicar el codigo del catalogo");
+    }
+
+    try {
+      switch (resolvedType) {
+        case "tallas": {
+          const existing = await this.prisma.tallas.findUnique({
+            where: { Codigo: normalizedCode },
+          });
+
+          if (!existing) {
+            throw new NotFoundException(`No se encontro ${this.getCatalogDisplayLabel(config.displayName)}.`);
+          }
+
+          await this.assertCatalogNotUsedByArticles(resolvedType, normalizedCode, config.displayName);
+
+          const deleted = await this.prisma.tallas.delete({
+            where: { Codigo: normalizedCode },
+          });
+
+          return {
+            codigo: deleted.Codigo,
+          };
+        }
+        case "categorias": {
+          const existing = await this.prisma.categorias.findUnique({
+            where: { Codigo: normalizedCode },
+          });
+
+          if (!existing) {
+            throw new NotFoundException(`No se encontro ${this.getCatalogDisplayLabel(config.displayName)}.`);
+          }
+
+          await this.assertCatalogNotUsedByArticles(resolvedType, normalizedCode, config.displayName);
+
+          const deleted = await this.prisma.categorias.delete({
+            where: { Codigo: normalizedCode },
+          });
+
+          return {
+            codigo: deleted.Codigo,
+            nombre: deleted.Nombre,
+            status: deleted.Status,
+          };
+        }
+        case "marcas": {
+          const existing = await this.prisma.marcas.findUnique({
+            where: { Codigo: normalizedCode },
+          });
+
+          if (!existing) {
+            throw new NotFoundException(`No se encontro ${this.getCatalogDisplayLabel(config.displayName)}.`);
+          }
+
+          await this.assertCatalogNotUsedByArticles(resolvedType, normalizedCode, config.displayName);
+
+          const deleted = await this.prisma.marcas.delete({
+            where: { Codigo: normalizedCode },
+          });
+
+          return {
+            codigo: deleted.Codigo,
+            nombre: deleted.Nombre,
+            status: deleted.Status,
+          };
+        }
+        case "colores": {
+          const existing = await this.prisma.colores.findUnique({
+            where: { Codigo: normalizedCode },
+          });
+
+          if (!existing) {
+            throw new NotFoundException(`No se encontro ${this.getCatalogDisplayLabel(config.displayName)}.`);
+          }
+
+          await this.assertCatalogNotUsedByArticles(resolvedType, normalizedCode, config.displayName);
+
+          const deleted = await this.prisma.colores.delete({
+            where: { Codigo: normalizedCode },
+          });
+
+          return {
+            codigo: deleted.Codigo,
+            nombre: deleted.Nombre,
+            status: deleted.Status,
+          };
+        }
+        case "fabricantes": {
+          const existing = await this.prisma.fabricantes.findUnique({
+            where: { Codigo: normalizedCode },
+          });
+
+          if (!existing) {
+            throw new NotFoundException(`No se encontro ${this.getCatalogDisplayLabel(config.displayName)}.`);
+          }
+
+          await this.assertCatalogNotUsedByArticles(resolvedType, normalizedCode, config.displayName);
+
+          const deleted = await this.prisma.fabricantes.delete({
+            where: { Codigo: normalizedCode },
+          });
+
+          return {
+            codigo: deleted.Codigo,
+            nombre: deleted.Nombre,
+            status: deleted.Status,
+          };
+        }
+        default:
+          throw new BadRequestException("Tipo de catalogo no soportado.");
+      }
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2003", "P2014"].includes(error.code)) {
+        throw new ConflictException(
+          `No se puede eliminar ${this.getCatalogDisplayLabel(config.displayName)} porque ese registro esta siendo usado en articulos u otros registros.`,
+        );
+      }
+
+      throw error;
+    }
   }
 
   async getCreationAutofill(resolveCreationAutofillDto: ResolveCreationAutofillDto) {
@@ -327,6 +651,7 @@ export class InventoryService {
   async createMerchandise(createMerchandiseDto: CreateMerchandiseDto) {
     const normalized = this.normalizeMerchandisePayload(createMerchandiseDto);
     const codigoBarra = this.requireString(normalized.codigoBarra, "Debe indicar el codigo de barra");
+    const referencia = this.requireString(normalized.referencia, "Debe indicar la referencia del articulo");
     const familia = this.requireString(normalized.familia, "Debe indicar la familia del articulo");
 
     const existing = await this.prisma.inventario.findUnique({
@@ -339,7 +664,7 @@ export class InventoryService {
 
     const marcaSeed = normalized.marca.codigo ?? normalized.marca.nombre ?? familia;
     const siblingValues = await this.getSiblingValues(
-      familia,
+      referencia,
       this.buildCodeCandidate(marcaSeed),
       codigoBarra,
     );
@@ -350,13 +675,15 @@ export class InventoryService {
     try {
       const created = await this.prisma.$transaction(async (tx) => {
         await this.ensureCatalogs(tx, resolvedCatalogs);
+        await this.ensureUniqueBarcode(tx, completePayload.codigoBarra);
+        await this.ensureUniqueReferencePerBrand(tx, completePayload.referencia, resolvedCatalogs.marca.codigo);
 
         const now = new Date();
         return tx.inventario.create({
           data: {
             CodigoBarra: completePayload.codigoBarra,
             CodigoBarraAnt: completePayload.codigoBarraAnt,
-            Referencia: completePayload.familia,
+            Referencia: completePayload.referencia,
             CodigoMarca: resolvedCatalogs.marca.codigo,
             Nombre: completePayload.nombre,
             Talla: resolvedCatalogs.talla.codigo,
@@ -417,12 +744,20 @@ export class InventoryService {
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
         await this.ensureCatalogs(tx, resolvedCatalogs);
+        await this.ensureUniqueBarcode(tx, merged.codigoBarra, normalizedBarcode);
+        await this.ensureUniqueReferencePerBrand(
+          tx,
+          merged.referencia,
+          resolvedCatalogs.marca.codigo,
+          normalizedBarcode,
+        );
 
         return tx.inventario.update({
           where: { CodigoBarra: normalizedBarcode },
           data: {
+            CodigoBarra: merged.codigoBarra,
             CodigoBarraAnt: merged.codigoBarraAnt,
-            Referencia: merged.familia,
+            Referencia: merged.referencia,
             CodigoMarca: resolvedCatalogs.marca.codigo,
             Nombre: merged.nombre,
             Talla: resolvedCatalogs.talla.codigo,
@@ -456,6 +791,10 @@ export class InventoryService {
 
       return toInventoryView(updated);
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException("Ya existe una mercancia con ese codigo de barra");
+      }
+
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
         throw new ConflictException("No se pudo actualizar la mercancia por restricciones de integridad");
       }
@@ -508,6 +847,7 @@ export class InventoryService {
         OR: [
           { CodigoBarra: { contains: buscar, mode: "insensitive" } },
           { Referencia: { contains: buscar, mode: "insensitive" } },
+          { CodigoBarraAnt: { contains: buscar, mode: "insensitive" } },
           { Nombre: { contains: buscar, mode: "insensitive" } },
           { Categoria: { contains: buscar.toUpperCase(), mode: "insensitive" } },
           { Fabricante: { contains: buscar.toUpperCase(), mode: "insensitive" } },
@@ -522,7 +862,7 @@ export class InventoryService {
 
     if (familia) {
       filters.push({
-        Referencia: { contains: familia, mode: "insensitive" },
+        CodigoBarraAnt: { contains: familia, mode: "insensitive" },
       });
     }
 
@@ -587,8 +927,9 @@ export class InventoryService {
 
     return {
       codigoBarra: this.pickUpperString(raw.codigoBarra),
-      codigoBarraAnt: this.pickUpperString(raw.codigoBarraAnt),
-      familia: this.pickString(general?.familia, raw.familia, raw.referencia),
+      referencia: this.pickString(raw.referencia, raw.codigoBarraAnt),
+      codigoBarraAnt: this.pickString(raw.codigoBarraAnt),
+      familia: this.pickString(general?.familia, raw.familia),
       nombre: this.pickString(general?.nombre, raw.nombre),
       nota: this.pickString(general?.nota, raw.nota),
       puntoRecorte: this.pickNumericString(general?.puntoRecorte, raw.puntoRecorte, raw.puntoReorden),
@@ -660,6 +1001,7 @@ export class InventoryService {
     siblingValues: ReturnType<InventoryService["reduceSiblingValues"]>,
   ): CompleteMerchandisePayload {
     const codigoBarra = this.requireString(payload.codigoBarra, "Debe indicar el codigo de barra");
+    const referencia = this.requireString(payload.referencia, "Debe indicar la referencia del articulo");
     const familia = this.requireString(payload.familia, "Debe indicar la familia del articulo");
     const nombre = this.requireString(payload.nombre, "Debe indicar el nombre del articulo");
     const talla = this.requireString(payload.talla.codigo, "Debe indicar la talla del articulo");
@@ -690,7 +1032,8 @@ export class InventoryService {
 
     return {
       codigoBarra,
-      codigoBarraAnt: this.pickUpperString(payload.codigoBarraAnt) ?? codigoBarra,
+      referencia,
+      codigoBarraAnt: this.pickString(payload.codigoBarraAnt) ?? familia,
       familia,
       nombre,
       nota: payload.nota ?? "",
@@ -741,9 +1084,10 @@ export class InventoryService {
     });
 
     return {
-      codigoBarra: existing.CodigoBarra,
-      codigoBarraAnt: payload.codigoBarraAnt ?? existing.CodigoBarraAnt,
-      familia: payload.familia ?? existing.Referencia,
+      codigoBarra: payload.codigoBarra ?? existing.CodigoBarra,
+      referencia: payload.referencia ?? existing.Referencia,
+      codigoBarraAnt: payload.codigoBarraAnt ?? payload.familia ?? existing.CodigoBarraAnt,
+      familia: payload.familia ?? existing.CodigoBarraAnt,
       nombre: payload.nombre ?? existing.Nombre,
       nota: payload.nota ?? existing.Nota ?? "",
       puntoRecorte: payload.puntoRecorte ?? existing.PuntoReorden.toString(),
@@ -963,6 +1307,59 @@ export class InventoryService {
     });
 
     return this.reduceSiblingValues(siblings);
+  }
+
+  private async ensureUniqueBarcode(
+    client: PrismaService | TransactionClient,
+    codigoBarra: string,
+    currentCodigoBarra?: string,
+  ) {
+    const normalizedCodigoBarra = this.normalizeBarcode(codigoBarra);
+    const duplicate = await client.inventario.findFirst({
+      where: {
+        CodigoBarra: currentCodigoBarra
+          ? {
+              equals: normalizedCodigoBarra,
+              not: this.normalizeBarcode(currentCodigoBarra),
+            }
+          : normalizedCodigoBarra,
+      },
+      select: {
+        CodigoBarra: true,
+      },
+    });
+
+    if (duplicate) {
+      throw new ConflictException("Ya existe una mercancia con ese codigo de barra");
+    }
+  }
+
+  private async ensureUniqueReferencePerBrand(
+    client: PrismaService | TransactionClient,
+    referencia: string,
+    codigoMarca: string,
+    currentCodigoBarra?: string,
+  ) {
+    const duplicate = await client.inventario.findFirst({
+      where: {
+        Referencia: referencia,
+        CodigoMarca: codigoMarca,
+        ...(currentCodigoBarra
+          ? {
+              CodigoBarra: {
+                not: this.normalizeBarcode(currentCodigoBarra),
+              },
+            }
+          : {}),
+      },
+      select: {
+        CodigoBarra: true,
+      },
+    });
+
+    if (duplicate) {
+      throw new ConflictException("No puede existir otra mercancia con la misma referencia para esa marca");
+    }
   }
 
   private reduceSiblingValues(siblings: InventorySibling[]) {
@@ -1426,9 +1823,34 @@ export class InventoryService {
   }
 
   private mergeCatalogInput(input: CatalogInput, fallback: CatalogInput): CatalogInput {
+    const explicitCode = this.normalizeOptionalUpper(input.codigo);
+    const explicitName = this.normalizeOptionalName(input.nombre);
+    const fallbackCode = this.normalizeOptionalUpper(fallback.codigo);
+    const fallbackName = this.normalizeOptionalName(fallback.nombre) ?? undefined;
+
+    if (explicitCode) {
+      return {
+        codigo: explicitCode,
+        nombre: explicitName ?? fallbackName,
+      };
+    }
+
+    if (explicitName) {
+      if (this.catalogInputMatchesFallback(explicitName, fallbackCode, fallbackName)) {
+        return {
+          codigo: fallbackCode,
+          nombre: fallbackName ?? explicitName,
+        };
+      }
+
+      return {
+        nombre: explicitName,
+      };
+    }
+
     return {
-      codigo: input.codigo ?? fallback.codigo,
-      nombre: input.nombre ?? fallback.nombre,
+      codigo: fallbackCode,
+      nombre: fallbackName,
     };
   }
 
@@ -1438,6 +1860,456 @@ export class InventoryService {
       nombre: input.nombre ?? fallback.nombre,
       porcentajeImpuesto: input.porcentajeImpuesto ?? fallback.porcentajeImpuesto,
     };
+  }
+
+  private catalogInputMatchesFallback(
+    explicitName: string,
+    fallbackCode?: string,
+    fallbackName?: string,
+  ) {
+    const normalizedInput = this.normalizeOptionalName(explicitName);
+    const normalizedFallbackName = this.normalizeOptionalName(fallbackName);
+    const normalizedFallbackCode = this.normalizeOptionalUpper(fallbackCode);
+
+    if (!normalizedInput) {
+      return false;
+    }
+
+    return normalizedInput === normalizedFallbackName || normalizedInput.toUpperCase() === normalizedFallbackCode;
+  }
+
+  private resolveCatalogImportKind(catalogType: string): CatalogImportKind {
+    const normalizedType = String(catalogType || "").trim().toLowerCase();
+
+    if (
+      normalizedType === "categorias" ||
+      normalizedType === "marcas" ||
+      normalizedType === "tallas" ||
+      normalizedType === "colores" ||
+      normalizedType === "fabricantes"
+    ) {
+      return normalizedType;
+    }
+
+    throw new BadRequestException(
+      "Tipo de catalogo no soportado. Usa categorias, marcas, tallas, colores o fabricantes.",
+    );
+  }
+
+  private parseCatalogImportRow(
+    row: Record<string, unknown>,
+    rowNumber: number,
+    catalogType: CatalogImportKind,
+  ): CatalogImportRow | null {
+    const config = this.getCatalogImportConfig(catalogType);
+    const statusAliases = ["status", "estado", "activo", "estatus"];
+
+    const codigo = this.normalizeOptionalUpper(this.extractImportRowValue(row, config.codeAliases));
+    const nombre = config.supportsName
+      ? this.normalizeOptionalName(this.extractImportRowValue(row, config.nameAliases)) ?? undefined
+      : undefined;
+    const status = config.supportsStatus
+      ? this.parseImportStatusValue(this.extractImportRowValue(row, statusAliases), rowNumber)
+      : undefined;
+
+    if (!codigo && !nombre && status === undefined) {
+      return null;
+    }
+
+    return {
+      codigo,
+      nombre,
+      status,
+      rowNumber,
+    };
+  }
+
+  private extractImportRowValue(row: Record<string, unknown>, aliases: string[]) {
+    const normalizedAliases = new Set(aliases.map((alias) => this.normalizeImportHeader(alias)));
+
+    for (const [key, value] of Object.entries(row)) {
+      if (normalizedAliases.has(this.normalizeImportHeader(key))) {
+        return typeof value === "string" ? value : value?.toString();
+      }
+    }
+
+    return undefined;
+  }
+
+  private normalizeImportHeader(value: string) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]/g, "")
+      .toLowerCase();
+  }
+
+  private parseImportStatusValue(value: string | undefined, rowNumber: number) {
+    if (!value || !value.trim()) {
+      return undefined;
+    }
+
+    const normalizedBoolean = this.pickBoolean(value);
+    if (typeof normalizedBoolean === "boolean") {
+      return normalizedBoolean ? 1 : 0;
+    }
+
+    if (/^\d+$/.test(value.trim())) {
+      return Number.parseInt(value.trim(), 10) > 0 ? 1 : 0;
+    }
+
+    throw new BadRequestException(`Fila ${rowNumber}: el status "${value}" no es valido.`);
+  }
+
+  private async persistCatalogImportRows(catalogType: CatalogImportKind, rows: CatalogImportRow[]) {
+    let creados = 0;
+    let actualizados = 0;
+    let omitidos = 0;
+    const detalleErrores: string[] = [];
+
+    for (const row of rows) {
+      try {
+        const outcome = await this.upsertCatalogImportRow(catalogType, row);
+
+        if (outcome === "created") {
+          creados += 1;
+          continue;
+        }
+
+        if (outcome === "updated") {
+          actualizados += 1;
+          continue;
+        }
+
+        omitidos += 1;
+      } catch (error) {
+        detalleErrores.push(`Fila ${row.rowNumber}: ${this.extractImportErrorMessage(error)}`);
+      }
+    }
+
+    return {
+      procesados: rows.length,
+      creados,
+      actualizados,
+      omitidos,
+      errores: detalleErrores.length,
+      detalleErrores: detalleErrores.slice(0, 10),
+    };
+  }
+
+  private async upsertCatalogImportRow(catalogType: CatalogImportKind, row: CatalogImportRow) {
+    const config = this.getCatalogImportConfig(catalogType);
+
+    if (catalogType === "tallas") {
+      const codigo = this.normalizeOptionalUpper(row.codigo ?? row.nombre);
+
+      if (!codigo) {
+        return "skipped";
+      }
+
+      this.assertCatalogCodeLength(config.displayName, codigo, config.maxCodeLength);
+
+      const existing = await this.prisma.tallas.findUnique({ where: { Codigo: codigo } });
+      if (existing) {
+        return "skipped";
+      }
+
+      await this.prisma.tallas.create({
+        data: {
+          Codigo: codigo,
+        },
+      });
+      return "created";
+    }
+
+    if (!row.codigo && !row.nombre) {
+      return "skipped";
+    }
+
+    const status = row.status ?? DEFAULT_STATUS;
+    const defaultName = row.nombre ?? row.codigo ?? config.defaultName;
+
+    return this.upsertNamedCatalogImportRow(catalogType, row, {
+      status,
+      defaultName,
+      displayName: config.displayName,
+      maxCodeLength: config.maxCodeLength,
+      maxNameLength: config.maxNameLength,
+    });
+  }
+
+  private getCatalogImportConfig(catalogType: CatalogImportKind) {
+    switch (catalogType) {
+      case "categorias":
+        return {
+          displayName: "categoria",
+          defaultName: "CATEGORIA",
+          maxCodeLength: 6,
+          maxNameLength: 60,
+          supportsName: true,
+          supportsStatus: true,
+          codeAliases: ["codigo", "cod", "codigocategoria", "codcategoria", "id"],
+          nameAliases: ["nombre", "descripcion", "detalle", "categoria", "categorias"],
+        };
+      case "marcas":
+        return {
+          displayName: "marca",
+          defaultName: "MARCA",
+          maxCodeLength: 3,
+          maxNameLength: 20,
+          supportsName: true,
+          supportsStatus: true,
+          codeAliases: ["codigo", "cod", "codigomarca", "codmarca", "id"],
+          nameAliases: ["nombre", "descripcion", "detalle", "marca", "marcas"],
+        };
+      case "tallas":
+        return {
+          displayName: "talla",
+          defaultName: "TALLA",
+          maxCodeLength: 6,
+          maxNameLength: 0,
+          supportsName: false,
+          supportsStatus: false,
+          codeAliases: ["codigo", "cod", "codigotalla", "codtalla", "talla", "tallas", "nombre", "descripcion", "detalle", "id"],
+          nameAliases: [] as string[],
+        };
+      case "colores":
+        return {
+          displayName: "color",
+          defaultName: "COLOR",
+          maxCodeLength: 3,
+          maxNameLength: 30,
+          supportsName: true,
+          supportsStatus: true,
+          codeAliases: ["codigo", "cod", "codigocolor", "codcolor", "id"],
+          nameAliases: ["nombre", "descripcion", "detalle", "color", "colores"],
+        };
+      case "fabricantes":
+        return {
+          displayName: "fabricante",
+          defaultName: "FABRICANTE",
+          maxCodeLength: 12,
+          maxNameLength: 50,
+          supportsName: true,
+          supportsStatus: true,
+          codeAliases: ["codigo", "cod", "codigofabricante", "codfabricante", "id"],
+          nameAliases: ["nombre", "descripcion", "detalle", "fabricante", "fabricantes"],
+        };
+      default:
+        return {
+          displayName: "catalogo",
+          defaultName: "CATALOGO",
+          maxCodeLength: 6,
+          maxNameLength: 60,
+          supportsName: true,
+          supportsStatus: true,
+          codeAliases: ["codigo", "cod", "id"],
+          nameAliases: ["nombre", "descripcion", "detalle"],
+        };
+    }
+  }
+
+  private async upsertNamedCatalogImportRow(
+    catalogType: Exclude<CatalogImportKind, "tallas">,
+    row: CatalogImportRow,
+    options: {
+      displayName: string;
+      status: number;
+      defaultName: string;
+      maxCodeLength: number;
+      maxNameLength: number;
+    },
+  ) {
+    const { displayName, status, defaultName, maxCodeLength, maxNameLength } = options;
+
+    if (row.codigo) {
+      this.assertCatalogCodeLength(displayName, row.codigo, maxCodeLength);
+    }
+
+    if (row.nombre) {
+      this.assertCatalogNameLength(displayName, row.nombre, maxNameLength);
+    }
+
+    const findByCode = async (codigo: string) => {
+      switch (catalogType) {
+        case "categorias":
+          return this.prisma.categorias.findUnique({ where: { Codigo: codigo } });
+        case "marcas":
+          return this.prisma.marcas.findUnique({ where: { Codigo: codigo } });
+        case "colores":
+          return this.prisma.colores.findUnique({ where: { Codigo: codigo } });
+        case "fabricantes":
+          return this.prisma.fabricantes.findUnique({ where: { Codigo: codigo } });
+      }
+    };
+
+    const findByName = async (nombre: string) => {
+      switch (catalogType) {
+        case "categorias":
+          return this.prisma.categorias.findFirst({
+            where: { Nombre: { equals: nombre, mode: "insensitive" } },
+          });
+        case "marcas":
+          return this.prisma.marcas.findFirst({
+            where: { Nombre: { equals: nombre, mode: "insensitive" } },
+          });
+        case "colores":
+          return this.prisma.colores.findFirst({
+            where: { Nombre: { equals: nombre, mode: "insensitive" } },
+          });
+        case "fabricantes":
+          return this.prisma.fabricantes.findFirst({
+            where: { Nombre: { equals: nombre, mode: "insensitive" } },
+          });
+      }
+    };
+
+    const updateRecord = async (codigo: string, data: { Nombre: string; Status: number }) => {
+      switch (catalogType) {
+        case "categorias":
+          await this.prisma.categorias.update({ where: { Codigo: codigo }, data });
+          return;
+        case "marcas":
+          await this.prisma.marcas.update({ where: { Codigo: codigo }, data });
+          return;
+        case "colores":
+          await this.prisma.colores.update({ where: { Codigo: codigo }, data });
+          return;
+        case "fabricantes":
+          await this.prisma.fabricantes.update({ where: { Codigo: codigo }, data });
+          return;
+      }
+    };
+
+    const createRecord = async (data: { Codigo: string; Nombre: string; Status: number }) => {
+      switch (catalogType) {
+        case "categorias":
+          await this.prisma.categorias.create({ data });
+          return;
+        case "marcas":
+          await this.prisma.marcas.create({ data });
+          return;
+        case "colores":
+          await this.prisma.colores.create({ data });
+          return;
+        case "fabricantes":
+          await this.prisma.fabricantes.create({ data });
+          return;
+      }
+    };
+
+    const existing = row.codigo ? await findByCode(row.codigo) : row.nombre ? await findByName(row.nombre) : null;
+
+    if (existing) {
+      await updateRecord(existing.Codigo, {
+        Nombre: row.nombre ?? existing.Nombre ?? existing.Codigo,
+        Status: status,
+      });
+      return "updated";
+    }
+
+    const codigo =
+      row.codigo ??
+      (await this.generateUniqueCode(defaultName, maxCodeLength, async (candidate) => {
+        const match = await findByCode(candidate);
+        return Boolean(match);
+      }));
+
+    await createRecord({
+      Codigo: codigo,
+      Nombre: row.nombre ?? codigo,
+      Status: status,
+    });
+    return "created";
+  }
+
+  private async namedCatalogCodeExists(
+    catalogType: Exclude<CatalogImportKind, "tallas">,
+    codigo: string,
+  ) {
+    switch (catalogType) {
+      case "categorias":
+        return Boolean(await this.prisma.categorias.findUnique({ where: { Codigo: codigo } }));
+      case "marcas":
+        return Boolean(await this.prisma.marcas.findUnique({ where: { Codigo: codigo } }));
+      case "colores":
+        return Boolean(await this.prisma.colores.findUnique({ where: { Codigo: codigo } }));
+      case "fabricantes":
+        return Boolean(await this.prisma.fabricantes.findUnique({ where: { Codigo: codigo } }));
+    }
+  }
+
+  private async namedCatalogNameExists(
+    catalogType: Exclude<CatalogImportKind, "tallas">,
+    nombre: string,
+  ) {
+    switch (catalogType) {
+      case "categorias":
+        return Boolean(
+          await this.prisma.categorias.findFirst({
+            where: { Nombre: { equals: nombre, mode: "insensitive" } },
+          }),
+        );
+      case "marcas":
+        return Boolean(
+          await this.prisma.marcas.findFirst({
+            where: { Nombre: { equals: nombre, mode: "insensitive" } },
+          }),
+        );
+      case "colores":
+        return Boolean(
+          await this.prisma.colores.findFirst({
+            where: { Nombre: { equals: nombre, mode: "insensitive" } },
+          }),
+        );
+      case "fabricantes":
+        return Boolean(
+          await this.prisma.fabricantes.findFirst({
+            where: { Nombre: { equals: nombre, mode: "insensitive" } },
+          }),
+        );
+    }
+  }
+
+  private async createNamedCatalogRecord(
+    catalogType: Exclude<CatalogImportKind, "tallas">,
+    data: { Codigo: string; Nombre: string; Status: number },
+  ) {
+    switch (catalogType) {
+      case "categorias":
+        return this.prisma.categorias.create({ data });
+      case "marcas":
+        return this.prisma.marcas.create({ data });
+      case "colores":
+        return this.prisma.colores.create({ data });
+      case "fabricantes":
+        return this.prisma.fabricantes.create({ data });
+    }
+  }
+
+  private extractImportErrorMessage(error: unknown) {
+    if (error instanceof BadRequestException) {
+      const response = error.getResponse();
+      if (typeof response === "string") {
+        return response;
+      }
+
+      if (typeof response === "object" && response && "message" in response) {
+        const message = (response as { message?: string | string[] }).message;
+        if (Array.isArray(message)) {
+          return message.join(". ");
+        }
+        if (typeof message === "string") {
+          return message;
+        }
+      }
+    }
+
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return "Ocurrio un error al importar la fila.";
   }
 
   private buildCodeCandidate(seed: string) {
@@ -1469,6 +2341,96 @@ export class InventoryService {
     }
 
     throw new ConflictException("No se pudo generar un codigo unico para el catalogo");
+  }
+
+  private assertCatalogCodeLength(displayName: string, codigo: string, maxLength: number) {
+    if (codigo.length > maxLength) {
+      throw new BadRequestException(
+        `El codigo de ${this.getCatalogDisplayLabel(displayName)} no puede tener mas de ${maxLength} caracteres.`,
+      );
+    }
+  }
+
+  private assertCatalogNameLength(displayName: string, nombre: string, maxLength: number) {
+    if (nombre.length > maxLength) {
+      throw new BadRequestException(
+        `El nombre de ${this.getCatalogDisplayLabel(displayName)} no puede tener mas de ${maxLength} caracteres.`,
+      );
+    }
+  }
+
+  private async assertCatalogNotUsedByArticles(
+    catalogType: CatalogImportKind,
+    codigo: string,
+    displayName: string,
+  ) {
+    const usedCount = await this.countArticlesUsingCatalog(catalogType, codigo);
+
+    if (usedCount > 0) {
+      throw new ConflictException(
+        `No se puede eliminar ${this.getCatalogDisplayLabel(displayName)} porque hay ${usedCount} articulo(s) con ese registro asignado.`,
+      );
+    }
+  }
+
+  private async countArticlesUsingCatalog(catalogType: CatalogImportKind, codigo: string) {
+    switch (catalogType) {
+      case "categorias":
+        return this.prisma.inventario.count({
+          where: {
+            Categoria: {
+              equals: codigo,
+              mode: "insensitive",
+            },
+          },
+        });
+      case "marcas":
+        return this.prisma.inventario.count({
+          where: {
+            CodigoMarca: {
+              equals: codigo,
+              mode: "insensitive",
+            },
+          },
+        });
+      case "tallas":
+        return this.prisma.inventario.count({
+          where: {
+            Talla: {
+              equals: codigo,
+              mode: "insensitive",
+            },
+          },
+        });
+      case "colores":
+        return this.prisma.inventario.count({
+          where: {
+            CodigoColor: {
+              equals: codigo,
+              mode: "insensitive",
+            },
+          },
+        });
+      case "fabricantes":
+        return this.prisma.inventario.count({
+          where: {
+            Fabricante: {
+              equals: codigo,
+              mode: "insensitive",
+            },
+          },
+        });
+      default:
+        return 0;
+    }
+  }
+
+  private getCatalogDisplayLabel(displayName: string) {
+    if (["categoria", "marca", "talla"].includes(displayName)) {
+      return `la ${displayName}`;
+    }
+
+    return `el ${displayName}`;
   }
 
   private calculatePromotionPrice(detailPrice: string, percentage: string) {

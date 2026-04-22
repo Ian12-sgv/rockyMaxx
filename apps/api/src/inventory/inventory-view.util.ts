@@ -55,9 +55,10 @@ function toPromotionDiscount(detail: Prisma.Decimal, promotionPrice: Prisma.Deci
 export function toInventoryView(item: InventoryWithRelations) {
   return {
     codigoBarra: item.CodigoBarra,
+    referencia: item.Referencia,
     codigoBarraAnt: item.CodigoBarraAnt,
     general: {
-      familia: item.Referencia,
+      familia: item.CodigoBarraAnt,
       nombre: item.Nombre,
       categoria: {
         codigo: item.categoriaRef.Codigo,

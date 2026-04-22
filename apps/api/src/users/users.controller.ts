@@ -1,14 +1,16 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { RequireGroups } from "../auth/decorators/require-groups.decorator";
 import { GroupsGuard } from "../auth/guards/groups.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { UserView } from "./user-view.util";
 import { UsersService } from "./users.service";
 
 @UseGuards(JwtAuthGuard, GroupsGuard)
-@RequireGroups("admin")
+@RequireGroups("admin", "sistema")
 @Controller("users")
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -35,16 +37,20 @@ export class UsersController {
   }
 
   @Post()
-  async create(@Body() createUserDto: CreateUserDto) {
+  async create(@Body() createUserDto: CreateUserDto, @CurrentUser() currentUser: UserView) {
     return {
-      usuario: await this.usersService.create(createUserDto),
+      usuario: await this.usersService.create(createUserDto, currentUser),
     };
   }
 
   @Patch(":codUsuario")
-  async update(@Param("codUsuario") codUsuario: string, @Body() updateUserDto: UpdateUserDto) {
+  async update(
+    @Param("codUsuario") codUsuario: string,
+    @Body() updateUserDto: UpdateUserDto,
+    @CurrentUser() currentUser: UserView,
+  ) {
     return {
-      usuario: await this.usersService.update(codUsuario, updateUserDto),
+      usuario: await this.usersService.update(codUsuario, updateUserDto, currentUser),
     };
   }
 

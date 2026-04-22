@@ -13,13 +13,19 @@ export class UsersBootstrapService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    const enabled = this.configService.get<string>("AUTH_BOOTSTRAP_ADMIN_ENABLED", "true");
+    const adminEnabled = this.configService.get<string>("AUTH_BOOTSTRAP_ADMIN_ENABLED", "true");
+    const systemEnabled = this.configService.get<string>("AUTH_BOOTSTRAP_SYSTEM_ENABLED", "true");
 
-    if (enabled.toLowerCase() !== "true") {
-      return;
+    await this.usersService.ensureCatalogImportPermissionSetup();
+
+    if (adminEnabled.toLowerCase() === "true") {
+      await this.usersService.ensureDefaultAdmin();
+      this.logger.log("Usuario administrador inicial verificado");
     }
 
-    await this.usersService.ensureDefaultAdmin();
-    this.logger.log("Usuario administrador inicial verificado");
+    if (systemEnabled.toLowerCase() === "true") {
+      await this.usersService.ensureSystemOperator();
+      this.logger.log("Usuario sistema inicial verificado");
+    }
   }
 }

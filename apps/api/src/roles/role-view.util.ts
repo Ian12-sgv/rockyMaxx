@@ -1,7 +1,7 @@
 import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 
-import { isProtectedAdminRoleCode } from "../shared/protected-admin.util";
+import { isProtectedAdminRoleCode, isProtectedSystemRoleCode } from "../shared/protected-admin.util";
 
 export const roleWithRelationsInclude = Prisma.validator<Prisma.GruposInclude>()({
   usuarioGrupo: {
@@ -29,6 +29,7 @@ export function toRoleView(role: RoleWithRelations, configService: ConfigService
     codigo: role.CodGrupo,
     nombre: role.NombreGrupo,
     protegidoAdmin: isProtectedAdminRoleCode(role.CodGrupo, configService),
+    protegidoSistema: isProtectedSystemRoleCode(role.CodGrupo, configService),
     totalUsuarios: role.usuarioGrupo.length,
     totalPermisos: role.grupoSeg.length,
     usuarios: role.usuarioGrupo
