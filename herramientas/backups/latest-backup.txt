@@ -1,4 +1,4 @@
-Base de datos: rocky_maxx
-Fecha del backup: 2026-04-19 21:54:05
-Archivo recomendado para restaurar: rocky_maxx-20260419-215404.custom.dump
-Archivo SQL legible: rocky_maxx-20260419-215404.full.sql
+﻿Base de datos: rocky_maxx
+Fecha del backup: 2026-04-24 21:55:11
+Archivo recomendado para restaurar: rocky_maxx-20260424-215511.custom.dump
+Archivo SQL legible: rocky_maxx-20260424-215511.full.sql
