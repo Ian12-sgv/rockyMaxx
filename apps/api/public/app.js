@@ -66,8 +66,20 @@ const state = {
     deleting: false,
     items: [],
     metadata: null,
+    search: {
+      buscar: "",
+      status: "",
+      limit: "25",
+    },
     selectedNumero: null,
     draft: createEmptyTransferDraft(),
+  },
+  sucursales: {
+    loading: false,
+    saving: false,
+    items: [],
+    selectedCodigo: "",
+    draft: createEmptySucursalDraft(),
   },
   loadingForm: false,
   submittingForm: false,
@@ -140,8 +152,20 @@ async function hydrateAuthenticatedState() {
     deleting: false,
     items: [],
     metadata: null,
+    search: {
+      buscar: "",
+      status: "",
+      limit: "25",
+    },
     selectedNumero: null,
     draft: createEmptyTransferDraft(),
+  };
+  state.sucursales = {
+    loading: false,
+    saving: false,
+    items: [],
+    selectedCodigo: "",
+    draft: createEmptySucursalDraft(),
   };
   state.articleEditorTab = "general";
   state.formMode = "create";
@@ -391,7 +415,8 @@ function renderShellView() {
               `)}
               ${renderDesktopMenu("archivos", "Archivos", renderDesktopArchivoMenuV2())}
               ${renderDesktopMenu("procesos", "Procesos", `
-                ${renderDesktopMenuLink("transferencias", "Transferencias")}
+                ${renderDesktopMenuLink("registro-transferencia", "Registro de transferencia")}
+                ${renderDesktopMenuLink("cargar-transferencia", "Cargar transferencia")}
                 ${renderDesktopMenuLink("reportes", "Movimientos")}
               `)}
                 ${renderDesktopMenu("reportes", "Reportes", `
@@ -499,8 +524,16 @@ function renderDesktopWorkspace() {
     return renderRoleAccessWorkspace();
   }
 
-  if (state.currentView === "transferencias") {
+  if (state.currentView === "transferencias" || state.currentView === "registro-transferencia") {
     return renderTransfersWorkspace();
+  }
+
+  if (state.currentView === "cargar-transferencia") {
+    return renderLoadTransferWorkspace();
+  }
+
+  if (state.currentView === "sucursales") {
+    return renderSucursalesWorkspace();
   }
 
   if (["categorias", "marcas", "tallas", "colores", "fabricantes"].includes(state.currentView)) {
@@ -1118,16 +1151,16 @@ function renderTransfersWorkspace() {
 
   return `
     <div class="modern-page">
-      ${renderDesktopBreadcrumb(["Procesos", "Transferencias"])}
+      ${renderDesktopBreadcrumb(["Procesos", "Registro de transferencia"])}
 
       <div class="modern-page-header">
         <div>
-          <h1>Transferencias</h1>
-          <p>Guarda transferencias pendientes, descuenta stock en origen y aprueba la entrada en destino.</p>
+          <h1>Registro de transferencia</h1>
+          <p>Crea, edita, guarda, aprueba o elimina una transferencia pendiente.</p>
         </div>
         <div class="modern-page-actions">
-          <button class="button button-ghost" type="button" data-refresh-transfers ${state.transfers.loadingList || state.transfers.loadingMetadata ? "disabled" : ""}>
-            ${state.transfers.loadingList || state.transfers.loadingMetadata ? "Actualizando..." : "Actualizar"}
+          <button class="button button-ghost" type="button" data-open-load-transfer ${isSaving || isApproving || isDeleting ? "disabled" : ""}>
+            Cargar transferencia
           </button>
           <button class="button button-primary" type="button" data-new-transfer ${isSaving || isApproving || isDeleting ? "disabled" : ""}>
             Nueva transferencia
@@ -1136,20 +1169,7 @@ function renderTransfersWorkspace() {
       </div>
 
       <div class="modern-module-grid">
-        <section class="modern-card modern-card-list">
-          <div class="modern-card-head">
-            <div>
-              <h2>Transferencias registradas</h2>
-              <p>${escapeHtml(String(state.transfers.items.length || 0))} documento(s) visibles.</p>
-            </div>
-            <div class="modern-chip">
-              ${state.transfers.loadingList ? "Cargando" : "Listas"}
-            </div>
-          </div>
-          ${state.transfers.loadingList ? renderLoadingState("Cargando transferencias...") : renderTransfersTable()}
-        </section>
-
-        <aside class="modern-card modern-card-editor">
+        <section class="modern-card modern-card-editor">
           <form id="transfer-form" class="article-editor article-editor-panel">
             <div class="article-editor-header">
               <div>
@@ -1284,8 +1304,83 @@ function renderTransfersWorkspace() {
           <datalist id="transfer-location-options">
             ${renderTransferLocationOptions(Array.isArray(state.transfers.metadata?.sucursales) ? state.transfers.metadata.sucursales : [])}
           </datalist>
-        </aside>
+        </section>
       </div>
+    </div>
+  `;
+}
+
+function renderLoadTransferWorkspace() {
+  return `
+    <div class="modern-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Cargar transferencia"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Cargar transferencia</h1>
+          <p>Busca una transferencia registrada y abre el documento para continuar el registro.</p>
+        </div>
+        <div class="modern-page-actions">
+          <button class="button button-primary" type="button" data-open-transfer-register>
+            Registro de transferencia
+          </button>
+        </div>
+      </div>
+
+      <section class="modern-card catalog-import-card">
+        <form id="transfer-search-form" class="catalog-import-form">
+          <div class="catalog-manual-grid">
+            <label class="field">
+              <span>Buscar</span>
+              <input
+                type="text"
+                name="buscar"
+                value="${escapeHtml(toInputValue(state.transfers.search?.buscar))}"
+                maxlength="30"
+                placeholder="Numero, origen, destino, documento"
+              />
+            </label>
+            <label class="field">
+              <span>Status</span>
+              <select name="status">
+                <option value="" ${String(state.transfers.search?.status || "") === "" ? "selected" : ""}>Todos</option>
+                <option value="0" ${String(state.transfers.search?.status || "") === "0" ? "selected" : ""}>No aprobada</option>
+                <option value="1" ${String(state.transfers.search?.status || "") === "1" ? "selected" : ""}>Aprobada</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Limite</span>
+              <input
+                type="number"
+                name="limit"
+                min="1"
+                max="100"
+                step="1"
+                value="${escapeHtml(toInputValue(state.transfers.search?.limit || "25"))}"
+              />
+            </label>
+          </div>
+          <div class="catalog-import-actions">
+            <button class="button button-primary" type="submit" ${state.transfers.loadingList ? "disabled" : ""}>
+              ${state.transfers.loadingList ? "Buscando..." : "Buscar transferencia"}
+            </button>
+            <button class="button button-ghost" type="button" data-clear-transfer-search ${state.transfers.loadingList ? "disabled" : ""}>
+              Limpiar
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section class="modern-card catalog-import-card">
+        <div class="modern-card-head">
+          <div>
+            <h2>Resultados</h2>
+            <p>${escapeHtml(String(state.transfers.items.length || 0))} documento(s) visibles.</p>
+          </div>
+          <div class="modern-chip">${state.transfers.loadingList ? "Buscando" : "Listas"}</div>
+        </div>
+        ${state.transfers.loadingList ? renderLoadingState("Buscando transferencias...") : renderTransfersTable()}
+      </section>
     </div>
   `;
 }
@@ -1466,6 +1561,186 @@ function renderTransferStatusBadge(status) {
   return `<span class="modern-chip">${escapeHtml(label)}</span>`;
 }
 
+function renderSucursalesWorkspace() {
+  const draft = state.sucursales.draft || createEmptySucursalDraft();
+  const isSaving = state.sucursales.saving;
+
+  return `
+    <div class="modern-page">
+      ${renderDesktopBreadcrumb(["Archivos", "Inventario", "Sucursales"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Sucursales</h1>
+          <p>Administra tiendas y bodegas. Status 1 indica abierta; status 0 indica cerrada.</p>
+        </div>
+        <div class="modern-page-actions">
+          <button class="button button-ghost" type="button" data-refresh-sucursales ${state.sucursales.loading ? "disabled" : ""}>
+            ${state.sucursales.loading ? "Actualizando..." : "Actualizar"}
+          </button>
+          <button class="button button-primary" type="button" data-new-sucursal ${isSaving ? "disabled" : ""}>
+            Nueva sucursal
+          </button>
+        </div>
+      </div>
+
+      <div class="modern-module-grid">
+        <section class="modern-card modern-card-list">
+          <div class="modern-card-head">
+            <div>
+              <h2>Sucursales registradas</h2>
+              <p>${escapeHtml(String(state.sucursales.items.length || 0))} registro(s) visibles.</p>
+            </div>
+            <div class="modern-chip">${state.sucursales.loading ? "Cargando" : "Listas"}</div>
+          </div>
+          ${state.sucursales.loading ? renderLoadingState("Cargando sucursales...") : renderSucursalesTable()}
+        </section>
+
+        <aside class="modern-card modern-card-editor">
+          <form id="sucursal-form" class="article-editor article-editor-panel">
+            <div class="article-editor-header">
+              <div>
+                <span class="article-editor-eyebrow">Registro</span>
+                <h2>${draft.codigo ? `Sucursal ${escapeHtml(String(draft.codigo))}` : "Nueva sucursal"}</h2>
+                <p>Todos los campos son opcionales; si no indicas codigo, se genera automaticamente.</p>
+              </div>
+              <div class="article-editor-status">
+                ${renderSucursalStatusBadge(draft.status)}
+              </div>
+            </div>
+
+            <div class="article-toolbar">
+              <div class="article-toolbar-group">
+                <button class="button button-primary" type="submit" ${isSaving ? "disabled" : ""}>
+                  ${isSaving ? "Guardando..." : draft.originalCodigo ? "Guardar cambios" : "Guardar sucursal"}
+                </button>
+                <button class="button button-ghost" type="button" data-sucursal-reset ${isSaving ? "disabled" : ""}>
+                  Limpiar
+                </button>
+              </div>
+            </div>
+
+            <div class="article-editor-section">
+              <div class="article-editor-grid">
+                <label class="field">
+                  <span>Codigo</span>
+                  <input
+                    type="text"
+                    name="codigo"
+                    value="${escapeHtml(toInputValue(draft.codigo))}"
+                    maxlength="15"
+                    placeholder="Automatico"
+                  />
+                </label>
+                <label class="field">
+                  <span>Nombre</span>
+                  <input
+                    type="text"
+                    name="nombre"
+                    value="${escapeHtml(toInputValue(draft.nombre))}"
+                    maxlength="80"
+                    placeholder="Nombre de tienda o bodega"
+                  />
+                </label>
+                <label class="field">
+                  <span>Telefono</span>
+                  <input
+                    type="text"
+                    name="telefono"
+                    value="${escapeHtml(toInputValue(draft.telefono))}"
+                    maxlength="30"
+                    placeholder="Telefono"
+                  />
+                </label>
+                <label class="field">
+                  <span>Status</span>
+                  <select name="status">
+                    <option value="1" ${String(draft.status ?? "1") === "1" ? "selected" : ""}>1 - Abierta</option>
+                    <option value="0" ${String(draft.status ?? "1") === "0" ? "selected" : ""}>0 - Cerrada</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Porcentaje de redondeo</span>
+                  <input
+                    type="number"
+                    name="porcentajeDeRedondeo"
+                    min="0"
+                    step="0.0001"
+                    value="${escapeHtml(toInputValue(draft.porcentajeDeRedondeo))}"
+                    placeholder="0"
+                  />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Direccion</span>
+                <textarea name="direccion" rows="3" maxlength="120" placeholder="Direccion">${escapeHtml(toInputValue(draft.direccion))}</textarea>
+              </label>
+            </div>
+          </form>
+        </aside>
+      </div>
+    </div>
+  `;
+}
+
+function renderSucursalesTable() {
+  const items = Array.isArray(state.sucursales.items) ? state.sucursales.items : [];
+
+  if (!items.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin sucursales</h3>
+        <p>No hay tiendas o bodegas registradas todavia.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Codigo</th>
+            <th>Nombre</th>
+            <th>Telefono</th>
+            <th>Status</th>
+            <th>Redondeo</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map((item) => {
+              const isSelected = String(state.sucursales.selectedCodigo || "") === String(item.codigo || "");
+
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(item.codigo || "-")}</strong></td>
+                  <td>${escapeHtml(item.nombre || "-")}</td>
+                  <td>${escapeHtml(item.telefono || "-")}</td>
+                  <td>${renderSucursalStatusBadge(item.status)}</td>
+                  <td>${escapeHtml(formatTransferAmount(item.porcentajeDeRedondeo || 0))}</td>
+                  <td>
+                    <button class="button button-ghost" type="button" data-sucursal-select="${escapeHtml(item.codigo || "")}">
+                      Abrir
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderSucursalStatusBadge(status) {
+  const numericStatus = Number(status ?? 1);
+  return `<span class="modern-chip">${numericStatus === 0 ? "Cerrada" : "Abierta"}</span>`;
+}
+
 function renderLoadingState(message) {
   return `
     <div class="empty-state">
@@ -1587,7 +1862,7 @@ function renderSystemFooter() {
       <div class="modern-system-footer-main">
         <span class="modern-system-footer-eyebrow">Sistema Operativo</span>
         <strong>RockyMax - Rocky Maxx</strong>
-        <span>Usuario ${escapeHtml((state.user?.codUsuario || "admin").toUpperCase())} | Version 2.0.0</span>
+        <span>Usuario ${escapeHtml((state.user?.codUsuario || "admin").toUpperCase())} | Version 2.0.1</span>
       </div>
       <div class="modern-system-footer-grid">
         <div class="modern-system-footer-block">
@@ -1620,8 +1895,12 @@ function getDesktopBreadcrumb(view) {
     return ["Reportes", "General"];
   }
 
-  if (view === "transferencias") {
-    return ["Procesos", "Transferencias"];
+  if (view === "transferencias" || view === "registro-transferencia") {
+    return ["Procesos", "Registro de transferencia"];
+  }
+
+  if (view === "cargar-transferencia") {
+    return ["Procesos", "Cargar transferencia"];
   }
 
   if (["usuarios", "roles"].includes(view)) {
@@ -1648,6 +1927,8 @@ function getDesktopViewLabelV2(view) {
     sucursales: "Sucursales",
     personal: "Personal",
     transferencias: "Transferencias",
+    "registro-transferencia": "Registro de transferencia",
+    "cargar-transferencia": "Cargar transferencia",
     reportes: "Reportes",
     usuarios: "Usuarios",
     roles: "Roles",
@@ -2549,8 +2830,18 @@ function bindShellEvents() {
         return;
       }
 
-      if (nextView === "transferencias") {
-        await loadTransfersModule();
+      if (nextView === "transferencias" || nextView === "registro-transferencia") {
+        await loadTransfersMetadata();
+        return;
+      }
+
+      if (nextView === "cargar-transferencia") {
+        await loadTransfers();
+        return;
+      }
+
+      if (nextView === "sucursales") {
+        await loadSucursales();
       }
     });
   });
@@ -2595,6 +2886,7 @@ function bindShellEvents() {
 
   bindArticleEvents();
   bindTransferEvents();
+  bindSucursalEvents();
 
   document.querySelectorAll("[data-role-import-toggle]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -2901,6 +3193,36 @@ function bindTransferEvents() {
     await loadTransfersModule();
   });
 
+  document.querySelector("[data-open-transfer-register]")?.addEventListener("click", async () => {
+    state.currentView = "registro-transferencia";
+    await loadTransfersMetadata({ renderAfter: false });
+    render();
+  });
+
+  document.querySelector("[data-open-load-transfer]")?.addEventListener("click", async () => {
+    state.currentView = "cargar-transferencia";
+    await loadTransfers({ renderAfter: false });
+    render();
+  });
+
+  document.querySelector("[data-clear-transfer-search]")?.addEventListener("click", async () => {
+    state.transfers.search = createEmptyTransferSearch();
+    await loadTransfers();
+  });
+
+  const transferSearchForm = document.getElementById("transfer-search-form");
+  if (transferSearchForm) {
+    transferSearchForm.addEventListener("input", () => {
+      state.transfers.search = readTransferSearch(transferSearchForm);
+    });
+
+    transferSearchForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      state.transfers.search = readTransferSearch(transferSearchForm);
+      await loadTransfers();
+    });
+  }
+
   document.querySelector("[data-new-transfer]")?.addEventListener("click", () => {
     resetTransferDraft();
     clearFlash();
@@ -2974,6 +3296,48 @@ function bindTransferEvents() {
       event.preventDefault();
       captureTransferDraft();
       await saveTransfer();
+    });
+  }
+}
+
+function bindSucursalEvents() {
+  document.querySelector("[data-refresh-sucursales]")?.addEventListener("click", async () => {
+    await loadSucursales();
+  });
+
+  document.querySelector("[data-new-sucursal]")?.addEventListener("click", () => {
+    resetSucursalDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-sucursal-reset]")?.addEventListener("click", () => {
+    resetSucursalDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelectorAll("[data-sucursal-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codigo = button.getAttribute("data-sucursal-select") || "";
+      if (!codigo) {
+        return;
+      }
+
+      await loadSucursalForEdit(codigo);
+    });
+  });
+
+  const sucursalForm = document.getElementById("sucursal-form");
+  if (sucursalForm) {
+    sucursalForm.addEventListener("input", () => {
+      captureSucursalDraft();
+    });
+
+    sucursalForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureSucursalDraft();
+      await saveSucursal();
     });
   }
 }
@@ -3336,7 +3700,21 @@ async function loadTransfers(options = {}) {
   }
 
   try {
-    const response = await apiFetch("/transfers");
+    const params = new URLSearchParams();
+    const search = state.transfers.search || createEmptyTransferSearch();
+
+    if (search.buscar) {
+      params.set("buscar", search.buscar);
+    }
+    if (search.status !== "") {
+      params.set("status", search.status);
+    }
+    if (search.limit) {
+      params.set("limit", search.limit);
+    }
+
+    const query = params.toString();
+    const response = await apiFetch(`/transfers${query ? `?${query}` : ""}`);
     state.transfers.items = Array.isArray(response.items) ? response.items : [];
   } catch (error) {
     console.error(error);
@@ -3355,9 +3733,14 @@ async function loadTransferForEdit(numero) {
   render();
 
   try {
+    if (!state.transfers.metadata) {
+      await loadTransfersMetadata({ renderAfter: false });
+    }
+
     const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}`);
     state.transfers.selectedNumero = numero;
     state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
+    state.currentView = "registro-transferencia";
   } catch (error) {
     console.error(error);
     setFlash(`No se pudo cargar la transferencia ${numero}: ${extractErrorMessage(error)}`, "error");
@@ -3466,6 +3849,81 @@ async function deleteTransfer(numero) {
     setFlash(extractErrorMessage(error), "error");
   } finally {
     state.transfers.deleting = false;
+    render();
+  }
+}
+
+async function loadSucursales(options = {}) {
+  const { renderAfter = true } = options;
+  state.sucursales.loading = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/sucursales");
+    state.sucursales.items = Array.isArray(response.sucursales) ? response.sucursales : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar las sucursales: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.sucursales.loading = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadSucursalForEdit(codigo) {
+  state.sucursales.loading = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/sucursales/${encodeURIComponent(codigo)}`);
+    state.sucursales.selectedCodigo = response.sucursal?.codigo || codigo;
+    state.sucursales.draft = sucursalToDraft(response.sucursal);
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la sucursal ${codigo}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.sucursales.loading = false;
+    render();
+  }
+}
+
+async function saveSucursal() {
+  const draft = state.sucursales.draft || createEmptySucursalDraft();
+  state.sucursales.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildSucursalPayload(draft);
+    const response = draft.originalCodigo
+      ? await apiFetch(`/sucursales/${encodeURIComponent(draft.originalCodigo)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/sucursales", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.sucursales.selectedCodigo = response.sucursal?.codigo || draft.codigo || "";
+    state.sucursales.draft = sucursalToDraft(response.sucursal);
+    await loadSucursales({ renderAfter: false });
+    setFlash(
+      draft.originalCodigo
+        ? `Sucursal ${response.sucursal?.codigo || draft.originalCodigo} actualizada correctamente.`
+        : `Sucursal ${response.sucursal?.codigo || ""} guardada correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.sucursales.saving = false;
     render();
   }
 }
@@ -3680,6 +4138,22 @@ function resetTransferDraft() {
   state.transfers.draft = createEmptyTransferDraft(state.transfers.metadata);
 }
 
+function createEmptyTransferSearch() {
+  return {
+    buscar: "",
+    status: "",
+    limit: "25",
+  };
+}
+
+function readTransferSearch(form) {
+  return {
+    buscar: readFormFieldValue(form, "buscar", ""),
+    status: readFormFieldValue(form, "status", ""),
+    limit: readFormFieldValue(form, "limit", "25") || "25",
+  };
+}
+
 function createEmptyTransferDraft(metadata = state.transfers?.metadata) {
   return {
     numero: null,
@@ -3834,6 +4308,73 @@ function computeTransferDraftTotal(draft) {
 
     return total + quantity * value;
   }, 0);
+}
+
+function resetSucursalDraft() {
+  state.sucursales.selectedCodigo = "";
+  state.sucursales.draft = createEmptySucursalDraft();
+}
+
+function createEmptySucursalDraft() {
+  return {
+    originalCodigo: "",
+    codigo: "",
+    nombre: "",
+    direccion: "",
+    telefono: "",
+    status: "1",
+    porcentajeDeRedondeo: "0",
+  };
+}
+
+function captureSucursalDraft() {
+  const form = document.getElementById("sucursal-form");
+  if (!form) {
+    return;
+  }
+
+  state.sucursales.draft = readSucursalDraft(form);
+}
+
+function readSucursalDraft(form) {
+  const currentDraft = state.sucursales.draft || createEmptySucursalDraft();
+
+  return {
+    originalCodigo: currentDraft.originalCodigo || "",
+    codigo: readFormFieldValue(form, "codigo", currentDraft.codigo),
+    nombre: readFormFieldValue(form, "nombre", currentDraft.nombre),
+    direccion: readFormFieldValue(form, "direccion", currentDraft.direccion),
+    telefono: readFormFieldValue(form, "telefono", currentDraft.telefono),
+    status: readFormFieldValue(form, "status", currentDraft.status || "1"),
+    porcentajeDeRedondeo: readFormFieldValue(
+      form,
+      "porcentajeDeRedondeo",
+      currentDraft.porcentajeDeRedondeo || "0",
+    ),
+  };
+}
+
+function buildSucursalPayload(draft) {
+  return {
+    codigo: String(draft.codigo || "").trim().toUpperCase() || undefined,
+    nombre: String(draft.nombre || "").trim() || undefined,
+    direccion: String(draft.direccion || "").trim() || undefined,
+    telefono: String(draft.telefono || "").trim() || undefined,
+    status: Number.parseInt(String(draft.status ?? "1"), 10),
+    porcentajeDeRedondeo: String(draft.porcentajeDeRedondeo || "").trim() || undefined,
+  };
+}
+
+function sucursalToDraft(sucursal) {
+  return {
+    originalCodigo: sucursal?.codigo || "",
+    codigo: sucursal?.codigo || "",
+    nombre: sucursal?.nombre || "",
+    direccion: sucursal?.direccion || "",
+    telefono: sucursal?.telefono || "",
+    status: String(sucursal?.status ?? 1),
+    porcentajeDeRedondeo: toInputValue(sucursal?.porcentajeDeRedondeo ?? "0"),
+  };
 }
 
 function resetArticleForm() {
@@ -4531,6 +5072,11 @@ function clearSession() {
     deleting: false,
     items: [],
     metadata: null,
+    search: {
+      buscar: "",
+      status: "",
+      limit: "25",
+    },
     selectedNumero: null,
     draft: createEmptyTransferDraft(),
   };

@@ -80,6 +80,14 @@ Y se conecto en:
 
 - `apps/api/src/app.module.ts`
 
+Tambien se agrego el modulo legacy de sucursales:
+
+- `apps/api/src/sucursales/sucursales.module.ts`
+- `apps/api/src/sucursales/sucursales.controller.ts`
+- `apps/api/src/sucursales/sucursales.service.ts`
+- `apps/api/src/sucursales/sucursal-view.util.ts`
+- `apps/api/src/sucursales/dto/`
+
 ### Endpoints nuevos
 
 - `GET /api/transfers/metadata`
@@ -90,26 +98,49 @@ Y se conecto en:
 - `POST /api/transfers/:numero/approve`
 - `DELETE /api/transfers/:numero`
 
+### Endpoints de sucursales
+
+- `GET /api/sucursales`
+- `GET /api/sucursales/:codigo`
+- `POST /api/sucursales`
+- `PATCH /api/sucursales/:codigo`
+
 ### Frontend nuevo
 
 Se agrego una pantalla minima de transferencias dentro de:
 
 - `apps/api/public/app.js`
 
-La vista aparece en:
+El flujo de transferencias quedo separado en dos modulos de UI:
 
 - menu `Procesos`
-- opcion `Transferencias`
+- opcion `Registro de transferencia`
+- opcion `Cargar transferencia`
 
-La pantalla permite:
+`Registro de transferencia` permite:
 
 - crear transferencia
 - agregar y quitar renglones
 - guardar transferencia pendiente
-- abrir transferencia existente
 - editar mientras `Status = 0`
 - aprobar
 - eliminar una transferencia pendiente
+
+`Cargar transferencia` permite:
+
+- buscar transferencias por numero, origen, destino, documento, observacion o usuario
+- filtrar por status pendiente/aprobada
+- limitar resultados
+- abrir una transferencia existente en el modulo `Registro de transferencia`
+
+Tambien se agrego pantalla para:
+
+- menu `Archivos`
+- opcion `Sucursales`
+- listar tiendas/bodegas
+- crear sucursal con todos los campos libres para el usuario
+- editar `Codigo`, `Nombre`, `Direccion`, `Telefono`, `Status` y `PorcentajeDeRedondeo`
+- mostrar `Status = 1` como abierta y `Status = 0` como cerrada
 
 ## Comportamiento Tecnico Importante
 
@@ -230,6 +261,28 @@ Precision posterior:
 - la aprobacion tambien sincroniza atributos del articulo cuando existe coincidencia, incluyendo nombre, talla, color, fabricante, categoria, impuesto, precios, costos, promocion, punto de reorden, status, tipo, serializado y codigo de familia/anterior
 - por la limitacion actual de `INVENTARIO.CodigoBarra` como clave primaria, no se puede crear otro articulo con el mismo codigo de barra y distinta referencia o marca dentro de la misma tabla
 - si al crear mercancia o al recibir una transferencia se detecta un `CodigoBarra` duplicado, el backend responde conflicto con el mensaje `Codigo de barra duplicado.`, que el frontend muestra como alerta
+
+### Modulo Sucursales
+
+Se trabaja sobre la tabla legacy `SUCURSALES` con estos campos:
+
+- `Codigo`
+- `Nombre`
+- `Direccion`
+- `Telefono`
+- `Status`
+- `PorcentajeDeRedondeo`
+
+Reglas implementadas:
+
+- el formulario no obliga al usuario a llenar campos
+- si no se envia `Codigo`, el backend genera uno numerico
+- si no se envia `Nombre`, se usa el `Codigo` como nombre tecnico
+- si no se envia `Status`, queda `1` por defecto
+- `Status = 0` significa cerrada
+- `Status = 1` significa abierta
+- si no se envia `PorcentajeDeRedondeo`, queda `0`
+- aunque Prisma marca `Direccion` y `Telefono` como opcionales, la base restaurada puede exigir NOT NULL; por eso el backend guarda cadena vacia cuando el usuario no llena esos campos
 
 ## Estado Actual Del Repositorio
 
