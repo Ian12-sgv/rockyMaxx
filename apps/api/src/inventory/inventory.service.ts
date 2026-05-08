@@ -23,6 +23,7 @@ const DEFAULT_TYPE = 0;
 const DEFAULT_STATUS = 1;
 const DEFAULT_SERIALIZED = 0;
 const DEFAULT_BRAND_NAME = "GENERAL";
+const DUPLICATE_BARCODE_MESSAGE = "Codigo de barra duplicado.";
 
 type InventorySibling = {
   PrecioDetal: Prisma.Decimal;
@@ -659,7 +660,7 @@ export class InventoryService {
     });
 
     if (existing) {
-      throw new ConflictException("Ya existe una mercancia con ese codigo de barra");
+      throw new ConflictException(DUPLICATE_BARCODE_MESSAGE);
     }
 
     const marcaSeed = normalized.marca.codigo ?? normalized.marca.nombre ?? familia;
@@ -719,7 +720,7 @@ export class InventoryService {
       return toInventoryView(created);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new ConflictException("Ya existe una mercancia con ese codigo de barra");
+        throw new ConflictException(DUPLICATE_BARCODE_MESSAGE);
       }
 
       throw error;
@@ -792,7 +793,7 @@ export class InventoryService {
       return toInventoryView(updated);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new ConflictException("Ya existe una mercancia con ese codigo de barra");
+        throw new ConflictException(DUPLICATE_BARCODE_MESSAGE);
       }
 
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
@@ -1330,7 +1331,7 @@ export class InventoryService {
     });
 
     if (duplicate) {
-      throw new ConflictException("Ya existe una mercancia con ese codigo de barra");
+      throw new ConflictException(DUPLICATE_BARCODE_MESSAGE);
     }
   }
 

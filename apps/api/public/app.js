@@ -57,6 +57,18 @@ const state = {
     savingRole: "",
     roles: [],
   },
+  transfers: {
+    loadingList: false,
+    loadingMetadata: false,
+    loadingDetail: false,
+    saving: false,
+    approving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    selectedNumero: null,
+    draft: createEmptyTransferDraft(),
+  },
   loadingForm: false,
   submittingForm: false,
   deletingCode: "",
@@ -118,6 +130,18 @@ async function hydrateAuthenticatedState() {
     loading: false,
     savingRole: "",
     roles: [],
+  };
+  state.transfers = {
+    loadingList: false,
+    loadingMetadata: false,
+    loadingDetail: false,
+    saving: false,
+    approving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    selectedNumero: null,
+    draft: createEmptyTransferDraft(),
   };
   state.articleEditorTab = "general";
   state.formMode = "create";
@@ -367,6 +391,7 @@ function renderShellView() {
               `)}
               ${renderDesktopMenu("archivos", "Archivos", renderDesktopArchivoMenuV2())}
               ${renderDesktopMenu("procesos", "Procesos", `
+                ${renderDesktopMenuLink("transferencias", "Transferencias")}
                 ${renderDesktopMenuLink("reportes", "Movimientos")}
               `)}
                 ${renderDesktopMenu("reportes", "Reportes", `
@@ -472,6 +497,10 @@ function renderDesktopWorkspace() {
 
   if (state.currentView === "roles") {
     return renderRoleAccessWorkspace();
+  }
+
+  if (state.currentView === "transferencias") {
+    return renderTransfersWorkspace();
   }
 
   if (["categorias", "marcas", "tallas", "colores", "fabricantes"].includes(state.currentView)) {
@@ -1080,6 +1109,363 @@ function renderRoleAccessTable(roles, options = {}) {
   `;
 }
 
+function renderTransfersWorkspace() {
+  const draft = state.transfers.draft || createEmptyTransferDraft();
+  const isLocked = Boolean(draft.numero) && Number(draft.status) === 1;
+  const isSaving = state.transfers.saving;
+  const isApproving = state.transfers.approving;
+  const isDeleting = state.transfers.deleting;
+
+  return `
+    <div class="modern-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Transferencias"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Transferencias</h1>
+          <p>Guarda transferencias pendientes, descuenta stock en origen y aprueba la entrada en destino.</p>
+        </div>
+        <div class="modern-page-actions">
+          <button class="button button-ghost" type="button" data-refresh-transfers ${state.transfers.loadingList || state.transfers.loadingMetadata ? "disabled" : ""}>
+            ${state.transfers.loadingList || state.transfers.loadingMetadata ? "Actualizando..." : "Actualizar"}
+          </button>
+          <button class="button button-primary" type="button" data-new-transfer ${isSaving || isApproving || isDeleting ? "disabled" : ""}>
+            Nueva transferencia
+          </button>
+        </div>
+      </div>
+
+      <div class="modern-module-grid">
+        <section class="modern-card modern-card-list">
+          <div class="modern-card-head">
+            <div>
+              <h2>Transferencias registradas</h2>
+              <p>${escapeHtml(String(state.transfers.items.length || 0))} documento(s) visibles.</p>
+            </div>
+            <div class="modern-chip">
+              ${state.transfers.loadingList ? "Cargando" : "Listas"}
+            </div>
+          </div>
+          ${state.transfers.loadingList ? renderLoadingState("Cargando transferencias...") : renderTransfersTable()}
+        </section>
+
+        <aside class="modern-card modern-card-editor">
+          <form id="transfer-form" class="article-editor article-editor-panel">
+            <div class="article-editor-header">
+              <div>
+                <span class="article-editor-eyebrow">Documento</span>
+                <h2>${draft.numero ? `Transferencia ${escapeHtml(String(draft.numero))}` : "Nueva transferencia"}</h2>
+                <p>${isLocked ? "La transferencia ya fue aprobada y quedo bloqueada para edicion." : "Las transferencias pendientes descuentan stock al guardar."}</p>
+              </div>
+              <div class="article-editor-status">
+                ${renderTransferStatusBadge(draft.status)}
+              </div>
+            </div>
+
+            <div class="article-toolbar">
+              <div class="article-toolbar-group">
+                <button class="button button-primary" type="submit" ${isLocked || isSaving || isApproving || isDeleting ? "disabled" : ""}>
+                  ${isSaving ? "Guardando..." : draft.numero ? "Guardar cambios" : "Guardar transferencia"}
+                </button>
+                <button class="button button-ghost" type="button" data-transfer-reset ${isSaving || isApproving || isDeleting ? "disabled" : ""}>
+                  Limpiar
+                </button>
+                <button class="button button-ghost" type="button" data-transfer-add-line ${isLocked || isSaving || isApproving || isDeleting ? "disabled" : ""}>
+                  Agregar linea
+                </button>
+              </div>
+              <div class="article-toolbar-group">
+                <button
+                  class="button button-danger"
+                  type="button"
+                  data-delete-transfer
+                  ${draft.numero && Number(draft.status) === 0 && !isSaving && !isApproving && !isDeleting ? "" : "disabled"}
+                >
+                  ${isDeleting ? "Eliminando..." : "Eliminar pendiente"}
+                </button>
+                <button
+                  class="button button-primary"
+                  type="button"
+                  data-approve-transfer
+                  ${draft.numero && Number(draft.status) === 0 && !isSaving && !isApproving && !isDeleting ? "" : "disabled"}
+                >
+                  ${isApproving ? "Aprobando..." : "Aprobar"}
+                </button>
+              </div>
+            </div>
+
+            <div class="article-editor-section">
+              <div class="article-editor-grid">
+                <label class="field">
+                  <span>Numero</span>
+                  <input type="text" name="numero" value="${escapeHtml(draft.numero ? String(draft.numero) : "Automatico al guardar")}" readonly />
+                </label>
+                <label class="field">
+                  <span>Fecha</span>
+                  <input type="date" name="fecha" value="${escapeHtml(toInputValue(draft.fecha))}" ${isLocked ? "disabled" : ""} />
+                </label>
+                <label class="field">
+                  <span>Codigo envia</span>
+                  <input
+                    type="text"
+                    name="codigoEnvia"
+                    list="transfer-location-options"
+                    value="${escapeHtml(toInputValue(draft.codigoEnvia))}"
+                    maxlength="12"
+                    placeholder="Origen"
+                    ${isLocked ? "disabled" : ""}
+                  />
+                </label>
+                <label class="field">
+                  <span>Codigo recibe</span>
+                  <input
+                    type="text"
+                    name="codigoRecibe"
+                    list="transfer-location-options"
+                    value="${escapeHtml(toInputValue(draft.codigoRecibe))}"
+                    maxlength="15"
+                    placeholder="Destino"
+                    ${isLocked ? "disabled" : ""}
+                  />
+                </label>
+                <label class="field">
+                  <span>Documento origen</span>
+                  <input
+                    type="text"
+                    name="documentoOrigen"
+                    value="${escapeHtml(toInputValue(draft.documentoOrigen))}"
+                    maxlength="12"
+                    placeholder="Opcional"
+                    ${isLocked ? "disabled" : ""}
+                  />
+                </label>
+                <label class="field">
+                  <span>Tipo despacho</span>
+                  <select name="idDespacho" ${isLocked ? "disabled" : ""}>
+                    ${renderTransferDispatchOptions(
+                      Array.isArray(state.transfers.metadata?.tiposDespacho) ? state.transfers.metadata.tiposDespacho : [],
+                      String(draft.idDespacho || state.transfers.metadata?.defaults?.idDespacho || "0"),
+                    )}
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Zona</span>
+                  <input
+                    type="text"
+                    name="zona"
+                    value="${escapeHtml(toInputValue(draft.zona))}"
+                    maxlength="50"
+                    placeholder="Zona"
+                    ${isLocked ? "disabled" : ""}
+                  />
+                </label>
+                <label class="field">
+                  <span>Total calculado</span>
+                  <input type="text" value="${escapeHtml(formatTransferAmount(computeTransferDraftTotal(draft)))}" readonly />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Observacion</span>
+                <textarea name="observacion" rows="3" maxlength="100" ${isLocked ? "disabled" : ""}>${escapeHtml(toInputValue(draft.observacion))}</textarea>
+              </label>
+            </div>
+
+            <div class="article-editor-section">
+              <div class="modern-card-head">
+                <div>
+                  <h2>Renglones</h2>
+                  <p>La existencia se descuenta al guardar y se suma en destino al aprobar.</p>
+                </div>
+              </div>
+              ${renderTransferLinesEditor(draft, { isLocked })}
+            </div>
+          </form>
+          <datalist id="transfer-location-options">
+            ${renderTransferLocationOptions(Array.isArray(state.transfers.metadata?.sucursales) ? state.transfers.metadata.sucursales : [])}
+          </datalist>
+        </aside>
+      </div>
+    </div>
+  `;
+}
+
+function renderTransfersTable() {
+  const items = Array.isArray(state.transfers.items) ? state.transfers.items : [];
+
+  if (!items.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin transferencias</h3>
+        <p>No hay documentos registrados todavia. Usa el formulario para crear el primero.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Numero</th>
+            <th>Fecha</th>
+            <th>Envia</th>
+            <th>Recibe</th>
+            <th>Status</th>
+            <th>Total</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map((item) => {
+              const isSelected = Number(state.transfers.selectedNumero || 0) === Number(item.numero || 0);
+
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+                  <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+                  <td>${escapeHtml(item.codigoEnviaInfo?.nombre || item.codigoEnvia || "-")}</td>
+                  <td>${escapeHtml(item.codigoRecibeInfo?.nombre || item.codigoRecibe || "-")}</td>
+                  <td>${renderTransferStatusBadge(item.status)}</td>
+                  <td>${escapeHtml(formatTransferAmount(item.totalValor))}</td>
+                  <td>
+                    <button class="button button-ghost" type="button" data-transfer-select="${escapeHtml(String(item.numero || ""))}">
+                      Abrir
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderTransferLinesEditor(draft, options = {}) {
+  const { isLocked = false } = options;
+  const lines = Array.isArray(draft.items) && draft.items.length > 0 ? draft.items : [createEmptyTransferLineDraft()];
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Codigo barra</th>
+            <th>Cantidad</th>
+            <th>Valor</th>
+            <th>Caja</th>
+            <th>Articulo</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lines
+            .map(
+              (line, index) => `
+                <tr data-transfer-line-row="${index}">
+                  <td>${index + 1}</td>
+                  <td>
+                    <input
+                      type="text"
+                      name="codigoBarra"
+                      value="${escapeHtml(toInputValue(line.codigoBarra))}"
+                      maxlength="15"
+                      placeholder="Codigo"
+                      ${isLocked ? "disabled" : ""}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      name="cantidad"
+                      min="0.01"
+                      step="0.01"
+                      value="${escapeHtml(toInputValue(line.cantidad || "1"))}"
+                      ${isLocked ? "disabled" : ""}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      name="valor"
+                      min="0"
+                      step="0.0001"
+                      value="${escapeHtml(toInputValue(line.valor))}"
+                      placeholder="Auto"
+                      ${isLocked ? "disabled" : ""}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      name="numeroCaja"
+                      min="0"
+                      step="1"
+                      value="${escapeHtml(toInputValue(line.numeroCaja || "0"))}"
+                      ${isLocked ? "disabled" : ""}
+                    />
+                  </td>
+                  <td>
+                    <span data-transfer-item-name>${escapeHtml(line.articuloNombre || "Pendiente")}</span>
+                  </td>
+                  <td>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-transfer-remove-line="${index}"
+                      ${isLocked || lines.length === 1 ? "disabled" : ""}
+                    >
+                      Quitar
+                    </button>
+                  </td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderTransferLocationOptions(items) {
+  return items
+    .map(
+      (item) => `
+        <option value="${escapeHtml(item.codigo || "")}">
+          ${escapeHtml(item.nombre || item.codigo || "")}
+        </option>
+      `,
+    )
+    .join("");
+}
+
+function renderTransferDispatchOptions(items, selectedValue) {
+  const options = items.map((item) => ({
+    value: String(item.id),
+    label: `${item.id} - ${item.descripcion || "Sin descripcion"}`,
+  }));
+
+  if (!options.length) {
+    options.push({
+      value: selectedValue || "0",
+      label: "0 - Sin definir",
+    });
+  }
+
+  return renderSelectOptions(options, selectedValue || "0");
+}
+
+function renderTransferStatusBadge(status) {
+  const numericStatus = Number(status || 0);
+  const label = numericStatus === 1 ? "Aprobada" : "No aprobada";
+  return `<span class="modern-chip">${escapeHtml(label)}</span>`;
+}
+
 function renderLoadingState(message) {
   return `
     <div class="empty-state">
@@ -1201,7 +1587,7 @@ function renderSystemFooter() {
       <div class="modern-system-footer-main">
         <span class="modern-system-footer-eyebrow">Sistema Operativo</span>
         <strong>RockyMax - Rocky Maxx</strong>
-        <span>Usuario ${escapeHtml((state.user?.codUsuario || "admin").toUpperCase())} | Version 1.0.1</span>
+        <span>Usuario ${escapeHtml((state.user?.codUsuario || "admin").toUpperCase())} | Version 2.0.0</span>
       </div>
       <div class="modern-system-footer-grid">
         <div class="modern-system-footer-block">
@@ -1234,6 +1620,10 @@ function getDesktopBreadcrumb(view) {
     return ["Reportes", "General"];
   }
 
+  if (view === "transferencias") {
+    return ["Procesos", "Transferencias"];
+  }
+
   if (["usuarios", "roles"].includes(view)) {
     return ["Utilidades", getDesktopViewLabelV2(view)];
   }
@@ -1257,6 +1647,7 @@ function getDesktopViewLabelV2(view) {
     clientes: "Clientes",
     sucursales: "Sucursales",
     personal: "Personal",
+    transferencias: "Transferencias",
     reportes: "Reportes",
     usuarios: "Usuarios",
     roles: "Roles",
@@ -1338,6 +1729,13 @@ function countLoadedCatalogEntries() {
 
 function formatCompactMetric(value) {
   return new Intl.NumberFormat("es-VE").format(toFiniteNumber(value));
+}
+
+function formatTransferAmount(value) {
+  return new Intl.NumberFormat("es-VE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(toFiniteNumber(value));
 }
 
 function toFiniteNumber(value) {
@@ -2148,6 +2546,11 @@ function bindShellEvents() {
 
       if (nextView === "roles") {
         await loadRoleAccess();
+        return;
+      }
+
+      if (nextView === "transferencias") {
+        await loadTransfersModule();
       }
     });
   });
@@ -2191,6 +2594,7 @@ function bindShellEvents() {
   });
 
   bindArticleEvents();
+  bindTransferEvents();
 
   document.querySelectorAll("[data-role-import-toggle]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -2490,6 +2894,88 @@ function bindArticleEvents() {
 
     closeCatalogComboboxes();
   });
+}
+
+function bindTransferEvents() {
+  document.querySelector("[data-refresh-transfers]")?.addEventListener("click", async () => {
+    await loadTransfersModule();
+  });
+
+  document.querySelector("[data-new-transfer]")?.addEventListener("click", () => {
+    resetTransferDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-transfer-reset]")?.addEventListener("click", () => {
+    resetTransferDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-transfer-add-line]")?.addEventListener("click", () => {
+    captureTransferDraft();
+    state.transfers.draft.items = [...state.transfers.draft.items, createEmptyTransferLineDraft()];
+    render();
+  });
+
+  document.querySelectorAll("[data-transfer-remove-line]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number.parseInt(button.getAttribute("data-transfer-remove-line") || "-1", 10);
+      if (index < 0) {
+        return;
+      }
+
+      captureTransferDraft();
+      state.transfers.draft.items = state.transfers.draft.items.filter((_, currentIndex) => currentIndex !== index);
+      if (!state.transfers.draft.items.length) {
+        state.transfers.draft.items = [createEmptyTransferLineDraft()];
+      }
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-transfer-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const numero = Number.parseInt(button.getAttribute("data-transfer-select") || "", 10);
+      if (!Number.isInteger(numero)) {
+        return;
+      }
+
+      await loadTransferForEdit(numero);
+    });
+  });
+
+  document.querySelector("[data-approve-transfer]")?.addEventListener("click", async () => {
+    const numero = Number.parseInt(String(state.transfers.draft?.numero || ""), 10);
+    if (!Number.isInteger(numero)) {
+      return;
+    }
+
+    await approveTransfer(numero);
+  });
+
+  document.querySelector("[data-delete-transfer]")?.addEventListener("click", async () => {
+    const numero = Number.parseInt(String(state.transfers.draft?.numero || ""), 10);
+    if (!Number.isInteger(numero)) {
+      return;
+    }
+
+    await deleteTransfer(numero);
+  });
+
+  const transferForm = document.getElementById("transfer-form");
+  if (transferForm) {
+    transferForm.addEventListener("input", () => {
+      captureTransferDraft();
+    });
+
+    transferForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureTransferDraft();
+      await saveTransfer();
+    });
+  }
 }
 
 async function handleLogin() {
@@ -2806,6 +3292,184 @@ async function setRoleCatalogImportAccess(roleCode, enabled) {
   }
 }
 
+async function loadTransfersModule(options = {}) {
+  const { renderAfter = true } = options;
+
+  await Promise.all([
+    loadTransfersMetadata({ renderAfter: false }),
+    loadTransfers({ renderAfter: false }),
+  ]);
+
+  if (renderAfter) {
+    render();
+  }
+}
+
+async function loadTransfersMetadata(options = {}) {
+  const { renderAfter = true } = options;
+  state.transfers.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    state.transfers.metadata = await apiFetch("/transfers/metadata");
+    if (!state.transfers.draft?.numero) {
+      state.transfers.draft = createEmptyTransferDraft(state.transfers.metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la configuracion de transferencias: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.transfers.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadTransfers(options = {}) {
+  const { renderAfter = true } = options;
+  state.transfers.loadingList = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/transfers");
+    state.transfers.items = Array.isArray(response.items) ? response.items : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar las transferencias: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.transfers.loadingList = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadTransferForEdit(numero) {
+  state.transfers.loadingDetail = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}`);
+    state.transfers.selectedNumero = numero;
+    state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la transferencia ${numero}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.transfers.loadingDetail = false;
+    render();
+  }
+}
+
+async function saveTransfer() {
+  const draft = state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
+  const validationMessage = validateTransferDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.transfers.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildTransferPayload(draft);
+    const response = draft.numero
+      ? await apiFetch(`/transfers/${encodeURIComponent(draft.numero)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/transfers", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.transfers.selectedNumero = response.transferencia?.numero || draft.numero || null;
+    state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
+
+    await Promise.all([
+      loadTransfers({ renderAfter: false }),
+      loadTransfersMetadata({ renderAfter: false }),
+    ]);
+
+    setFlash(
+      draft.numero
+        ? `Transferencia ${response.transferencia?.numero || draft.numero} actualizada correctamente.`
+        : `Transferencia ${response.transferencia?.numero || ""} guardada correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.transfers.saving = false;
+    render();
+  }
+}
+
+async function approveTransfer(numero) {
+  state.transfers.approving = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}/approve`, {
+      method: "POST",
+    });
+
+    state.transfers.selectedNumero = numero;
+    state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
+    await loadTransfers({ renderAfter: false });
+    setFlash(`Transferencia ${numero} aprobada correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.transfers.approving = false;
+    render();
+  }
+}
+
+async function deleteTransfer(numero) {
+  const confirmed = window.confirm(
+    `Se eliminara la transferencia pendiente ${numero} y se devolvera el inventario al origen. Deseas continuar?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  state.transfers.deleting = true;
+  clearFlash();
+  render();
+
+  try {
+    await apiFetch(`/transfers/${encodeURIComponent(numero)}`, {
+      method: "DELETE",
+    });
+
+    resetTransferDraft();
+    await Promise.all([
+      loadTransfers({ renderAfter: false }),
+      loadTransfersMetadata({ renderAfter: false }),
+    ]);
+    setFlash(`Transferencia ${numero} eliminada correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.transfers.deleting = false;
+    render();
+  }
+}
+
 async function loadArticles(page = 1, options = {}) {
   const { renderAfter = true } = options;
   state.loadingArticles = true;
@@ -3009,6 +3673,167 @@ async function fetchAllArticlesForLookup() {
   } while (page <= totalPages);
 
   return items;
+}
+
+function resetTransferDraft() {
+  state.transfers.selectedNumero = null;
+  state.transfers.draft = createEmptyTransferDraft(state.transfers.metadata);
+}
+
+function createEmptyTransferDraft(metadata = state.transfers?.metadata) {
+  return {
+    numero: null,
+    fecha: toDateInputValue(new Date()),
+    codigoEnvia: "",
+    codigoRecibe: "",
+    documentoOrigen: "",
+    observacion: "",
+    idDespacho: String(metadata?.defaults?.idDespacho ?? "0"),
+    zona: "",
+    status: 0,
+    items: [createEmptyTransferLineDraft()],
+  };
+}
+
+function createEmptyTransferLineDraft() {
+  return {
+    codigoBarra: "",
+    cantidad: "1",
+    valor: "",
+    numeroCaja: "0",
+    articuloNombre: "",
+  };
+}
+
+function captureTransferDraft() {
+  const form = document.getElementById("transfer-form");
+  if (!form) {
+    return;
+  }
+
+  state.transfers.draft = readTransferDraft(form);
+}
+
+function readTransferDraft(form) {
+  const currentDraft = state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
+  const rows = Array.from(form.querySelectorAll("[data-transfer-line-row]"));
+  const items = rows
+    .map((row) => ({
+      codigoBarra: readRowFieldValue(row, "codigoBarra", ""),
+      cantidad: readRowFieldValue(row, "cantidad", "1"),
+      valor: readRowFieldValue(row, "valor", ""),
+      numeroCaja: readRowFieldValue(row, "numeroCaja", "0"),
+      articuloNombre: String(row.querySelector("[data-transfer-item-name]")?.textContent || "").trim(),
+    }))
+    .filter((item) => item.codigoBarra || item.cantidad || item.valor || item.articuloNombre);
+
+  return {
+    numero: currentDraft.numero,
+    fecha: readFormFieldValue(form, "fecha", currentDraft.fecha),
+    codigoEnvia: readFormFieldValue(form, "codigoEnvia", currentDraft.codigoEnvia),
+    codigoRecibe: readFormFieldValue(form, "codigoRecibe", currentDraft.codigoRecibe),
+    documentoOrigen: readFormFieldValue(form, "documentoOrigen", currentDraft.documentoOrigen),
+    observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
+    idDespacho: readFormFieldValue(form, "idDespacho", currentDraft.idDespacho),
+    zona: readFormFieldValue(form, "zona", currentDraft.zona),
+    status: currentDraft.status,
+    items: items.length ? items : [createEmptyTransferLineDraft()],
+  };
+}
+
+function readRowFieldValue(row, name, fallback = "") {
+  const field = row?.querySelector(`[name="${name}"]`);
+  if (!field || !("value" in field)) {
+    return fallback;
+  }
+
+  return field.value;
+}
+
+function validateTransferDraft(draft) {
+  const codigoEnvia = String(draft.codigoEnvia || "").trim().toUpperCase();
+  const codigoRecibe = String(draft.codigoRecibe || "").trim().toUpperCase();
+
+  if (!codigoEnvia) {
+    return "Debes indicar el codigo de origen.";
+  }
+
+  if (!codigoRecibe) {
+    return "Debes indicar el codigo de destino.";
+  }
+
+  if (codigoEnvia === codigoRecibe) {
+    return "El origen y el destino no pueden ser iguales.";
+  }
+
+  const validLines = (draft.items || []).filter((item) => String(item.codigoBarra || "").trim());
+  if (!validLines.length) {
+    return "Debes registrar al menos un articulo en la transferencia.";
+  }
+
+  for (const item of validLines) {
+    const cantidad = Number(item.cantidad || 0);
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      return `La cantidad del articulo ${item.codigoBarra || ""} debe ser mayor a cero.`;
+    }
+  }
+
+  return "";
+}
+
+function buildTransferPayload(draft) {
+  return {
+    fecha: toApiDateTime(draft.fecha),
+    codigoEnvia: String(draft.codigoEnvia || "").trim().toUpperCase(),
+    codigoRecibe: String(draft.codigoRecibe || "").trim().toUpperCase(),
+    documentoOrigen: String(draft.documentoOrigen || "").trim() || undefined,
+    observacion: String(draft.observacion || "").trim() || undefined,
+    idDespacho: Number.parseInt(String(draft.idDespacho || "0"), 10),
+    zona: String(draft.zona || "").trim() || undefined,
+    items: (draft.items || [])
+      .filter((item) => String(item.codigoBarra || "").trim())
+      .map((item) => ({
+        codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
+        cantidad: String(item.cantidad || "").trim(),
+        valor: String(item.valor || "").trim() || undefined,
+        numeroCaja: Number.parseInt(String(item.numeroCaja || "0"), 10) || 0,
+      })),
+  };
+}
+
+function transferToDraft(transfer, metadata = state.transfers?.metadata) {
+  return {
+    numero: transfer?.numero ?? null,
+    fecha: toDateInputValue(transfer?.fecha),
+    codigoEnvia: transfer?.codigoEnvia || "",
+    codigoRecibe: transfer?.codigoRecibe || "",
+    documentoOrigen: transfer?.documentoOrigen || "",
+    observacion: transfer?.observacion || "",
+    idDespacho: String(transfer?.idDespacho ?? metadata?.defaults?.idDespacho ?? "0"),
+    zona: transfer?.zona || "",
+    status: Number(transfer?.status ?? 0),
+    items: Array.isArray(transfer?.items) && transfer.items.length > 0
+      ? transfer.items.map((item) => ({
+          codigoBarra: item.codigoBarra || "",
+          cantidad: toInputValue(item.cantidad),
+          valor: toInputValue(item.valor),
+          numeroCaja: toInputValue(item.numeroCaja),
+          articuloNombre: item.articulo?.nombre || "",
+        }))
+      : [createEmptyTransferLineDraft()],
+  };
+}
+
+function computeTransferDraftTotal(draft) {
+  return (draft.items || []).reduce((total, item) => {
+    const quantity = Number(item.cantidad || 0);
+    const value = Number(item.valor || 0);
+    if (!Number.isFinite(quantity) || !Number.isFinite(value)) {
+      return total;
+    }
+
+    return total + quantity * value;
+  }, 0);
 }
 
 function resetArticleForm() {
@@ -3696,6 +4521,18 @@ function clearSession() {
     loading: false,
     savingRole: "",
     roles: [],
+  };
+  state.transfers = {
+    loadingList: false,
+    loadingMetadata: false,
+    loadingDetail: false,
+    saving: false,
+    approving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    selectedNumero: null,
+    draft: createEmptyTransferDraft(),
   };
   state.articleEditorTab = "general";
   state.articles = [];

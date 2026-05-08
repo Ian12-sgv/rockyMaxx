@@ -7,6 +7,7 @@ import { HealthModule } from "./health/health.module";
 import { InventoryModule } from "./inventory/inventory.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RolesModule } from "./roles/roles.module";
+import { TransfersModule } from "./transfers/transfers.module";
 import { UsersModule } from "./users/users.module";
 
 @Module({
@@ -21,6 +22,7 @@ import { UsersModule } from "./users/users.module";
     UsersModule,
     RolesModule,
     InventoryModule,
+    TransfersModule,
   ],
   controllers: [AppController],
 })
