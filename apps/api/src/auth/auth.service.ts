@@ -5,7 +5,6 @@ import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import { userWithGroupsInclude, UserView, toUserView } from "../users/user-view.util";
 import { LoginDto } from "./dto/login.dto";
-import { verifyLegacyPassword } from "./password.util";
 
 export type AuthTokenPayload = {
   sub: string;
@@ -50,10 +49,11 @@ export class AuthService {
   }
 
   private async validateCredentials(usuario: string, password: string) {
+    const normalizedUser = usuario.trim();
     const user = await this.prisma.usuarios.findFirst({
       where: {
         CodUsuario: {
-          equals: usuario.trim(),
+          equals: normalizedUser,
           mode: "insensitive",
         },
       },
@@ -64,10 +64,8 @@ export class AuthService {
       throw new UnauthorizedException("Usuario o clave inválidos");
     }
 
-    const pepper = this.configService.get<string>("AUTH_PASSWORD_PEPPER") || this.configService.get<string>("JWT_SECRET", "rocky-maxx-local-secret");
-    const validPassword = verifyLegacyPassword(user.Pasword, password, pepper);
-
-    if (!validPassword) {
+    const storedPassword = typeof user.Pasword === "string" ? user.Pasword.trim() : "";
+    if (storedPassword !== password) {
       throw new UnauthorizedException("Usuario o clave inválidos");
     }
 

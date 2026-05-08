@@ -11,6 +11,8 @@
     "build:api": "npm run build --workspace=@sistema-arabe/api",
     "desktop:start": "npm run build --workspace=@sistema-arabe/api && npm run start --workspace=@sistema-arabe/desktop",
     "desktop:start:direct": "npm run start --workspace=@sistema-arabe/desktop",
+    "desktop:prepare-runtime": "node scripts/prepare-desktop-runtime.cjs",
+    "desktop:dist": "npm run build:api && npm run desktop:prepare-runtime && npm run dist:win --workspace=@sistema-arabe/desktop",
     "typecheck:api": "npm run typecheck --workspace=@sistema-arabe/api",
     "prisma:generate": "npm run prisma:generate --workspace=@sistema-arabe/api",
     "prisma:validate": "npm run prisma:validate --workspace=@sistema-arabe/api"

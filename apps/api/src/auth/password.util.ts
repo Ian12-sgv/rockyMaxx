@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const HASH_PREFIX = "h$";
+export const LEGACY_PASSWORD_FALLBACK_PEPPER = "change-me";
 
 function safeEquals(left: string, right: string) {
   const leftBuffer = Buffer.from(left);
@@ -28,4 +29,18 @@ export function verifyLegacyPassword(storedPassword: string | null | undefined, 
   }
 
   return safeEquals(storedPassword, plainPassword);
+}
+
+export function findMatchingLegacyPasswordPepper(
+  storedPassword: string | null | undefined,
+  plainPassword: string,
+  peppers: string[],
+) {
+  for (const pepper of peppers) {
+    if (verifyLegacyPassword(storedPassword, plainPassword, pepper)) {
+      return pepper;
+    }
+  }
+
+  return null;
 }

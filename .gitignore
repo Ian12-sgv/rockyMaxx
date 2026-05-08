@@ -9,3 +9,6 @@ apps/api/.env
 .npm-cache/
 *.log
 lovable-reference.png
+apps/desktop/.bundle/
+dist/
+api-deps.json

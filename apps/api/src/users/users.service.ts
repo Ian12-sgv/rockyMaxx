@@ -9,7 +9,6 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
-import { hashLegacyPassword } from "../auth/password.util";
 import {
   getProtectedAdminRoleCode,
   getProtectedSystemRoleCode,
@@ -87,13 +86,11 @@ export class UsersService {
       throw new ForbiddenException("Solo el usuario sistema puede asignar el rol sistema");
     }
 
-    const passwordPepper = this.getPasswordPepper();
-
     const created = await this.prisma.usuarios.create({
       data: {
         CodUsuario: codUsuario,
         NombreUsuario: createUserDto.nombreUsuario?.trim() || codUsuario,
-        Pasword: hashLegacyPassword(createUserDto.password, passwordPepper),
+        Pasword: createUserDto.password.trim(),
         Status: createUserDto.status ?? 1,
         usuarioGrupos: {
           create: resolvedGroups.map((group) => ({
@@ -164,8 +161,6 @@ export class UsersService {
       throw new BadRequestException("El usuario sistema debe permanecer activo");
     }
 
-    const passwordPepper = this.getPasswordPepper();
-
     const updated = await this.prisma.$transaction(async (tx) => {
       if (groups) {
         await tx.usuarioGrupo.deleteMany({
@@ -187,7 +182,7 @@ export class UsersService {
         data: {
           NombreUsuario: updateUserDto.nombreUsuario?.trim() ?? undefined,
           Pasword: updateUserDto.password
-            ? hashLegacyPassword(updateUserDto.password, passwordPepper)
+            ? updateUserDto.password.trim()
             : undefined,
           Status: updateUserDto.status ?? undefined,
         },
@@ -259,7 +254,7 @@ export class UsersService {
         data: {
           CodUsuario: username,
           NombreUsuario: name || username,
-          Pasword: hashLegacyPassword(password, this.getPasswordPepper()),
+          Pasword: password,
           Status: 1,
           usuarioGrupos: {
             create: [
@@ -276,6 +271,24 @@ export class UsersService {
     }
 
     const alreadyLinked = existingUser.usuarioGrupos.some((item) => item.CodGrupo === group.CodGrupo);
+    const adminUpdateData: { NombreUsuario?: string; Pasword?: string; Status?: number } = {};
+    if ((existingUser.NombreUsuario || "") !== (name || username)) {
+      adminUpdateData.NombreUsuario = name || username;
+    }
+    if ((existingUser.Pasword || "") !== password) {
+      adminUpdateData.Pasword = password;
+    }
+    if (existingUser.Status === 0) {
+      adminUpdateData.Status = 1;
+    }
+
+    if (Object.keys(adminUpdateData).length > 0) {
+      await this.prisma.usuarios.update({
+        where: { CodUsuario: existingUser.CodUsuario },
+        data: adminUpdateData,
+      });
+    }
+
     if (!alreadyLinked) {
       await this.prisma.usuarioGrupo.create({
         data: {
@@ -308,7 +321,7 @@ export class UsersService {
         data: {
           CodUsuario: username,
           NombreUsuario: name || username,
-          Pasword: hashLegacyPassword(password, this.getPasswordPepper()),
+          Pasword: password,
           Status: 1,
           usuarioGrupos: {
             create: [
@@ -325,19 +338,30 @@ export class UsersService {
     }
 
     const alreadyLinked = existingUser.usuarioGrupos.some((item) => item.CodGrupo === group.CodGrupo);
+    const systemUpdateData: { NombreUsuario?: string; Pasword?: string; Status?: number } = {};
+    if ((existingUser.NombreUsuario || "") !== (name || username)) {
+      systemUpdateData.NombreUsuario = name || username;
+    }
+    if ((existingUser.Pasword || "") !== password) {
+      systemUpdateData.Pasword = password;
+    }
+    if (existingUser.Status === 0) {
+      systemUpdateData.Status = 1;
+    }
+
+    if (Object.keys(systemUpdateData).length > 0) {
+      await this.prisma.usuarios.update({
+        where: { CodUsuario: existingUser.CodUsuario },
+        data: systemUpdateData,
+      });
+    }
+
     if (!alreadyLinked) {
       await this.prisma.usuarioGrupo.create({
         data: {
           CodUsuario: existingUser.CodUsuario,
           CodGrupo: group.CodGrupo,
         },
-      });
-    }
-
-    if (existingUser.Status === 0) {
-      await this.prisma.usuarios.update({
-        where: { CodUsuario: existingUser.CodUsuario },
-        data: { Status: 1 },
       });
     }
   }
