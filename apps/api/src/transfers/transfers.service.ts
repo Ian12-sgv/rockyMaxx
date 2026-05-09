@@ -7,6 +7,7 @@ import {
 import { Prisma, type Inventario, type Sucursales } from "@prisma/client";
 
 import { UserView } from "../users/user-view.util";
+import { ApproveTransferDto, TransferDuplicateResolutionDto } from "./dto/approve-transfer.dto";
 import { CreateTransferDto, CreateTransferLineDto } from "./dto/create-transfer.dto";
 import { FindTransfersDto } from "./dto/find-transfers.dto";
 import { UpdateTransferDto } from "./dto/update-transfer.dto";
@@ -17,14 +18,22 @@ const DEFAULT_TRANSFER_LOT = "TR_AUTO";
 const DEFAULT_TRANSFER_LOT_DESCRIPTION = "Lote automatico para transferencias";
 const DEFAULT_DISPATCH_ID = 0;
 const DUPLICATE_BARCODE_MESSAGE = "Codigo de barra duplicado.";
+const DEFAULT_ORIGIN_CODE = "ORIGEN";
+const DEFAULT_DESTINATION_CODE = "DESTINO";
 const ZERO = new Prisma.Decimal(0);
 
 type TransferTransactionClient = Prisma.TransactionClient;
+type TransferDuplicateResolutionAction = "modify-existing" | "create-new";
+type TransferDuplicateResolution = {
+  action: TransferDuplicateResolutionAction;
+  nuevoCodigoBarra?: string;
+};
 
 type NormalizedTransferLine = {
   item: number;
   fecha: Date;
   codigoBarra: string;
+  referencia: string;
   cantidad: Prisma.Decimal;
   valor: Prisma.Decimal;
   numeroCaja: number;
@@ -262,7 +271,7 @@ export class TransfersService {
     };
   }
 
-  async approveTransfer(numero: number) {
+  async approveTransfer(numero: number, approveTransferDto: ApproveTransferDto = {}) {
     const transferencia = await this.prisma.$transaction(
       async (tx) => {
         const existing = await tx.transferencias.findUnique({
@@ -290,12 +299,22 @@ export class TransfersService {
         }
 
         await this.ensureLocations(tx, [existing.CodigoEnvia, existing.CodigoRecibe]);
-        await this.applyDestinationReceipt(tx, existing.movTransferencias);
+        const currentTotalValor = await this.refreshTransferMovementValuesFromInventory(
+          tx,
+          existing.movTransferencias,
+        );
+        await this.applyDestinationReceipt(
+          tx,
+          numero,
+          existing.movTransferencias,
+          this.buildDuplicateResolutionMap(approveTransferDto.duplicateResolutions),
+        );
 
         await tx.transferencias.update({
           where: { Numero: numero },
           data: {
             Status: 1,
+            TotalValor: currentTotalValor,
           },
         });
 
@@ -371,17 +390,14 @@ export class TransfersService {
   ): Promise<NormalizedTransferDraft> {
     const fecha = input.fecha ?? options?.fechaFallback ?? new Date();
     const fechaEmision = input.fechaEmision ?? options?.fechaEmisionFallback ?? fecha;
-    const codigoEnvia = this.normalizeRequiredCode(input.codigoEnvia, "Debes indicar el codigo de origen.");
-    const codigoRecibe = this.normalizeRequiredCode(input.codigoRecibe, "Debes indicar el codigo de destino.");
+    const codigoEnvia = this.normalizeOptionalCode(input.codigoEnvia) || DEFAULT_ORIGIN_CODE;
+    const codigoRecibe = this.normalizeOptionalCode(input.codigoRecibe) || DEFAULT_DESTINATION_CODE;
 
     if (codigoEnvia === codigoRecibe) {
       throw new BadRequestException("El origen y el destino no pueden ser iguales.");
     }
 
     const lines = await this.normalizeTransferLines(tx, input.items, fecha);
-    if (lines.length === 0) {
-      throw new BadRequestException("Debes registrar al menos un articulo en la transferencia.");
-    }
 
     const quantitiesByBarcode = this.aggregateLineQuantities(lines);
     const totalValor = lines.reduce((total, line) => total.plus(line.valor.mul(line.cantidad)), ZERO);
@@ -405,14 +421,21 @@ export class TransfersService {
 
   private async normalizeTransferLines(
     tx: TransferTransactionClient,
-    items: CreateTransferLineDto[],
+    items: CreateTransferLineDto[] | undefined,
     fecha: Date,
   ) {
     if (!Array.isArray(items) || items.length === 0) {
-      throw new BadRequestException("Debes registrar al menos un articulo en la transferencia.");
+      return [];
     }
 
-    const normalizedCodes = items.map((item) => this.normalizeRequiredCode(item.codigoBarra, "Codigo de barra invalido."));
+    const meaningfulItems = items.filter((item) => Boolean(String(item.codigoBarra || "").trim()));
+
+    if (meaningfulItems.length === 0) {
+      return [];
+    }
+
+    const normalizedCodes = meaningfulItems.map((item) => this.normalizeRequiredCode(item.codigoBarra, "Codigo de barra invalido."));
+    const normalizedReferences = meaningfulItems.map((item) => this.normalizeOptionalCode(item.referencia));
     const uniqueCodes = Array.from(new Set(normalizedCodes));
 
     const inventoryItems = await tx.inventario.findMany({
@@ -431,15 +454,23 @@ export class TransfersService {
 
     const inventoryByCode = new Map(inventoryItems.map((item) => [item.CodigoBarra, item]));
 
-    return items.map((item, index) => {
+    return meaningfulItems.map((item, index) => {
       const codigoBarra = normalizedCodes[index];
+      const referencia = normalizedReferences[index] || "";
       const articulo = inventoryByCode.get(codigoBarra);
       if (!articulo) {
         throw new NotFoundException(`No se encontro el articulo ${codigoBarra} en inventario.`);
       }
 
+      const resolvedReferencia = referencia || String(articulo.Referencia || "").trim().toUpperCase();
+      if (String(articulo.Referencia || "").trim().toUpperCase() !== resolvedReferencia) {
+        throw new BadRequestException(
+          `El articulo ${codigoBarra} no coincide con la referencia ${resolvedReferencia} en inventario.`,
+        );
+      }
+
       const cantidad = this.parsePositiveDecimal(
-        item.cantidad,
+        item.cantidad || "1",
         `La cantidad del articulo ${codigoBarra} debe ser mayor a cero.`,
       );
       const valor = item.valor
@@ -450,6 +481,7 @@ export class TransfersService {
         item: index + 1,
         fecha,
         codigoBarra,
+        referencia: resolvedReferencia,
         cantidad,
         valor,
         numeroCaja: item.numeroCaja ?? 0,
@@ -743,7 +775,9 @@ export class TransfersService {
 
   private async applyDestinationReceipt(
     tx: TransferTransactionClient,
+    numero: number,
     lines: Array<{ Cantidad: Prisma.Decimal; inventarioRef: Inventario }>,
+    duplicateResolutions: Map<string, TransferDuplicateResolution>,
   ) {
     if (lines.length === 0) {
       return;
@@ -779,6 +813,35 @@ export class TransfersService {
     const matchesByIdentity = new Map(
       existingMatches.map((item) => [this.buildInventoryIdentityKey(item), item]),
     );
+    const identitiesWithoutMatch = identities.filter(
+      ({ source }) => !matchesByIdentity.has(this.buildInventoryIdentityKey(source)),
+    );
+    const collisions = identitiesWithoutMatch.length
+      ? await tx.inventario.findMany({
+          where: {
+            CodigoBarra: { in: identitiesWithoutMatch.map(({ source }) => source.CodigoBarra) },
+          },
+        })
+      : [];
+    const collisionsByBarcode = new Map(collisions.map((item) => [item.CodigoBarra, item]));
+    const unresolvedCollisions = identitiesWithoutMatch.filter(({ source }) => {
+      const collision = collisionsByBarcode.get(source.CodigoBarra);
+      return collision && !duplicateResolutions.has(source.CodigoBarra);
+    });
+
+    if (unresolvedCollisions.length > 0) {
+      throw new ConflictException({
+        message: DUPLICATE_BARCODE_MESSAGE,
+        code: "TRANSFER_DUPLICATE_BARCODE",
+        duplicates: unresolvedCollisions.map(({ source }) => ({
+          codigoBarra: source.CodigoBarra,
+          referencia: source.Referencia,
+          codigoMarca: source.CodigoMarca,
+          nombre: source.Nombre,
+        })),
+      });
+    }
+
     const now = new Date();
 
     for (const { source, quantity } of identities) {
@@ -799,16 +862,92 @@ export class TransfersService {
         continue;
       }
 
-      const barcodeCollision = await tx.inventario.findUnique({
-        where: { CodigoBarra: source.CodigoBarra },
-      });
+      const barcodeCollision = collisionsByBarcode.get(source.CodigoBarra);
 
       if (barcodeCollision) {
-        throw new ConflictException(DUPLICATE_BARCODE_MESSAGE);
+        const resolution = duplicateResolutions.get(source.CodigoBarra);
+
+        if (resolution?.action === "modify-existing") {
+          await tx.inventario.update({
+            where: { CodigoBarra: barcodeCollision.CodigoBarra },
+            data: {
+              ...this.buildReceivedInventoryAttributeUpdate(source),
+              Existencia: barcodeCollision.Existencia.plus(quantity),
+              UltimaActualizacion: now,
+              FechaPrimerMovimiento: barcodeCollision.FechaPrimerMovimiento ?? now,
+            },
+          });
+
+          continue;
+        }
+
+        if (resolution?.action === "create-new") {
+          const nuevoCodigoBarra = this.normalizeRequiredCode(
+            resolution.nuevoCodigoBarra,
+            "Debes indicar el nuevo codigo de barra para crear el articulo.",
+          );
+          const existingNewBarcode = await tx.inventario.findUnique({
+            where: { CodigoBarra: nuevoCodigoBarra },
+          });
+
+          if (existingNewBarcode) {
+            throw new ConflictException(DUPLICATE_BARCODE_MESSAGE);
+          }
+
+          await this.createReceivedInventoryArticle(tx, source, quantity, now, nuevoCodigoBarra);
+          await tx.movTransferencias.updateMany({
+            where: {
+              Numero: numero,
+              CodigoBarra: source.CodigoBarra,
+            },
+            data: {
+              CodigoBarra: nuevoCodigoBarra,
+            },
+          });
+
+          continue;
+        }
       }
 
       await this.createReceivedInventoryArticle(tx, source, quantity, now);
     }
+  }
+
+  private async refreshTransferMovementValuesFromInventory(
+    tx: TransferTransactionClient,
+    lines: Array<{
+      Numero: number;
+      CodigoBarra: string;
+      NumeroCaja: number;
+      Item: number;
+      Cantidad: Prisma.Decimal;
+      inventarioRef: Inventario;
+    }>,
+  ) {
+    let totalValor = ZERO;
+
+    for (const line of lines) {
+      const currentArticle = line.inventarioRef;
+      const currentValue = this.resolveLineValue(currentArticle);
+      totalValor = totalValor.plus(currentValue.mul(line.Cantidad));
+
+      await tx.movTransferencias.updateMany({
+        where: {
+          Numero: line.Numero,
+          CodigoBarra: line.CodigoBarra,
+          NumeroCaja: line.NumeroCaja,
+          Item: line.Item,
+        },
+        data: {
+          Valor: currentValue,
+          UltimoCosto: currentArticle.UltimoCosto,
+          CostoInicial: currentArticle.CostoInicial,
+          CostoDolar: currentArticle.CostoDolar,
+        },
+      });
+    }
+
+    return totalValor;
   }
 
   private async createReceivedInventoryArticle(
@@ -816,10 +955,11 @@ export class TransfersService {
     source: Inventario,
     quantity: Prisma.Decimal,
     now: Date,
+    codigoBarraOverride?: string,
   ) {
     await tx.inventario.create({
       data: {
-        CodigoBarra: source.CodigoBarra,
+        CodigoBarra: codigoBarraOverride ?? source.CodigoBarra,
         Referencia: source.Referencia,
         CodigoMarca: source.CodigoMarca,
         Nombre: source.Nombre,
@@ -891,6 +1031,22 @@ export class TransfersService {
     ].join("|");
   }
 
+  private buildDuplicateResolutionMap(resolutions: TransferDuplicateResolutionDto[] | undefined) {
+    const result = new Map<string, TransferDuplicateResolution>();
+
+    for (const resolution of resolutions ?? []) {
+      const codigoBarra = this.normalizeRequiredCode(resolution.codigoBarra, "Codigo de barra invalido.");
+      result.set(codigoBarra, {
+        action: resolution.action,
+        nuevoCodigoBarra: resolution.nuevoCodigoBarra
+          ? this.normalizeRequiredCode(resolution.nuevoCodigoBarra, "Codigo de barra nuevo invalido.")
+          : undefined,
+      });
+    }
+
+    return result;
+  }
+
   private resolveLineValue(article: Inventario) {
     if (article.UltimoCosto && !article.UltimoCosto.isZero()) {
       return article.UltimoCosto;
@@ -933,13 +1089,17 @@ export class TransfersService {
     }
   }
 
-  private normalizeRequiredCode(value: string, message: string) {
+  private normalizeRequiredCode(value: string | undefined, message: string) {
     const normalized = String(value || "").trim().toUpperCase();
     if (!normalized) {
       throw new BadRequestException(message);
     }
 
     return normalized;
+  }
+
+  private normalizeOptionalCode(value: string | undefined) {
+    return String(value || "").trim().toUpperCase();
   }
 
   private async loadLocationsByCode(

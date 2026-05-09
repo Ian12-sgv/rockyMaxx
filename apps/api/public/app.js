@@ -1450,10 +1450,13 @@ function renderTransferLinesEditor(draft, options = {}) {
           <tr>
             <th>Item</th>
             <th>Codigo barra</th>
-            <th>Cantidad</th>
-            <th>Valor</th>
+            <th>Referencia</th>
+            <th>Nombre articulo</th>
             <th>Caja</th>
-            <th>Articulo</th>
+            <th>Cantidad</th>
+            <th>Lote</th>
+            <th>Exist. lote</th>
+            <th>Total</th>
             <th>Accion</th>
           </tr>
         </thead>
@@ -1475,24 +1478,16 @@ function renderTransferLinesEditor(draft, options = {}) {
                   </td>
                   <td>
                     <input
-                      type="number"
-                      name="cantidad"
-                      min="0.01"
-                      step="0.01"
-                      value="${escapeHtml(toInputValue(line.cantidad || "1"))}"
+                      type="text"
+                      name="referencia"
+                      value="${escapeHtml(toInputValue(line.referencia))}"
+                      maxlength="30"
+                      placeholder="Referencia"
                       ${isLocked ? "disabled" : ""}
                     />
                   </td>
                   <td>
-                    <input
-                      type="number"
-                      name="valor"
-                      min="0"
-                      step="0.0001"
-                      value="${escapeHtml(toInputValue(line.valor))}"
-                      placeholder="Auto"
-                      ${isLocked ? "disabled" : ""}
-                    />
+                    <span data-transfer-item-name>${escapeHtml(line.articuloNombre || "Pendiente")}</span>
                   </td>
                   <td>
                     <input
@@ -1505,7 +1500,23 @@ function renderTransferLinesEditor(draft, options = {}) {
                     />
                   </td>
                   <td>
-                    <span data-transfer-item-name>${escapeHtml(line.articuloNombre || "Pendiente")}</span>
+                    <input
+                      type="number"
+                      name="cantidad"
+                      min="0.01"
+                      step="0.01"
+                      value="${escapeHtml(toInputValue(line.cantidad || "1"))}"
+                      ${isLocked ? "disabled" : ""}
+                    />
+                  </td>
+                  <td>
+                    <span>${escapeHtml(resolveTransferLineLotLabel())}</span>
+                  </td>
+                  <td>
+                    <span data-transfer-line-existence>${escapeHtml(toInputValue(line.existenciaLote || line.existenciaActual || ""))}</span>
+                  </td>
+                  <td>
+                    <span>${escapeHtml(formatTransferAmount(computeTransferLineTotal(line)))}</span>
                   </td>
                   <td>
                     <button
@@ -3804,21 +3815,84 @@ async function approveTransfer(numero) {
   render();
 
   try {
-    const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}/approve`, {
-      method: "POST",
-    });
-
-    state.transfers.selectedNumero = numero;
-    state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
-    await loadTransfers({ renderAfter: false });
-    setFlash(`Transferencia ${numero} aprobada correctamente.`, "success");
+    await approveTransferWithPayload(numero);
   } catch (error) {
     console.error(error);
+    if (isTransferDuplicateBarcodeError(error)) {
+      await resolveDuplicateBarcodesAndApprove(numero, error);
+      return;
+    }
+
     setFlash(extractErrorMessage(error), "error");
   } finally {
     state.transfers.approving = false;
     render();
   }
+}
+
+async function approveTransferWithPayload(numero, payload = {}) {
+  const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}/approve`, {
+    method: "POST",
+    body: payload,
+  });
+
+  state.transfers.selectedNumero = numero;
+  state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
+  await loadTransfers({ renderAfter: false });
+  setFlash(`Transferencia ${numero} aprobada correctamente.`, "success");
+}
+
+async function resolveDuplicateBarcodesAndApprove(numero, error) {
+  const duplicates = Array.isArray(error?.payload?.duplicates) ? error.payload.duplicates : [];
+  if (!duplicates.length) {
+    setFlash(extractErrorMessage(error), "error");
+    return;
+  }
+
+  const duplicateResolutions = [];
+
+  for (const item of duplicates) {
+    const codigoBarra = String(item.codigoBarra || "").trim().toUpperCase();
+    const nombre = item.nombre ? ` - ${item.nombre}` : "";
+    const shouldModifyExisting = window.confirm(
+      `El codigo de barra ${codigoBarra}${nombre} ya existe en inventario.\n\nAceptar: modificar el articulo existente con los atributos de la transferencia.\nCancelar: crear un articulo nuevo con otro codigo de barra.`,
+    );
+
+    if (shouldModifyExisting) {
+      duplicateResolutions.push({
+        codigoBarra,
+        action: "modify-existing",
+      });
+      continue;
+    }
+
+    const nuevoCodigoBarra = window.prompt(
+      `Indica el nuevo codigo de barra para crear el articulo recibido desde ${codigoBarra}.`,
+      "",
+    );
+
+    if (!nuevoCodigoBarra || !String(nuevoCodigoBarra).trim()) {
+      setFlash("La aprobacion fue cancelada porque falta el nuevo codigo de barra.", "error");
+      return;
+    }
+
+    duplicateResolutions.push({
+      codigoBarra,
+      action: "create-new",
+      nuevoCodigoBarra: String(nuevoCodigoBarra).trim().toUpperCase(),
+    });
+  }
+
+  try {
+    await approveTransferWithPayload(numero, { duplicateResolutions });
+  } catch (retryError) {
+    console.error(retryError);
+    setFlash(extractErrorMessage(retryError), "error");
+  }
+}
+
+function isTransferDuplicateBarcodeError(error) {
+  return error?.payload?.code === "TRANSFER_DUPLICATE_BARCODE";
 }
 
 async function deleteTransfer(numero) {
@@ -4172,10 +4246,13 @@ function createEmptyTransferDraft(metadata = state.transfers?.metadata) {
 function createEmptyTransferLineDraft() {
   return {
     codigoBarra: "",
+    referencia: "",
     cantidad: "1",
     valor: "",
     numeroCaja: "0",
     articuloNombre: "",
+    existenciaActual: "",
+    existenciaLote: "",
   };
 }
 
@@ -4194,12 +4271,13 @@ function readTransferDraft(form) {
   const items = rows
     .map((row) => ({
       codigoBarra: readRowFieldValue(row, "codigoBarra", ""),
+      referencia: readRowFieldValue(row, "referencia", ""),
       cantidad: readRowFieldValue(row, "cantidad", "1"),
-      valor: readRowFieldValue(row, "valor", ""),
       numeroCaja: readRowFieldValue(row, "numeroCaja", "0"),
       articuloNombre: String(row.querySelector("[data-transfer-item-name]")?.textContent || "").trim(),
+      existenciaActual: String(row.querySelector("[data-transfer-line-existence]")?.textContent || "").trim(),
     }))
-    .filter((item) => item.codigoBarra || item.cantidad || item.valor || item.articuloNombre);
+    .filter((item) => item.codigoBarra || item.referencia || item.cantidad || item.articuloNombre);
 
   return {
     numero: currentDraft.numero,
@@ -4228,22 +4306,11 @@ function validateTransferDraft(draft) {
   const codigoEnvia = String(draft.codigoEnvia || "").trim().toUpperCase();
   const codigoRecibe = String(draft.codigoRecibe || "").trim().toUpperCase();
 
-  if (!codigoEnvia) {
-    return "Debes indicar el codigo de origen.";
-  }
-
-  if (!codigoRecibe) {
-    return "Debes indicar el codigo de destino.";
-  }
-
-  if (codigoEnvia === codigoRecibe) {
+  if (codigoEnvia && codigoRecibe && codigoEnvia === codigoRecibe) {
     return "El origen y el destino no pueden ser iguales.";
   }
 
   const validLines = (draft.items || []).filter((item) => String(item.codigoBarra || "").trim());
-  if (!validLines.length) {
-    return "Debes registrar al menos un articulo en la transferencia.";
-  }
 
   for (const item of validLines) {
     const cantidad = Number(item.cantidad || 0);
@@ -4258,8 +4325,8 @@ function validateTransferDraft(draft) {
 function buildTransferPayload(draft) {
   return {
     fecha: toApiDateTime(draft.fecha),
-    codigoEnvia: String(draft.codigoEnvia || "").trim().toUpperCase(),
-    codigoRecibe: String(draft.codigoRecibe || "").trim().toUpperCase(),
+    codigoEnvia: String(draft.codigoEnvia || "").trim().toUpperCase() || undefined,
+    codigoRecibe: String(draft.codigoRecibe || "").trim().toUpperCase() || undefined,
     documentoOrigen: String(draft.documentoOrigen || "").trim() || undefined,
     observacion: String(draft.observacion || "").trim() || undefined,
     idDespacho: Number.parseInt(String(draft.idDespacho || "0"), 10),
@@ -4268,8 +4335,8 @@ function buildTransferPayload(draft) {
       .filter((item) => String(item.codigoBarra || "").trim())
       .map((item) => ({
         codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
+        referencia: String(item.referencia || "").trim().toUpperCase(),
         cantidad: String(item.cantidad || "").trim(),
-        valor: String(item.valor || "").trim() || undefined,
         numeroCaja: Number.parseInt(String(item.numeroCaja || "0"), 10) || 0,
       })),
   };
@@ -4289,10 +4356,13 @@ function transferToDraft(transfer, metadata = state.transfers?.metadata) {
     items: Array.isArray(transfer?.items) && transfer.items.length > 0
       ? transfer.items.map((item) => ({
           codigoBarra: item.codigoBarra || "",
+          referencia: item.articulo?.referencia || item.referencia || "",
           cantidad: toInputValue(item.cantidad),
           valor: toInputValue(item.valor),
           numeroCaja: toInputValue(item.numeroCaja),
           articuloNombre: item.articulo?.nombre || "",
+          existenciaActual: item.articulo?.existenciaActual || "",
+          existenciaLote: item.articulo?.existenciaActual || "",
         }))
       : [createEmptyTransferLineDraft()],
   };
@@ -4300,14 +4370,24 @@ function transferToDraft(transfer, metadata = state.transfers?.metadata) {
 
 function computeTransferDraftTotal(draft) {
   return (draft.items || []).reduce((total, item) => {
-    const quantity = Number(item.cantidad || 0);
-    const value = Number(item.valor || 0);
-    if (!Number.isFinite(quantity) || !Number.isFinite(value)) {
-      return total;
-    }
-
-    return total + quantity * value;
+    return total + computeTransferLineTotal(item);
   }, 0);
+}
+
+function computeTransferLineTotal(line) {
+  const quantity = Number(line?.cantidad || 0);
+  const value = Number(line?.valor || 0);
+  if (!Number.isFinite(quantity) || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  return quantity * value;
+}
+
+function resolveTransferLineLotLabel() {
+  const draft = state.transfers?.draft || {};
+  const selected = String(draft.idLote || "").trim();
+  return selected || "Auto";
 }
 
 function resetSucursalDraft() {

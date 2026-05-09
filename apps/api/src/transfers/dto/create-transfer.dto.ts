@@ -1,6 +1,5 @@
 import { Transform, Type } from "class-transformer";
 import {
-  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsDate,
@@ -10,30 +9,36 @@ import {
   Matches,
   MaxLength,
   Min,
-  MinLength,
   ValidateNested,
 } from "class-validator";
 
 import {
   toOptionalInteger,
   toOptionalTrimmedString,
-  toTrimmedString,
   toUpperTrimmedString,
 } from "./transfer-dto.helpers";
 
 export class CreateTransferLineDto {
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(15)
   @Type(() => String)
   @Transform(({ value }) => toUpperTrimmedString(value))
-  declare codigoBarra: string;
+  declare codigoBarra?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  @Type(() => String)
+  @Transform(({ value }) => toOptionalTrimmedString(value)?.toUpperCase())
+  declare referencia?: string;
+
+  @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d{1,2})?$/)
   @Type(() => String)
-  @Transform(({ value }) => toTrimmedString(value))
-  declare cantidad: string;
+  @Transform(({ value }) => toOptionalTrimmedString(value))
+  declare cantidad?: string;
 
   @IsOptional()
   @IsString()
@@ -55,19 +60,19 @@ export class CreateTransferDto {
   @IsDate()
   declare fecha?: Date;
 
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(12)
   @Type(() => String)
   @Transform(({ value }) => toUpperTrimmedString(value))
-  declare codigoEnvia: string;
+  declare codigoEnvia?: string;
 
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(15)
   @Type(() => String)
   @Transform(({ value }) => toUpperTrimmedString(value))
-  declare codigoRecibe: string;
+  declare codigoRecibe?: string;
 
   @IsOptional()
   @IsString()
@@ -118,9 +123,9 @@ export class CreateTransferDto {
   @Transform(({ value }) => toOptionalTrimmedString(value))
   declare zona?: string;
 
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => CreateTransferLineDto)
-  declare items: CreateTransferLineDto[];
+  declare items?: CreateTransferLineDto[];
 }

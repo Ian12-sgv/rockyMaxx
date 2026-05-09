@@ -45,6 +45,23 @@ Todavia **no** se implemento `ITRANSFERENCIAS`, `IMOVTRANSFERENCIAS` ni `DEVTRAN
 ### Fase 1 de transferencias
 
 - el usuario arma la transferencia
+- en los renglones de transferencia el usuario solo captura datos operativos minimos:
+  - `CodigoBarra`
+  - `Referencia`
+  - nombre del articulo como informacion visual tomada de inventario cuando esta disponible
+  - caja
+  - cantidad
+  - lote
+  - existencia de lote / existencia visible
+  - total calculado
+- al guardar o aprobar, el sistema consulta `INVENTARIO` usando `CodigoBarra + Referencia` para tomar la ficha completa del articulo
+- no se debe depender de precios o atributos escritos manualmente en la transferencia
+- ningun campo del formulario de transferencia debe bloquear el guardado como borrador
+- si el usuario no llena origen, el backend usa `ORIGEN`
+- si el usuario no llena destino, el backend usa `DESTINO`
+- si el usuario no llena renglones, se guarda una transferencia pendiente sin movimientos
+- si un renglon tiene `CodigoBarra` pero no tiene `Referencia`, el backend toma la referencia vigente desde `INVENTARIO`
+- aprobar sigue exigiendo que existan renglones validos, porque una transferencia sin articulos no tiene movimiento que aprobar
 - el sistema genera `Numero`
 - al guardar, la transferencia queda con `Status = 0`
 - al guardar, se descuenta inventario del origen
@@ -52,8 +69,14 @@ Todavia **no** se implemento `ITRANSFERENCIAS`, `IMOVTRANSFERENCIAS` ni `DEVTRAN
 - si se edita, el ajuste de inventario en origen debe hacerse por delta, no recontando todo desde cero
 - al aprobar, `Status` pasa a `1`
 - al aprobar, se valida la recepcion contra `INVENTARIO` usando `CodigoBarra + Referencia + CodigoMarca`
+- al aprobar, siempre se refrescan los datos del articulo desde `INVENTARIO`, no desde los valores que quedaron guardados cuando se creo la transferencia
+- si una transferencia se crea hoy y se aprueba semanas despues, los atributos, costos/precios de movimiento y `TotalValor` se recalculan con la informacion vigente en `INVENTARIO`
 - si existe un articulo que coincide con `CodigoBarra + Referencia + CodigoMarca`, se suma la cantidad recibida y se sincronizan los atributos del articulo desde el origen
 - si no existe ese articulo, se crea en `INVENTARIO` copiando la ficha completa del articulo origen y cargando la cantidad recibida
+- si al aprobar aparece un codigo de barra usado por otro articulo que no coincide con la identidad esperada, el backend devuelve `TRANSFER_DUPLICATE_BARCODE`
+- la UI pregunta si se quiere modificar el articulo existente o crear un articulo nuevo
+- si se elige modificar, se actualizan los atributos del articulo existente y se suma la existencia recibida
+- si se elige crear nuevo, la UI pide un nuevo codigo de barra porque el original ya esta usado; el backend crea el articulo con ese nuevo codigo y los atributos recibidos
 - una transferencia aprobada no puede editarse
 
 ### Validaciones ya acordadas
@@ -261,6 +284,8 @@ Precision posterior:
 - la aprobacion tambien sincroniza atributos del articulo cuando existe coincidencia, incluyendo nombre, talla, color, fabricante, categoria, impuesto, precios, costos, promocion, punto de reorden, status, tipo, serializado y codigo de familia/anterior
 - por la limitacion actual de `INVENTARIO.CodigoBarra` como clave primaria, no se puede crear otro articulo con el mismo codigo de barra y distinta referencia o marca dentro de la misma tabla
 - si al crear mercancia o al recibir una transferencia se detecta un `CodigoBarra` duplicado, el backend responde conflicto con el mensaje `Codigo de barra duplicado.`, que el frontend muestra como alerta
+- para aprobacion de transferencias, ese conflicto ahora se puede resolver desde la UI: modificar el articulo existente o crear uno nuevo indicando otro `CodigoBarra`
+- la aprobacion refresca `Valor`, `UltimoCosto`, `CostoInicial`, `CostoDolar` y `TotalValor` desde `INVENTARIO` antes de cambiar `Status` a `1`
 
 ### Modulo Sucursales
 

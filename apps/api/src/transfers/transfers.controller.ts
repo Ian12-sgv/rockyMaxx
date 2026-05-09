@@ -5,6 +5,7 @@ import { RequireGroups } from "../auth/decorators/require-groups.decorator";
 import { GroupsGuard } from "../auth/guards/groups.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UserView } from "../users/user-view.util";
+import { ApproveTransferDto } from "./dto/approve-transfer.dto";
 import { CreateTransferDto } from "./dto/create-transfer.dto";
 import { FindTransfersDto } from "./dto/find-transfers.dto";
 import { UpdateTransferDto } from "./dto/update-transfer.dto";
@@ -45,8 +46,8 @@ export class TransfersController {
   }
 
   @Post(":numero/approve")
-  async approve(@Param("numero", ParseIntPipe) numero: number) {
-    return this.transfersService.approveTransfer(numero);
+  async approve(@Param("numero", ParseIntPipe) numero: number, @Body() approveTransferDto: ApproveTransferDto) {
+    return this.transfersService.approveTransfer(numero, approveTransferDto);
   }
 
   @Delete(":numero")
