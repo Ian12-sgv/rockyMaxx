@@ -1,6 +1,6 @@
 {
   "name": "@sistema-arabe/desktop",
-  "version": "2.0.1",
+  "version": "2.1.2",
   "private": true,
   "description": "Aplicacion de escritorio Rocky Maxx con backend embebido.",
   "author": "OpenAI Codex",

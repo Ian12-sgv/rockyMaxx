@@ -72,6 +72,7 @@ const state = {
       limit: "25",
     },
     selectedNumero: null,
+    receiptNumero: null,
     draft: createEmptyTransferDraft(),
   },
   sucursales: {
@@ -158,6 +159,7 @@ async function hydrateAuthenticatedState() {
       limit: "25",
     },
     selectedNumero: null,
+    receiptNumero: null,
     draft: createEmptyTransferDraft(),
   };
   state.sucursales = {
@@ -1175,7 +1177,7 @@ function renderTransfersWorkspace() {
               <div>
                 <span class="article-editor-eyebrow">Documento</span>
                 <h2>${draft.numero ? `Transferencia ${escapeHtml(String(draft.numero))}` : "Nueva transferencia"}</h2>
-                <p>${isLocked ? "La transferencia ya fue aprobada y quedo bloqueada para edicion." : "Las transferencias pendientes descuentan stock al guardar."}</p>
+                <p>${isLocked ? "La transferencia ya fue aprobada y quedo bloqueada para edicion." : "Las transferencias pendientes no afectan inventario hasta aprobar."}</p>
               </div>
               <div class="article-editor-status">
                 ${renderTransferStatusBadge(draft.status)}
@@ -1295,7 +1297,7 @@ function renderTransfersWorkspace() {
               <div class="modern-card-head">
                 <div>
                   <h2>Renglones</h2>
-                  <p>La existencia se descuenta al guardar y se suma en destino al aprobar.</p>
+                  <p>La existencia se valida y se mueve solo al aprobar la transferencia.</p>
                 </div>
               </div>
               ${renderTransferLinesEditor(draft, { isLocked })}
@@ -1318,12 +1320,7 @@ function renderLoadTransferWorkspace() {
       <div class="modern-page-header">
         <div>
           <h1>Cargar transferencia</h1>
-          <p>Busca una transferencia registrada y abre el documento para continuar el registro.</p>
-        </div>
-        <div class="modern-page-actions">
-          <button class="button button-primary" type="button" data-open-transfer-register>
-            Registro de transferencia
-          </button>
+          <p>Busca transferencias llegadas para analizarlas, validarlas y aprobar su recepcion.</p>
         </div>
       </div>
 
@@ -1381,6 +1378,8 @@ function renderLoadTransferWorkspace() {
         </div>
         ${state.transfers.loadingList ? renderLoadingState("Buscando transferencias...") : renderTransfersTable()}
       </section>
+
+      ${renderLoadedTransferReceiptPanel()}
     </div>
   `;
 }
@@ -1425,13 +1424,138 @@ function renderTransfersTable() {
                   <td>${renderTransferStatusBadge(item.status)}</td>
                   <td>${escapeHtml(formatTransferAmount(item.totalValor))}</td>
                   <td>
-                    <button class="button button-ghost" type="button" data-transfer-select="${escapeHtml(String(item.numero || ""))}">
-                      Abrir
+                    <button class="button button-ghost" type="button" data-transfer-load-receipt="${escapeHtml(String(item.numero || ""))}">
+                      Cargar
                     </button>
                   </td>
                 </tr>
               `;
             })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderLoadedTransferReceiptPanel() {
+  const draft = state.transfers.draft;
+  const hasLoadedTransfer =
+    draft?.numero &&
+    state.currentView === "cargar-transferencia" &&
+    Number(state.transfers.receiptNumero || 0) === Number(draft.numero || 0);
+
+  if (!hasLoadedTransfer) {
+    return "";
+  }
+
+  const isApproved = Number(draft.status) === 1;
+  const isBusy = state.transfers.loadingDetail || state.transfers.approving;
+
+  return `
+    <section class="modern-card catalog-import-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Transferencia llegada ${escapeHtml(String(draft.numero))}</h2>
+          <p>Destino: ${escapeHtml(draft.codigoRecibe || "-")}</p>
+        </div>
+        <div class="article-editor-status">
+          ${renderTransferStatusBadge(draft.status)}
+        </div>
+      </div>
+
+      <div class="article-editor-grid">
+        ${renderReadonlyTransferField("Numero", draft.numero)}
+        ${renderReadonlyTransferField("Fecha", formatDateDisplay(draft.fecha))}
+        ${renderReadonlyTransferField("Envia", draft.codigoEnvia)}
+        ${renderReadonlyTransferField("Recibe", draft.codigoRecibe)}
+        ${renderReadonlyTransferField("Documento origen", draft.documentoOrigen)}
+        ${renderReadonlyTransferField("Total", formatTransferAmount(computeTransferDraftTotal(draft)))}
+      </div>
+
+      <div class="article-editor-section">
+        <div class="modern-card-head">
+          <div>
+            <h2>Articulos enviados</h2>
+            <p>${escapeHtml(String((draft.items || []).filter((item) => item.codigoBarra).length))} renglon(es).</p>
+          </div>
+        </div>
+        ${renderLoadedTransferLines(draft)}
+      </div>
+
+      <div class="article-toolbar">
+        <div class="article-toolbar-group">
+          <button class="button button-ghost" type="button" data-clear-loaded-transfer ${isBusy ? "disabled" : ""}>
+            Cerrar
+          </button>
+        </div>
+        <div class="article-toolbar-group">
+          <button
+            class="button button-primary"
+            type="button"
+            data-approve-loaded-transfer
+            ${!draft.numero || isApproved || isBusy ? "disabled" : ""}
+          >
+            ${state.transfers.approving ? "Aprobando..." : "Validar y aprobar"}
+          </button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderReadonlyTransferField(label, value) {
+  return `
+    <label class="field">
+      <span>${escapeHtml(label)}</span>
+      <input type="text" value="${escapeHtml(toDisplayValue(value))}" readonly />
+    </label>
+  `;
+}
+
+function renderLoadedTransferLines(draft) {
+  const lines = (draft.items || []).filter((item) => item.codigoBarra || item.referencia || item.articuloNombre);
+
+  if (!lines.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin articulos</h3>
+        <p>Esta transferencia no tiene renglones para recibir.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Codigo barra</th>
+            <th>Referencia</th>
+            <th>Nombre articulo</th>
+            <th>Caja</th>
+            <th>Cantidad</th>
+            <th>Exist. actual</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lines
+            .map(
+              (line, index) => `
+                <tr>
+                  <td>${index + 1}</td>
+                  <td><strong>${escapeHtml(line.codigoBarra || "-")}</strong></td>
+                  <td>${escapeHtml(line.referencia || "-")}</td>
+                  <td>${escapeHtml(line.articuloNombre || "-")}</td>
+                  <td>${escapeHtml(toDisplayValue(line.numeroCaja))}</td>
+                  <td>${escapeHtml(toDisplayValue(line.cantidad))}</td>
+                  <td>${escapeHtml(toDisplayValue(line.existenciaActual))}</td>
+                  <td>${escapeHtml(formatTransferAmount(computeTransferLineTotal(line)))}</td>
+                </tr>
+              `,
+            )
             .join("")}
         </tbody>
       </table>
@@ -3204,12 +3328,6 @@ function bindTransferEvents() {
     await loadTransfersModule();
   });
 
-  document.querySelector("[data-open-transfer-register]")?.addEventListener("click", async () => {
-    state.currentView = "registro-transferencia";
-    await loadTransfersMetadata({ renderAfter: false });
-    render();
-  });
-
   document.querySelector("[data-open-load-transfer]")?.addEventListener("click", async () => {
     state.currentView = "cargar-transferencia";
     await loadTransfers({ renderAfter: false });
@@ -3268,18 +3386,35 @@ function bindTransferEvents() {
     });
   });
 
-  document.querySelectorAll("[data-transfer-select]").forEach((button) => {
+  document.querySelectorAll("[data-transfer-load-receipt]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const numero = Number.parseInt(button.getAttribute("data-transfer-select") || "", 10);
+      const numero = Number.parseInt(button.getAttribute("data-transfer-load-receipt") || "", 10);
       if (!Number.isInteger(numero)) {
         return;
       }
 
-      await loadTransferForEdit(numero);
+      await loadTransferForReceipt(numero);
     });
   });
 
+  document.querySelector("[data-clear-loaded-transfer]")?.addEventListener("click", () => {
+    state.transfers.selectedNumero = null;
+    state.transfers.receiptNumero = null;
+    state.transfers.draft = createEmptyTransferDraft(state.transfers.metadata);
+    clearFlash();
+    render();
+  });
+
   document.querySelector("[data-approve-transfer]")?.addEventListener("click", async () => {
+    const numero = Number.parseInt(String(state.transfers.draft?.numero || ""), 10);
+    if (!Number.isInteger(numero)) {
+      return;
+    }
+
+    await approveTransfer(numero);
+  });
+
+  document.querySelector("[data-approve-loaded-transfer]")?.addEventListener("click", async () => {
     const numero = Number.parseInt(String(state.transfers.draft?.numero || ""), 10);
     if (!Number.isInteger(numero)) {
       return;
@@ -3750,8 +3885,33 @@ async function loadTransferForEdit(numero) {
 
     const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}`);
     state.transfers.selectedNumero = numero;
+    state.transfers.receiptNumero = null;
     state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
     state.currentView = "registro-transferencia";
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la transferencia ${numero}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.transfers.loadingDetail = false;
+    render();
+  }
+}
+
+async function loadTransferForReceipt(numero) {
+  state.transfers.loadingDetail = true;
+  clearFlash();
+  render();
+
+  try {
+    if (!state.transfers.metadata) {
+      await loadTransfersMetadata({ renderAfter: false });
+    }
+
+    const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}`);
+    state.transfers.selectedNumero = numero;
+    state.transfers.receiptNumero = numero;
+    state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
+    state.currentView = "cargar-transferencia";
   } catch (error) {
     console.error(error);
     setFlash(`No se pudo cargar la transferencia ${numero}: ${extractErrorMessage(error)}`, "error");
@@ -3787,6 +3947,7 @@ async function saveTransfer() {
         });
 
     state.transfers.selectedNumero = response.transferencia?.numero || draft.numero || null;
+    state.transfers.receiptNumero = null;
     state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
 
     await Promise.all([
@@ -3837,6 +3998,9 @@ async function approveTransferWithPayload(numero, payload = {}) {
   });
 
   state.transfers.selectedNumero = numero;
+  if (state.currentView === "cargar-transferencia") {
+    state.transfers.receiptNumero = numero;
+  }
   state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
   await loadTransfers({ renderAfter: false });
   setFlash(`Transferencia ${numero} aprobada correctamente.`, "success");
@@ -3897,7 +4061,7 @@ function isTransferDuplicateBarcodeError(error) {
 
 async function deleteTransfer(numero) {
   const confirmed = window.confirm(
-    `Se eliminara la transferencia pendiente ${numero} y se devolvera el inventario al origen. Deseas continuar?`,
+    `Se eliminara la transferencia pendiente ${numero}. Esta accion no modifica inventario. Deseas continuar?`,
   );
   if (!confirmed) {
     return;
@@ -4209,6 +4373,7 @@ async function fetchAllArticlesForLookup() {
 
 function resetTransferDraft() {
   state.transfers.selectedNumero = null;
+  state.transfers.receiptNumero = null;
   state.transfers.draft = createEmptyTransferDraft(state.transfers.metadata);
 }
 

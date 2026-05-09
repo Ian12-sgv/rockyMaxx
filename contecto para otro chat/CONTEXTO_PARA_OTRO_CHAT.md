@@ -64,10 +64,10 @@ Todavia **no** se implemento `ITRANSFERENCIAS`, `IMOVTRANSFERENCIAS` ni `DEVTRAN
 - aprobar sigue exigiendo que existan renglones validos, porque una transferencia sin articulos no tiene movimiento que aprobar
 - el sistema genera `Numero`
 - al guardar, la transferencia queda con `Status = 0`
-- al guardar, se descuenta inventario del origen
+- al guardar, editar o eliminar una transferencia pendiente no se modifica `INVENTARIO`
 - mientras `Status = 0`, la transferencia puede editarse
-- si se edita, el ajuste de inventario en origen debe hacerse por delta, no recontando todo desde cero
 - al aprobar, `Status` pasa a `1`
+- al aprobar, se valida existencia y se descuenta inventario del origen
 - al aprobar, se valida la recepcion contra `INVENTARIO` usando `CodigoBarra + Referencia + CodigoMarca`
 - al aprobar, siempre se refrescan los datos del articulo desde `INVENTARIO`, no desde los valores que quedaron guardados cuando se creo la transferencia
 - si una transferencia se crea hoy y se aprueba semanas despues, los atributos, costos/precios de movimiento y `TotalValor` se recalculan con la informacion vigente en `INVENTARIO`
@@ -151,10 +151,13 @@ El flujo de transferencias quedo separado en dos modulos de UI:
 
 `Cargar transferencia` permite:
 
-- buscar transferencias por numero, origen, destino, documento, observacion o usuario
-- filtrar por status pendiente/aprobada
-- limitar resultados
-- abrir una transferencia existente en el modulo `Registro de transferencia`
+- que el destino busque transferencias llegadas por numero, origen, destino, documento, observacion o usuario
+- ubicar documentos pendientes/aprobados que corresponden al proceso de recepcion
+- cargar el documento en una vista de recepcion dentro del mismo modulo
+- revisar y analizar los articulos enviados en solo lectura
+- validar y aprobar la recepcion desde el modulo del destino
+- al aprobar, se valida y se afecta `INVENTARIO`
+- no debe entenderse como modulo del origen ni como modulo de edicion; este modulo solo busca transferencias llegadas, las abre para revision y permite validarlas/aprobarlas
 
 Tambien se agrego pantalla para:
 
@@ -227,55 +230,56 @@ Se validaron estos pasos:
 - `npm.cmd run build --workspace=@sistema-arabe/api`
 - `node --check apps/api/public/app.js`
 
-Tambien se hizo un smoke test real contra la base:
+Smoke test real recomendado despues del ajuste actual:
 
 1. se subio temporalmente `INVENTARIO.Existencia` del articulo `123456789` a `10`
 2. se creo una transferencia de prueba `TESTSRC -> TESTDST`
-3. al guardar, el stock bajo a `9.00`
-4. al aprobar, el stock volvio a `10.00`
+3. al guardar, el stock se mantuvo sin cambios
+4. al aprobar, se valido y se movio la existencia usando los datos vigentes de `INVENTARIO`
 5. se limpiaron los datos de prueba y el inventario quedo restaurado a su estado original
 
-Resultado del smoke test:
+Resultado esperado del smoke test:
 
 - `statusAfterSave = 0`
 - `statusAfterApprove = 1`
-- el descuento y la suma funcionaron
+- guardar no afecto inventario
+- aprobar fue el unico paso que aplico el movimiento de inventario
 
 ## Continuacion Implementada Despues Del Handoff Inicial
 
 Se agrego eliminacion de transferencias pendientes:
 
 - solo se permite eliminar si `Status = 0`
-- al eliminar, se revierte el descuento hecho al origen sumando nuevamente las cantidades a `INVENTARIO`
+- al eliminar, no se revierte inventario porque guardar una pendiente no descuenta existencia
 - se eliminan los renglones de `MOVTRANSFERENCIAS`
 - se elimina el encabezado de `TRANSFERENCIAS`
-- si la transferencia ya esta aprobada (`Status = 1`), el backend responde conflicto y no modifica inventario
+- si la transferencia ya esta aprobada (`Status = 1`), el backend responde conflicto
 - la pantalla de `Procesos > Transferencias` ahora muestra `Eliminar pendiente` para documentos pendientes
 
-Validacion adicional realizada despues de implementar eliminacion:
+Smoke test real recomendado para eliminacion pendiente despues del ajuste actual:
 
 - `npm.cmd run typecheck --workspace=@sistema-arabe/api`
 - `npm.cmd run build --workspace=@sistema-arabe/api`
 - `node --check apps/api/public/app.js`
-- smoke test real contra base usando usuario legacy `admin`:
+- smoke test contra base usando usuario legacy `admin`:
   - se subio temporalmente `INVENTARIO.Existencia` del articulo `123456789` a `10`
   - se creo una transferencia pendiente temporal `TESTDEL -> TESTDST`
-  - al guardar, el stock bajo a `9`
-  - al eliminar, el stock volvio a `10`
+  - al guardar, el stock se mantuvo en `10`
+  - al eliminar, el stock siguio en `10`
   - `TRANSFERENCIAS` ya no tenia el documento eliminado
   - se limpio la data temporal y se restauro el inventario original
 
-Validacion adicional realizada despues de ajustar aprobacion por identidad de articulo:
+Smoke test real recomendado para aprobacion por identidad de articulo despues del ajuste actual:
 
 - `npm.cmd run typecheck --workspace=@sistema-arabe/api`
 - `npm.cmd run build --workspace=@sistema-arabe/api`
 - `node --check apps/api/public/app.js`
-- smoke test real contra base usando usuario legacy `admin`:
+- smoke test contra base usando usuario legacy `admin`:
   - se subio temporalmente `INVENTARIO.Existencia` del articulo `123456789` a `10`
   - se creo una transferencia temporal `TESTSRC -> TESTDST`
-  - al guardar, el stock bajo a `9`
+  - al guardar, el stock se mantuvo en `10`
   - al aprobar, se busco el articulo por `CodigoBarra + Referencia + CodigoMarca`
-  - al aprobar, el stock volvio a `10`
+  - al aprobar, se aplico el movimiento de inventario
   - `Status` paso de `0` a `1`
   - se limpio la data temporal y se restauro el inventario original
 
@@ -346,7 +350,7 @@ Como `INVENTARIO` no esta separado por ubicacion dentro de la base actual:
 
 Usa este prompt para continuar sin rehacer contexto:
 
-> Lee primero `contecto para otro chat/CONTEXTO_PARA_OTRO_CHAT.md`. Estamos en `H:\\sistema arabe`. Ya se implemento la fase 1 de transferencias usando `TRANSFERENCIAS`, `MOVTRANSFERENCIAS` e `INVENTARIO`, con guardado pendiente, descuento en origen, aprobacion y suma en destino. Quiero continuar desde ese punto sin cambiar al modelo moderno `Transfer/TransferItem`. Revisa los archivos tocados y dime el siguiente paso exacto para seguir.
+> Lee primero `contecto para otro chat/CONTEXTO_PARA_OTRO_CHAT.md`. Estamos en `H:\\sistema arabe`. Ya se implemento la fase 1 de transferencias usando `TRANSFERENCIAS`, `MOVTRANSFERENCIAS` e `INVENTARIO`, con guardado pendiente que no afecta inventario, edicion mientras `Status = 0`, aprobacion como unico momento donde se valida y se mueve existencia, y suma/creacion en destino segun corresponda. Quiero continuar desde ese punto sin cambiar al modelo moderno `Transfer/TransferItem`. Revisa los archivos tocados y dime el siguiente paso exacto para seguir.
 
 ## Nota Final Para El Siguiente Chat
 
