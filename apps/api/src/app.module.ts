@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
+import { AdjustmentsModule } from "./adjustments/adjustments.module";
 import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
 import { DevReturnsModule } from "./dev-returns/dev-returns.module";
@@ -19,6 +20,7 @@ import { UsersModule } from "./users/users.module";
       envFilePath: ["../../.env", ".env"],
     }),
     PrismaModule,
+    AdjustmentsModule,
     HealthModule,
     AuthModule,
     DevReturnsModule,

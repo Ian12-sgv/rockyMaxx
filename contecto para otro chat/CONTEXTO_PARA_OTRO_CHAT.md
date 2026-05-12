@@ -45,6 +45,8 @@ La implementacion se hizo sobre estas tablas:
 - `IMOVDEVTRANSFERENCIAS`
 - `DEVTRANSFERENCIAS`
 - `MOVDEVTRANSFERENCIAS`
+- `AJUSTES`
+- `MOVAJUSTES`
 
 `DEVTRANSFERENCIAS` y `MOVDEVTRANSFERENCIAS` ya se conectaron al cierre de la devolucion desde backend.
 Se agrego `DEVBORRADOR` porque la base solo tenia `MOVDEVBORRADOR`.
@@ -117,6 +119,25 @@ Endpoints backend agregados para devoluciones:
 - `POST /api/dev-returns/drafts/:numero/destination-approve`
 - `POST /api/dev-returns/drafts/:numero/origin-approve`
 - `POST /api/dev-returns/:numero/destination-approve`
+
+### Flujo legacy de ajustes
+
+- el proceso `AJUSTE` modifica directamente la mercancia en `INVENTARIO`
+- ajuste positivo suma existencia
+- ajuste negativo resta existencia
+- se registra encabezado en `AJUSTES`
+- se registran renglones en `MOVAJUSTES`, relacionados con `AJUSTES` por `Numero`
+- campos de `AJUSTES`: `Numero`, `TipoAjuste`, `Signo`, `Fecha`, `TotalValor`, `Observacion`, `Usuario`, `InterContable`, `Status`, `IDLote`
+- campos de `MOVAJUSTES`: `Numero`, `CodigoBarra`, `Cantidad`, `Costo`
+- el ajuste busca y valida el articulo por `CodigoBarra`
+- `Status` se guarda en `1` para que las vistas legacy `VW_AJUSTESPOSITIVOS` y `VW_AJUSTESNEGATIVOS` lo tomen como aplicado
+- en ajustes negativos, si la existencia no alcanza, el backend rechaza el ajuste
+
+Endpoints backend agregados para ajustes:
+
+- `GET /api/adjustments`
+- `GET /api/adjustments/:numero`
+- `POST /api/adjustments`
 
 ### Validaciones ya acordadas
 
