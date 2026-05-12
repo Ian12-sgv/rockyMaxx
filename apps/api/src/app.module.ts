@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 
 import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
+import { DevReturnsModule } from "./dev-returns/dev-returns.module";
 import { HealthModule } from "./health/health.module";
 import { InventoryModule } from "./inventory/inventory.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -20,6 +21,7 @@ import { UsersModule } from "./users/users.module";
     PrismaModule,
     HealthModule,
     AuthModule,
+    DevReturnsModule,
     UsersModule,
     RolesModule,
     InventoryModule,

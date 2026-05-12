@@ -36,9 +36,21 @@ La implementacion se hizo sobre estas tablas:
 
 - `TRANSFERENCIAS`
 - `MOVTRANSFERENCIAS`
+- `ITRANSFERENCIAS`
+- `IMOVTRANSFERENCIAS`
 - `INVENTARIO`
+- `DEVBORRADOR`
+- `MOVDEVBORRADOR`
+- `IDEVTRANSFERENCIAS`
+- `IMOVDEVTRANSFERENCIAS`
+- `DEVTRANSFERENCIAS`
+- `MOVDEVTRANSFERENCIAS`
 
-Todavia **no** se implemento `ITRANSFERENCIAS`, `IMOVTRANSFERENCIAS` ni `DEVTRANSFERENCIAS` como parte del flujo funcional nuevo. Solo se respetaron como contexto del modelo legacy.
+`DEVTRANSFERENCIAS` y `MOVDEVTRANSFERENCIAS` ya se conectaron al cierre de la devolucion desde backend.
+Se agrego `DEVBORRADOR` porque la base solo tenia `MOVDEVBORRADOR`.
+Campos de `DEVBORRADOR`: `Numero`, `Fecha`, `Observacion`, `Usuario`, `Status`.
+`MOVDEVBORRADOR.Numero` queda relacionado con `DEVBORRADOR.Numero`.
+`MOVDEVBORRADOR.CodigoBarra` queda relacionado con `INVENTARIO.CodigoBarra`.
 
 ## Reglas De Negocio Ya Definidas Con El Usuario
 
@@ -64,12 +76,15 @@ Todavia **no** se implemento `ITRANSFERENCIAS`, `IMOVTRANSFERENCIAS` ni `DEVTRAN
 - aprobar sigue exigiendo que existan renglones validos, porque una transferencia sin articulos no tiene movimiento que aprobar
 - el sistema genera `Numero`
 - al guardar, la transferencia queda con `Status = 0`
-- al guardar, editar o eliminar una transferencia pendiente no se modifica `INVENTARIO`
+- al guardar, se descuenta inventario del origen
 - mientras `Status = 0`, la transferencia puede editarse
+- si se edita una pendiente, el inventario del origen se ajusta por diferencia
+- si se elimina una pendiente, se devuelve al inventario lo descontado al guardar
 - al aprobar, `Status` pasa a `1`
-- al aprobar, se valida existencia y se descuenta inventario del origen
 - al aprobar, se valida la recepcion contra `INVENTARIO` usando `CodigoBarra + Referencia + CodigoMarca`
 - al aprobar, siempre se refrescan los datos del articulo desde `INVENTARIO`, no desde los valores que quedaron guardados cuando se creo la transferencia
+- al aprobar, se registra la transferencia recibida en `ITRANSFERENCIAS`
+- al aprobar, se registran los renglones recibidos en `IMOVTRANSFERENCIAS`
 - si una transferencia se crea hoy y se aprueba semanas despues, los atributos, costos/precios de movimiento y `TotalValor` se recalculan con la informacion vigente en `INVENTARIO`
 - si existe un articulo que coincide con `CodigoBarra + Referencia + CodigoMarca`, se suma la cantidad recibida y se sincronizan los atributos del articulo desde el origen
 - si no existe ese articulo, se crea en `INVENTARIO` copiando la ficha completa del articulo origen y cargando la cantidad recibida
@@ -78,6 +93,30 @@ Todavia **no** se implemento `ITRANSFERENCIAS`, `IMOVTRANSFERENCIAS` ni `DEVTRAN
 - si se elige modificar, se actualizan los atributos del articulo existente y se suma la existencia recibida
 - si se elige crear nuevo, la UI pide un nuevo codigo de barra porque el original ya esta usado; el backend crea el articulo con ese nuevo codigo y los atributos recibidos
 - una transferencia aprobada no puede editarse
+
+### Flujo legacy de devoluciones
+
+- las devoluciones funcionan parecido a transferencias, pero tienen una fase previa de borrador
+- primero se crea un borrador en `DEVBORRADOR` y `MOVDEVBORRADOR`
+- el destino revisa el borrador y envia una aceptacion del borrador al origen
+- esa aceptacion del borrador solo cambia el estado del borrador; todavia no llena `IDEVTRANSFERENCIAS` ni `IMOVDEVTRANSFERENCIAS`
+- luego el origen valida esa aceptacion y envia la devolucion real
+- al aprobar el origen, se llenan `DEVTRANSFERENCIAS` y `MOVDEVTRANSFERENCIAS`
+- cuando llega la devolucion real, el destino la aprueba finalmente
+- en esa aprobacion final del destino se llenan automaticamente `IDEVTRANSFERENCIAS` e `IMOVDEVTRANSFERENCIAS`
+- campos de `DEVTRANSFERENCIAS`: `Numero`, `Fecha`, `CodigoEnvia`, `CodigoRecibe`, `DocumentoOrigen`/codigo origen, `TotalValor`, `Observacion`, `Status`, `Usuario`, `FechaEmision`, `InterContable`, `IDLote`
+- campos de `MOVDEVTRANSFERENCIAS`: `Numero`, `Fecha`, `CodigoBarra`, `Cantidad`, `Valor`, `NumeroCaja`, `Item`, `UltimoCosto`, `CostoInicial`, `CostoDolar`
+- limitacion actual: `DEVBORRADOR` no guarda `CodigoEnvia`, `CodigoRecibe`, `IDLote` ni `InterContable`; esos datos se pasan al aprobar el borrador/devolucion
+- limitacion actual: `INVENTARIO` sigue siendo global, no separado por sucursal
+
+Endpoints backend agregados para devoluciones:
+
+- `GET /api/dev-returns/drafts`
+- `GET /api/dev-returns/drafts/:numero`
+- `POST /api/dev-returns/drafts`
+- `POST /api/dev-returns/drafts/:numero/destination-approve`
+- `POST /api/dev-returns/drafts/:numero/origin-approve`
+- `POST /api/dev-returns/:numero/destination-approve`
 
 ### Validaciones ya acordadas
 
@@ -234,23 +273,23 @@ Smoke test real recomendado despues del ajuste actual:
 
 1. se subio temporalmente `INVENTARIO.Existencia` del articulo `123456789` a `10`
 2. se creo una transferencia de prueba `TESTSRC -> TESTDST`
-3. al guardar, el stock se mantuvo sin cambios
-4. al aprobar, se valido y se movio la existencia usando los datos vigentes de `INVENTARIO`
+3. al guardar, el stock bajo en el origen
+4. al aprobar, se valido y se recibio en destino usando los datos vigentes de `INVENTARIO`
 5. se limpiaron los datos de prueba y el inventario quedo restaurado a su estado original
 
 Resultado esperado del smoke test:
 
 - `statusAfterSave = 0`
 - `statusAfterApprove = 1`
-- guardar no afecto inventario
-- aprobar fue el unico paso que aplico el movimiento de inventario
+- guardar desconto inventario del origen
+- aprobar aplico la recepcion del destino
 
 ## Continuacion Implementada Despues Del Handoff Inicial
 
 Se agrego eliminacion de transferencias pendientes:
 
 - solo se permite eliminar si `Status = 0`
-- al eliminar, no se revierte inventario porque guardar una pendiente no descuenta existencia
+- al eliminar, se revierte inventario devolviendo lo descontado al guardar
 - se eliminan los renglones de `MOVTRANSFERENCIAS`
 - se elimina el encabezado de `TRANSFERENCIAS`
 - si la transferencia ya esta aprobada (`Status = 1`), el backend responde conflicto
@@ -264,8 +303,8 @@ Smoke test real recomendado para eliminacion pendiente despues del ajuste actual
 - smoke test contra base usando usuario legacy `admin`:
   - se subio temporalmente `INVENTARIO.Existencia` del articulo `123456789` a `10`
   - se creo una transferencia pendiente temporal `TESTDEL -> TESTDST`
-  - al guardar, el stock se mantuvo en `10`
-  - al eliminar, el stock siguio en `10`
+  - al guardar, el stock bajo a `9`
+  - al eliminar, el stock volvio a `10`
   - `TRANSFERENCIAS` ya no tenia el documento eliminado
   - se limpio la data temporal y se restauro el inventario original
 
@@ -277,9 +316,9 @@ Smoke test real recomendado para aprobacion por identidad de articulo despues de
 - smoke test contra base usando usuario legacy `admin`:
   - se subio temporalmente `INVENTARIO.Existencia` del articulo `123456789` a `10`
   - se creo una transferencia temporal `TESTSRC -> TESTDST`
-  - al guardar, el stock se mantuvo en `10`
+  - al guardar, el stock bajo a `9`
   - al aprobar, se busco el articulo por `CodigoBarra + Referencia + CodigoMarca`
-  - al aprobar, se aplico el movimiento de inventario
+  - al aprobar, se aplico la recepcion del destino
   - `Status` paso de `0` a `1`
   - se limpio la data temporal y se restauro el inventario original
 
@@ -331,13 +370,13 @@ Cerrar la fase 1 con estas decisiones pendientes:
 
 - definir si se quiere bloqueo adicional por usuario creador o si cualquier admin puede aprobar
 - definir si hace falta una auditoria historica de eliminaciones de transferencias pendientes
+- validar con smoke test real que al aprobar se llenan `ITRANSFERENCIAS` e `IMOVTRANSFERENCIAS`
 
 ### Siguiente paso de producto recomendado
 
 Despues de cerrar fase 1:
 
-- implementar `ITRANSFERENCIAS` e `IMOVTRANSFERENCIAS`
-- o pasar a la siguiente parte del roadmap multi-sucursal
+- pasar a la siguiente parte del roadmap multi-sucursal
 
 ### Riesgo a vigilar
 
@@ -350,7 +389,7 @@ Como `INVENTARIO` no esta separado por ubicacion dentro de la base actual:
 
 Usa este prompt para continuar sin rehacer contexto:
 
-> Lee primero `contecto para otro chat/CONTEXTO_PARA_OTRO_CHAT.md`. Estamos en `H:\\sistema arabe`. Ya se implemento la fase 1 de transferencias usando `TRANSFERENCIAS`, `MOVTRANSFERENCIAS` e `INVENTARIO`, con guardado pendiente que no afecta inventario, edicion mientras `Status = 0`, aprobacion como unico momento donde se valida y se mueve existencia, y suma/creacion en destino segun corresponda. Quiero continuar desde ese punto sin cambiar al modelo moderno `Transfer/TransferItem`. Revisa los archivos tocados y dime el siguiente paso exacto para seguir.
+> Lee primero `contecto para otro chat/CONTEXTO_PARA_OTRO_CHAT.md`. Estamos en `H:\\sistema arabe`. Ya se implemento la fase 1 de transferencias usando `TRANSFERENCIAS`, `MOVTRANSFERENCIAS` e `INVENTARIO`, con guardado pendiente que descuenta inventario del origen, edicion mientras `Status = 0` ajustando por diferencia, eliminacion pendiente que devuelve lo descontado, y aprobacion desde destino para validar/recibir y sumar/crear segun corresponda. Quiero continuar desde ese punto sin cambiar al modelo moderno `Transfer/TransferItem`. Revisa los archivos tocados y dime el siguiente paso exacto para seguir.
 
 ## Nota Final Para El Siguiente Chat
 

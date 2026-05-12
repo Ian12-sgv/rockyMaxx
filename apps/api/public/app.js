@@ -1177,7 +1177,7 @@ function renderTransfersWorkspace() {
               <div>
                 <span class="article-editor-eyebrow">Documento</span>
                 <h2>${draft.numero ? `Transferencia ${escapeHtml(String(draft.numero))}` : "Nueva transferencia"}</h2>
-                <p>${isLocked ? "La transferencia ya fue aprobada y quedo bloqueada para edicion." : "Las transferencias pendientes no afectan inventario hasta aprobar."}</p>
+                <p>${isLocked ? "La transferencia ya fue aprobada y quedo bloqueada para edicion." : "Las transferencias pendientes descuentan inventario al guardar."}</p>
               </div>
               <div class="article-editor-status">
                 ${renderTransferStatusBadge(draft.status)}
@@ -1297,7 +1297,7 @@ function renderTransfersWorkspace() {
               <div class="modern-card-head">
                 <div>
                   <h2>Renglones</h2>
-                  <p>La existencia se valida y se mueve solo al aprobar la transferencia.</p>
+                  <p>La existencia se descuenta al guardar y se ajusta si editas la pendiente.</p>
                 </div>
               </div>
               ${renderTransferLinesEditor(draft, { isLocked })}
@@ -4061,7 +4061,7 @@ function isTransferDuplicateBarcodeError(error) {
 
 async function deleteTransfer(numero) {
   const confirmed = window.confirm(
-    `Se eliminara la transferencia pendiente ${numero}. Esta accion no modifica inventario. Deseas continuar?`,
+    `Se eliminara la transferencia pendiente ${numero} y se devolvera al inventario lo descontado. Deseas continuar?`,
   );
   if (!confirmed) {
     return;

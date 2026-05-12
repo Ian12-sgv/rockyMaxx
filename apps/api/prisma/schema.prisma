@@ -20,6 +20,7 @@ model Usuarios {
   compras          Compras[]
   depositos        Depositos[]
   depositosDolares DepositosDolares[]
+  devBorradores     DevBorrador[]
   devCompras       DevCompras[]
   devVentas        DevVentas[]
   listaPrecios     ListaPrecio[]
@@ -354,6 +355,7 @@ model Inventario {
   marcaRef              Marcas                 @relation(fields: [CodigoMarca], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
   tallaRef              Tallas                 @relation(fields: [Talla], references: [Codigo], onDelete: NoAction, onUpdate: Cascade)
   movCompras            MovCompras[]
+  movDevBorrador        MovDevBorrador[]
   movDevCompras         MovDevCompras[]
   movDevTransferencias  MovDevTransferencias[]
   movDevVentas          MovDevVentas[]
@@ -991,6 +993,19 @@ model MovListaPrecio {
   @@map("MOVLISTAPRECIO")
 }
 
+model DevBorrador {
+  Numero       BigInt
+  Fecha        DateTime
+  Observacion  String
+  Usuario      String
+  Status       Int
+  usuarioRef   Usuarios          @relation(fields: [Usuario], references: [CodUsuario], onDelete: NoAction, onUpdate: Cascade)
+  movimientos  MovDevBorrador[]
+
+  @@id([Numero])
+  @@map("DEVBORRADOR")
+}
+
 model MovDevBorrador {
   Numero      BigInt
   CodigoBarra String
@@ -998,6 +1013,8 @@ model MovDevBorrador {
   NumeroCaja  Int
   Item        Int
   Costo       Decimal
+  devBorrador DevBorrador @relation(fields: [Numero], references: [Numero], onDelete: Cascade, onUpdate: Cascade)
+  inventarioRef Inventario @relation(fields: [CodigoBarra], references: [CodigoBarra], onDelete: NoAction, onUpdate: Cascade)
 
   @@id([Numero, CodigoBarra, Item])
   @@map("MOVDEVBORRADOR")

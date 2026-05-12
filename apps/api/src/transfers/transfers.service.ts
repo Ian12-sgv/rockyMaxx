@@ -56,6 +56,7 @@ type NormalizedTransferDraft = {
   zona: string;
   lines: NormalizedTransferLine[];
   totalValor: Prisma.Decimal;
+  quantitiesByBarcode: Map<string, Prisma.Decimal>;
 };
 
 @Injectable()
@@ -130,6 +131,7 @@ export class TransfersService {
 
         await this.ensureLocations(tx, [normalizedDraft.codigoEnvia, normalizedDraft.codigoRecibe]);
         await this.ensureDispatchTypeExists(tx, normalizedDraft.idDespacho);
+        await this.applyOriginDelta(tx, normalizedDraft.quantitiesByBarcode);
 
         await tx.transferencias.create({
           data: {
@@ -213,9 +215,12 @@ export class TransfersService {
         });
 
         const loteId = await this.resolveTransferLoteId(tx, updateTransferDto.idLote ?? existing.IDLote, existing.Usuario);
+        const currentQuantities = this.aggregateSavedQuantities(existing.movTransferencias);
+        const originDelta = this.subtractAggregateMaps(normalizedDraft.quantitiesByBarcode, currentQuantities);
 
         await this.ensureLocations(tx, [normalizedDraft.codigoEnvia, normalizedDraft.codigoRecibe]);
         await this.ensureDispatchTypeExists(tx, normalizedDraft.idDespacho);
+        await this.applyOriginDelta(tx, originDelta);
 
         await tx.transferencias.update({
           where: { Numero: numero },
@@ -298,13 +303,13 @@ export class TransfersService {
           tx,
           existing.movTransferencias,
         );
-        await this.applyOriginDelta(tx, this.aggregateSavedQuantities(existing.movTransferencias));
         await this.applyDestinationReceipt(
           tx,
           numero,
           existing.movTransferencias,
           this.buildDuplicateResolutionMap(approveTransferDto.duplicateResolutions),
         );
+        await this.recordReceivedTransfer(tx, numero, currentTotalValor);
 
         await tx.transferencias.update({
           where: { Numero: numero },
@@ -345,6 +350,11 @@ export class TransfersService {
         if (existing.Status === 1) {
           throw new ConflictException("La transferencia ya fue aprobada y no puede eliminarse.");
         }
+
+        await this.applyOriginDelta(
+          tx,
+          this.negateAggregateMap(this.aggregateSavedQuantities(existing.movTransferencias)),
+        );
 
         await tx.movTransferencias.deleteMany({
           where: { Numero: numero },
@@ -390,6 +400,7 @@ export class TransfersService {
 
     const lines = await this.normalizeTransferLines(tx, input.items, fecha);
 
+    const quantitiesByBarcode = this.aggregateLineQuantities(lines);
     const totalValor = lines.reduce((total, line) => total.plus(line.valor.mul(line.cantidad)), ZERO);
 
     return {
@@ -405,6 +416,7 @@ export class TransfersService {
       zona: String(input.zona ?? options?.zonaFallback ?? "").trim(),
       lines,
       totalValor,
+      quantitiesByBarcode,
     };
   }
 
@@ -671,6 +683,49 @@ export class TransfersService {
     return quantities;
   }
 
+  private aggregateLineQuantities(lines: NormalizedTransferLine[]) {
+    const quantities = new Map<string, Prisma.Decimal>();
+
+    for (const line of lines) {
+      const current = quantities.get(line.codigoBarra) ?? ZERO;
+      quantities.set(line.codigoBarra, current.plus(line.cantidad));
+    }
+
+    return quantities;
+  }
+
+  private subtractAggregateMaps(
+    current: Map<string, Prisma.Decimal>,
+    previous: Map<string, Prisma.Decimal>,
+  ) {
+    const result = new Map<string, Prisma.Decimal>();
+    const keys = new Set([...current.keys(), ...previous.keys()]);
+
+    for (const key of keys) {
+      const nextValue = current.get(key) ?? ZERO;
+      const previousValue = previous.get(key) ?? ZERO;
+      const delta = nextValue.minus(previousValue);
+
+      if (!delta.isZero()) {
+        result.set(key, delta);
+      }
+    }
+
+    return result;
+  }
+
+  private negateAggregateMap(values: Map<string, Prisma.Decimal>) {
+    const result = new Map<string, Prisma.Decimal>();
+
+    for (const [key, value] of values.entries()) {
+      if (!value.isZero()) {
+        result.set(key, value.negated());
+      }
+    }
+
+    return result;
+  }
+
   private async applyOriginDelta(
     tx: TransferTransactionClient,
     deltaByBarcode: Map<string, Prisma.Decimal>,
@@ -894,6 +949,59 @@ export class TransfersService {
     }
 
     return totalValor;
+  }
+
+  private async recordReceivedTransfer(
+    tx: TransferTransactionClient,
+    numero: number,
+    totalValor: Prisma.Decimal,
+  ) {
+    const transfer = await tx.transferencias.findUnique({
+      where: { Numero: numero },
+      include: {
+        movTransferencias: {
+          orderBy: [{ Item: "asc" }, { NumeroCaja: "asc" }, { CodigoBarra: "asc" }],
+        },
+      },
+    });
+
+    if (!transfer) {
+      throw new NotFoundException("La transferencia no existe.");
+    }
+
+    await tx.iTransferencias.create({
+      data: {
+        Numero: transfer.Numero,
+        CodigoEnvia: transfer.CodigoEnvia,
+        CodigoRecibe: transfer.CodigoRecibe,
+        Fecha: transfer.Fecha,
+        FechaEmision: transfer.FechaEmision,
+        TotalValor: totalValor,
+        Observacion: transfer.Observacion,
+        Status: 1,
+        Usuario: transfer.Usuario,
+        InterContable: transfer.InterContable,
+        IDLote: transfer.IDLote,
+        IDDespacho: transfer.IDDespacho,
+        Correccion: transfer.Correccion,
+      },
+    });
+
+    await tx.iMovTransferencias.createMany({
+      data: transfer.movTransferencias.map((line) => ({
+        Numero: transfer.Numero,
+        CodigoEnvia: transfer.CodigoEnvia,
+        Item: line.Item,
+        Fecha: line.Fecha,
+        CodigoBarra: line.CodigoBarra,
+        Cantidad: line.Cantidad,
+        Valor: line.Valor,
+        NumeroCaja: line.NumeroCaja,
+        UltimoCosto: line.UltimoCosto,
+        CostoInicial: line.CostoInicial,
+        CostoDolar: line.CostoDolar,
+      })),
+    });
   }
 
   private async createReceivedInventoryArticle(
