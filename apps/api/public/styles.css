@@ -2146,6 +2146,11 @@ button {
   overflow: visible;
 }
 
+.modern-dropdown-procesos {
+  min-width: 244px;
+  overflow: visible;
+}
+
 .modern-mega-menu {
   position: relative;
   width: 204px;
@@ -2613,6 +2618,466 @@ button {
   color: #1d66b3;
   font-size: 0.84rem;
   font-weight: 700;
+}
+
+.sucursales-page {
+  gap: 14px;
+}
+
+.sucursal-command-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(35, 122, 202, 0.18);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f7fbff 0%, #e8f1fb 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 8px 20px rgba(31, 53, 83, 0.07);
+}
+
+.sucursal-command-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(35, 122, 202, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.sucursal-command-button:hover {
+  background: #eef6ff;
+}
+
+.sucursal-command-button[disabled] {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.sucursal-command-primary {
+  border-color: rgba(29, 102, 179, 0.32);
+  background: linear-gradient(135deg, #237aca 0%, #4e9be4 100%);
+  color: #f8fbff;
+}
+
+.sucursal-command-primary:hover {
+  background: linear-gradient(135deg, #1d66b3 0%, #237aca 100%);
+}
+
+.sucursal-command-danger {
+  border-color: rgba(171, 63, 47, 0.26);
+  background: rgba(171, 63, 47, 0.08);
+  color: var(--danger);
+}
+
+.sucursal-command-danger:hover {
+  background: rgba(171, 63, 47, 0.14);
+}
+
+.sucursal-command-icon {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid rgba(35, 122, 202, 0.22);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #1d66b3;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.sucursal-layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.92fr) minmax(420px, 1.08fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.sucursal-list-card,
+.sucursal-form-card {
+  border-radius: 8px;
+}
+
+.sucursal-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.sucursal-form-card {
+  position: sticky;
+  top: 16px;
+}
+
+.sucursal-editor-form {
+  display: grid;
+  gap: 16px;
+}
+
+.sucursal-form-title {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sucursal-form-title h2 {
+  margin: 4px 0 0;
+  color: #1f3245;
+  font-family: var(--font-display);
+  font-size: 1.8rem;
+}
+
+.sucursal-data-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(35, 122, 202, 0.18);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5fc 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.84);
+}
+
+.sucursal-field-row,
+.sucursal-percentage-row {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.sucursal-field-row span,
+.sucursal-percentage-row span,
+.sucursal-status-row legend {
+  color: #263847;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.sucursal-field-row input,
+.sucursal-field-row textarea,
+.sucursal-percentage-row input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid rgba(35, 48, 58, 0.24);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.sucursal-field-row input,
+.sucursal-percentage-row input {
+  padding: 0 10px;
+}
+
+.sucursal-field-row textarea {
+  min-height: 72px;
+  padding: 9px 10px;
+  resize: vertical;
+}
+
+.sucursal-field-code input {
+  max-width: 150px;
+  background: #eef7ff;
+}
+
+.sucursal-field-phone input {
+  max-width: 180px;
+}
+
+.sucursal-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 142px;
+  color: #87909a;
+  font-size: 0.88rem;
+}
+
+.sucursal-checkbox-row input {
+  width: 16px;
+  height: 16px;
+}
+
+.sucursal-percentage-row {
+  grid-template-columns: 1fr 110px;
+  max-width: 390px;
+  margin-left: 142px;
+}
+
+.sucursal-percentage-row span {
+  line-height: 1.25;
+}
+
+.sucursal-status-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(35, 122, 202, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.sucursal-status-row legend {
+  padding: 0 8px;
+}
+
+.sucursal-status-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.sucursal-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 6px;
+}
+
+.sucursal-row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.transfer-register-page {
+  gap: 10px;
+}
+
+.transfer-register-shell {
+  border: 1px solid rgba(38, 73, 111, 0.16);
+  border-radius: 8px;
+  background: #f8fbff;
+  box-shadow: 0 12px 28px rgba(31, 53, 83, 0.06);
+}
+
+.transfer-register-form {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.transfer-command-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid rgba(35, 122, 202, 0.18);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #f7fbff 0%, #e7f1fb 100%);
+}
+
+.transfer-command-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid rgba(35, 122, 202, 0.18);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.transfer-command-button:hover {
+  background: #eef6ff;
+}
+
+.transfer-command-button[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.transfer-command-primary {
+  border-color: rgba(29, 102, 179, 0.32);
+  background: linear-gradient(135deg, #237aca 0%, #4e9be4 100%);
+  color: #f8fbff;
+}
+
+.transfer-command-icon {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid rgba(35, 122, 202, 0.24);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #1d66b3;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.transfer-header-panel {
+  display: grid;
+  grid-template-columns: 150px minmax(150px, 1fr) minmax(150px, 1fr) 110px;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(38, 73, 111, 0.18);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #f8fbff 0%, #edf4fb 100%);
+}
+
+.transfer-field {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.transfer-field span,
+.transfer-check-field span,
+.transfer-correction-field span {
+  color: #263847;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.transfer-field input,
+.transfer-field select {
+  width: 100%;
+  min-height: 31px;
+  padding: 0 8px;
+  border: 1px solid rgba(35, 48, 58, 0.24);
+  border-radius: 3px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.transfer-number-field input {
+  max-width: 96px;
+  background: #eef7ff;
+}
+
+.transfer-wide-field {
+  grid-column: span 2;
+}
+
+.transfer-full-field {
+  grid-column: 1 / -1;
+}
+
+.transfer-check-field,
+.transfer-correction-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transfer-check-field {
+  justify-content: flex-end;
+}
+
+.transfer-lines-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.transfer-grid-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.transfer-lines-panel .table-wrap {
+  border-radius: 4px;
+  overflow: auto;
+}
+
+.transfer-lines-panel .data-table th,
+.transfer-lines-panel .data-table td {
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.transfer-lines-panel .data-table input {
+  min-height: 28px;
+  padding: 0 6px;
+  border: 1px solid rgba(35, 48, 58, 0.22);
+  border-radius: 2px;
+  background: #ffffff;
+}
+
+.transfer-summary-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 14px;
+  align-items: center;
+  color: #18314b;
+  font-size: 0.86rem;
+}
+
+.transfer-summary-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.transfer-summary-row input {
+  width: 110px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid rgba(35, 48, 58, 0.24);
+  border-radius: 4px;
+  background: #eef7ff;
+  color: #1d45b3;
+  text-align: right;
+  font-weight: 800;
+}
+
+.transfer-lookup-dialog {
+  width: min(980px, calc(100vw - 36px));
+}
+
+.transfer-lookup-table-wrap {
+  max-height: 62vh;
+}
+
+.transfer-lookup-table th,
+.transfer-lookup-table td {
+  padding: 5px 8px;
+  font-family: "Tahoma", "Segoe UI", sans-serif;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.transfer-lookup-row {
+  cursor: pointer;
+}
+
+.transfer-lookup-row-pending {
+  background: #d9ffc8;
+}
+
+.transfer-lookup-row-approved {
+  background: #ffffff;
+}
+
+.transfer-lookup-row:hover {
+  background: #bdefff;
+}
+
+.transfer-lookup-row td:nth-child(4) {
+  min-width: 260px;
+  white-space: normal;
 }
 
 .modern-search-wrap {
@@ -3382,6 +3847,23 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .sucursal-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-header-panel {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .transfer-wide-field,
+  .transfer-full-field {
+    grid-column: 1 / -1;
+  }
+
+  .sucursal-form-card {
+    position: static;
+  }
+
   .modern-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3448,8 +3930,25 @@ button {
   }
 
   .modern-search-wrap .search-grid,
+  .sucursal-search-row,
   .modern-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sucursal-command-bar {
+    flex-wrap: wrap;
+  }
+
+  .transfer-command-bar {
+    flex-wrap: wrap;
+  }
+
+  .sucursal-command-button {
+    flex: 1 1 120px;
+  }
+
+  .transfer-command-button {
+    flex: 1 1 120px;
   }
 
   .modern-mega-menu {
@@ -3503,5 +4002,39 @@ button {
 
   .modern-system-footer-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sucursal-field-row,
+  .sucursal-percentage-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sucursal-checkbox-row,
+  .sucursal-percentage-row {
+    max-width: none;
+    margin-left: 0;
+    padding-left: 0;
+  }
+
+  .sucursal-status-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .transfer-header-panel,
+  .transfer-field {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-check-field {
+    justify-content: flex-start;
+  }
+
+  .transfer-summary-row {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-summary-row label {
+    justify-content: space-between;
   }
 }

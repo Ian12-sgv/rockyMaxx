@@ -1,12 +1,13 @@
 const API_BASE = "/api";
 const TOKEN_STORAGE_KEY = "rocky.maxx.access-token";
 const USER_STORAGE_KEY = "rocky.maxx.user";
+const REMEMBER_SESSION_STORAGE_KEY = "rocky.maxx.remember-session";
 const CATALOG_IMPORT_EXCEL_PERMISSION_CODE = "CATALOG_IMPORT_EXCEL";
 
 const state = {
   booting: true,
-  token: window.sessionStorage.getItem(TOKEN_STORAGE_KEY) || "",
-  user: readStoredJson(USER_STORAGE_KEY),
+  token: readStoredToken(),
+  user: readStoredUser(),
   flash: null,
   isAuthenticating: false,
   currentView: "desktop",
@@ -18,6 +19,7 @@ const state = {
   loginDraft: {
     usuario: "",
     password: "",
+    mantenerSesion: hasPersistentSession(),
   },
   metadata: null,
   loadingMetadata: false,
@@ -75,10 +77,17 @@ const state = {
     receiptNumero: null,
     draft: createEmptyTransferDraft(),
   },
+  transferLookup: {
+    open: false,
+    loading: false,
+    items: [],
+  },
   sucursales: {
     loading: false,
     saving: false,
+    deleting: false,
     items: [],
+    search: "",
     selectedCodigo: "",
     draft: createEmptySucursalDraft(),
   },
@@ -162,10 +171,17 @@ async function hydrateAuthenticatedState() {
     receiptNumero: null,
     draft: createEmptyTransferDraft(),
   };
+  state.transferLookup = {
+    open: false,
+    loading: false,
+    items: [],
+  };
   state.sucursales = {
     loading: false,
     saving: false,
+    deleting: false,
     items: [],
+    search: "",
     selectedCodigo: "",
     draft: createEmptySucursalDraft(),
   };
@@ -355,7 +371,7 @@ function renderLoginView() {
 
             <div class="login-meta-row">
               <label class="login-remember">
-                <input type="checkbox" name="mantenerSesion" />
+                <input type="checkbox" name="mantenerSesion" ${state.loginDraft.mantenerSesion ? "checked" : ""} />
                 <span>Mantener sesion iniciada</span>
               </label>
               <button class="login-link-button" type="button" data-action="forgot-password">
@@ -416,11 +432,7 @@ function renderShellView() {
                 <button class="modern-dropdown-link" type="button" data-menu-action="logout">Cerrar sesion</button>
               `)}
               ${renderDesktopMenu("archivos", "Archivos", renderDesktopArchivoMenuV2())}
-              ${renderDesktopMenu("procesos", "Procesos", `
-                ${renderDesktopMenuLink("registro-transferencia", "Registro de transferencia")}
-                ${renderDesktopMenuLink("cargar-transferencia", "Cargar transferencia")}
-                ${renderDesktopMenuLink("reportes", "Movimientos")}
-              `)}
+              ${renderDesktopMenu("procesos", "Procesos", renderDesktopProcesosMenu())}
                 ${renderDesktopMenu("reportes", "Reportes", `
                   ${renderDesktopMenuLink("reportes", "General")}
                 `)}
@@ -457,6 +469,7 @@ function renderShellView() {
         </section>
       </section>
       ${renderArticleLookupModal()}
+      ${renderTransferLookupModal()}
     </main>
   `;
 }
@@ -669,6 +682,40 @@ function renderDesktopArchivoMenuV2() {
               ${renderDesktopMenuLink("fabricantes", "Fabricantes")}
               ${renderDesktopMenuLink("marcas", "Marcas")}
               ${renderDesktopMenuLink("categorias", "Categorias")}
+            </div>
+          `
+          : ""
+      }
+    </div>
+  `;
+}
+
+function renderDesktopProcesosMenu() {
+  const transfersOpen = state.navigation.openSubmenu === "transferencias-procesos";
+
+  return `
+    <div class="modern-mega-menu">
+      <div class="modern-mega-column modern-mega-column-root">
+        ${renderDesktopMenuLink("borrador-devoluciones", "Borrador devoluciones")}
+        <button
+          class="modern-dropdown-link modern-dropdown-link-with-arrow ${transfersOpen ? "modern-dropdown-link-open" : ""}"
+          type="button"
+          data-submenu="transferencias-procesos"
+          data-submenu-owner="procesos"
+          aria-expanded="${transfersOpen ? "true" : "false"}"
+        >
+          <span>Transferencias</span>
+          <span class="modern-dropdown-link-arrow">&rsaquo;</span>
+        </button>
+      </div>
+      ${
+        transfersOpen
+          ? `
+            <div class="modern-archive-submenu modern-process-submenu">
+              ${renderDesktopMenuLink("registro-transferencia", "Registro de transferencias")}
+              ${renderDesktopMenuLink("registro-devoluciones", "Registro de devoluciones")}
+              ${renderDesktopMenuLink("cargar-transferencia", "Carga de transferencias")}
+              ${renderDesktopMenuLink("cargar-devoluciones", "Carga de devoluciones")}
             </div>
           `
           : ""
@@ -1150,164 +1197,150 @@ function renderTransfersWorkspace() {
   const isSaving = state.transfers.saving;
   const isApproving = state.transfers.approving;
   const isDeleting = state.transfers.deleting;
+  const isBusy = isSaving || isApproving || isDeleting;
 
   return `
-    <div class="modern-page">
-      ${renderDesktopBreadcrumb(["Procesos", "Registro de transferencia"])}
+    <div class="modern-page transfer-register-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Transferencias", "Registro de transferencias"])}
 
       <div class="modern-page-header">
         <div>
-          <h1>Registro de transferencia</h1>
-          <p>Crea, edita, guarda, aprueba o elimina una transferencia pendiente.</p>
-        </div>
-        <div class="modern-page-actions">
-          <button class="button button-ghost" type="button" data-open-load-transfer ${isSaving || isApproving || isDeleting ? "disabled" : ""}>
-            Cargar transferencia
-          </button>
-          <button class="button button-primary" type="button" data-new-transfer ${isSaving || isApproving || isDeleting ? "disabled" : ""}>
-            Nueva transferencia
-          </button>
+          <h1>Registro de transferencias de mercancia</h1>
         </div>
       </div>
 
-      <div class="modern-module-grid">
-        <section class="modern-card modern-card-editor">
-          <form id="transfer-form" class="article-editor article-editor-panel">
-            <div class="article-editor-header">
-              <div>
-                <span class="article-editor-eyebrow">Documento</span>
-                <h2>${draft.numero ? `Transferencia ${escapeHtml(String(draft.numero))}` : "Nueva transferencia"}</h2>
-                <p>${isLocked ? "La transferencia ya fue aprobada y quedo bloqueada para edicion." : "Las transferencias pendientes descuentan inventario al guardar."}</p>
-              </div>
-              <div class="article-editor-status">
-                ${renderTransferStatusBadge(draft.status)}
-              </div>
+      <section class="transfer-register-shell">
+        <form id="transfer-form" class="transfer-register-form">
+          <div class="transfer-command-bar" role="toolbar" aria-label="Acciones de transferencias">
+            <button class="transfer-command-button" type="button" data-new-transfer ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button" type="button" data-open-load-transfer ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">B</span>
+              Buscar
+            </button>
+            <button class="transfer-command-button" type="button" data-print-transfer>
+              <span class="transfer-command-icon">P</span>
+              Imprimir
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" ${isLocked || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : "Guardar"}
+            </button>
+            <button
+              class="transfer-command-button transfer-command-primary"
+              type="button"
+              data-approve-transfer
+              ${draft.numero && Number(draft.status) === 0 && !isBusy ? "" : "disabled"}
+            >
+              <span class="transfer-command-icon">A</span>
+              ${isApproving ? "Aprobando" : "Aprobar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-transfer-exit ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">S</span>
+              Salir
+            </button>
+          </div>
+
+          <div class="transfer-header-panel">
+            <label class="transfer-field transfer-number-field">
+              <span>Numero</span>
+              <input type="text" name="numero" value="${escapeHtml(draft.numero ? String(draft.numero) : "0")}" readonly />
+            </label>
+            <label class="transfer-field">
+              <span>Fecha</span>
+              <input type="date" name="fecha" value="${escapeHtml(toInputValue(draft.fecha))}" ${isLocked ? "disabled" : ""} />
+            </label>
+            <label class="transfer-field">
+              <span>Fecha emision</span>
+              <input type="date" name="fechaEmisionVisual" value="${escapeHtml(toInputValue(draft.fecha))}" ${isLocked ? "disabled" : ""} />
+            </label>
+            <label class="transfer-check-field">
+              <span>Usa lector</span>
+              <input type="checkbox" name="usaLector" />
+            </label>
+
+            <label class="transfer-field transfer-wide-field">
+              <span>Sucursal</span>
+              <input
+                type="text"
+                name="codigoRecibe"
+                list="transfer-location-options"
+                value="${escapeHtml(toInputValue(draft.codigoRecibe))}"
+                maxlength="15"
+                ${isLocked ? "disabled" : ""}
+              />
+            </label>
+            <label class="transfer-field">
+              <span>Documento origen</span>
+              <input
+                type="text"
+                name="documentoOrigen"
+                value="${escapeHtml(toInputValue(draft.documentoOrigen))}"
+                maxlength="12"
+                ${isLocked ? "disabled" : ""}
+              />
+            </label>
+
+            <label class="transfer-field transfer-full-field">
+              <span>Observacion</span>
+              <input name="observacion" maxlength="100" value="${escapeHtml(toInputValue(draft.observacion))}" ${isLocked ? "disabled" : ""} />
+            </label>
+
+            <label class="transfer-field transfer-wide-field">
+              <span>Despacho</span>
+              <select name="idDespacho" ${isLocked ? "disabled" : ""}>
+                ${renderTransferDispatchOptions(
+                  Array.isArray(state.transfers.metadata?.tiposDespacho) ? state.transfers.metadata.tiposDespacho : [],
+                  String(draft.idDespacho || state.transfers.metadata?.defaults?.idDespacho || "0"),
+                )}
+              </select>
+            </label>
+            <label class="transfer-field">
+              <span>Lote</span>
+              <input
+                type="text"
+                name="zona"
+                value="${escapeHtml(toInputValue(draft.zona))}"
+                maxlength="50"
+                ${isLocked ? "disabled" : ""}
+              />
+            </label>
+            <label class="transfer-correction-field">
+              <input type="checkbox" name="transferenciaCorreccion" checked ${isLocked ? "disabled" : ""} />
+              <span>Transferencia de Correccion</span>
+            </label>
+          </div>
+
+          <input type="hidden" name="codigoEnvia" value="${escapeHtml(toInputValue(draft.codigoEnvia))}" />
+
+          <div class="transfer-lines-panel">
+            <div class="transfer-grid-actions">
+              <button class="button button-ghost" type="button" data-transfer-add-line ${isLocked || isBusy ? "disabled" : ""}>
+                Agregar linea
+              </button>
             </div>
-
-            <div class="article-toolbar">
-              <div class="article-toolbar-group">
-                <button class="button button-primary" type="submit" ${isLocked || isSaving || isApproving || isDeleting ? "disabled" : ""}>
-                  ${isSaving ? "Guardando..." : draft.numero ? "Guardar cambios" : "Guardar transferencia"}
-                </button>
-                <button class="button button-ghost" type="button" data-transfer-reset ${isSaving || isApproving || isDeleting ? "disabled" : ""}>
-                  Limpiar
-                </button>
-                <button class="button button-ghost" type="button" data-transfer-add-line ${isLocked || isSaving || isApproving || isDeleting ? "disabled" : ""}>
-                  Agregar linea
-                </button>
-              </div>
-              <div class="article-toolbar-group">
-                <button
-                  class="button button-danger"
-                  type="button"
-                  data-delete-transfer
-                  ${draft.numero && Number(draft.status) === 0 && !isSaving && !isApproving && !isDeleting ? "" : "disabled"}
-                >
-                  ${isDeleting ? "Eliminando..." : "Eliminar pendiente"}
-                </button>
-                <button
-                  class="button button-primary"
-                  type="button"
-                  data-approve-transfer
-                  ${draft.numero && Number(draft.status) === 0 && !isSaving && !isApproving && !isDeleting ? "" : "disabled"}
-                >
-                  ${isApproving ? "Aprobando..." : "Aprobar"}
-                </button>
-              </div>
-            </div>
-
-            <div class="article-editor-section">
-              <div class="article-editor-grid">
-                <label class="field">
-                  <span>Numero</span>
-                  <input type="text" name="numero" value="${escapeHtml(draft.numero ? String(draft.numero) : "Automatico al guardar")}" readonly />
-                </label>
-                <label class="field">
-                  <span>Fecha</span>
-                  <input type="date" name="fecha" value="${escapeHtml(toInputValue(draft.fecha))}" ${isLocked ? "disabled" : ""} />
-                </label>
-                <label class="field">
-                  <span>Codigo envia</span>
-                  <input
-                    type="text"
-                    name="codigoEnvia"
-                    list="transfer-location-options"
-                    value="${escapeHtml(toInputValue(draft.codigoEnvia))}"
-                    maxlength="12"
-                    placeholder="Origen"
-                    ${isLocked ? "disabled" : ""}
-                  />
-                </label>
-                <label class="field">
-                  <span>Codigo recibe</span>
-                  <input
-                    type="text"
-                    name="codigoRecibe"
-                    list="transfer-location-options"
-                    value="${escapeHtml(toInputValue(draft.codigoRecibe))}"
-                    maxlength="15"
-                    placeholder="Destino"
-                    ${isLocked ? "disabled" : ""}
-                  />
-                </label>
-                <label class="field">
-                  <span>Documento origen</span>
-                  <input
-                    type="text"
-                    name="documentoOrigen"
-                    value="${escapeHtml(toInputValue(draft.documentoOrigen))}"
-                    maxlength="12"
-                    placeholder="Opcional"
-                    ${isLocked ? "disabled" : ""}
-                  />
-                </label>
-                <label class="field">
-                  <span>Tipo despacho</span>
-                  <select name="idDespacho" ${isLocked ? "disabled" : ""}>
-                    ${renderTransferDispatchOptions(
-                      Array.isArray(state.transfers.metadata?.tiposDespacho) ? state.transfers.metadata.tiposDespacho : [],
-                      String(draft.idDespacho || state.transfers.metadata?.defaults?.idDespacho || "0"),
-                    )}
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Zona</span>
-                  <input
-                    type="text"
-                    name="zona"
-                    value="${escapeHtml(toInputValue(draft.zona))}"
-                    maxlength="50"
-                    placeholder="Zona"
-                    ${isLocked ? "disabled" : ""}
-                  />
-                </label>
-                <label class="field">
-                  <span>Total calculado</span>
-                  <input type="text" value="${escapeHtml(formatTransferAmount(computeTransferDraftTotal(draft)))}" readonly />
-                </label>
-              </div>
-
-              <label class="field">
-                <span>Observacion</span>
-                <textarea name="observacion" rows="3" maxlength="100" ${isLocked ? "disabled" : ""}>${escapeHtml(toInputValue(draft.observacion))}</textarea>
-              </label>
-            </div>
-
-            <div class="article-editor-section">
-              <div class="modern-card-head">
-                <div>
-                  <h2>Renglones</h2>
-                  <p>La existencia se descuenta al guardar y se ajusta si editas la pendiente.</p>
-                </div>
-              </div>
               ${renderTransferLinesEditor(draft, { isLocked })}
-            </div>
-          </form>
+          </div>
+
+          <div class="transfer-summary-row">
+            <strong>F2 = Cambiar N de Caja</strong>
+            <label>
+              <span>Total Caja N 1</span>
+              <input type="text" value="${escapeHtml(formatTransferAmount(computeTransferDraftTotal(draft)))}" readonly />
+            </label>
+            <label>
+              <span>Cantidad</span>
+              <input type="text" value="${escapeHtml(formatTransferQuantity(computeTransferDraftQuantity(draft)))}" readonly />
+            </label>
+          </div>
+
           <datalist id="transfer-location-options">
             ${renderTransferLocationOptions(Array.isArray(state.transfers.metadata?.sucursales) ? state.transfers.metadata.sucursales : [])}
           </datalist>
-        </section>
-      </div>
+        </form>
+      </section>
     </div>
   `;
 }
@@ -1572,15 +1605,14 @@ function renderTransferLinesEditor(draft, options = {}) {
       <table class="data-table">
         <thead>
           <tr>
-            <th>Item</th>
+            <th></th>
             <th>Codigo barra</th>
             <th>Referencia</th>
-            <th>Nombre articulo</th>
+            <th>Nombre</th>
             <th>Caja</th>
             <th>Cantidad</th>
             <th>Lote</th>
-            <th>Exist. lote</th>
-            <th>Total</th>
+            <th>E</th>
             <th>Accion</th>
           </tr>
         </thead>
@@ -1594,6 +1626,7 @@ function renderTransferLinesEditor(draft, options = {}) {
                     <input
                       type="text"
                       name="codigoBarra"
+                      data-transfer-barcode-input="${index}"
                       value="${escapeHtml(toInputValue(line.codigoBarra))}"
                       maxlength="15"
                       placeholder="Codigo"
@@ -1611,7 +1644,7 @@ function renderTransferLinesEditor(draft, options = {}) {
                     />
                   </td>
                   <td>
-                    <span data-transfer-item-name>${escapeHtml(line.articuloNombre || "Pendiente")}</span>
+                    <span data-transfer-item-name>${escapeHtml(line.articuloNombre || line.nombre || "Pendiente")}</span>
                   </td>
                   <td>
                     <input
@@ -1638,9 +1671,6 @@ function renderTransferLinesEditor(draft, options = {}) {
                   </td>
                   <td>
                     <span data-transfer-line-existence>${escapeHtml(toInputValue(line.existenciaLote || line.existenciaActual || ""))}</span>
-                  </td>
-                  <td>
-                    <span>${escapeHtml(formatTransferAmount(computeTransferLineTotal(line)))}</span>
                   </td>
                   <td>
                     <button
@@ -1699,28 +1729,37 @@ function renderTransferStatusBadge(status) {
 function renderSucursalesWorkspace() {
   const draft = state.sucursales.draft || createEmptySucursalDraft();
   const isSaving = state.sucursales.saving;
+  const isDeleting = state.sucursales.deleting;
+  const isBusy = isSaving || isDeleting;
 
   return `
-    <div class="modern-page">
+    <div class="modern-page sucursales-page">
       ${renderDesktopBreadcrumb(["Archivos", "Inventario", "Sucursales"])}
 
       <div class="modern-page-header">
         <div>
           <h1>Sucursales</h1>
-          <p>Administra tiendas y bodegas. Status 1 indica abierta; status 0 indica cerrada.</p>
-        </div>
-        <div class="modern-page-actions">
-          <button class="button button-ghost" type="button" data-refresh-sucursales ${state.sucursales.loading ? "disabled" : ""}>
-            ${state.sucursales.loading ? "Actualizando..." : "Actualizar"}
-          </button>
-          <button class="button button-primary" type="button" data-new-sucursal ${isSaving ? "disabled" : ""}>
-            Nueva sucursal
-          </button>
+          <p>Administra tiendas y bodegas con el formato operativo del sistema.</p>
         </div>
       </div>
 
-      <div class="modern-module-grid">
-        <section class="modern-card modern-card-list">
+      <div class="sucursal-command-bar" role="toolbar" aria-label="Acciones de sucursales">
+        <button class="sucursal-command-button" type="button" data-new-sucursal ${isBusy ? "disabled" : ""}>
+          <span class="sucursal-command-icon">+</span>
+          Crear
+        </button>
+        <button class="sucursal-command-button sucursal-command-primary" type="submit" form="sucursal-form" ${isBusy ? "disabled" : ""}>
+          <span class="sucursal-command-icon">G</span>
+          ${isSaving ? "Guardando" : "Guardar"}
+        </button>
+        <button class="sucursal-command-button" type="button" data-sucursal-exit ${isBusy ? "disabled" : ""}>
+          <span class="sucursal-command-icon">S</span>
+          Salir
+        </button>
+      </div>
+
+      <div class="sucursal-layout">
+        <section class="modern-card modern-card-list sucursal-list-card">
           <div class="modern-card-head">
             <div>
               <h2>Sucursales registradas</h2>
@@ -1728,89 +1767,107 @@ function renderSucursalesWorkspace() {
             </div>
             <div class="modern-chip">${state.sucursales.loading ? "Cargando" : "Listas"}</div>
           </div>
+          <div class="sucursal-search-row">
+            <label class="field">
+              <span>Buscar</span>
+              <input
+                type="search"
+                name="sucursalBuscar"
+                data-sucursal-search
+                value="${escapeHtml(toInputValue(state.sucursales.search))}"
+                placeholder="Codigo, nombre, telefono o direccion"
+              />
+            </label>
+            <button class="button button-ghost" type="button" data-refresh-sucursales ${state.sucursales.loading || isBusy ? "disabled" : ""}>
+              ${state.sucursales.loading ? "Actualizando..." : "Actualizar"}
+            </button>
+          </div>
           ${state.sucursales.loading ? renderLoadingState("Cargando sucursales...") : renderSucursalesTable()}
         </section>
 
-        <aside class="modern-card modern-card-editor">
-          <form id="sucursal-form" class="article-editor article-editor-panel">
-            <div class="article-editor-header">
+        <aside class="modern-card modern-card-editor sucursal-form-card">
+          <form id="sucursal-form" class="sucursal-editor-form">
+            <div class="sucursal-form-title">
               <div>
-                <span class="article-editor-eyebrow">Registro</span>
+                <span class="article-editor-eyebrow">Datos</span>
                 <h2>${draft.codigo ? `Sucursal ${escapeHtml(String(draft.codigo))}` : "Nueva sucursal"}</h2>
-                <p>Todos los campos son opcionales; si no indicas codigo, se genera automaticamente.</p>
               </div>
-              <div class="article-editor-status">
-                ${renderSucursalStatusBadge(draft.status)}
-              </div>
+              ${renderSucursalStatusBadge(draft.status)}
             </div>
 
-            <div class="article-toolbar">
-              <div class="article-toolbar-group">
-                <button class="button button-primary" type="submit" ${isSaving ? "disabled" : ""}>
-                  ${isSaving ? "Guardando..." : draft.originalCodigo ? "Guardar cambios" : "Guardar sucursal"}
-                </button>
-                <button class="button button-ghost" type="button" data-sucursal-reset ${isSaving ? "disabled" : ""}>
-                  Limpiar
-                </button>
-              </div>
-            </div>
+            <div class="sucursal-data-panel">
+              <label class="sucursal-field-row sucursal-field-code">
+                <span>Codigo</span>
+                <input
+                  type="text"
+                  name="codigo"
+                  value="${escapeHtml(toInputValue(draft.codigo))}"
+                  maxlength="15"
+                  placeholder="Automatico"
+                />
+              </label>
 
-            <div class="article-editor-section">
-              <div class="article-editor-grid">
-                <label class="field">
-                  <span>Codigo</span>
-                  <input
-                    type="text"
-                    name="codigo"
-                    value="${escapeHtml(toInputValue(draft.codigo))}"
-                    maxlength="15"
-                    placeholder="Automatico"
-                  />
-                </label>
-                <label class="field">
-                  <span>Nombre</span>
-                  <input
-                    type="text"
-                    name="nombre"
-                    value="${escapeHtml(toInputValue(draft.nombre))}"
-                    maxlength="80"
-                    placeholder="Nombre de tienda o bodega"
-                  />
-                </label>
-                <label class="field">
-                  <span>Telefono</span>
-                  <input
-                    type="text"
-                    name="telefono"
-                    value="${escapeHtml(toInputValue(draft.telefono))}"
-                    maxlength="30"
-                    placeholder="Telefono"
-                  />
-                </label>
-                <label class="field">
-                  <span>Status</span>
-                  <select name="status">
-                    <option value="1" ${String(draft.status ?? "1") === "1" ? "selected" : ""}>1 - Abierta</option>
-                    <option value="0" ${String(draft.status ?? "1") === "0" ? "selected" : ""}>0 - Cerrada</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Porcentaje de redondeo</span>
-                  <input
-                    type="number"
-                    name="porcentajeDeRedondeo"
-                    min="0"
-                    step="0.0001"
-                    value="${escapeHtml(toInputValue(draft.porcentajeDeRedondeo))}"
-                    placeholder="0"
-                  />
-                </label>
-              </div>
+              <label class="sucursal-field-row">
+                <span>Nombre</span>
+                <input
+                  type="text"
+                  name="nombre"
+                  value="${escapeHtml(toInputValue(draft.nombre))}"
+                  maxlength="80"
+                  placeholder="Nombre de tienda o bodega"
+                />
+              </label>
 
-              <label class="field">
+              <label class="sucursal-field-row sucursal-field-phone">
+                <span>Telefono</span>
+                <input
+                  type="text"
+                  name="telefono"
+                  value="${escapeHtml(toInputValue(draft.telefono))}"
+                  maxlength="30"
+                  placeholder="Telefono"
+                />
+              </label>
+
+              <label class="sucursal-field-row sucursal-field-address">
                 <span>Direccion</span>
                 <textarea name="direccion" rows="3" maxlength="120" placeholder="Direccion">${escapeHtml(toInputValue(draft.direccion))}</textarea>
               </label>
+
+              <label class="sucursal-checkbox-row">
+                <input type="checkbox" name="exentaImpuesto" disabled />
+                <span>Exenta de impuesto</span>
+              </label>
+
+              <label class="sucursal-percentage-row">
+                <span>Porcentaje de redondeo</span>
+                <input
+                  type="number"
+                  name="porcentajeDeRedondeo"
+                  min="0"
+                  step="0.0001"
+                  value="${escapeHtml(toInputValue(draft.porcentajeDeRedondeo))}"
+                  placeholder="0"
+                />
+              </label>
+
+              <fieldset class="sucursal-status-row">
+                <legend>Status</legend>
+                <label>
+                  <input type="radio" name="status" value="1" ${String(draft.status ?? "1") === "1" ? "checked" : ""} />
+                  Activo
+                </label>
+                <label>
+                  <input type="radio" name="status" value="0" ${String(draft.status ?? "1") === "0" ? "checked" : ""} />
+                  Inactivo
+                </label>
+              </fieldset>
+
+              <div class="sucursal-form-footer">
+                <button class="button button-ghost" type="button" data-sucursal-reset ${isBusy ? "disabled" : ""}>
+                  Limpiar campos
+                </button>
+              </div>
             </div>
           </form>
         </aside>
@@ -1821,12 +1878,20 @@ function renderSucursalesWorkspace() {
 
 function renderSucursalesTable() {
   const items = Array.isArray(state.sucursales.items) ? state.sucursales.items : [];
+  const search = normalizeSearchText(state.sucursales.search);
+  const visibleItems = search
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.codigo || ""} ${item.nombre || ""} ${item.telefono || ""} ${item.direccion || ""}`,
+        ).includes(search),
+      )
+    : items;
 
-  if (!items.length) {
+  if (!visibleItems.length) {
     return `
       <div class="empty-state">
         <h3>Sin sucursales</h3>
-        <p>No hay tiendas o bodegas registradas todavia.</p>
+        <p>${search ? "No hay resultados para la busqueda actual." : "No hay tiendas o bodegas registradas todavia."}</p>
       </div>
     `;
   }
@@ -1845,7 +1910,7 @@ function renderSucursalesTable() {
           </tr>
         </thead>
         <tbody>
-          ${items
+          ${visibleItems
             .map((item) => {
               const isSelected = String(state.sucursales.selectedCodigo || "") === String(item.codigo || "");
 
@@ -1856,9 +1921,17 @@ function renderSucursalesTable() {
                   <td>${escapeHtml(item.telefono || "-")}</td>
                   <td>${renderSucursalStatusBadge(item.status)}</td>
                   <td>${escapeHtml(formatTransferAmount(item.porcentajeDeRedondeo || 0))}</td>
-                  <td>
+                  <td class="sucursal-row-actions">
                     <button class="button button-ghost" type="button" data-sucursal-select="${escapeHtml(item.codigo || "")}">
                       Abrir
+                    </button>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-delete-sucursal="${escapeHtml(item.codigo || "")}"
+                      ${state.sucursales.deleting ? "disabled" : ""}
+                    >
+                      Eliminar
                     </button>
                   </td>
                 </tr>
@@ -2031,11 +2104,23 @@ function getDesktopBreadcrumb(view) {
   }
 
   if (view === "transferencias" || view === "registro-transferencia") {
-    return ["Procesos", "Registro de transferencia"];
+    return ["Procesos", "Transferencias", "Registro de transferencias"];
   }
 
   if (view === "cargar-transferencia") {
-    return ["Procesos", "Cargar transferencia"];
+    return ["Procesos", "Transferencias", "Carga de transferencias"];
+  }
+
+  if (view === "borrador-devoluciones") {
+    return ["Procesos", "Borrador devoluciones"];
+  }
+
+  if (view === "registro-devoluciones") {
+    return ["Procesos", "Transferencias", "Registro de devoluciones"];
+  }
+
+  if (view === "cargar-devoluciones") {
+    return ["Procesos", "Transferencias", "Carga de devoluciones"];
   }
 
   if (["usuarios", "roles"].includes(view)) {
@@ -2062,8 +2147,11 @@ function getDesktopViewLabelV2(view) {
     sucursales: "Sucursales",
     personal: "Personal",
     transferencias: "Transferencias",
-    "registro-transferencia": "Registro de transferencia",
-    "cargar-transferencia": "Cargar transferencia",
+    "registro-transferencia": "Registro de transferencias",
+    "cargar-transferencia": "Carga de transferencias",
+    "borrador-devoluciones": "Borrador devoluciones",
+    "registro-devoluciones": "Registro de devoluciones",
+    "cargar-devoluciones": "Carga de devoluciones",
     reportes: "Reportes",
     usuarios: "Usuarios",
     roles: "Roles",
@@ -2520,6 +2608,93 @@ function renderArticleLookupRow(article) {
   `;
 }
 
+function renderTransferLookupModal() {
+  if (!state.transferLookup.open) {
+    return "";
+  }
+
+  const items = Array.isArray(state.transferLookup.items) ? state.transferLookup.items : [];
+  const totalLabel = state.transferLookup.loading
+    ? "Cargando registros..."
+    : `Catalogo (${escapeHtml(String(items.length))} Registros)`;
+
+  return `
+    <div class="article-lookup-overlay transfer-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-transfer-lookup-close aria-label="Cerrar catalogo"></button>
+      <section class="article-lookup-dialog transfer-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="transfer-lookup-title">
+        <div class="article-lookup-header transfer-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Transferencias</p>
+            <h3 id="transfer-lookup-title">${totalLabel}</h3>
+            <p>Haz clic sobre una transferencia para cargarla en el registro.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">
+              ${state.transferLookup.loading ? "Cargando..." : `${escapeHtml(String(items.length))} registros`}
+            </span>
+            <button class="article-command-button" type="button" data-transfer-lookup-refresh ${state.transferLookup.loading ? "disabled" : ""}>
+              Actualizar
+            </button>
+            <button class="article-command-button" type="button" data-transfer-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          state.transferLookup.loading
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Cargando transferencias</h3>
+                <p>Estamos trayendo transferencias guardadas y aprobadas.</p>
+              </div>
+            `
+            : items.length === 0
+              ? `
+                <div class="empty-state article-lookup-empty">
+                  <h3>Sin transferencias</h3>
+                  <p>No hay transferencias para mostrar en este catalogo.</p>
+                </div>
+              `
+              : `
+                <div class="table-wrap article-lookup-table-wrap transfer-lookup-table-wrap">
+                  <table class="data-table article-lookup-table transfer-lookup-table">
+                    <thead>
+                      <tr>
+                        <th>Numero</th>
+                        <th>Fecha</th>
+                        <th>Nombre</th>
+                        <th>Observacion</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${items.map(renderTransferLookupRow).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderTransferLookupRow(item) {
+  const nombre = item.codigoRecibeInfo?.nombre || item.codigoRecibe || "-";
+  const isApproved = Number(item.status || 0) === 1;
+
+  return `
+    <tr class="transfer-lookup-row ${isApproved ? "transfer-lookup-row-approved" : "transfer-lookup-row-pending"}" data-transfer-lookup-select="${escapeHtml(String(item.numero || ""))}">
+      <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+      <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+      <td>${escapeHtml(nombre)}</td>
+      <td>${escapeHtml(item.observacion || "-")}</td>
+      <td>${renderTransferStatusBadge(item.status)}</td>
+    </tr>
+  `;
+}
+
 function renderArticleEditorTab(key, label, activeTab) {
   const isActive = key === activeTab;
 
@@ -2933,7 +3108,7 @@ function bindShellEvents() {
         return;
       }
 
-      state.navigation.openMenu = "archivos";
+      state.navigation.openMenu = button.getAttribute("data-submenu-owner") || "archivos";
       state.navigation.openSubmenu = state.navigation.openSubmenu === submenu ? "" : submenu;
       state.navigation.menuPinned = true;
       render();
@@ -3314,6 +3489,29 @@ function bindArticleEvents() {
     });
   });
 
+  document.querySelectorAll("[data-transfer-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeTransferLookupModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-transfer-lookup-refresh]")?.addEventListener("click", async () => {
+    await openTransferLookupModal();
+  });
+
+  document.querySelectorAll("[data-transfer-lookup-select]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      const numero = Number.parseInt(row.getAttribute("data-transfer-lookup-select") || "", 10);
+      if (!numero) {
+        return;
+      }
+
+      closeTransferLookupModal();
+      await loadTransferForEdit(numero);
+    });
+  });
+
   document.querySelector(".desktop-shell")?.addEventListener("click", (event) => {
     if (event.target.closest("[data-catalog-combobox]")) {
       return;
@@ -3329,8 +3527,19 @@ function bindTransferEvents() {
   });
 
   document.querySelector("[data-open-load-transfer]")?.addEventListener("click", async () => {
-    state.currentView = "cargar-transferencia";
-    await loadTransfers({ renderAfter: false });
+    await openTransferLookupModal();
+  });
+
+  document.querySelector("[data-print-transfer]")?.addEventListener("click", () => {
+    window.print();
+  });
+
+  document.querySelector("[data-transfer-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
     render();
   });
 
@@ -3383,6 +3592,23 @@ function bindTransferEvents() {
         state.transfers.draft.items = [createEmptyTransferLineDraft()];
       }
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-transfer-barcode-input]").forEach((input) => {
+    input.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      const index = Number.parseInt(input.getAttribute("data-transfer-barcode-input") || "-1", 10);
+      const codigoBarra = String(input.value || "").trim();
+      if (index < 0 || !codigoBarra) {
+        return;
+      }
+
+      await fillTransferLineFromInventory(index, codigoBarra);
     });
   });
 
@@ -3457,9 +3683,34 @@ function bindSucursalEvents() {
     render();
   });
 
+  document.querySelectorAll("[data-delete-sucursal]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codigo = button.getAttribute("data-delete-sucursal") || "";
+      if (!codigo) {
+        return;
+      }
+
+      await deleteSucursal(codigo);
+    });
+  });
+
+  document.querySelector("[data-sucursal-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
   document.querySelector("[data-sucursal-reset]")?.addEventListener("click", () => {
     resetSucursalDraft();
     clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-sucursal-search]")?.addEventListener("input", (event) => {
+    state.sucursales.search = event.target.value || "";
     render();
   });
 
@@ -3486,6 +3737,48 @@ function bindSucursalEvents() {
       await saveSucursal();
     });
   }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "sucursales" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "s"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.sucursales.saving || state.sucursales.deleting) {
+      return;
+    }
+
+    if (key === "c") {
+      resetSucursalDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      const sucursalForm = document.getElementById("sucursal-form");
+      if (sucursalForm) {
+        captureSucursalDraft();
+        await saveSucursal();
+      }
+      return;
+    }
+
+    if (key === "s") {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    }
+  };
 }
 
 async function handleLogin() {
@@ -3519,7 +3812,11 @@ async function handleLogin() {
     };
     state.articleEditorTab = "general";
     resetArticleForm();
-    state.loginDraft = { usuario: "", password: "" };
+    state.loginDraft = {
+      usuario: "",
+      password: "",
+      mantenerSesion: state.loginDraft.mantenerSesion,
+    };
     setFlash(`Bienvenido ${state.user?.nombreUsuario || state.user?.codUsuario || ""}.`, "success");
   } catch (error) {
     console.error(error);
@@ -3921,6 +4218,39 @@ async function loadTransferForReceipt(numero) {
   }
 }
 
+async function fillTransferLineFromInventory(index, codigoBarra) {
+  captureTransferDraft();
+  const draft = state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
+  const items = Array.isArray(draft.items) && draft.items.length ? [...draft.items] : [createEmptyTransferLineDraft()];
+
+  try {
+    const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
+    const article = response.mercancia || response;
+    const currentLine = items[index] || createEmptyTransferLineDraft();
+
+    items[index] = {
+      ...currentLine,
+      codigoBarra: article.codigoBarra || codigoBarra,
+      referencia: article.referencia || currentLine.referencia || "",
+      articuloNombre: article.general?.nombre || article.nombre || currentLine.articuloNombre || "",
+      existenciaActual: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaActual ?? ""),
+      existenciaLote: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaLote ?? ""),
+      valor: toInputValue(article.inventario?.costos?.ultimo ?? currentLine.valor ?? ""),
+    };
+
+    state.transfers.draft = {
+      ...draft,
+      items,
+    };
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el articulo ${codigoBarra}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    render();
+  }
+}
+
 async function saveTransfer() {
   const draft = state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
   const validationMessage = validateTransferDraft(draft);
@@ -4166,6 +4496,38 @@ async function saveSucursal() {
   }
 }
 
+async function deleteSucursal(codigo) {
+  const normalizedCode = String(codigo || "").trim();
+  if (!normalizedCode) {
+    return;
+  }
+
+  const confirmed = window.confirm(`Se eliminara la sucursal ${normalizedCode}. Deseas continuar?`);
+  if (!confirmed) {
+    return;
+  }
+
+  state.sucursales.deleting = true;
+  clearFlash();
+  render();
+
+  try {
+    await apiFetch(`/sucursales/${encodeURIComponent(normalizedCode)}`, {
+      method: "DELETE",
+    });
+
+    resetSucursalDraft();
+    await loadSucursales({ renderAfter: false });
+    setFlash(`Sucursal ${normalizedCode} eliminada correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.sucursales.deleting = false;
+    render();
+  }
+}
+
 async function loadArticles(page = 1, options = {}) {
   const { renderAfter = true } = options;
   state.loadingArticles = true;
@@ -4350,6 +4712,30 @@ function closeArticleLookupModal() {
   state.articleLookup.loading = false;
 }
 
+async function openTransferLookupModal() {
+  captureTransferDraft();
+  state.transferLookup.open = true;
+  state.transferLookup.loading = true;
+  state.transferLookup.items = [];
+  render();
+
+  try {
+    const response = await apiFetch("/transfers?limit=100");
+    state.transferLookup.items = Array.isArray(response.items) ? response.items : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el catalogo de transferencias: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.transferLookup.loading = false;
+    render();
+  }
+}
+
+function closeTransferLookupModal() {
+  state.transferLookup.open = false;
+  state.transferLookup.loading = false;
+}
+
 async function fetchAllArticlesForLookup() {
   const items = [];
   const limit = 100;
@@ -4393,7 +4779,7 @@ function readTransferSearch(form) {
   };
 }
 
-function createEmptyTransferDraft(metadata = state.transfers?.metadata) {
+function createEmptyTransferDraft(metadata) {
   return {
     numero: null,
     fecha: toDateInputValue(new Date()),
@@ -4539,6 +4925,13 @@ function computeTransferDraftTotal(draft) {
   }, 0);
 }
 
+function computeTransferDraftQuantity(draft) {
+  return (draft.items || []).reduce((total, item) => {
+    const quantity = Number(item?.cantidad || 0);
+    return total + (Number.isFinite(quantity) ? quantity : 0);
+  }, 0);
+}
+
 function computeTransferLineTotal(line) {
   const quantity = Number(line?.cantidad || 0);
   const value = Number(line?.valor || 0);
@@ -4547,6 +4940,13 @@ function computeTransferLineTotal(line) {
   }
 
   return quantity * value;
+}
+
+function formatTransferQuantity(value) {
+  return new Intl.NumberFormat("es-VE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
 }
 
 function resolveTransferLineLotLabel() {
@@ -4882,6 +5282,7 @@ function readLoginDraft(form) {
   return {
     usuario: form.elements.usuario.value,
     password: form.elements.password.value,
+    mantenerSesion: Boolean(form.elements.mantenerSesion?.checked),
   };
 }
 
@@ -5057,6 +5458,14 @@ function isCatalogImportView(view) {
 
 function buildCatalogEntryDeleteKey(kind, code) {
   return `${String(kind || "").trim().toLowerCase()}:${String(code || "").trim().toUpperCase()}`;
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 }
 
 function normalizeGroupCode(value) {
@@ -5273,12 +5682,20 @@ function clearFlash() {
 }
 
 function persistSession() {
-  window.sessionStorage.setItem(TOKEN_STORAGE_KEY, state.token);
+  const persistent = Boolean(state.loginDraft?.mantenerSesion);
+  const targetStorage = persistent ? window.localStorage : window.sessionStorage;
+  const staleStorage = persistent ? window.sessionStorage : window.localStorage;
+
+  targetStorage.setItem(TOKEN_STORAGE_KEY, state.token);
+  targetStorage.setItem(REMEMBER_SESSION_STORAGE_KEY, persistent ? "1" : "0");
+  staleStorage.removeItem(TOKEN_STORAGE_KEY);
+  staleStorage.removeItem(USER_STORAGE_KEY);
+  staleStorage.removeItem(REMEMBER_SESSION_STORAGE_KEY);
   persistUser();
 }
 
 function persistUser() {
-  window.sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(state.user));
+  getSessionStorage().setItem(USER_STORAGE_KEY, JSON.stringify(state.user));
 }
 
 function clearSession() {
@@ -5325,6 +5742,11 @@ function clearSession() {
     selectedNumero: null,
     draft: createEmptyTransferDraft(),
   };
+  state.transferLookup = {
+    open: false,
+    loading: false,
+    items: [],
+  };
   state.articleEditorTab = "general";
   state.articles = [];
   state.metadata = null;
@@ -5342,14 +5764,19 @@ function clearSession() {
   state.loginDraft = {
     usuario: "",
     password: "",
+    mantenerSesion: false,
   };
   resetArticleForm();
   window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
   window.sessionStorage.removeItem(USER_STORAGE_KEY);
+  window.sessionStorage.removeItem(REMEMBER_SESSION_STORAGE_KEY);
+  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(USER_STORAGE_KEY);
+  window.localStorage.removeItem(REMEMBER_SESSION_STORAGE_KEY);
 }
 
 function readStoredJson(key) {
-  const value = window.sessionStorage.getItem(key);
+  const value = window.sessionStorage.getItem(key) || window.localStorage.getItem(key);
   if (!value) {
     return null;
   }
@@ -5360,6 +5787,22 @@ function readStoredJson(key) {
     console.error(error);
     return null;
   }
+}
+
+function readStoredToken() {
+  return window.sessionStorage.getItem(TOKEN_STORAGE_KEY) || window.localStorage.getItem(TOKEN_STORAGE_KEY) || "";
+}
+
+function readStoredUser() {
+  return readStoredJson(USER_STORAGE_KEY);
+}
+
+function hasPersistentSession() {
+  return Boolean(window.localStorage.getItem(TOKEN_STORAGE_KEY));
+}
+
+function getSessionStorage() {
+  return hasPersistentSession() ? window.localStorage : window.sessionStorage;
 }
 
 function escapeHtml(value) {

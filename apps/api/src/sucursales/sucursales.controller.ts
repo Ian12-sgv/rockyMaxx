@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 
 import { RequireGroups } from "../auth/decorators/require-groups.decorator";
 import { GroupsGuard } from "../auth/guards/groups.guard";
@@ -39,6 +39,15 @@ export class SucursalesController {
   async update(@Param("codigo") codigo: string, @Body() updateSucursalDto: UpdateSucursalDto) {
     return {
       sucursal: await this.sucursalesService.update(codigo, updateSucursalDto),
+    };
+  }
+
+  @Delete(":codigo")
+  async remove(@Param("codigo") codigo: string) {
+    await this.sucursalesService.remove(codigo);
+
+    return {
+      deleted: true,
     };
   }
 }

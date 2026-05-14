@@ -108,6 +108,31 @@ export class SucursalesService {
     return toSucursalView(updated);
   }
 
+  async remove(codigo: string) {
+    const currentCode = this.normalizeCode(codigo);
+    const existing = await this.prisma.sucursales.findUnique({
+      where: { Codigo: currentCode },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Sucursal no encontrada.");
+    }
+
+    try {
+      await this.prisma.sucursales.delete({
+        where: { Codigo: currentCode },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+        throw new ConflictException(
+          "No se puede eliminar la sucursal porque ya tiene movimientos relacionados.",
+        );
+      }
+
+      throw error;
+    }
+  }
+
   private buildWhere(findSucursalesDto: FindSucursalesDto): Prisma.SucursalesWhereInput {
     const conditions: Prisma.SucursalesWhereInput[] = [];
     const search = String(findSucursalesDto.buscar || "").trim();
