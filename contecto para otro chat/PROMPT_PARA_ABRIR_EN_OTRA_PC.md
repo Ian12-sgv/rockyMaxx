@@ -146,7 +146,7 @@ Restaurar base de datos desde el backup incluido:
 ```powershell
 $env:PGPASSWORD="123456"
 createdb -h localhost -p 5432 -U postgres rocky_maxx
-pg_restore -h localhost -p 5432 -U postgres -d rocky_maxx --clean --if-exists "backups\rocky_maxx_2026-05-14.bak"
+pg_restore -h localhost -p 5432 -U postgres -d rocky_maxx --clean --if-exists "herramientas\backups\rocky_maxx_2026-05-14.bak"
 ```
 
 Si la base ya existe y quieres reemplazarla:
@@ -155,7 +155,7 @@ Si la base ya existe y quieres reemplazarla:
 $env:PGPASSWORD="123456"
 dropdb -h localhost -p 5432 -U postgres rocky_maxx
 createdb -h localhost -p 5432 -U postgres rocky_maxx
-pg_restore -h localhost -p 5432 -U postgres -d rocky_maxx --clean --if-exists "backups\rocky_maxx_2026-05-14.bak"
+pg_restore -h localhost -p 5432 -U postgres -d rocky_maxx --clean --if-exists "herramientas\backups\rocky_maxx_2026-05-14.bak"
 ```
 
 Validar Prisma y compilar:
@@ -204,4 +204,3 @@ Clave: 123456
 - Continuar pragmaticamente sobre las tablas legacy actuales.
 - Antes de editar, revisar siempre `git status --short` y `git diff --stat`.
 - Si hay cambios pendientes, no revertirlos sin permiso.
-
