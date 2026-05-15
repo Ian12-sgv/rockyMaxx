@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type Ajustes, type Inventario } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
@@ -7,7 +7,8 @@ import { CreateAdjustmentDto, CreateAdjustmentLineDto } from "./dto/create-adjus
 import { FindAdjustmentsDto } from "./dto/find-adjustments.dto";
 
 const ZERO = new Prisma.Decimal(0);
-const DEFAULT_LOT_ID = 0;
+const DEFAULT_ADJUSTMENT_LOT = "S/DEFINIR";
+const DEFAULT_ADJUSTMENT_LOT_DESCRIPTION = "Sin definir";
 
 type AdjustmentTransactionClient = Prisma.TransactionClient;
 
@@ -23,11 +24,51 @@ type AdjustmentMovementRow = {
   CodigoBarra: string;
   Cantidad: Prisma.Decimal;
   Costo: Prisma.Decimal;
+  Referencia?: string | null;
+  Nombre?: string | null;
+  Existencia?: Prisma.Decimal | null;
 };
 
 @Injectable()
 export class AdjustmentsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getMetadata(user: UserView) {
+    const defaultLotId = await this.resolveAdjustmentLotId(this.prisma, undefined, user.codUsuario);
+    const lotes = await this.prisma.lotes.findMany({
+      orderBy: { ID: "asc" },
+    });
+
+    return {
+      defaults: {
+        fecha: new Date(),
+        status: 0,
+        idLote: defaultLotId,
+        tipo: "positivo",
+        tipoAjuste: 1,
+      },
+      tiposAjuste: [
+        {
+          tipo: "positivo",
+          tipoAjuste: 1,
+          signo: 1,
+          descripcion: "POSITIVO - SUMA",
+        },
+        {
+          tipo: "negativo",
+          tipoAjuste: 2,
+          signo: -1,
+          descripcion: "NEGATIVO - RESTA",
+        },
+      ],
+      lotes: lotes.map((item) => ({
+        id: item.ID,
+        lote: item.Lote,
+        descripcion: item.Descripcion,
+        estado: item.Estado,
+      })),
+    };
+  }
 
   async searchAdjustments(findAdjustmentsDto: FindAdjustmentsDto) {
     const limit = findAdjustmentsDto.limit ?? 25;
@@ -76,14 +117,11 @@ export class AdjustmentsService {
           throw new BadRequestException("El ajuste debe tener al menos un renglon.");
         }
 
-        const idLote = createAdjustmentDto.idLote ?? DEFAULT_LOT_ID;
-        await this.ensureLotExists(tx, idLote);
+        const idLote = await this.resolveAdjustmentLotId(tx, createAdjustmentDto.idLote, user.codUsuario);
 
         const totalValor = lines.reduce((total, line) => total.plus(line.cantidad.mul(line.costo)), ZERO);
         const tipoAjuste = createAdjustmentDto.tipoAjuste ?? (signo === 1 ? 1 : 2);
         const fecha = createAdjustmentDto.fecha ?? new Date();
-
-        await this.applyInventoryAdjustment(tx, lines, signo);
 
         await tx.ajustes.create({
           data: {
@@ -95,7 +133,7 @@ export class AdjustmentsService {
             Observacion: String(createAdjustmentDto.observacion || "").trim(),
             Usuario: user.codUsuario,
             InterContable: createAdjustmentDto.interContable ?? 0,
-            Status: 1,
+            Status: 0,
             IDLote: idLote,
           },
         });
@@ -104,6 +142,106 @@ export class AdjustmentsService {
 
         return tx.ajustes.findUniqueOrThrow({
           where: { Numero: numero },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    return {
+      ajuste: this.toAdjustmentView(ajuste, await this.loadMovements(ajuste.Numero)),
+    };
+  }
+
+  async updateAdjustment(numero: bigint, updateAdjustmentDto: CreateAdjustmentDto, user: UserView) {
+    const ajuste = await this.prisma.$transaction(
+      async (tx) => {
+        const existing = await tx.ajustes.findUnique({
+          where: { Numero: numero },
+        });
+
+        if (!existing) {
+          throw new NotFoundException("El ajuste no existe.");
+        }
+
+        if (existing.Status === 1) {
+          throw new ConflictException("El ajuste ya fue aprobado y no puede editarse.");
+        }
+
+        const signo = this.resolveRequiredSign(updateAdjustmentDto.tipo);
+        const lines = await this.normalizeLines(tx, updateAdjustmentDto.items || []);
+
+        if (lines.length === 0) {
+          throw new BadRequestException("El ajuste debe tener al menos un renglon.");
+        }
+
+        const idLote = await this.resolveAdjustmentLotId(tx, updateAdjustmentDto.idLote ?? existing.IDLote, user.codUsuario);
+        const totalValor = lines.reduce((total, line) => total.plus(line.cantidad.mul(line.costo)), ZERO);
+        const tipoAjuste = updateAdjustmentDto.tipoAjuste ?? (signo === 1 ? 1 : 2);
+        const fecha = updateAdjustmentDto.fecha ?? existing.Fecha;
+
+        await this.deleteMovementRows(tx, numero);
+
+        await tx.ajustes.update({
+          where: { Numero: numero },
+          data: {
+            TipoAjuste: tipoAjuste,
+            Signo: signo,
+            Fecha: fecha,
+            TotalValor: totalValor,
+            Observacion: String(updateAdjustmentDto.observacion || "").trim(),
+            Usuario: user.codUsuario,
+            InterContable: updateAdjustmentDto.interContable ?? existing.InterContable,
+            IDLote: idLote,
+          },
+        });
+
+        await this.insertMovementRows(tx, numero, lines);
+
+        return tx.ajustes.findUniqueOrThrow({
+          where: { Numero: numero },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    return {
+      ajuste: this.toAdjustmentView(ajuste, await this.loadMovements(ajuste.Numero)),
+    };
+  }
+
+  async approveAdjustment(numero: bigint) {
+    const ajuste = await this.prisma.$transaction(
+      async (tx) => {
+        const existing = await tx.ajustes.findUnique({
+          where: { Numero: numero },
+        });
+
+        if (!existing) {
+          throw new NotFoundException("El ajuste no existe.");
+        }
+
+        if (existing.Status === 1) {
+          throw new ConflictException("El ajuste ya fue aprobado.");
+        }
+
+        const movementRows = await this.loadMovements(numero, tx);
+        const lines = await this.normalizeStoredMovementLines(tx, movementRows);
+
+        if (lines.length === 0) {
+          throw new BadRequestException("El ajuste debe tener al menos un renglon para aprobar.");
+        }
+
+        const signo = this.resolveRequiredSign(existing.Signo);
+        await this.applyInventoryAdjustment(tx, lines, signo);
+
+        const totalValor = lines.reduce((total, line) => total.plus(line.cantidad.mul(line.costo)), ZERO);
+
+        return tx.ajustes.update({
+          where: { Numero: numero },
+          data: {
+            Status: 1,
+            TotalValor: totalValor,
+          },
         });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -181,7 +319,36 @@ export class AdjustmentsService {
     });
   }
 
-  private async ensureLotExists(tx: AdjustmentTransactionClient, idLote: number) {
+  private async normalizeStoredMovementLines(
+    tx: AdjustmentTransactionClient,
+    movements: AdjustmentMovementRow[],
+  ) {
+    const codes = [...new Set(movements.map((item) => item.CodigoBarra))];
+    if (codes.length === 0) {
+      return [];
+    }
+
+    const articles = await tx.inventario.findMany({
+      where: { CodigoBarra: { in: codes } },
+    });
+    const articlesByCode = new Map(articles.map((article) => [article.CodigoBarra, article]));
+
+    return movements.map((line): NormalizedAdjustmentLine => {
+      const article = articlesByCode.get(line.CodigoBarra);
+      if (!article) {
+        throw new NotFoundException(`No se encontro el articulo ${line.CodigoBarra} en inventario.`);
+      }
+
+      return {
+        codigoBarra: line.CodigoBarra,
+        cantidad: line.Cantidad,
+        costo: line.Costo,
+        articulo: article,
+      };
+    });
+  }
+
+  private async ensureLotExists(tx: AdjustmentTransactionClient | PrismaService, idLote: number) {
     const lote = await tx.lotes.findUnique({
       where: { ID: idLote },
     });
@@ -189,6 +356,67 @@ export class AdjustmentsService {
     if (!lote) {
       throw new BadRequestException("El lote indicado no existe.");
     }
+  }
+
+  private async resolveAdjustmentLotId(
+    tx: AdjustmentTransactionClient | PrismaService,
+    requestedId: number | undefined,
+    userCode: string,
+  ) {
+    if (typeof requestedId === "number") {
+      await this.ensureLotExists(tx, requestedId);
+      return requestedId;
+    }
+
+    const existing = await tx.lotes.findUnique({
+      where: { Lote: DEFAULT_ADJUSTMENT_LOT },
+    });
+
+    if (existing) {
+      return existing.ID;
+    }
+
+    const nextLotId = await this.getNextLotId(tx);
+
+    try {
+      const created = await tx.lotes.create({
+        data: {
+          ID: nextLotId,
+          Lote: DEFAULT_ADJUSTMENT_LOT,
+          Descripcion: DEFAULT_ADJUSTMENT_LOT_DESCRIPTION,
+          Estado: 1,
+          FechaRegistro: new Date(),
+          UsuarioCreacion: userCode,
+        },
+      });
+
+      return created.ID;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError
+        && error.code === "P2002"
+      ) {
+        const lot = await tx.lotes.findUnique({
+          where: { Lote: DEFAULT_ADJUSTMENT_LOT },
+        });
+
+        if (lot) {
+          return lot.ID;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  private async getNextLotId(tx: AdjustmentTransactionClient | PrismaService) {
+    const result = await tx.lotes.aggregate({
+      _max: {
+        ID: true,
+      },
+    });
+
+    return (result._max.ID ?? 0) + 1;
   }
 
   private async applyInventoryAdjustment(
@@ -232,16 +460,34 @@ export class AdjustmentsService {
     }
   }
 
-  private async loadMovements(numero: bigint) {
-    return this.prisma.$queryRaw<AdjustmentMovementRow[]>`
-      select "Numero", "CodigoBarra", "Cantidad", "Costo"
-      from dbo."MOVAJUSTES"
+  private async deleteMovementRows(tx: AdjustmentTransactionClient, numero: bigint) {
+    await tx.$executeRaw`
+      delete from dbo."MOVAJUSTES"
       where "Numero" = ${numero}
-      order by "CodigoBarra"
     `;
   }
 
-  private resolveRequiredSign(value: CreateAdjustmentDto["tipo"]): 1 | -1 {
+  private async loadMovements(
+    numero: bigint,
+    client: PrismaService | AdjustmentTransactionClient = this.prisma,
+  ) {
+    return client.$queryRaw<AdjustmentMovementRow[]>`
+      select
+        m."Numero",
+        m."CodigoBarra",
+        m."Cantidad",
+        m."Costo",
+        i."Referencia",
+        i."Nombre",
+        i."Existencia"
+      from dbo."MOVAJUSTES" m
+      left join dbo."INVENTARIO" i on i."CodigoBarra" = m."CodigoBarra"
+      where m."Numero" = ${numero}
+      order by m."CodigoBarra"
+    `;
+  }
+
+  private resolveRequiredSign(value: FindAdjustmentsDto["tipo"] | CreateAdjustmentDto["tipo"] | number | undefined): 1 | -1 {
     const signo = this.resolveSign(value);
     if (!signo) {
       throw new BadRequestException("El tipo de ajuste debe ser positivo o negativo.");
@@ -250,7 +496,7 @@ export class AdjustmentsService {
     return signo;
   }
 
-  private resolveSign(value: FindAdjustmentsDto["tipo"] | CreateAdjustmentDto["tipo"] | undefined) {
+  private resolveSign(value: FindAdjustmentsDto["tipo"] | CreateAdjustmentDto["tipo"] | number | undefined) {
     if (value === "positivo" || value === 1 || value === "1") {
       return 1;
     }
@@ -276,8 +522,11 @@ export class AdjustmentsService {
       idLote: item.IDLote,
       items: movements.map((line) => ({
         codigoBarra: line.CodigoBarra,
+        referencia: line.Referencia || "",
+        nombre: line.Nombre || "",
         cantidad: line.Cantidad.toString(),
         costo: line.Costo.toString(),
+        existenciaActual: line.Existencia?.toString() || "",
       })),
     };
   }

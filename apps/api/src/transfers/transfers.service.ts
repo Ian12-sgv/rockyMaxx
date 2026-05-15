@@ -2,14 +2,17 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Prisma, type Inventario, type Sucursales } from "@prisma/client";
 
 import { UserView } from "../users/user-view.util";
 import { ApproveTransferDto, TransferDuplicateResolutionDto } from "./dto/approve-transfer.dto";
 import { CreateTransferDto, CreateTransferLineDto } from "./dto/create-transfer.dto";
 import { FindTransfersDto } from "./dto/find-transfers.dto";
+import { FindTransferSyncOutboxDto, PushTransferSyncDto, RegisterTransferSyncNodeDto } from "./dto/transfer-sync.dto";
 import { UpdateTransferDto } from "./dto/update-transfer.dto";
 import { toTransferDetailView, toTransferListItemView, transferInclude } from "./transfer-view.util";
 import { PrismaService } from "../prisma/prisma.service";
@@ -20,6 +23,13 @@ const DEFAULT_DISPATCH_ID = 0;
 const DUPLICATE_BARCODE_MESSAGE = "Codigo de barra duplicado.";
 const DEFAULT_ORIGIN_CODE = "ORIGEN";
 const DEFAULT_DESTINATION_CODE = "DESTINO";
+const TRANSFER_SYNC_SCHEMA_VERSION = 1;
+const TRANSFER_SYNC_EVENT_APPROVED = "TRANSFER_APPROVED";
+const TRANSFER_SYNC_STATUS_PENDING = "PENDING";
+const TRANSFER_SYNC_STATUS_SENT = "SENT";
+const TRANSFER_SYNC_STATUS_RECEIVED = "RECEIVED";
+const TRANSFER_SYNC_STATUS_APPLIED = "APPLIED";
+const TRANSFER_SYNC_STATUS_ERROR = "ERROR";
 const ZERO = new Prisma.Decimal(0);
 
 type TransferTransactionClient = Prisma.TransactionClient;
@@ -59,11 +69,199 @@ type NormalizedTransferDraft = {
   quantitiesByBarcode: Map<string, Prisma.Decimal>;
 };
 
+type TransferSyncCatalogPayload = {
+  codigo: string | number;
+  nombre?: string | null;
+  status?: number | null;
+  porcentajeImpuesto?: string | null;
+};
+
+type TransferSyncInventoryPayload = {
+  codigoBarra: string;
+  referencia: string;
+  codigoMarca: string;
+  nombre: string;
+  talla: string;
+  codigoColor: string;
+  fabricante: string;
+  categoria: string;
+  nota: string | null;
+  tipoImpuesto: number;
+  precioDetal: string;
+  precioMayor: string;
+  precioAfiliado: string;
+  precioPromocion: string;
+  promocion: boolean;
+  fechaInicial: string;
+  fechaFinal: string;
+  costoInicial: string;
+  costoPromedio: string;
+  ultimoCosto: string;
+  costoDolar: string;
+  existenciaInicial: string;
+  puntoReorden: string;
+  tipo: number;
+  status: number;
+  serializado: number;
+  codigoBarraAnt: string;
+  catalogs: {
+    marca: TransferSyncCatalogPayload;
+    talla: TransferSyncCatalogPayload;
+    color: TransferSyncCatalogPayload;
+    fabricante: TransferSyncCatalogPayload;
+    categoria: TransferSyncCatalogPayload;
+    impuesto: TransferSyncCatalogPayload;
+  };
+};
+
+type TransferSyncLinePayload = {
+  item: number;
+  fecha: string | null;
+  codigoBarra: string;
+  cantidad: string;
+  valor: string;
+  numeroCaja: number;
+  ultimoCosto: string | null;
+  costoInicial: string | null;
+  costoDolar: string | null;
+  articulo: TransferSyncInventoryPayload;
+};
+
+type TransferSyncPayload = {
+  schemaVersion: number;
+  eventType: typeof TRANSFER_SYNC_EVENT_APPROVED;
+  globalId: string;
+  sourceNodeId: string;
+  destinationNodeId: string;
+  transfer: {
+    numero: number;
+    fecha: string;
+    fechaEmision: string;
+    codigoEnvia: string;
+    codigoRecibe: string;
+    documentoOrigen: string;
+    totalValor: string;
+    observacion: string;
+    status: number;
+    usuario: string | null;
+    interContable: number | null;
+    idLote: number;
+    lote: {
+      id: number;
+      lote: string;
+      descripcion: string | null;
+      estado: number | null;
+    };
+    idDespacho: number;
+    tipoDespacho: {
+      id: number;
+      descripcion: string;
+      estado: number | null;
+    };
+    correccion: boolean;
+    zona: string;
+  };
+  items: TransferSyncLinePayload[];
+};
+
+type TransferForSync = Prisma.TransferenciasGetPayload<{
+  include: {
+    lote: true;
+    tipoDespacho: true;
+    sucursalRecibe: true;
+    movTransferencias: {
+      orderBy: [{ Item: "asc" }, { NumeroCaja: "asc" }, { CodigoBarra: "asc" }];
+      include: {
+        inventarioRef: {
+          include: {
+            marcaRef: true;
+            tallaRef: true;
+            colorRef: true;
+            fabricanteRef: true;
+            categoriaRef: true;
+            impuestoRef: true;
+          };
+        };
+      };
+    };
+  };
+}>;
+
+type TransferSyncNodeRow = {
+  NodeId: string;
+  SucursalCodigo: string;
+  Nombre: string | null;
+  Tipo: string | null;
+  ApiUrl: string | null;
+  CreatedAt: Date;
+  UpdatedAt: Date;
+  LastSeenAt: Date | null;
+};
+
+type TransferSyncOutboxRow = {
+  GlobalId: string;
+  Numero: number;
+  CodigoEnvia: string;
+  CodigoRecibe: string;
+  SourceNodeId: string;
+  DestinationNodeId: string;
+  EventType: string;
+  Payload: unknown;
+  Status: string;
+  CreatedAt: Date;
+  SentAt: Date | null;
+  Attempts: number;
+  LastError: string | null;
+};
+
+type TransferSyncInboxRow = {
+  GlobalId: string;
+  NumeroOrigen: number;
+  CodigoEnvia: string;
+  CodigoRecibe: string;
+  SourceNodeId: string;
+  DestinationNodeId: string;
+  EventType: string;
+  Payload: unknown;
+  Status: string;
+  ReceivedAt: Date;
+  AppliedAt: Date | null;
+  Attempts: number;
+  LastError: string | null;
+};
+
+type InboundTransferWithRelations = Prisma.ITransferenciasGetPayload<{
+  include: {
+    sucursalEnvia: true;
+    tipoDespacho: true;
+    iMovTransferencias: {
+      orderBy: [{ Item: "asc" }, { NumeroCaja: "asc" }, { CodigoBarra: "asc" }];
+      include: {
+        inventarioRef: {
+          select: {
+            CodigoBarra: true;
+            Nombre: true;
+            Referencia: true;
+            Existencia: true;
+          };
+        };
+      };
+    };
+  };
+}>;
+
 @Injectable()
 export class TransfersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(TransfersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
 
   async getMetadata() {
+    await this.ensureTransferSyncSchema();
+
     const [sucursales, tiposDespacho] = await Promise.all([
       this.prisma.sucursales.findMany({
         orderBy: [{ Status: "desc" }, { Codigo: "asc" }],
@@ -122,6 +320,385 @@ export class TransfersService {
     };
   }
 
+  async searchInboundTransfers(findTransfersDto: FindTransfersDto) {
+    const limit = findTransfersDto.limit ?? 25;
+    const where = this.buildInboundSearchWhere(findTransfersDto);
+
+    const transfers = await this.prisma.iTransferencias.findMany({
+      where,
+      include: {
+        sucursalEnvia: true,
+        tipoDespacho: true,
+        iMovTransferencias: {
+          orderBy: [{ Item: "asc" }, { NumeroCaja: "asc" }, { CodigoBarra: "asc" }],
+          include: {
+            inventarioRef: {
+              select: {
+                CodigoBarra: true,
+                Nombre: true,
+                Referencia: true,
+                Existencia: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ Numero: "desc" }, { CodigoEnvia: "asc" }],
+      take: limit,
+    });
+    const destinationLocations = await this.loadLocationsByCode(transfers.map((item) => item.CodigoRecibe));
+    const syncRows = await this.loadInboundSyncRows(transfers);
+
+    return {
+      items: transfers.map((item) =>
+        this.toInboundTransferListItemView(item, {
+          codigoRecibeInfo: this.toLocationView(destinationLocations.get(item.CodigoRecibe)),
+          syncRow: syncRows.get(this.buildInboundSyncKey(item.Numero, item.CodigoEnvia, item.CodigoRecibe)),
+        }),
+      ),
+    };
+  }
+
+  async findInboundOne(numero: number) {
+    return {
+      transferencia: await this.findInboundTransferDetailOrThrow(numero),
+    };
+  }
+
+  async loadInboundTransfer(numero: number) {
+    await this.ensureTransferSyncSchema();
+
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const transferencia = await tx.iTransferencias.findFirst({
+          where: { Numero: numero },
+        });
+
+        if (!transferencia) {
+          throw new NotFoundException("La transferencia recibida no existe.");
+        }
+
+        const inbox = await this.getTransferSyncInboxRowForTransfer(
+          tx,
+          transferencia.Numero,
+          transferencia.CodigoEnvia,
+          transferencia.CodigoRecibe,
+        );
+
+        if (!inbox) {
+          return {
+            loaded: false,
+            alreadyLoaded: true,
+            transferencia: await this.findInboundTransferDetailOrThrow(numero, tx),
+            message: "La transferencia no tiene paquete de sincronizacion pendiente; se toma como ya cargada.",
+          };
+        }
+
+        if (inbox.Status === TRANSFER_SYNC_STATUS_APPLIED) {
+          return {
+            loaded: false,
+            alreadyLoaded: true,
+            transferencia: await this.findInboundTransferDetailOrThrow(numero, tx),
+            message: "La transferencia ya estaba cargada en inventario.",
+          };
+        }
+
+        const payload = this.normalizeTransferSyncPayload(this.parseRawJson(inbox.Payload) as Record<string, unknown>);
+        await this.ensureLocations(tx, [payload.transfer.codigoEnvia, payload.transfer.codigoRecibe]);
+        await this.ensureSyncedDispatchType(tx, payload);
+        await this.ensureSyncedLot(tx, payload);
+        await this.applySyncedDestinationReceipt(tx, payload);
+        await this.markTransferSyncInboxApplied(tx, payload.globalId);
+
+        return {
+          loaded: true,
+          alreadyLoaded: false,
+          transferencia: await this.findInboundTransferDetailOrThrow(numero, tx),
+          message: "Transferencia cargada en inventario.",
+        };
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      },
+    );
+
+    return result;
+  }
+
+  async listTransferSyncNodes() {
+    await this.ensureTransferSyncSchema();
+    const nodes = await this.prisma.$queryRawUnsafe<TransferSyncNodeRow[]>(`
+      select
+        "NodeId",
+        "SucursalCodigo",
+        "Nombre",
+        "Tipo",
+        "ApiUrl",
+        "CreatedAt",
+        "UpdatedAt",
+        "LastSeenAt"
+      from dbo."SYNC_NODES"
+      order by "SucursalCodigo" asc, "NodeId" asc
+    `);
+
+    return {
+      nodes: nodes.map((node) => this.toTransferSyncNodeView(node)),
+    };
+  }
+
+  async registerTransferSyncNode(registerTransferSyncNodeDto: RegisterTransferSyncNodeDto) {
+    await this.ensureTransferSyncSchema();
+    const nodeId = this.normalizeSyncNodeId(registerTransferSyncNodeDto.nodeId);
+    const sucursalCodigo = this.normalizeRequiredCode(
+      registerTransferSyncNodeDto.sucursalCodigo,
+      "Debes indicar la sucursal del nodo.",
+    );
+    const nombre = String(registerTransferSyncNodeDto.nombre || sucursalCodigo).trim();
+    const tipo = String(registerTransferSyncNodeDto.tipo || "SUCURSAL").trim().toUpperCase();
+    const apiUrl = this.normalizeOptionalApiUrl(registerTransferSyncNodeDto.apiUrl);
+
+    await this.ensureLocations(this.prisma, [sucursalCodigo]);
+    await this.prisma.$executeRawUnsafe(
+      `
+        insert into dbo."SYNC_NODES"
+          ("NodeId", "SucursalCodigo", "Nombre", "Tipo", "ApiUrl", "CreatedAt", "UpdatedAt", "LastSeenAt")
+        values ($1, $2, $3, $4, $5, now(), now(), now())
+        on conflict ("NodeId") do update set
+          "SucursalCodigo" = excluded."SucursalCodigo",
+          "Nombre" = excluded."Nombre",
+          "Tipo" = excluded."Tipo",
+          "ApiUrl" = excluded."ApiUrl",
+          "UpdatedAt" = now(),
+          "LastSeenAt" = now()
+      `,
+      nodeId,
+      sucursalCodigo,
+      nombre,
+      tipo,
+      apiUrl,
+    );
+
+    return {
+      node: await this.getTransferSyncNodeById(nodeId),
+    };
+  }
+
+  async listTransferSyncOutbox(findTransferSyncOutboxDto: FindTransferSyncOutboxDto) {
+    await this.ensureTransferSyncSchema();
+    const status = findTransferSyncOutboxDto.status
+      ? String(findTransferSyncOutboxDto.status).trim().toUpperCase()
+      : TRANSFER_SYNC_STATUS_PENDING;
+    const limit = findTransferSyncOutboxDto.limit ?? 50;
+
+    const rows = await this.prisma.$queryRawUnsafe<TransferSyncOutboxRow[]>(
+      `
+        select
+          "GlobalId",
+          "Numero",
+          "CodigoEnvia",
+          "CodigoRecibe",
+          "SourceNodeId",
+          "DestinationNodeId",
+          "EventType",
+          "Payload",
+          "Status",
+          "CreatedAt",
+          "SentAt",
+          "Attempts",
+          "LastError"
+        from dbo."TRANSFER_SYNC_OUTBOX"
+        where "Status" = $1
+        order by "CreatedAt" asc
+        limit $2
+      `,
+      status,
+      limit,
+    );
+
+    return {
+      items: rows.map((row) => this.toTransferSyncOutboxView(row)),
+    };
+  }
+
+  async pushPendingTransferSync(pushTransferSyncDto: PushTransferSyncDto = {}) {
+    await this.ensureTransferSyncSchema();
+    const limit = pushTransferSyncDto.limit ?? 50;
+    const rows = await this.getTransferSyncOutboxRows(TRANSFER_SYNC_STATUS_PENDING, limit);
+    const results = [];
+
+    for (const row of rows) {
+      try {
+        const destination = await this.resolveDestinationSyncNode(row);
+        if (!destination.ApiUrl) {
+          throw new ConflictException(
+            `El nodo destino ${row.DestinationNodeId || row.CodigoRecibe} no tiene apiUrl configurada.`,
+          );
+        }
+
+        const response = await this.postTransferSyncPackage(destination.ApiUrl, row.Payload);
+        const sent = await this.updateTransferSyncOutboxStatus(
+          row.GlobalId,
+          TRANSFER_SYNC_STATUS_SENT,
+          null,
+        );
+
+        results.push({
+          globalId: row.GlobalId,
+          numero: row.Numero,
+          codigoRecibe: row.CodigoRecibe,
+          status: sent.Status,
+          destino: this.toTransferSyncNodeView(destination),
+          respuestaDestino: response,
+        });
+      } catch (error) {
+        const message = this.extractSyncErrorMessage(error);
+        this.logger.warn(`No se pudo sincronizar ${row.GlobalId}: ${message}`);
+        await this.updateTransferSyncOutboxStatus(
+          row.GlobalId,
+          TRANSFER_SYNC_STATUS_PENDING,
+          message,
+        );
+        results.push({
+          globalId: row.GlobalId,
+          numero: row.Numero,
+          codigoRecibe: row.CodigoRecibe,
+          status: TRANSFER_SYNC_STATUS_PENDING,
+          error: message,
+        });
+      }
+    }
+
+    return {
+      processed: results.length,
+      results,
+    };
+  }
+
+  async markTransferSyncOutboxSent(globalId: string) {
+    await this.ensureTransferSyncSchema();
+    const normalizedGlobalId = this.normalizeGlobalTransferId(globalId);
+
+    const rows = await this.prisma.$queryRawUnsafe<TransferSyncOutboxRow[]>(
+      `
+        update dbo."TRANSFER_SYNC_OUTBOX"
+        set
+          "Status" = $2,
+          "SentAt" = now(),
+          "Attempts" = "Attempts" + 1,
+          "LastError" = null
+        where "GlobalId" = $1
+        returning
+          "GlobalId",
+          "Numero",
+          "CodigoEnvia",
+          "CodigoRecibe",
+          "SourceNodeId",
+          "DestinationNodeId",
+          "EventType",
+          "Payload",
+          "Status",
+          "CreatedAt",
+          "SentAt",
+          "Attempts",
+          "LastError"
+      `,
+      normalizedGlobalId,
+      TRANSFER_SYNC_STATUS_SENT,
+    );
+
+    if (!rows[0]) {
+      throw new NotFoundException("El paquete de sincronizacion no existe.");
+    }
+
+    return {
+      item: this.toTransferSyncOutboxView(rows[0]),
+    };
+  }
+
+  async requeueTransferSyncPackage(numero: number) {
+    await this.ensureTransferSyncSchema();
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const transfer = await this.findTransferForSyncOrThrow(tx, numero);
+        if (transfer.Status !== 1) {
+          throw new ConflictException("Solo se pueden preparar para sincronizacion las transferencias aprobadas.");
+        }
+
+        const payload = await this.recordTransferSyncOutbox(tx, transfer, transfer.TotalValor);
+        return payload;
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      },
+    );
+
+    return {
+      item: result,
+    };
+  }
+
+  async importTransferSyncPackage(body: Record<string, unknown>) {
+    await this.ensureTransferSyncSchema();
+    const payload = this.normalizeTransferSyncPayload(body);
+
+    try {
+      const result = await this.prisma.$transaction(
+        async (tx) => {
+          const existingInbox = await this.getTransferSyncInboxRow(tx, payload.globalId);
+          if (existingInbox?.Status === TRANSFER_SYNC_STATUS_APPLIED) {
+            return {
+              imported: false,
+              status: TRANSFER_SYNC_STATUS_APPLIED,
+              globalId: payload.globalId,
+              message: "La transferencia ya habia sido aplicada en esta base.",
+            };
+          }
+
+          await this.upsertTransferSyncInbox(tx, payload, TRANSFER_SYNC_STATUS_RECEIVED);
+
+          const existingInbound = await tx.iTransferencias.findFirst({
+            where: {
+              Numero: payload.transfer.numero,
+              CodigoEnvia: payload.transfer.codigoEnvia,
+            },
+          });
+
+          if (existingInbound) {
+            return {
+              imported: false,
+              status: existingInbox?.Status ?? TRANSFER_SYNC_STATUS_RECEIVED,
+              globalId: payload.globalId,
+              message: "La transferencia ya existia como entrada en esta base.",
+            };
+          }
+
+          await this.ensureLocations(tx, [payload.transfer.codigoEnvia, payload.transfer.codigoRecibe]);
+          await this.ensureSyncedDispatchType(tx, payload);
+          await this.ensureSyncedLot(tx, payload);
+          await this.prepareSyncedDestinationInventory(tx, payload);
+          await this.recordSyncedInboundTransfer(tx, payload);
+
+          return {
+            imported: true,
+            status: TRANSFER_SYNC_STATUS_RECEIVED,
+            globalId: payload.globalId,
+            numero: payload.transfer.numero,
+            codigoEnvia: payload.transfer.codigoEnvia,
+            codigoRecibe: payload.transfer.codigoRecibe,
+          };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+
+      return result;
+    } catch (error) {
+      await this.markTransferSyncInboxError(payload, this.extractSyncErrorMessage(error));
+      throw error;
+    }
+  }
+
   async createTransfer(createTransferDto: CreateTransferDto, user: UserView) {
     const transferencia = await this.prisma.$transaction(
       async (tx) => {
@@ -175,8 +752,11 @@ export class TransfersService {
       },
     );
 
+    const sync = await this.pushPendingTransferSync({ limit: 25 });
+
     return {
       transferencia,
+      sync,
     };
   }
 
@@ -272,23 +852,12 @@ export class TransfersService {
   }
 
   async approveTransfer(numero: number, approveTransferDto: ApproveTransferDto = {}) {
+    await this.ensureTransferSyncSchema();
+    void approveTransferDto;
+
     const transferencia = await this.prisma.$transaction(
       async (tx) => {
-        const existing = await tx.transferencias.findUnique({
-          where: { Numero: numero },
-          include: {
-            movTransferencias: {
-              orderBy: [{ Item: "asc" }, { NumeroCaja: "asc" }, { CodigoBarra: "asc" }],
-              include: {
-                inventarioRef: true,
-              },
-            },
-          },
-        });
-
-        if (!existing) {
-          throw new NotFoundException("La transferencia no existe.");
-        }
+        const existing = await this.findTransferForSyncOrThrow(tx, numero);
 
         if (existing.Status === 1) {
           throw new ConflictException("La transferencia ya fue aprobada.");
@@ -303,13 +872,7 @@ export class TransfersService {
           tx,
           existing.movTransferencias,
         );
-        await this.applyDestinationReceipt(
-          tx,
-          numero,
-          existing.movTransferencias,
-          this.buildDuplicateResolutionMap(approveTransferDto.duplicateResolutions),
-        );
-        await this.recordReceivedTransfer(tx, numero, currentTotalValor);
+        await this.recordTransferSyncOutbox(tx, existing, currentTotalValor);
 
         await tx.transferencias.update({
           where: { Numero: numero },
@@ -373,6 +936,1317 @@ export class TransfersService {
       deleted: true,
       numero,
     };
+  }
+
+  private async ensureTransferSyncSchema(client: PrismaService | TransferTransactionClient = this.prisma) {
+    await client.$executeRawUnsafe(`
+      create table if not exists dbo."SYNC_NODES" (
+        "NodeId" text primary key,
+        "SucursalCodigo" varchar(15) not null,
+        "Nombre" varchar(80),
+        "Tipo" varchar(20),
+        "CreatedAt" timestamptz not null default now(),
+        "UpdatedAt" timestamptz not null default now(),
+        "LastSeenAt" timestamptz
+      )
+    `);
+
+    await client.$executeRawUnsafe(`
+      create unique index if not exists "UX_SYNC_NODES_SucursalCodigo"
+      on dbo."SYNC_NODES" ("SucursalCodigo")
+    `);
+
+    await client.$executeRawUnsafe(`
+      alter table dbo."SYNC_NODES"
+      add column if not exists "ApiUrl" varchar(200)
+    `);
+
+    await client.$executeRawUnsafe(`
+      create table if not exists dbo."TRANSFER_SYNC_OUTBOX" (
+        "GlobalId" text primary key,
+        "Numero" integer not null,
+        "CodigoEnvia" varchar(15) not null,
+        "CodigoRecibe" varchar(15) not null,
+        "SourceNodeId" text not null,
+        "DestinationNodeId" text not null,
+        "EventType" varchar(40) not null,
+        "Payload" jsonb not null,
+        "Status" varchar(20) not null default 'PENDING',
+        "CreatedAt" timestamptz not null default now(),
+        "SentAt" timestamptz,
+        "Attempts" integer not null default 0,
+        "LastError" text
+      )
+    `);
+
+    await client.$executeRawUnsafe(`
+      create index if not exists "IX_TRANSFER_SYNC_OUTBOX_Status"
+      on dbo."TRANSFER_SYNC_OUTBOX" ("Status", "CreatedAt")
+    `);
+
+    await client.$executeRawUnsafe(`
+      create table if not exists dbo."TRANSFER_SYNC_INBOX" (
+        "GlobalId" text primary key,
+        "NumeroOrigen" integer not null,
+        "CodigoEnvia" varchar(15) not null,
+        "CodigoRecibe" varchar(15) not null,
+        "SourceNodeId" text not null,
+        "DestinationNodeId" text not null,
+        "EventType" varchar(40) not null,
+        "Payload" jsonb not null,
+        "Status" varchar(20) not null default 'RECEIVED',
+        "ReceivedAt" timestamptz not null default now(),
+        "AppliedAt" timestamptz,
+        "Attempts" integer not null default 0,
+        "LastError" text
+      )
+    `);
+
+    await client.$executeRawUnsafe(`
+      create index if not exists "IX_TRANSFER_SYNC_INBOX_Status"
+      on dbo."TRANSFER_SYNC_INBOX" ("Status", "ReceivedAt")
+    `);
+  }
+
+  private async findTransferForSyncOrThrow(
+    tx: TransferTransactionClient,
+    numero: number,
+  ): Promise<TransferForSync> {
+    const transfer = await tx.transferencias.findUnique({
+      where: { Numero: numero },
+      include: {
+        lote: true,
+        tipoDespacho: true,
+        sucursalRecibe: true,
+        movTransferencias: {
+          orderBy: [{ Item: "asc" }, { NumeroCaja: "asc" }, { CodigoBarra: "asc" }],
+          include: {
+            inventarioRef: {
+              include: {
+                marcaRef: true,
+                tallaRef: true,
+                colorRef: true,
+                fabricanteRef: true,
+                categoriaRef: true,
+                impuestoRef: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!transfer) {
+      throw new NotFoundException("La transferencia no existe.");
+    }
+
+    return transfer;
+  }
+
+  private async getTransferSyncOutboxRows(status: string, limit: number) {
+    return this.prisma.$queryRawUnsafe<TransferSyncOutboxRow[]>(
+      `
+        select
+          "GlobalId",
+          "Numero",
+          "CodigoEnvia",
+          "CodigoRecibe",
+          "SourceNodeId",
+          "DestinationNodeId",
+          "EventType",
+          "Payload",
+          "Status",
+          "CreatedAt",
+          "SentAt",
+          "Attempts",
+          "LastError"
+        from dbo."TRANSFER_SYNC_OUTBOX"
+        where "Status" = $1
+        order by "CreatedAt" asc
+        limit $2
+      `,
+      status,
+      limit,
+    );
+  }
+
+  private async updateTransferSyncOutboxStatus(
+    globalId: string,
+    status: string,
+    lastError: string | null,
+  ) {
+    const rows = await this.prisma.$queryRawUnsafe<TransferSyncOutboxRow[]>(
+      `
+        update dbo."TRANSFER_SYNC_OUTBOX"
+        set
+          "Status" = $2,
+          "SentAt" = case when $2 = $3 then now() else "SentAt" end,
+          "Attempts" = "Attempts" + 1,
+          "LastError" = $4
+        where "GlobalId" = $1
+        returning
+          "GlobalId",
+          "Numero",
+          "CodigoEnvia",
+          "CodigoRecibe",
+          "SourceNodeId",
+          "DestinationNodeId",
+          "EventType",
+          "Payload",
+          "Status",
+          "CreatedAt",
+          "SentAt",
+          "Attempts",
+          "LastError"
+      `,
+      globalId,
+      status,
+      TRANSFER_SYNC_STATUS_SENT,
+      lastError,
+    );
+
+    if (!rows[0]) {
+      throw new NotFoundException("El paquete de sincronizacion no existe.");
+    }
+
+    return rows[0];
+  }
+
+  private async resolveDestinationSyncNode(row: TransferSyncOutboxRow) {
+    const rows = await this.prisma.$queryRawUnsafe<TransferSyncNodeRow[]>(
+      `
+        select
+          "NodeId",
+          "SucursalCodigo",
+          "Nombre",
+          "Tipo",
+          "ApiUrl",
+          "CreatedAt",
+          "UpdatedAt",
+          "LastSeenAt"
+        from dbo."SYNC_NODES"
+        where
+          upper("NodeId") = upper($1)
+          or upper("SucursalCodigo") = upper($1)
+          or upper("SucursalCodigo") = upper($2)
+        order by
+          case
+            when upper("NodeId") = upper($1) then 0
+            when upper("SucursalCodigo") = upper($1) then 1
+            else 2
+          end
+        limit 1
+      `,
+      row.DestinationNodeId,
+      row.CodigoRecibe,
+    );
+
+    if (!rows[0]) {
+      throw new NotFoundException(`No existe nodo de sincronizacion para la sucursal ${row.CodigoRecibe}.`);
+    }
+
+    return rows[0];
+  }
+
+  private async postTransferSyncPackage(apiUrl: string, payload: unknown) {
+    const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
+    const token = await this.loginRemoteSyncNode(baseUrl);
+    const response = await fetch(`${baseUrl}/api/transfers/sync/import`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseBody = await this.readRemoteJson(response);
+    if (!response.ok) {
+      throw new ConflictException(
+        `Destino rechazo la transferencia: ${this.formatRemoteError(responseBody, response.status)}`,
+      );
+    }
+
+    return responseBody;
+  }
+
+  private async loginRemoteSyncNode(baseUrl: string) {
+    const usuario = this.configService.get<string>("TRANSFER_SYNC_USERNAME", "admin");
+    const password = this.configService.get<string>("TRANSFER_SYNC_PASSWORD", "123456");
+    const response = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ usuario, password }),
+    });
+    const body = await this.readRemoteJson(response);
+
+    if (!response.ok || !this.isRecord(body) || typeof body.accessToken !== "string") {
+      throw new ConflictException(
+        `No se pudo autenticar contra el nodo destino: ${this.formatRemoteError(body, response.status)}`,
+      );
+    }
+
+    return body.accessToken;
+  }
+
+  private async readRemoteJson(response: Response) {
+    const text = await response.text();
+    if (!text) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return text;
+    }
+  }
+
+  private formatRemoteError(body: unknown, status: number) {
+    if (this.isRecord(body)) {
+      const message = body.message;
+      if (Array.isArray(message)) {
+        return message.join("; ");
+      }
+
+      if (typeof message === "string") {
+        return message;
+      }
+
+      if (typeof body.error === "string") {
+        return body.error;
+      }
+    }
+
+    if (typeof body === "string") {
+      return body;
+    }
+
+    return `HTTP ${status}`;
+  }
+
+  private async recordTransferSyncOutbox(
+    tx: TransferTransactionClient,
+    transfer: TransferForSync,
+    totalValor: Prisma.Decimal,
+  ) {
+    const sourceNodeId = await this.resolveTransferSyncNodeId(tx, transfer.CodigoEnvia);
+    const destinationNodeId = await this.resolveTransferSyncNodeId(tx, transfer.CodigoRecibe);
+    const globalId = this.buildTransferGlobalId(sourceNodeId, transfer.Numero);
+    const payload = this.buildTransferSyncPayload(transfer, totalValor, {
+      globalId,
+      sourceNodeId,
+      destinationNodeId,
+    });
+
+    await tx.$executeRawUnsafe(
+      `
+        insert into dbo."TRANSFER_SYNC_OUTBOX"
+          (
+            "GlobalId",
+            "Numero",
+            "CodigoEnvia",
+            "CodigoRecibe",
+            "SourceNodeId",
+            "DestinationNodeId",
+            "EventType",
+            "Payload",
+            "Status",
+            "CreatedAt",
+            "SentAt",
+            "Attempts",
+            "LastError"
+          )
+        values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, now(), null, 0, null)
+        on conflict ("GlobalId") do update set
+          "Numero" = excluded."Numero",
+          "CodigoEnvia" = excluded."CodigoEnvia",
+          "CodigoRecibe" = excluded."CodigoRecibe",
+          "SourceNodeId" = excluded."SourceNodeId",
+          "DestinationNodeId" = excluded."DestinationNodeId",
+          "EventType" = excluded."EventType",
+          "Payload" = excluded."Payload",
+          "Status" = excluded."Status",
+          "SentAt" = null,
+          "LastError" = null
+      `,
+      payload.globalId,
+      transfer.Numero,
+      transfer.CodigoEnvia,
+      transfer.CodigoRecibe,
+      sourceNodeId,
+      destinationNodeId,
+      TRANSFER_SYNC_EVENT_APPROVED,
+      JSON.stringify(payload),
+      TRANSFER_SYNC_STATUS_PENDING,
+    );
+
+    return this.toTransferSyncOutboxView({
+      GlobalId: payload.globalId,
+      Numero: transfer.Numero,
+      CodigoEnvia: transfer.CodigoEnvia,
+      CodigoRecibe: transfer.CodigoRecibe,
+      SourceNodeId: sourceNodeId,
+      DestinationNodeId: destinationNodeId,
+      EventType: TRANSFER_SYNC_EVENT_APPROVED,
+      Payload: payload,
+      Status: TRANSFER_SYNC_STATUS_PENDING,
+      CreatedAt: new Date(),
+      SentAt: null,
+      Attempts: 0,
+      LastError: null,
+    });
+  }
+
+  private buildTransferSyncPayload(
+    transfer: TransferForSync,
+    totalValor: Prisma.Decimal,
+    ids: { globalId: string; sourceNodeId: string; destinationNodeId: string },
+  ): TransferSyncPayload {
+    return {
+      schemaVersion: TRANSFER_SYNC_SCHEMA_VERSION,
+      eventType: TRANSFER_SYNC_EVENT_APPROVED,
+      globalId: ids.globalId,
+      sourceNodeId: ids.sourceNodeId,
+      destinationNodeId: ids.destinationNodeId,
+      transfer: {
+        numero: transfer.Numero,
+        fecha: this.toIsoString(transfer.Fecha),
+        fechaEmision: this.toIsoString(transfer.FechaEmision),
+        codigoEnvia: transfer.CodigoEnvia,
+        codigoRecibe: transfer.CodigoRecibe,
+        documentoOrigen: transfer.DocumentoOrigen,
+        totalValor: totalValor.toString(),
+        observacion: transfer.Observacion,
+        status: 1,
+        usuario: transfer.Usuario,
+        interContable: transfer.InterContable,
+        idLote: transfer.IDLote,
+        lote: {
+          id: transfer.lote.ID,
+          lote: transfer.lote.Lote,
+          descripcion: transfer.lote.Descripcion,
+          estado: transfer.lote.Estado,
+        },
+        idDespacho: transfer.IDDespacho,
+        tipoDespacho: {
+          id: transfer.tipoDespacho.ID,
+          descripcion: transfer.tipoDespacho.Descripcion,
+          estado: transfer.tipoDespacho.Estado,
+        },
+        correccion: transfer.Correccion,
+        zona: transfer.Zona,
+      },
+      items: transfer.movTransferencias.map((line) => ({
+        item: line.Item,
+        fecha: line.Fecha ? this.toIsoString(line.Fecha) : null,
+        codigoBarra: line.CodigoBarra,
+        cantidad: line.Cantidad.toString(),
+        valor: line.Valor.toString(),
+        numeroCaja: line.NumeroCaja,
+        ultimoCosto: line.UltimoCosto?.toString() ?? null,
+        costoInicial: line.CostoInicial?.toString() ?? null,
+        costoDolar: line.CostoDolar?.toString() ?? null,
+        articulo: this.serializeInventoryForSync(line.inventarioRef),
+      })),
+    };
+  }
+
+  private serializeInventoryForSync(
+    article: TransferForSync["movTransferencias"][number]["inventarioRef"],
+  ): TransferSyncInventoryPayload {
+    return {
+      codigoBarra: article.CodigoBarra,
+      referencia: article.Referencia,
+      codigoMarca: article.CodigoMarca,
+      nombre: article.Nombre,
+      talla: article.Talla,
+      codigoColor: article.CodigoColor,
+      fabricante: article.Fabricante,
+      categoria: article.Categoria,
+      nota: article.Nota,
+      tipoImpuesto: article.TipoImpuesto,
+      precioDetal: article.PrecioDetal.toString(),
+      precioMayor: article.PrecioMayor.toString(),
+      precioAfiliado: article.PrecioAfiliado.toString(),
+      precioPromocion: article.PrecioPromocion.toString(),
+      promocion: article.Promocion,
+      fechaInicial: this.toIsoString(article.FechaInicial),
+      fechaFinal: this.toIsoString(article.FechaFinal),
+      costoInicial: article.CostoInicial.toString(),
+      costoPromedio: article.CostoPromedio.toString(),
+      ultimoCosto: article.UltimoCosto.toString(),
+      costoDolar: article.CostoDolar.toString(),
+      existenciaInicial: article.ExistenciaInicial.toString(),
+      puntoReorden: article.PuntoReorden.toString(),
+      tipo: article.Tipo,
+      status: article.Status,
+      serializado: article.Serializado,
+      codigoBarraAnt: article.CodigoBarraAnt,
+      catalogs: {
+        marca: {
+          codigo: article.marcaRef.Codigo,
+          nombre: article.marcaRef.Nombre,
+          status: article.marcaRef.Status,
+        },
+        talla: {
+          codigo: article.tallaRef.Codigo,
+        },
+        color: {
+          codigo: article.colorRef.Codigo,
+          nombre: article.colorRef.Nombre,
+          status: article.colorRef.Status,
+        },
+        fabricante: {
+          codigo: article.fabricanteRef.Codigo,
+          nombre: article.fabricanteRef.Nombre,
+          status: article.fabricanteRef.Status,
+        },
+        categoria: {
+          codigo: article.categoriaRef.Codigo,
+          nombre: article.categoriaRef.Nombre,
+          status: article.categoriaRef.Status,
+        },
+        impuesto: {
+          codigo: article.impuestoRef.Codigo,
+          nombre: article.impuestoRef.Nombre,
+          porcentajeImpuesto: article.impuestoRef.PorcentajeImpuesto?.toString() ?? null,
+        },
+      },
+    };
+  }
+
+  private normalizeTransferSyncPayload(body: Record<string, unknown>): TransferSyncPayload {
+    const candidate = this.isRecord(body.payload) ? body.payload : body;
+    if (!this.isRecord(candidate)) {
+      throw new BadRequestException("Paquete de sincronizacion invalido.");
+    }
+
+    const transfer = candidate.transfer;
+    const items = candidate.items;
+    if (!this.isRecord(transfer) || !Array.isArray(items)) {
+      throw new BadRequestException("El paquete de transferencia no tiene cabecera o renglones validos.");
+    }
+
+    const schemaVersion = Number(candidate.schemaVersion);
+    if (schemaVersion !== TRANSFER_SYNC_SCHEMA_VERSION) {
+      throw new BadRequestException("La version del paquete de sincronizacion no es compatible.");
+    }
+
+    const eventType = String(candidate.eventType || "").trim().toUpperCase();
+    if (eventType !== TRANSFER_SYNC_EVENT_APPROVED) {
+      throw new BadRequestException("Solo se pueden importar transferencias aprobadas.");
+    }
+
+    const payload: TransferSyncPayload = {
+      schemaVersion,
+      eventType: TRANSFER_SYNC_EVENT_APPROVED,
+      globalId: this.normalizeGlobalTransferId(candidate.globalId),
+      sourceNodeId: this.normalizeSyncNodeId(candidate.sourceNodeId),
+      destinationNodeId: this.normalizeSyncNodeId(candidate.destinationNodeId),
+      transfer: {
+        numero: this.toPositiveInteger(transfer.numero, "Numero de transferencia invalido."),
+        fecha: this.toRequiredIsoString(transfer.fecha, "Fecha de transferencia invalida."),
+        fechaEmision: this.toRequiredIsoString(transfer.fechaEmision, "Fecha de emision invalida."),
+        codigoEnvia: this.normalizeRequiredCode(transfer.codigoEnvia as string | undefined, "Codigo de origen invalido."),
+        codigoRecibe: this.normalizeRequiredCode(transfer.codigoRecibe as string | undefined, "Codigo de destino invalido."),
+        documentoOrigen: String(transfer.documentoOrigen || "").trim(),
+        totalValor: this.parseNonNegativeDecimal(
+          String(transfer.totalValor || "0"),
+          "Total de transferencia invalido.",
+        ).toString(),
+        observacion: String(transfer.observacion || "").trim(),
+        status: 1,
+        usuario: transfer.usuario ? String(transfer.usuario).trim() : null,
+        interContable: transfer.interContable === null || transfer.interContable === undefined
+          ? null
+          : Number(transfer.interContable),
+        idLote: this.toNonNegativeInteger(transfer.idLote, "Lote de transferencia invalido."),
+        lote: this.normalizeTransferSyncLot(transfer.lote),
+        idDespacho: this.toNonNegativeInteger(transfer.idDespacho, "Despacho de transferencia invalido."),
+        tipoDespacho: this.normalizeTransferSyncDispatch(transfer.tipoDespacho),
+        correccion: Boolean(transfer.correccion),
+        zona: String(transfer.zona || "").trim(),
+      },
+      items: items.map((line, index) => this.normalizeTransferSyncLine(line, index)),
+    };
+
+    if (payload.items.length === 0) {
+      throw new BadRequestException("El paquete de transferencia no tiene renglones.");
+    }
+
+    return payload;
+  }
+
+  private normalizeTransferSyncLine(line: unknown, index: number): TransferSyncLinePayload {
+    if (!this.isRecord(line) || !this.isRecord(line.articulo)) {
+      throw new BadRequestException(`Renglon ${index + 1} de sincronizacion invalido.`);
+    }
+
+    const codigoBarra = this.normalizeRequiredCode(
+      line.codigoBarra as string | undefined,
+      `Codigo de barra invalido en el renglon ${index + 1}.`,
+    );
+
+    return {
+      item: this.toPositiveInteger(line.item, `Item invalido en el renglon ${index + 1}.`),
+      fecha: line.fecha ? this.toRequiredIsoString(line.fecha, `Fecha invalida en el renglon ${index + 1}.`) : null,
+      codigoBarra,
+      cantidad: this.parsePositiveDecimal(
+        String(line.cantidad || "0"),
+        `Cantidad invalida en el renglon ${index + 1}.`,
+      ).toString(),
+      valor: this.parseNonNegativeDecimal(
+        String(line.valor || "0"),
+        `Valor invalido en el renglon ${index + 1}.`,
+      ).toString(),
+      numeroCaja: this.toNonNegativeInteger(line.numeroCaja, `Caja invalida en el renglon ${index + 1}.`),
+      ultimoCosto: line.ultimoCosto === null || line.ultimoCosto === undefined
+        ? null
+        : this.parseNonNegativeDecimal(String(line.ultimoCosto), `Ultimo costo invalido en el renglon ${index + 1}.`).toString(),
+      costoInicial: line.costoInicial === null || line.costoInicial === undefined
+        ? null
+        : this.parseNonNegativeDecimal(String(line.costoInicial), `Costo inicial invalido en el renglon ${index + 1}.`).toString(),
+      costoDolar: line.costoDolar === null || line.costoDolar === undefined
+        ? null
+        : this.parseNonNegativeDecimal(String(line.costoDolar), `Costo dolar invalido en el renglon ${index + 1}.`).toString(),
+      articulo: this.normalizeTransferSyncInventory(line.articulo, codigoBarra, index),
+    };
+  }
+
+  private normalizeTransferSyncInventory(
+    article: Record<string, unknown>,
+    codigoBarra: string,
+    index: number,
+  ): TransferSyncInventoryPayload {
+    const catalogs = this.isRecord(article.catalogs) ? article.catalogs : {};
+    const tipoImpuesto = this.toNonNegativeInteger(article.tipoImpuesto, `Impuesto invalido en el renglon ${index + 1}.`);
+
+    return {
+      codigoBarra,
+      referencia: this.normalizeRequiredCode(article.referencia as string | undefined, `Referencia invalida en el renglon ${index + 1}.`),
+      codigoMarca: this.normalizeRequiredCode(article.codigoMarca as string | undefined, `Marca invalida en el renglon ${index + 1}.`),
+      nombre: String(article.nombre || codigoBarra).trim(),
+      talla: this.normalizeRequiredCode(article.talla as string | undefined, `Talla invalida en el renglon ${index + 1}.`),
+      codigoColor: this.normalizeRequiredCode(article.codigoColor as string | undefined, `Color invalido en el renglon ${index + 1}.`),
+      fabricante: this.normalizeRequiredCode(article.fabricante as string | undefined, `Fabricante invalido en el renglon ${index + 1}.`),
+      categoria: this.normalizeRequiredCode(article.categoria as string | undefined, `Categoria invalida en el renglon ${index + 1}.`),
+      nota: article.nota === null || article.nota === undefined ? null : String(article.nota),
+      tipoImpuesto,
+      precioDetal: this.parseNonNegativeDecimal(String(article.precioDetal || "0"), `Precio detal invalido en el renglon ${index + 1}.`).toString(),
+      precioMayor: this.parseNonNegativeDecimal(String(article.precioMayor || "0"), `Precio mayor invalido en el renglon ${index + 1}.`).toString(),
+      precioAfiliado: this.parseNonNegativeDecimal(String(article.precioAfiliado || "0"), `Precio afiliado invalido en el renglon ${index + 1}.`).toString(),
+      precioPromocion: this.parseNonNegativeDecimal(String(article.precioPromocion || "0"), `Precio promocion invalido en el renglon ${index + 1}.`).toString(),
+      promocion: Boolean(article.promocion),
+      fechaInicial: this.toRequiredIsoString(article.fechaInicial, `Fecha inicial invalida en el renglon ${index + 1}.`),
+      fechaFinal: this.toRequiredIsoString(article.fechaFinal, `Fecha final invalida en el renglon ${index + 1}.`),
+      costoInicial: this.parseNonNegativeDecimal(String(article.costoInicial || "0"), `Costo inicial invalido en el renglon ${index + 1}.`).toString(),
+      costoPromedio: this.parseNonNegativeDecimal(String(article.costoPromedio || "0"), `Costo promedio invalido en el renglon ${index + 1}.`).toString(),
+      ultimoCosto: this.parseNonNegativeDecimal(String(article.ultimoCosto || "0"), `Ultimo costo invalido en el renglon ${index + 1}.`).toString(),
+      costoDolar: this.parseNonNegativeDecimal(String(article.costoDolar || "0"), `Costo dolar invalido en el renglon ${index + 1}.`).toString(),
+      existenciaInicial: this.parseNonNegativeDecimal(String(article.existenciaInicial || "0"), `Existencia inicial invalida en el renglon ${index + 1}.`).toString(),
+      puntoReorden: this.parseNonNegativeDecimal(String(article.puntoReorden || "0"), `Punto de reorden invalido en el renglon ${index + 1}.`).toString(),
+      tipo: this.toNonNegativeInteger(article.tipo, `Tipo invalido en el renglon ${index + 1}.`),
+      status: this.toNonNegativeInteger(article.status, `Status invalido en el renglon ${index + 1}.`),
+      serializado: this.toNonNegativeInteger(article.serializado, `Serializado invalido en el renglon ${index + 1}.`),
+      codigoBarraAnt: String(article.codigoBarraAnt || codigoBarra).trim(),
+      catalogs: {
+        marca: this.normalizeCatalogPayload(catalogs.marca, article.codigoMarca, article.codigoMarca),
+        talla: this.normalizeCatalogPayload(catalogs.talla, article.talla, article.talla),
+        color: this.normalizeCatalogPayload(catalogs.color, article.codigoColor, article.codigoColor),
+        fabricante: this.normalizeCatalogPayload(catalogs.fabricante, article.fabricante, article.fabricante),
+        categoria: this.normalizeCatalogPayload(catalogs.categoria, article.categoria, article.categoria),
+        impuesto: this.normalizeCatalogPayload(catalogs.impuesto, tipoImpuesto, `IVA ${tipoImpuesto}`),
+      },
+    };
+  }
+
+  private normalizeCatalogPayload(
+    value: unknown,
+    fallbackCode: unknown,
+    fallbackName: unknown,
+  ): TransferSyncCatalogPayload {
+    const record = this.isRecord(value) ? value : {};
+    const codigo = record.codigo ?? fallbackCode;
+    const nombre = record.nombre === null || record.nombre === undefined
+      ? String(fallbackName ?? codigo ?? "").trim()
+      : String(record.nombre).trim();
+    const status = record.status === null || record.status === undefined ? 1 : Number(record.status);
+
+    return {
+      codigo: typeof codigo === "number" ? codigo : String(codigo || "").trim().toUpperCase(),
+      nombre,
+      status: Number.isFinite(status) ? status : 1,
+      porcentajeImpuesto: record.porcentajeImpuesto === null || record.porcentajeImpuesto === undefined
+        ? null
+        : this.parseNonNegativeDecimal(String(record.porcentajeImpuesto), "Porcentaje de impuesto invalido.").toString(),
+    };
+  }
+
+  private normalizeTransferSyncLot(value: unknown) {
+    const record = this.isRecord(value) ? value : {};
+    const id = this.toNonNegativeInteger(record.id, "Lote de transferencia invalido.");
+    return {
+      id,
+      lote: String(record.lote || `SYNC_LOTE_${id}`).trim(),
+      descripcion: record.descripcion === null || record.descripcion === undefined
+        ? "Lote sincronizado desde transferencia"
+        : String(record.descripcion).trim(),
+      estado: record.estado === null || record.estado === undefined ? 1 : Number(record.estado),
+    };
+  }
+
+  private normalizeTransferSyncDispatch(value: unknown) {
+    const record = this.isRecord(value) ? value : {};
+    const id = this.toNonNegativeInteger(record.id, "Despacho de transferencia invalido.");
+    return {
+      id,
+      descripcion: String(record.descripcion || `SYNC_DESPACHO_${id}`).trim(),
+      estado: record.estado === null || record.estado === undefined ? 1 : Number(record.estado),
+    };
+  }
+
+  private async prepareSyncedDestinationInventory(
+    tx: TransferTransactionClient,
+    payload: TransferSyncPayload,
+  ) {
+    const now = new Date();
+
+    for (const line of payload.items) {
+      const article = line.articulo;
+      await this.ensureSyncedInventoryCatalogs(tx, article);
+
+      const existingArticle = await tx.inventario.findUnique({
+        where: { CodigoBarra: article.codigoBarra },
+      });
+
+      if (existingArticle) {
+        await tx.inventario.update({
+          where: { CodigoBarra: existingArticle.CodigoBarra },
+          data: {
+            ...this.buildSyncedInventoryAttributeUpdate(article),
+            UltimaActualizacion: now,
+          },
+        });
+
+        continue;
+      }
+
+      await tx.inventario.create({
+        data: this.buildSyncedInventoryCreateInput(article, ZERO, now),
+      });
+    }
+  }
+
+  private async applySyncedDestinationReceipt(
+    tx: TransferTransactionClient,
+    payload: TransferSyncPayload,
+  ) {
+    const now = new Date();
+
+    for (const line of payload.items) {
+      const article = line.articulo;
+      const quantity = this.parsePositiveDecimal(line.cantidad, "Cantidad de transferencia invalida.");
+
+      await this.ensureSyncedInventoryCatalogs(tx, article);
+
+      const existingArticle = await tx.inventario.findUnique({
+        where: { CodigoBarra: article.codigoBarra },
+      });
+
+      if (existingArticle) {
+        await tx.inventario.update({
+          where: { CodigoBarra: existingArticle.CodigoBarra },
+          data: {
+            ...this.buildSyncedInventoryAttributeUpdate(article),
+            Existencia: existingArticle.Existencia.plus(quantity),
+            UltimaActualizacion: now,
+            FechaPrimerMovimiento: existingArticle.FechaPrimerMovimiento ?? now,
+          },
+        });
+
+        continue;
+      }
+
+      await tx.inventario.create({
+        data: this.buildSyncedInventoryCreateInput(article, quantity, now),
+      });
+    }
+  }
+
+  private async recordSyncedInboundTransfer(
+    tx: TransferTransactionClient,
+    payload: TransferSyncPayload,
+  ) {
+    await tx.iTransferencias.create({
+      data: {
+        Numero: payload.transfer.numero,
+        CodigoEnvia: payload.transfer.codigoEnvia,
+        CodigoRecibe: payload.transfer.codigoRecibe,
+        Fecha: new Date(payload.transfer.fecha),
+        FechaEmision: new Date(payload.transfer.fechaEmision),
+        TotalValor: this.parseNonNegativeDecimal(payload.transfer.totalValor, "Total de transferencia invalido."),
+        Observacion: payload.transfer.observacion,
+        Status: 1,
+        Usuario: payload.transfer.usuario,
+        InterContable: payload.transfer.interContable,
+        IDLote: payload.transfer.idLote,
+        IDDespacho: payload.transfer.idDespacho,
+        Correccion: payload.transfer.correccion,
+      },
+    });
+
+    await tx.iMovTransferencias.createMany({
+      data: payload.items.map((line) => ({
+        Numero: payload.transfer.numero,
+        CodigoEnvia: payload.transfer.codigoEnvia,
+        Item: line.item,
+        Fecha: line.fecha ? new Date(line.fecha) : null,
+        CodigoBarra: line.articulo.codigoBarra,
+        Cantidad: this.parsePositiveDecimal(line.cantidad, "Cantidad de transferencia invalida."),
+        Valor: this.parseNonNegativeDecimal(line.valor, "Valor de transferencia invalido."),
+        NumeroCaja: line.numeroCaja,
+        UltimoCosto: line.ultimoCosto === null
+          ? null
+          : this.parseNonNegativeDecimal(line.ultimoCosto, "Ultimo costo de transferencia invalido."),
+        CostoInicial: line.costoInicial === null
+          ? null
+          : this.parseNonNegativeDecimal(line.costoInicial, "Costo inicial de transferencia invalido."),
+        CostoDolar: line.costoDolar === null
+          ? null
+          : this.parseNonNegativeDecimal(line.costoDolar, "Costo dolar de transferencia invalido."),
+      })),
+    });
+  }
+
+  private async ensureSyncedInventoryCatalogs(
+    tx: TransferTransactionClient,
+    article: TransferSyncInventoryPayload,
+  ) {
+    await tx.marcas.upsert({
+      where: { Codigo: article.codigoMarca },
+      update: {
+        Nombre: this.catalogName(article.catalogs.marca, article.codigoMarca),
+        Status: this.catalogStatus(article.catalogs.marca),
+      },
+      create: {
+        Codigo: article.codigoMarca,
+        Nombre: this.catalogName(article.catalogs.marca, article.codigoMarca),
+        Status: this.catalogStatus(article.catalogs.marca),
+      },
+    });
+
+    await tx.tallas.upsert({
+      where: { Codigo: article.talla },
+      update: {},
+      create: { Codigo: article.talla },
+    });
+
+    await tx.colores.upsert({
+      where: { Codigo: article.codigoColor },
+      update: {
+        Nombre: this.catalogName(article.catalogs.color, article.codigoColor),
+        Status: this.catalogStatus(article.catalogs.color),
+      },
+      create: {
+        Codigo: article.codigoColor,
+        Nombre: this.catalogName(article.catalogs.color, article.codigoColor),
+        Status: this.catalogStatus(article.catalogs.color),
+      },
+    });
+
+    await tx.fabricantes.upsert({
+      where: { Codigo: article.fabricante },
+      update: {
+        Nombre: this.catalogName(article.catalogs.fabricante, article.fabricante),
+        Status: this.catalogStatus(article.catalogs.fabricante),
+      },
+      create: {
+        Codigo: article.fabricante,
+        Nombre: this.catalogName(article.catalogs.fabricante, article.fabricante),
+        Status: this.catalogStatus(article.catalogs.fabricante),
+      },
+    });
+
+    await tx.categorias.upsert({
+      where: { Codigo: article.categoria },
+      update: {
+        Nombre: this.catalogName(article.catalogs.categoria, article.categoria),
+        Status: this.catalogStatus(article.catalogs.categoria),
+      },
+      create: {
+        Codigo: article.categoria,
+        Nombre: this.catalogName(article.catalogs.categoria, article.categoria),
+        Status: this.catalogStatus(article.catalogs.categoria),
+      },
+    });
+
+    await tx.impuestos.upsert({
+      where: { Codigo: article.tipoImpuesto },
+      update: {
+        Nombre: this.catalogName(article.catalogs.impuesto, `IVA ${article.tipoImpuesto}`),
+        PorcentajeImpuesto: article.catalogs.impuesto.porcentajeImpuesto
+          ? this.parseNonNegativeDecimal(article.catalogs.impuesto.porcentajeImpuesto, "Porcentaje de impuesto invalido.")
+          : undefined,
+      },
+      create: {
+        Codigo: article.tipoImpuesto,
+        Nombre: this.catalogName(article.catalogs.impuesto, `IVA ${article.tipoImpuesto}`),
+        PorcentajeImpuesto: article.catalogs.impuesto.porcentajeImpuesto
+          ? this.parseNonNegativeDecimal(article.catalogs.impuesto.porcentajeImpuesto, "Porcentaje de impuesto invalido.")
+          : ZERO,
+      },
+    });
+  }
+
+  private async ensureSyncedDispatchType(
+    tx: TransferTransactionClient,
+    payload: TransferSyncPayload,
+  ) {
+    const existing = await tx.tipoDespacho.findUnique({
+      where: { ID: payload.transfer.idDespacho },
+    });
+
+    if (existing) {
+      return;
+    }
+
+    await tx.tipoDespacho.create({
+      data: {
+        ID: payload.transfer.idDespacho,
+        Descripcion: payload.transfer.tipoDespacho.descripcion || `SYNC_DESPACHO_${payload.transfer.idDespacho}`,
+        Estado: payload.transfer.tipoDespacho.estado,
+      },
+    });
+  }
+
+  private async ensureSyncedLot(
+    tx: TransferTransactionClient,
+    payload: TransferSyncPayload,
+  ) {
+    const existing = await tx.lotes.findUnique({
+      where: { ID: payload.transfer.idLote },
+    });
+
+    if (existing) {
+      return;
+    }
+
+    await tx.lotes.create({
+      data: {
+        ID: payload.transfer.idLote,
+        Lote: payload.transfer.lote.lote || `SYNC_LOTE_${payload.transfer.idLote}`,
+        Descripcion: payload.transfer.lote.descripcion,
+        Estado: payload.transfer.lote.estado,
+        FechaRegistro: new Date(),
+        UsuarioCreacion: payload.transfer.usuario || "sistema",
+      },
+    });
+  }
+
+  private buildSyncedInventoryCreateInput(
+    article: TransferSyncInventoryPayload,
+    quantity: Prisma.Decimal,
+    now: Date,
+  ): Prisma.InventarioUncheckedCreateInput {
+    return {
+      ...this.buildSyncedInventoryAttributes(article),
+      CodigoBarra: article.codigoBarra,
+      ExistenciaInicial: quantity,
+      Existencia: quantity,
+      FechaPrimerMovimiento: now,
+      UltimaActualizacion: now,
+    };
+  }
+
+  private buildSyncedInventoryAttributeUpdate(
+    article: TransferSyncInventoryPayload,
+  ): Prisma.InventarioUncheckedUpdateInput {
+    return this.buildSyncedInventoryAttributes(article);
+  }
+
+  private buildSyncedInventoryAttributes(article: TransferSyncInventoryPayload) {
+    return {
+      Referencia: article.referencia,
+      CodigoMarca: article.codigoMarca,
+      Nombre: article.nombre,
+      Talla: article.talla,
+      CodigoColor: article.codigoColor,
+      Fabricante: article.fabricante,
+      Categoria: article.categoria,
+      Nota: article.nota,
+      TipoImpuesto: article.tipoImpuesto,
+      PrecioDetal: this.parseNonNegativeDecimal(article.precioDetal, "Precio detal invalido."),
+      PrecioMayor: this.parseNonNegativeDecimal(article.precioMayor, "Precio mayor invalido."),
+      PrecioAfiliado: this.parseNonNegativeDecimal(article.precioAfiliado, "Precio afiliado invalido."),
+      PrecioPromocion: this.parseNonNegativeDecimal(article.precioPromocion, "Precio promocion invalido."),
+      Promocion: article.promocion,
+      FechaInicial: new Date(article.fechaInicial),
+      FechaFinal: new Date(article.fechaFinal),
+      CostoInicial: this.parseNonNegativeDecimal(article.costoInicial, "Costo inicial invalido."),
+      CostoPromedio: this.parseNonNegativeDecimal(article.costoPromedio, "Costo promedio invalido."),
+      UltimoCosto: this.parseNonNegativeDecimal(article.ultimoCosto, "Ultimo costo invalido."),
+      CostoDolar: this.parseNonNegativeDecimal(article.costoDolar, "Costo dolar invalido."),
+      PuntoReorden: this.parseNonNegativeDecimal(article.puntoReorden, "Punto de reorden invalido."),
+      Tipo: article.tipo,
+      Status: article.status,
+      Serializado: article.serializado,
+      CodigoBarraAnt: article.codigoBarraAnt,
+    };
+  }
+
+  private async upsertTransferSyncInbox(
+    tx: TransferTransactionClient,
+    payload: TransferSyncPayload,
+    status: string,
+  ) {
+    await tx.$executeRawUnsafe(
+      `
+        insert into dbo."TRANSFER_SYNC_INBOX"
+          (
+            "GlobalId",
+            "NumeroOrigen",
+            "CodigoEnvia",
+            "CodigoRecibe",
+            "SourceNodeId",
+            "DestinationNodeId",
+            "EventType",
+            "Payload",
+            "Status",
+            "ReceivedAt",
+            "AppliedAt",
+            "Attempts",
+            "LastError"
+          )
+        values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, now(), null, 0, null)
+        on conflict ("GlobalId") do update set
+          "Payload" = excluded."Payload",
+          "Status" = excluded."Status",
+          "LastError" = null
+      `,
+      payload.globalId,
+      payload.transfer.numero,
+      payload.transfer.codigoEnvia,
+      payload.transfer.codigoRecibe,
+      payload.sourceNodeId,
+      payload.destinationNodeId,
+      payload.eventType,
+      JSON.stringify(payload),
+      status,
+    );
+  }
+
+  private async markTransferSyncInboxApplied(tx: TransferTransactionClient, globalId: string) {
+    await tx.$executeRawUnsafe(
+      `
+        update dbo."TRANSFER_SYNC_INBOX"
+        set
+          "Status" = $2,
+          "AppliedAt" = now(),
+          "LastError" = null
+        where "GlobalId" = $1
+      `,
+      globalId,
+      TRANSFER_SYNC_STATUS_APPLIED,
+    );
+  }
+
+  private async markTransferSyncInboxError(payload: TransferSyncPayload, message: string) {
+    await this.prisma.$executeRawUnsafe(
+      `
+        insert into dbo."TRANSFER_SYNC_INBOX"
+          (
+            "GlobalId",
+            "NumeroOrigen",
+            "CodigoEnvia",
+            "CodigoRecibe",
+            "SourceNodeId",
+            "DestinationNodeId",
+            "EventType",
+            "Payload",
+            "Status",
+            "ReceivedAt",
+            "AppliedAt",
+            "Attempts",
+            "LastError"
+          )
+        values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, now(), null, 1, $10)
+        on conflict ("GlobalId") do update set
+          "Status" = excluded."Status",
+          "Attempts" = dbo."TRANSFER_SYNC_INBOX"."Attempts" + 1,
+          "LastError" = excluded."LastError"
+      `,
+      payload.globalId,
+      payload.transfer.numero,
+      payload.transfer.codigoEnvia,
+      payload.transfer.codigoRecibe,
+      payload.sourceNodeId,
+      payload.destinationNodeId,
+      payload.eventType,
+      JSON.stringify(payload),
+      TRANSFER_SYNC_STATUS_ERROR,
+      message,
+    );
+  }
+
+  private async getTransferSyncInboxRow(
+    tx: TransferTransactionClient,
+    globalId: string,
+  ) {
+    const rows = await tx.$queryRawUnsafe<TransferSyncInboxRow[]>(
+      `
+        select
+          "GlobalId",
+          "NumeroOrigen",
+          "CodigoEnvia",
+          "CodigoRecibe",
+          "SourceNodeId",
+          "DestinationNodeId",
+          "EventType",
+          "Payload",
+          "Status",
+          "ReceivedAt",
+          "AppliedAt",
+          "Attempts",
+          "LastError"
+        from dbo."TRANSFER_SYNC_INBOX"
+        where "GlobalId" = $1
+        limit 1
+      `,
+      globalId,
+    );
+
+    return rows[0] ?? null;
+  }
+
+  private async getTransferSyncInboxRowForTransfer(
+    tx: PrismaService | TransferTransactionClient,
+    numero: number,
+    codigoEnvia: string,
+    codigoRecibe: string,
+  ) {
+    const rows = await tx.$queryRawUnsafe<TransferSyncInboxRow[]>(
+      `
+        select
+          "GlobalId",
+          "NumeroOrigen",
+          "CodigoEnvia",
+          "CodigoRecibe",
+          "SourceNodeId",
+          "DestinationNodeId",
+          "EventType",
+          "Payload",
+          "Status",
+          "ReceivedAt",
+          "AppliedAt",
+          "Attempts",
+          "LastError"
+        from dbo."TRANSFER_SYNC_INBOX"
+        where "NumeroOrigen" = $1
+          and upper("CodigoEnvia") = upper($2)
+          and upper("CodigoRecibe") = upper($3)
+        order by "ReceivedAt" desc
+        limit 1
+      `,
+      numero,
+      codigoEnvia,
+      codigoRecibe,
+    );
+
+    return rows[0] ?? null;
+  }
+
+  private async resolveTransferSyncNodeId(
+    client: PrismaService | TransferTransactionClient,
+    sucursalCodigo: string,
+  ) {
+    const code = this.normalizeRequiredCode(sucursalCodigo, "Codigo de sucursal invalido.");
+    const rows = await client.$queryRawUnsafe<TransferSyncNodeRow[]>(
+      `
+        select
+          "NodeId",
+          "SucursalCodigo",
+          "Nombre",
+          "Tipo",
+          "ApiUrl",
+          "CreatedAt",
+          "UpdatedAt",
+          "LastSeenAt"
+        from dbo."SYNC_NODES"
+        where upper("SucursalCodigo") = upper($1) or upper("NodeId") = upper($1)
+        order by case when upper("SucursalCodigo") = upper($1) then 0 else 1 end
+        limit 1
+      `,
+      code,
+    );
+
+    return rows[0]?.NodeId ?? code;
+  }
+
+  private async getTransferSyncNodeById(nodeId: string) {
+    const rows = await this.prisma.$queryRawUnsafe<TransferSyncNodeRow[]>(
+      `
+        select
+          "NodeId",
+          "SucursalCodigo",
+          "Nombre",
+          "Tipo",
+          "ApiUrl",
+          "CreatedAt",
+          "UpdatedAt",
+          "LastSeenAt"
+        from dbo."SYNC_NODES"
+        where "NodeId" = $1
+        limit 1
+      `,
+      nodeId,
+    );
+
+    if (!rows[0]) {
+      throw new NotFoundException("El nodo de sincronizacion no existe.");
+    }
+
+    return this.toTransferSyncNodeView(rows[0]);
+  }
+
+  private toTransferSyncNodeView(row: TransferSyncNodeRow) {
+    return {
+      nodeId: row.NodeId,
+      sucursalCodigo: row.SucursalCodigo,
+      nombre: row.Nombre,
+      tipo: row.Tipo,
+      apiUrl: row.ApiUrl,
+      creado: row.CreatedAt,
+      actualizado: row.UpdatedAt,
+      ultimaConexion: row.LastSeenAt,
+    };
+  }
+
+  private toTransferSyncOutboxView(row: TransferSyncOutboxRow) {
+    return {
+      globalId: row.GlobalId,
+      numero: row.Numero,
+      codigoEnvia: row.CodigoEnvia,
+      codigoRecibe: row.CodigoRecibe,
+      sourceNodeId: row.SourceNodeId,
+      destinationNodeId: row.DestinationNodeId,
+      eventType: row.EventType,
+      payload: this.parseRawJson(row.Payload),
+      status: row.Status,
+      creado: row.CreatedAt,
+      enviado: row.SentAt,
+      intentos: row.Attempts,
+      ultimoError: row.LastError,
+    };
+  }
+
+  private buildTransferGlobalId(sourceNodeId: string, numero: number) {
+    return `${this.normalizeSyncNodeId(sourceNodeId)}-TRF-${String(numero).padStart(10, "0")}`;
+  }
+
+  private normalizeGlobalTransferId(value: unknown) {
+    const normalized = String(value || "").trim().toUpperCase();
+    if (!normalized) {
+      throw new BadRequestException("Identificador global de transferencia invalido.");
+    }
+
+    return normalized;
+  }
+
+  private normalizeSyncNodeId(value: unknown) {
+    const normalized = String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "");
+
+    if (!normalized) {
+      throw new BadRequestException("Identificador de nodo invalido.");
+    }
+
+    return normalized;
+  }
+
+  private normalizeOptionalApiUrl(value: unknown) {
+    const normalized = String(value || "").trim();
+    if (!normalized) {
+      return null;
+    }
+
+    return this.normalizeRequiredApiUrl(normalized);
+  }
+
+  private normalizeRequiredApiUrl(value: unknown) {
+    const normalized = String(value || "").trim().replace(/\/+$/, "");
+    if (!/^https?:\/\//i.test(normalized)) {
+      throw new BadRequestException("La URL del nodo debe comenzar con http:// o https://.");
+    }
+
+    return normalized;
+  }
+
+  private catalogName(catalog: TransferSyncCatalogPayload, fallback: string | number) {
+    return String(catalog.nombre || fallback || "").trim();
+  }
+
+  private catalogStatus(catalog: TransferSyncCatalogPayload) {
+    return typeof catalog.status === "number" && Number.isFinite(catalog.status) ? catalog.status : 1;
+  }
+
+  private toIsoString(value: Date) {
+    return value.toISOString();
+  }
+
+  private toRequiredIsoString(value: unknown, message: string) {
+    const date = new Date(String(value || ""));
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException(message);
+    }
+
+    return date.toISOString();
+  }
+
+  private toPositiveInteger(value: unknown, message: string) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      throw new BadRequestException(message);
+    }
+
+    return parsed;
+  }
+
+  private toNonNegativeInteger(value: unknown, message: string) {
+    const parsed = Number(value ?? 0);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      throw new BadRequestException(message);
+    }
+
+    return parsed;
+  }
+
+  private parseRawJson(value: unknown) {
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+
+    return value;
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+
+  private extractSyncErrorMessage(error: unknown) {
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return "Error desconocido al sincronizar la transferencia.";
   }
 
   private async normalizeTransferDraft(
@@ -514,6 +2388,102 @@ export class TransfersService {
     });
   }
 
+  private async findInboundTransferDetailOrThrow(
+    numero: number,
+    client: PrismaService | TransferTransactionClient = this.prisma,
+  ) {
+    const transferencia = await client.iTransferencias.findFirst({
+      where: { Numero: numero },
+      include: {
+        sucursalEnvia: true,
+        tipoDespacho: true,
+        iMovTransferencias: {
+          orderBy: [{ Item: "asc" }, { NumeroCaja: "asc" }, { CodigoBarra: "asc" }],
+          include: {
+            inventarioRef: {
+              select: {
+                CodigoBarra: true,
+                Nombre: true,
+                Referencia: true,
+                Existencia: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!transferencia) {
+      throw new NotFoundException("La transferencia recibida no existe.");
+    }
+
+    const [destinationLocations, syncRow] = await Promise.all([
+      this.loadLocationsByCode([transferencia.CodigoRecibe], client),
+      this.getTransferSyncInboxRowForTransfer(
+        client,
+        transferencia.Numero,
+        transferencia.CodigoEnvia,
+        transferencia.CodigoRecibe,
+      ),
+    ]);
+
+    return this.toInboundTransferDetailView(transferencia, {
+      codigoRecibeInfo: this.toLocationView(destinationLocations.get(transferencia.CodigoRecibe)),
+      syncRow,
+    });
+  }
+
+  private async loadInboundSyncRows(
+    transfers: Array<Pick<InboundTransferWithRelations, "Numero" | "CodigoEnvia" | "CodigoRecibe">>,
+    client: PrismaService | TransferTransactionClient = this.prisma,
+  ) {
+    const numeros = Array.from(new Set(transfers.map((item) => item.Numero)));
+    if (numeros.length === 0) {
+      return new Map<string, TransferSyncInboxRow>();
+    }
+
+    const rows = await client.$queryRawUnsafe<TransferSyncInboxRow[]>(
+      `
+        select
+          "GlobalId",
+          "NumeroOrigen",
+          "CodigoEnvia",
+          "CodigoRecibe",
+          "SourceNodeId",
+          "DestinationNodeId",
+          "EventType",
+          "Payload",
+          "Status",
+          "ReceivedAt",
+          "AppliedAt",
+          "Attempts",
+          "LastError"
+        from dbo."TRANSFER_SYNC_INBOX"
+        where "NumeroOrigen" = any($1::integer[])
+        order by "ReceivedAt" desc
+      `,
+      numeros,
+    );
+
+    const rowsByKey = new Map<string, TransferSyncInboxRow>();
+    for (const row of rows) {
+      const key = this.buildInboundSyncKey(row.NumeroOrigen, row.CodigoEnvia, row.CodigoRecibe);
+      if (!rowsByKey.has(key)) {
+        rowsByKey.set(key, row);
+      }
+    }
+
+    return rowsByKey;
+  }
+
+  private buildInboundSyncKey(numero: number, codigoEnvia: string, codigoRecibe: string) {
+    return [
+      String(numero),
+      String(codigoEnvia || "").trim().toUpperCase(),
+      String(codigoRecibe || "").trim().toUpperCase(),
+    ].join("|");
+  }
+
   private buildSearchWhere(findTransfersDto: FindTransfersDto): Prisma.TransferenciasWhereInput {
     const search = String(findTransfersDto.buscar || "").trim();
     const conditions: Prisma.TransferenciasWhereInput[] = [];
@@ -542,6 +2512,120 @@ export class TransfersService {
 
     return {
       AND: conditions,
+    };
+  }
+
+  private buildInboundSearchWhere(findTransfersDto: FindTransfersDto): Prisma.ITransferenciasWhereInput {
+    const search = String(findTransfersDto.buscar || "").trim();
+    const conditions: Prisma.ITransferenciasWhereInput[] = [];
+
+    if (typeof findTransfersDto.status === "number") {
+      conditions.push({ Status: findTransfersDto.status });
+    }
+
+    if (search) {
+      const numericSearch = Number.parseInt(search, 10);
+      conditions.push({
+        OR: [
+          Number.isInteger(numericSearch) ? { Numero: numericSearch } : undefined,
+          { CodigoEnvia: { contains: search, mode: "insensitive" } },
+          { CodigoRecibe: { contains: search, mode: "insensitive" } },
+          { Observacion: { contains: search, mode: "insensitive" } },
+          { Usuario: { contains: search, mode: "insensitive" } },
+        ].filter(Boolean) as Prisma.ITransferenciasWhereInput[],
+      });
+    }
+
+    if (conditions.length === 0) {
+      return {};
+    }
+
+    return {
+      AND: conditions,
+    };
+  }
+
+  private toInboundTransferListItemView(
+    item: InboundTransferWithRelations,
+    options: {
+      codigoRecibeInfo?: {
+        codigo: string;
+        nombre: string | null;
+        status: number | null;
+      } | null;
+      syncRow?: TransferSyncInboxRow | null;
+    } = {},
+  ) {
+    const syncStatus = options.syncRow?.Status ?? null;
+    const cargada = syncStatus === TRANSFER_SYNC_STATUS_APPLIED;
+
+    return {
+      numero: item.Numero,
+      fecha: item.Fecha,
+      codigoEnvia: item.CodigoEnvia,
+      codigoRecibe: item.CodigoRecibe,
+      codigoEnviaInfo: {
+        codigo: item.sucursalEnvia.Codigo,
+        nombre: item.sucursalEnvia.Nombre,
+        status: item.sucursalEnvia.Status,
+      },
+      codigoRecibeInfo: options.codigoRecibeInfo,
+      documentoOrigen: "",
+      totalValor: item.TotalValor.toString(),
+      observacion: item.Observacion,
+      status: item.Status,
+      statusNombre: item.Status === 1 ? "aprobada" : `status-${item.Status}`,
+      usuario: item.Usuario,
+      editable: false,
+      totalItems: item.iMovTransferencias.length,
+      inbound: true,
+      syncStatus,
+      cargada,
+      fechaCarga: options.syncRow?.AppliedAt ?? null,
+    };
+  }
+
+  private toInboundTransferDetailView(
+    item: InboundTransferWithRelations,
+    options: {
+      codigoRecibeInfo?: {
+        codigo: string;
+        nombre: string | null;
+        status: number | null;
+      } | null;
+      syncRow?: TransferSyncInboxRow | null;
+    } = {},
+  ) {
+    return {
+      ...this.toInboundTransferListItemView(item, options),
+      fechaEmision: item.FechaEmision,
+      interContable: item.InterContable,
+      idLote: item.IDLote,
+      idDespacho: item.IDDespacho,
+      correccion: item.Correccion,
+      zona: "",
+      tipoDespacho: {
+        id: item.tipoDespacho.ID,
+        descripcion: item.tipoDespacho.Descripcion,
+        estado: item.tipoDespacho.Estado,
+      },
+      items: item.iMovTransferencias.map((line) => ({
+        item: line.Item,
+        fecha: line.Fecha,
+        codigoBarra: line.CodigoBarra,
+        cantidad: line.Cantidad.toString(),
+        valor: line.Valor.toString(),
+        numeroCaja: line.NumeroCaja,
+        ultimoCosto: line.UltimoCosto?.toString() ?? null,
+        costoInicial: line.CostoInicial?.toString() ?? null,
+        costoDolar: line.CostoDolar?.toString() ?? null,
+        articulo: {
+          codigoBarra: line.inventarioRef.CodigoBarra,
+          nombre: line.inventarioRef.Nombre,
+          referencia: line.inventarioRef.Referencia,
+          existenciaActual: line.inventarioRef.Existencia.toString(),
+        },
+      })),
     };
   }
 
@@ -623,7 +2707,7 @@ export class TransfersService {
     return (result._max.ID ?? 0) + 1;
   }
 
-  private async ensureLocations(tx: TransferTransactionClient, codes: string[]) {
+  private async ensureLocations(client: PrismaService | TransferTransactionClient, codes: string[]) {
     const normalizedCodes = Array.from(
       new Set(
         codes
@@ -636,7 +2720,7 @@ export class TransfersService {
       return;
     }
 
-    const existing = await tx.sucursales.findMany({
+    const existing = await client.sucursales.findMany({
       where: {
         Codigo: { in: normalizedCodes },
       },
@@ -649,7 +2733,7 @@ export class TransfersService {
         continue;
       }
 
-      await tx.sucursales.create({
+      await client.sucursales.create({
         data: {
           Codigo: code,
           Nombre: code,
@@ -752,12 +2836,6 @@ export class TransfersService {
 
       let nextExistence = article.Existencia;
       if (delta.greaterThan(0)) {
-        if (article.Existencia.lessThan(delta)) {
-          throw new BadRequestException(
-            `El articulo ${codigoBarra} no tiene existencia suficiente. Disponible: ${article.Existencia.toString()}, solicitado: ${delta.toString()}.`,
-          );
-        }
-
         nextExistence = article.Existencia.minus(delta);
       } else if (delta.lessThan(0)) {
         nextExistence = article.Existencia.plus(delta.abs());

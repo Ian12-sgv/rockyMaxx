@@ -6,9 +6,12 @@ scripts/__pycache__/
 tmp_*
 .env
 apps/api/.env
+apps/api/.env.tienda*
+!apps/api/.env.tienda*.example
 .npm-cache/
 *.log
 lovable-reference.png
 apps/desktop/.bundle/
 dist/
 api-deps.json
+backups/

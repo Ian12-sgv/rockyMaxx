@@ -3043,6 +3043,321 @@ button {
   font-weight: 800;
 }
 
+.transfer-import-window {
+  margin-top: 0;
+  overflow: hidden;
+}
+
+.transfer-import-detail-page {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.transfer-import-command-bar {
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
+}
+
+.transfer-import-load-state {
+  margin-left: auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(29, 102, 179, 0.1);
+  color: #1b4e82;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.transfer-import-header {
+  grid-template-columns: 150px 90px minmax(170px, 1fr) minmax(190px, 1fr);
+  margin: 10px;
+}
+
+.transfer-import-status {
+  color: #008000;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.transfer-import-origin {
+  grid-column: span 3;
+}
+
+.transfer-import-lines-panel {
+  padding: 0 10px;
+}
+
+.transfer-import-lines-table {
+  min-width: 720px;
+}
+
+.transfer-import-lines-table th,
+.transfer-import-lines-table td {
+  height: 21px;
+  padding: 3px 7px;
+  font-size: 0.8rem;
+}
+
+.transfer-import-lines-table td:first-child,
+.transfer-import-lines-table th:first-child {
+  width: 44px;
+  text-align: center;
+}
+
+.transfer-import-lines-table th:nth-child(5),
+.transfer-import-lines-table td:nth-child(5),
+.transfer-import-lines-table th:nth-child(6),
+.transfer-import-lines-table td:nth-child(6) {
+  text-align: right;
+  width: 82px;
+}
+
+.transfer-import-empty-row td {
+  color: transparent;
+}
+
+.transfer-import-summary {
+  padding: 8px 10px 10px;
+}
+
+.adjustment-page {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  gap: 12px;
+}
+
+.adjustment-window {
+  border-color: rgba(38, 73, 111, 0.16);
+  border-radius: 8px;
+  background: #f8fbff;
+  box-shadow: 0 12px 28px rgba(31, 53, 83, 0.06);
+  color: var(--ink);
+  font-family: Tahoma, "Segoe UI", sans-serif;
+}
+
+.adjustment-titlebar {
+  min-height: 20px;
+  padding: 2px 5px;
+  background: linear-gradient(180deg, #cde1f4 0%, #a9c4dc 100%);
+  color: #000000;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.adjustment-form {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.adjustment-command-bar {
+  min-height: auto;
+  padding: 7px;
+  border-color: rgba(35, 122, 202, 0.18);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #f7fbff 0%, #e7f1fb 100%);
+}
+
+.adjustment-command-bar .transfer-command-button {
+  min-height: 34px;
+  padding: 0 11px;
+  border-color: rgba(35, 122, 202, 0.18);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.adjustment-command-bar .transfer-command-primary {
+  border-color: rgba(29, 102, 179, 0.32);
+  background: linear-gradient(135deg, #237aca 0%, #4e9be4 100%);
+  color: #f8fbff;
+}
+
+.adjustment-command-bar .transfer-command-button[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.adjustment-command-bar .transfer-command-icon {
+  width: 18px;
+  height: 18px;
+  border-color: rgba(35, 122, 202, 0.24);
+  border-radius: 4px;
+  color: #1d66b3;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.adjustment-header-panel {
+  display: grid;
+  grid-template-columns: 150px 120px minmax(180px, 1fr) 90px minmax(220px, 1.2fr);
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(38, 73, 111, 0.18);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #f8fbff 0%, #edf4fb 100%);
+}
+
+.adjustment-field {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  color: #263847;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.adjustment-field input,
+.adjustment-field select {
+  width: 100%;
+  min-height: 31px;
+  padding: 0 8px;
+  border: 1px solid rgba(35, 48, 58, 0.24);
+  border-radius: 3px;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.adjustment-number-field input {
+  max-width: 96px;
+  background: #eef7ff;
+  text-align: right;
+}
+
+.adjustment-status {
+  color: #b7791f;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.adjustment-status-approved {
+  color: #008000;
+}
+
+.adjustment-type-field {
+  grid-column: 1 / span 3;
+}
+
+.adjustment-lot-field {
+  grid-column: 4 / span 2;
+  grid-template-columns: 62px minmax(0, 1fr);
+}
+
+.adjustment-observation-field {
+  grid-column: 1 / -1;
+}
+
+.adjustment-lines-panel {
+  border: 1px solid rgba(38, 73, 111, 0.12);
+  border-radius: 4px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.adjustment-grid-wrap {
+  overflow: auto;
+  max-height: calc(100vh - 315px);
+  min-height: 328px;
+}
+
+.adjustment-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+}
+
+.adjustment-grid th,
+.adjustment-grid td {
+  height: 30px;
+  border: 1px solid rgba(35, 48, 58, 0.12);
+  padding: 0;
+}
+
+.adjustment-grid th {
+  background: #f2f6fb;
+  color: #32475c;
+  font-weight: 800;
+  text-align: center;
+}
+
+.adjustment-row-number {
+  width: 42px;
+  background: #f7f9fc;
+  text-align: center;
+}
+
+.adjustment-grid th:nth-child(2) {
+  width: 150px;
+}
+
+.adjustment-grid th:nth-child(3) {
+  width: 120px;
+}
+
+.adjustment-grid th:nth-child(5) {
+  width: 118px;
+}
+
+.adjustment-grid input {
+  width: 100%;
+  height: 100%;
+  min-height: 30px;
+  padding: 0 6px;
+  border: 0;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.84rem;
+}
+
+.adjustment-grid input[readonly] {
+  background: #fbfdff;
+}
+
+.adjustment-quantity-input {
+  text-align: right;
+}
+
+.adjustment-summary-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0;
+  color: #18314b;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.adjustment-summary-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.adjustment-summary-row input {
+  width: 104px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid rgba(35, 48, 58, 0.24);
+  border-radius: 4px;
+  background: #eef7ff;
+  color: #1d45b3;
+  text-align: right;
+  font-weight: 800;
+}
+
 .transfer-lookup-dialog {
   width: min(980px, calc(100vw - 36px));
 }
@@ -3853,6 +4168,14 @@ button {
 
   .transfer-header-panel {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .transfer-import-header {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .transfer-import-origin {
+    grid-column: 1 / -1;
   }
 
   .transfer-wide-field,

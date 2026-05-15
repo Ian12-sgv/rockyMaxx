@@ -77,6 +77,13 @@ const state = {
     receiptNumero: null,
     draft: createEmptyTransferDraft(),
   },
+  adjustments: {
+    loadingMetadata: false,
+    saving: false,
+    approving: false,
+    metadata: null,
+    draft: createEmptyAdjustmentDraft(),
+  },
   transferLookup: {
     open: false,
     loading: false,
@@ -170,6 +177,13 @@ async function hydrateAuthenticatedState() {
     selectedNumero: null,
     receiptNumero: null,
     draft: createEmptyTransferDraft(),
+  };
+  state.adjustments = {
+    loadingMetadata: false,
+    saving: false,
+    approving: false,
+    metadata: null,
+    draft: createEmptyAdjustmentDraft(),
   };
   state.transferLookup = {
     open: false,
@@ -547,6 +561,10 @@ function renderDesktopWorkspace() {
     return renderLoadTransferWorkspace();
   }
 
+  if (state.currentView === "ajuste-inventario") {
+    return renderInventoryAdjustmentWorkspace();
+  }
+
   if (state.currentView === "sucursales") {
     return renderSucursalesWorkspace();
   }
@@ -697,6 +715,7 @@ function renderDesktopProcesosMenu() {
     <div class="modern-mega-menu">
       <div class="modern-mega-column modern-mega-column-root">
         ${renderDesktopMenuLink("borrador-devoluciones", "Borrador devoluciones")}
+        ${renderDesktopMenuLink("ajuste-inventario", "Ajuste de inventario")}
         <button
           class="modern-dropdown-link modern-dropdown-link-with-arrow ${transfersOpen ? "modern-dropdown-link-open" : ""}"
           type="button"
@@ -1263,14 +1282,15 @@ function renderTransfersWorkspace() {
 
             <label class="transfer-field transfer-wide-field">
               <span>Sucursal</span>
-              <input
-                type="text"
+              <select
                 name="codigoRecibe"
-                list="transfer-location-options"
-                value="${escapeHtml(toInputValue(draft.codigoRecibe))}"
-                maxlength="15"
                 ${isLocked ? "disabled" : ""}
-              />
+              >
+                ${renderTransferLocationOptions(
+                  Array.isArray(state.transfers.metadata?.sucursales) ? state.transfers.metadata.sucursales : [],
+                  String(draft.codigoRecibe || ""),
+                )}
+              </select>
             </label>
             <label class="transfer-field">
               <span>Documento origen</span>
@@ -1335,17 +1355,206 @@ function renderTransfersWorkspace() {
               <input type="text" value="${escapeHtml(formatTransferQuantity(computeTransferDraftQuantity(draft)))}" readonly />
             </label>
           </div>
-
-          <datalist id="transfer-location-options">
-            ${renderTransferLocationOptions(Array.isArray(state.transfers.metadata?.sucursales) ? state.transfers.metadata.sucursales : [])}
-          </datalist>
         </form>
       </section>
     </div>
   `;
 }
 
+function renderInventoryAdjustmentWorkspace() {
+  const draft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
+  const isApproved = Number(draft.status) === 1;
+  const isBusy = state.adjustments.saving || state.adjustments.approving || state.adjustments.loadingMetadata;
+  const statusText = isApproved ? "APROBADA" : "PENDIENTE";
+
+  return `
+    <div class="modern-page transfer-register-page adjustment-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Ajuste de inventario"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Ajuste de inventario</h1>
+        </div>
+      </div>
+
+      <section class="transfer-register-shell adjustment-window">
+        <form id="adjustment-form" class="transfer-register-form adjustment-form">
+          <div class="transfer-command-bar adjustment-command-bar" role="toolbar" aria-label="Acciones de ajustes">
+            <button class="transfer-command-button" type="button" data-adjustment-new ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" ${isApproved || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${state.adjustments.saving ? "Guardando" : "Guardar"}
+            </button>
+            <button
+              class="transfer-command-button transfer-command-primary"
+              type="button"
+              data-adjustment-approve
+              ${draft.numero && !isApproved && !isBusy ? "" : "disabled"}
+            >
+              <span class="transfer-command-icon">A</span>
+              ${state.adjustments.approving ? "Aprobando" : "Aprobar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-adjustment-exit ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">S</span>
+              Salir
+            </button>
+          </div>
+
+          <div class="adjustment-header-panel">
+            <label class="adjustment-field adjustment-number-field">
+              <span>Numero</span>
+              <input type="text" name="numero" value="${escapeHtml(draft.numero ? String(draft.numero) : "")}" readonly />
+            </label>
+            <div class="adjustment-status ${isApproved ? "adjustment-status-approved" : "adjustment-status-pending"}">
+              ${statusText}
+            </div>
+            <label class="adjustment-field adjustment-date-field">
+              <span>Fecha</span>
+              <input type="date" name="fecha" value="${escapeHtml(toInputValue(draft.fecha))}" ${isApproved ? "disabled" : ""} />
+            </label>
+            <label class="adjustment-field adjustment-type-field">
+              <span>Tipo ajuste</span>
+              <select name="tipo" ${isApproved ? "disabled" : ""}>
+                ${renderAdjustmentTypeOptions(draft.tipo)}
+              </select>
+            </label>
+            <label class="adjustment-field adjustment-lot-field">
+              <span>Lote</span>
+              <select name="idLote" ${isApproved ? "disabled" : ""}>
+                ${renderAdjustmentLotOptions(draft.idLote)}
+              </select>
+            </label>
+            <label class="adjustment-field adjustment-observation-field">
+              <span>Observacion</span>
+              <input name="observacion" maxlength="250" value="${escapeHtml(toInputValue(draft.observacion))}" ${isApproved ? "disabled" : ""} />
+            </label>
+          </div>
+
+          <div class="adjustment-lines-panel">
+            ${renderAdjustmentLinesEditor(draft, { isApproved })}
+          </div>
+
+          <div class="adjustment-summary-row">
+            <label>
+              <span>Cantidad:</span>
+              <input type="text" value="${escapeHtml(formatTransferQuantity(computeAdjustmentDraftQuantity(draft)))}" readonly />
+            </label>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderAdjustmentTypeOptions(selectedValue) {
+  const tipos = Array.isArray(state.adjustments.metadata?.tiposAjuste)
+    ? state.adjustments.metadata.tiposAjuste
+    : [
+        { tipo: "positivo", descripcion: "POSITIVO - SUMA" },
+        { tipo: "negativo", descripcion: "NEGATIVO - RESTA" },
+      ];
+
+  return tipos
+    .map((item) => {
+      const value = String(item.tipo || "");
+      return `
+        <option value="${escapeHtml(value)}" ${String(selectedValue || "positivo") === value ? "selected" : ""}>
+          ${escapeHtml(item.descripcion || value)}
+        </option>
+      `;
+    })
+    .join("");
+}
+
+function renderAdjustmentLotOptions(selectedValue) {
+  const lotes = Array.isArray(state.adjustments.metadata?.lotes) ? state.adjustments.metadata.lotes : [];
+  if (lotes.length === 0) {
+    return `<option value="${escapeHtml(String(selectedValue || ""))}">S/DEFINIR</option>`;
+  }
+
+  return lotes
+    .map((item) => {
+      const value = String(item.id);
+      const label = item.lote || item.descripcion || value;
+      return `
+        <option value="${escapeHtml(value)}" ${String(selectedValue || "") === value ? "selected" : ""}>
+          ${escapeHtml(label)}
+        </option>
+      `;
+    })
+    .join("");
+}
+
+function renderAdjustmentLinesEditor(draft, { isApproved = false } = {}) {
+  const rows = [...(draft.items || [])];
+  while (rows.length < 15) {
+    rows.push(createEmptyAdjustmentLineDraft());
+  }
+
+  return `
+    <div class="adjustment-grid-wrap">
+      <table class="adjustment-grid">
+        <thead>
+          <tr>
+            <th class="adjustment-row-number"></th>
+            <th>Codigo Barra</th>
+            <th>Referencia</th>
+            <th>Nombre</th>
+            <th>Cantidad</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((line, index) => `
+              <tr data-adjustment-line-row="${index}">
+                <td class="adjustment-row-number">${index + 1}</td>
+                <td>
+                  <input
+                    name="codigoBarra"
+                    data-adjustment-barcode-input="${index}"
+                    value="${escapeHtml(toInputValue(line.codigoBarra))}"
+                    maxlength="15"
+                    ${isApproved ? "disabled" : ""}
+                  />
+                </td>
+                <td>
+                  <input name="referencia" value="${escapeHtml(toInputValue(line.referencia))}" readonly />
+                </td>
+                <td>
+                  <input name="nombre" value="${escapeHtml(toInputValue(line.nombre))}" readonly />
+                  <input type="hidden" name="costo" value="${escapeHtml(toInputValue(line.costo))}" />
+                </td>
+                <td>
+                  <input
+                    class="adjustment-quantity-input"
+                    name="cantidad"
+                    value="${escapeHtml(toInputValue(line.cantidad))}"
+                    inputmode="decimal"
+                    ${isApproved ? "disabled" : ""}
+                  />
+                </td>
+              </tr>
+            `)
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 function renderLoadTransferWorkspace() {
+  if (hasLoadedTransferReceipt()) {
+    return `
+      <div class="modern-page transfer-import-detail-page">
+        ${renderDesktopBreadcrumb(["Procesos", "Cargar transferencia", "Detalle"])}
+        ${renderLoadedTransferReceiptPanel()}
+      </div>
+    `;
+  }
+
   return `
     <div class="modern-page">
       ${renderDesktopBreadcrumb(["Procesos", "Cargar transferencia"])}
@@ -1411,10 +1620,17 @@ function renderLoadTransferWorkspace() {
         </div>
         ${state.transfers.loadingList ? renderLoadingState("Buscando transferencias...") : renderTransfersTable()}
       </section>
-
-      ${renderLoadedTransferReceiptPanel()}
     </div>
   `;
+}
+
+function hasLoadedTransferReceipt() {
+  const draft = state.transfers.draft;
+  return Boolean(
+    draft?.numero &&
+      state.currentView === "cargar-transferencia" &&
+      Number(state.transfers.receiptNumero || 0) === Number(draft.numero || 0),
+  );
 }
 
 function renderTransfersTable() {
@@ -1458,7 +1674,7 @@ function renderTransfersTable() {
                   <td>${escapeHtml(formatTransferAmount(item.totalValor))}</td>
                   <td>
                     <button class="button button-ghost" type="button" data-transfer-load-receipt="${escapeHtml(String(item.numero || ""))}">
-                      Cargar
+                      Ver detalle
                     </button>
                   </td>
                 </tr>
@@ -1473,65 +1689,69 @@ function renderTransfersTable() {
 
 function renderLoadedTransferReceiptPanel() {
   const draft = state.transfers.draft;
-  const hasLoadedTransfer =
-    draft?.numero &&
-    state.currentView === "cargar-transferencia" &&
-    Number(state.transfers.receiptNumero || 0) === Number(draft.numero || 0);
-
-  if (!hasLoadedTransfer) {
+  if (!hasLoadedTransferReceipt()) {
     return "";
   }
 
-  const isApproved = Number(draft.status) === 1;
   const isBusy = state.transfers.loadingDetail || state.transfers.approving;
+  const originName = draft.codigoEnviaNombre || draft.codigoEnvia || "-";
+  const loadedLabel = draft.cargada ? "Cargada" : "Pendiente de carga";
 
   return `
-    <section class="modern-card catalog-import-card">
-      <div class="modern-card-head">
-        <div>
-          <h2>Transferencia llegada ${escapeHtml(String(draft.numero))}</h2>
-          <p>Destino: ${escapeHtml(draft.codigoRecibe || "-")}</p>
-        </div>
-        <div class="article-editor-status">
-          ${renderTransferStatusBadge(draft.status)}
-        </div>
+    <section class="transfer-register-shell transfer-import-window">
+      <div class="adjustment-titlebar">Importar transferencias de mercancia</div>
+
+      <div class="transfer-command-bar transfer-import-command-bar" role="toolbar" aria-label="Acciones de carga de transferencia">
+        <button
+          class="transfer-command-button transfer-command-primary"
+          type="button"
+          data-load-inbound-transfer
+          ${!draft.numero || isBusy ? "disabled" : ""}
+        >
+          <span class="transfer-command-icon">C</span>
+          ${state.transfers.approving ? "Cargando" : "Cargar"}
+        </button>
+        <button class="transfer-command-button" type="button" data-clear-loaded-transfer ${isBusy ? "disabled" : ""}>
+          <span class="transfer-command-icon">S</span>
+          Salir
+        </button>
+        <span class="transfer-import-load-state">${escapeHtml(loadedLabel)}</span>
       </div>
 
-      <div class="article-editor-grid">
-        ${renderReadonlyTransferField("Numero", draft.numero)}
-        ${renderReadonlyTransferField("Fecha", formatDateDisplay(draft.fecha))}
-        ${renderReadonlyTransferField("Envia", draft.codigoEnvia)}
-        ${renderReadonlyTransferField("Recibe", draft.codigoRecibe)}
-        ${renderReadonlyTransferField("Documento origen", draft.documentoOrigen)}
-        ${renderReadonlyTransferField("Total", formatTransferAmount(computeTransferDraftTotal(draft)))}
+      <div class="transfer-header-panel transfer-import-header">
+        <label class="transfer-field transfer-number-field">
+          <span>Numero</span>
+          <input type="text" value="${escapeHtml(toDisplayValue(draft.numero))}" readonly />
+        </label>
+        <strong class="transfer-import-status">APROBADA</strong>
+        <label class="transfer-field">
+          <span>Fecha</span>
+          <input type="text" value="${escapeHtml(formatDateOnlyDisplay(draft.fecha))}" readonly />
+        </label>
+        <label class="transfer-field">
+          <span>Fecha emision</span>
+          <input type="text" value="${escapeHtml(formatDateOnlyDisplay(draft.fechaEmision || draft.fecha))}" readonly />
+        </label>
+        <label class="transfer-field transfer-import-origin">
+          <span>Origen</span>
+          <input type="text" value="${escapeHtml(originName)}" readonly />
+        </label>
+        <label class="transfer-field transfer-full-field">
+          <span>Observacion</span>
+          <input type="text" value="${escapeHtml(toInputValue(draft.observacion))}" readonly />
+        </label>
       </div>
 
-      <div class="article-editor-section">
-        <div class="modern-card-head">
-          <div>
-            <h2>Articulos enviados</h2>
-            <p>${escapeHtml(String((draft.items || []).filter((item) => item.codigoBarra).length))} renglon(es).</p>
-          </div>
-        </div>
+      <div class="transfer-lines-panel transfer-import-lines-panel">
         ${renderLoadedTransferLines(draft)}
       </div>
 
-      <div class="article-toolbar">
-        <div class="article-toolbar-group">
-          <button class="button button-ghost" type="button" data-clear-loaded-transfer ${isBusy ? "disabled" : ""}>
-            Cerrar
-          </button>
-        </div>
-        <div class="article-toolbar-group">
-          <button
-            class="button button-primary"
-            type="button"
-            data-approve-loaded-transfer
-            ${!draft.numero || isApproved || isBusy ? "disabled" : ""}
-          >
-            ${state.transfers.approving ? "Aprobando..." : "Validar y aprobar"}
-          </button>
-        </div>
+      <div class="transfer-summary-row transfer-import-summary">
+        <span></span>
+        <label>
+          Cantidad:
+          <input type="text" value="${escapeHtml(formatTransferQuantity(computeTransferDraftQuantity(draft)))}" readonly />
+        </label>
       </div>
     </section>
   `;
@@ -1548,6 +1768,7 @@ function renderReadonlyTransferField(label, value) {
 
 function renderLoadedTransferLines(draft) {
   const lines = (draft.items || []).filter((item) => item.codigoBarra || item.referencia || item.articuloNombre);
+  const rows = lines.length >= 15 ? lines : [...lines, ...Array.from({ length: 15 - lines.length }, () => null)];
 
   if (!lines.length) {
     return `
@@ -1560,23 +1781,22 @@ function renderLoadedTransferLines(draft) {
 
   return `
     <div class="table-wrap">
-      <table class="data-table">
+      <table class="data-table transfer-import-lines-table">
         <thead>
           <tr>
             <th>Item</th>
             <th>Codigo barra</th>
             <th>Referencia</th>
-            <th>Nombre articulo</th>
+            <th>Nombre</th>
             <th>Caja</th>
             <th>Cantidad</th>
-            <th>Exist. actual</th>
-            <th>Total</th>
           </tr>
         </thead>
         <tbody>
-          ${lines
-            .map(
-              (line, index) => `
+          ${rows
+            .map((line, index) =>
+              line
+                ? `
                 <tr>
                   <td>${index + 1}</td>
                   <td><strong>${escapeHtml(line.codigoBarra || "-")}</strong></td>
@@ -1584,8 +1804,16 @@ function renderLoadedTransferLines(draft) {
                   <td>${escapeHtml(line.articuloNombre || "-")}</td>
                   <td>${escapeHtml(toDisplayValue(line.numeroCaja))}</td>
                   <td>${escapeHtml(toDisplayValue(line.cantidad))}</td>
-                  <td>${escapeHtml(toDisplayValue(line.existenciaActual))}</td>
-                  <td>${escapeHtml(formatTransferAmount(computeTransferLineTotal(line)))}</td>
+                </tr>
+              `
+                : `
+                <tr class="transfer-import-empty-row">
+                  <td>${index + 1}</td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
                 </tr>
               `,
             )
@@ -1677,7 +1905,7 @@ function renderTransferLinesEditor(draft, options = {}) {
                       class="button button-danger"
                       type="button"
                       data-transfer-remove-line="${index}"
-                      ${isLocked || lines.length === 1 ? "disabled" : ""}
+                      ${isLocked ? "disabled" : ""}
                     >
                       Quitar
                     </button>
@@ -1692,16 +1920,29 @@ function renderTransferLinesEditor(draft, options = {}) {
   `;
 }
 
-function renderTransferLocationOptions(items) {
-  return items
-    .map(
+function renderTransferLocationOptions(items, selectedValue = "") {
+  const options = items.map((item) => ({
+    value: String(item.codigo || ""),
+    label: item.nombre || item.codigo || "Sin nombre",
+  }));
+
+  if (selectedValue && !options.some((item) => item.value === selectedValue)) {
+    options.push({
+      value: selectedValue,
+      label: selectedValue,
+    });
+  }
+
+  return [
+    `<option value="">Selecciona sucursal</option>`,
+    ...options.map(
       (item) => `
-        <option value="${escapeHtml(item.codigo || "")}">
-          ${escapeHtml(item.nombre || item.codigo || "")}
+        <option value="${escapeHtml(item.value)}" ${String(selectedValue || "") === item.value ? "selected" : ""}>
+          ${escapeHtml(item.label)}
         </option>
       `,
-    )
-    .join("");
+    ),
+  ].join("");
 }
 
 function renderTransferDispatchOptions(items, selectedValue) {
@@ -2111,6 +2352,10 @@ function getDesktopBreadcrumb(view) {
     return ["Procesos", "Transferencias", "Carga de transferencias"];
   }
 
+  if (view === "ajuste-inventario") {
+    return ["Procesos", "Ajuste de inventario"];
+  }
+
   if (view === "borrador-devoluciones") {
     return ["Procesos", "Borrador devoluciones"];
   }
@@ -2149,6 +2394,7 @@ function getDesktopViewLabelV2(view) {
     transferencias: "Transferencias",
     "registro-transferencia": "Registro de transferencias",
     "cargar-transferencia": "Carga de transferencias",
+    "ajuste-inventario": "Ajuste de inventario",
     "borrador-devoluciones": "Borrador devoluciones",
     "registro-devoluciones": "Registro de devoluciones",
     "cargar-devoluciones": "Carga de devoluciones",
@@ -3150,6 +3396,11 @@ function bindShellEvents() {
         return;
       }
 
+      if (nextView === "ajuste-inventario") {
+        await loadAdjustmentsMetadata();
+        return;
+      }
+
       if (nextView === "sucursales") {
         await loadSucursales();
       }
@@ -3196,6 +3447,7 @@ function bindShellEvents() {
 
   bindArticleEvents();
   bindTransferEvents();
+  bindAdjustmentEvents();
   bindSucursalEvents();
 
   document.querySelectorAll("[data-role-import-toggle]").forEach((button) => {
@@ -3587,9 +3839,10 @@ function bindTransferEvents() {
       }
 
       captureTransferDraft();
-      state.transfers.draft.items = state.transfers.draft.items.filter((_, currentIndex) => currentIndex !== index);
-      if (!state.transfers.draft.items.length) {
+      if (state.transfers.draft.items.length <= 1) {
         state.transfers.draft.items = [createEmptyTransferLineDraft()];
+      } else {
+        state.transfers.draft.items = state.transfers.draft.items.filter((_, currentIndex) => currentIndex !== index);
       }
       render();
     });
@@ -3640,13 +3893,13 @@ function bindTransferEvents() {
     await approveTransfer(numero);
   });
 
-  document.querySelector("[data-approve-loaded-transfer]")?.addEventListener("click", async () => {
+  document.querySelector("[data-load-inbound-transfer]")?.addEventListener("click", async () => {
     const numero = Number.parseInt(String(state.transfers.draft?.numero || ""), 10);
     if (!Number.isInteger(numero)) {
       return;
     }
 
-    await approveTransfer(numero);
+    await loadInboundTransfer(numero);
   });
 
   document.querySelector("[data-delete-transfer]")?.addEventListener("click", async () => {
@@ -3670,6 +3923,79 @@ function bindTransferEvents() {
       await saveTransfer();
     });
   }
+}
+
+function bindAdjustmentEvents() {
+  const form = document.getElementById("adjustment-form");
+  if (!form) {
+    return;
+  }
+
+  form.addEventListener("input", () => {
+    captureAdjustmentDraft();
+  });
+
+  form.addEventListener("change", () => {
+    captureAdjustmentDraft();
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    captureAdjustmentDraft();
+    await saveAdjustment();
+  });
+
+  document.querySelector("[data-adjustment-new]")?.addEventListener("click", () => {
+    resetAdjustmentDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-adjustment-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-adjustment-approve]")?.addEventListener("click", async () => {
+    captureAdjustmentDraft();
+    const numero = state.adjustments.draft?.numero;
+    if (!numero) {
+      setFlash("Guarda el ajuste antes de aprobarlo.", "error");
+      render();
+      return;
+    }
+
+    await approveAdjustment(numero);
+  });
+
+  document.querySelectorAll("[data-adjustment-barcode-input]").forEach((input) => {
+    input.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      const index = Number.parseInt(input.getAttribute("data-adjustment-barcode-input") || "-1", 10);
+      const codigoBarra = String(input.value || "").trim();
+      if (index >= 0 && codigoBarra) {
+        await fillAdjustmentLineFromInventory(index, codigoBarra);
+      }
+    });
+
+    input.addEventListener("blur", async () => {
+      const index = Number.parseInt(input.getAttribute("data-adjustment-barcode-input") || "-1", 10);
+      const codigoBarra = String(input.value || "").trim();
+      const row = input.closest("[data-adjustment-line-row]");
+      const currentName = row?.querySelector('[name="nombre"]')?.value || "";
+      if (index >= 0 && codigoBarra && !currentName) {
+        await fillAdjustmentLineFromInventory(index, codigoBarra);
+      }
+    });
+  });
 }
 
 function bindSucursalEvents() {
@@ -4157,7 +4483,8 @@ async function loadTransfers(options = {}) {
     }
 
     const query = params.toString();
-    const response = await apiFetch(`/transfers${query ? `?${query}` : ""}`);
+    const endpoint = state.currentView === "cargar-transferencia" ? "/transfers/inbound" : "/transfers";
+    const response = await apiFetch(`${endpoint}${query ? `?${query}` : ""}`);
     state.transfers.items = Array.isArray(response.items) ? response.items : [];
   } catch (error) {
     console.error(error);
@@ -4204,7 +4531,7 @@ async function loadTransferForReceipt(numero) {
       await loadTransfersMetadata({ renderAfter: false });
     }
 
-    const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}`);
+    const response = await apiFetch(`/transfers/inbound/${encodeURIComponent(numero)}`);
     state.transfers.selectedNumero = numero;
     state.transfers.receiptNumero = numero;
     state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
@@ -4321,6 +4648,36 @@ async function approveTransfer(numero) {
   }
 }
 
+async function loadInboundTransfer(numero) {
+  state.transfers.approving = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/transfers/inbound/${encodeURIComponent(numero)}/load`, {
+      method: "POST",
+    });
+
+    state.transfers.selectedNumero = numero;
+    state.transfers.receiptNumero = numero;
+    state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
+    await loadTransfers({ renderAfter: false });
+
+    setFlash(
+      response.alreadyLoaded
+        ? `Transferencia ${numero} ya estaba cargada en inventario.`
+        : `Transferencia ${numero} cargada correctamente en inventario.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.transfers.approving = false;
+    render();
+  }
+}
+
 async function approveTransferWithPayload(numero, payload = {}) {
   const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}/approve`, {
     method: "POST",
@@ -4417,6 +4774,126 @@ async function deleteTransfer(numero) {
     setFlash(extractErrorMessage(error), "error");
   } finally {
     state.transfers.deleting = false;
+    render();
+  }
+}
+
+async function loadAdjustmentsMetadata(options = {}) {
+  const { renderAfter = true } = options;
+  state.adjustments.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    state.adjustments.metadata = await apiFetch("/adjustments/metadata");
+    if (!state.adjustments.draft?.numero) {
+      state.adjustments.draft = createEmptyAdjustmentDraft(state.adjustments.metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la configuracion de ajustes: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.adjustments.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function fillAdjustmentLineFromInventory(index, codigoBarra) {
+  captureAdjustmentDraft();
+  const draft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
+  const items = Array.isArray(draft.items) && draft.items.length ? [...draft.items] : [createEmptyAdjustmentLineDraft()];
+
+  try {
+    const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
+    const article = response.mercancia || response;
+    const currentLine = items[index] || createEmptyAdjustmentLineDraft();
+    const ultimoCosto = article.inventario?.costos?.ultimo ?? article.costos?.ultimo ?? currentLine.costo ?? "";
+
+    items[index] = {
+      ...currentLine,
+      codigoBarra: article.codigoBarra || codigoBarra,
+      referencia: article.referencia || currentLine.referencia || "",
+      nombre: article.general?.nombre || article.nombre || currentLine.nombre || "",
+      costo: toInputValue(ultimoCosto),
+      existenciaActual: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaActual ?? ""),
+      cantidad: currentLine.cantidad || "1",
+    };
+
+    state.adjustments.draft = {
+      ...draft,
+      items,
+    };
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el articulo ${codigoBarra}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    render();
+  }
+}
+
+async function saveAdjustment() {
+  const draft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
+  const validationMessage = validateAdjustmentDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.adjustments.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildAdjustmentPayload(draft);
+    const response = draft.numero
+      ? await apiFetch(`/adjustments/${encodeURIComponent(draft.numero)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/adjustments", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.adjustments.draft = adjustmentToDraft(response.ajuste, state.adjustments.metadata);
+    setFlash(
+      draft.numero
+        ? `Ajuste ${response.ajuste?.numero || draft.numero} actualizado correctamente.`
+        : `Ajuste ${response.ajuste?.numero || ""} guardado correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.adjustments.saving = false;
+    render();
+  }
+}
+
+async function approveAdjustment(numero) {
+  state.adjustments.approving = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/adjustments/${encodeURIComponent(numero)}/approve`, {
+      method: "POST",
+      body: {},
+    });
+
+    state.adjustments.draft = adjustmentToDraft(response.ajuste, state.adjustments.metadata);
+    setFlash(`Ajuste ${response.ajuste?.numero || numero} aprobado correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.adjustments.approving = false;
     render();
   }
 }
@@ -4720,7 +5197,8 @@ async function openTransferLookupModal() {
   render();
 
   try {
-    const response = await apiFetch("/transfers?limit=100");
+    const endpoint = state.currentView === "cargar-transferencia" ? "/transfers/inbound" : "/transfers";
+    const response = await apiFetch(`${endpoint}?limit=100`);
     state.transferLookup.items = Array.isArray(response.items) ? response.items : [];
   } catch (error) {
     console.error(error);
@@ -4783,13 +5261,19 @@ function createEmptyTransferDraft(metadata) {
   return {
     numero: null,
     fecha: toDateInputValue(new Date()),
+    fechaEmision: toDateInputValue(new Date()),
     codigoEnvia: "",
+    codigoEnviaNombre: "",
     codigoRecibe: "",
+    codigoRecibeNombre: "",
     documentoOrigen: "",
     observacion: "",
     idDespacho: String(metadata?.defaults?.idDespacho ?? "0"),
     zona: "",
     status: 0,
+    syncStatus: "",
+    cargada: false,
+    fechaCarga: null,
     items: [createEmptyTransferLineDraft()],
   };
 }
@@ -4897,13 +5381,19 @@ function transferToDraft(transfer, metadata = state.transfers?.metadata) {
   return {
     numero: transfer?.numero ?? null,
     fecha: toDateInputValue(transfer?.fecha),
+    fechaEmision: toDateInputValue(transfer?.fechaEmision || transfer?.fecha),
     codigoEnvia: transfer?.codigoEnvia || "",
+    codigoEnviaNombre: transfer?.codigoEnviaInfo?.nombre || transfer?.codigoEnvia || "",
     codigoRecibe: transfer?.codigoRecibe || "",
+    codigoRecibeNombre: transfer?.codigoRecibeInfo?.nombre || transfer?.codigoRecibe || "",
     documentoOrigen: transfer?.documentoOrigen || "",
     observacion: transfer?.observacion || "",
     idDespacho: String(transfer?.idDespacho ?? metadata?.defaults?.idDespacho ?? "0"),
     zona: transfer?.zona || "",
     status: Number(transfer?.status ?? 0),
+    syncStatus: transfer?.syncStatus || "",
+    cargada: Boolean(transfer?.cargada),
+    fechaCarga: transfer?.fechaCarga || null,
     items: Array.isArray(transfer?.items) && transfer.items.length > 0
       ? transfer.items.map((item) => ({
           codigoBarra: item.codigoBarra || "",
@@ -4947,6 +5437,140 @@ function formatTransferQuantity(value) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
+}
+
+function resetAdjustmentDraft() {
+  state.adjustments.draft = createEmptyAdjustmentDraft(state.adjustments.metadata);
+}
+
+function createEmptyAdjustmentDraft(metadata) {
+  return {
+    numero: null,
+    fecha: toDateInputValue(new Date()),
+    tipo: metadata?.defaults?.tipo || "positivo",
+    tipoAjuste: String(metadata?.defaults?.tipoAjuste ?? "1"),
+    idLote: String(metadata?.defaults?.idLote ?? ""),
+    observacion: "",
+    status: 0,
+    items: [createEmptyAdjustmentLineDraft()],
+  };
+}
+
+function createEmptyAdjustmentLineDraft() {
+  return {
+    codigoBarra: "",
+    referencia: "",
+    nombre: "",
+    cantidad: "",
+    costo: "",
+    existenciaActual: "",
+  };
+}
+
+function captureAdjustmentDraft() {
+  const form = document.getElementById("adjustment-form");
+  if (!form) {
+    return;
+  }
+
+  state.adjustments.draft = readAdjustmentDraft(form);
+}
+
+function readAdjustmentDraft(form) {
+  const currentDraft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
+  const rows = Array.from(form.querySelectorAll("[data-adjustment-line-row]"));
+  const items = rows
+    .map((row) => ({
+      codigoBarra: readRowFieldValue(row, "codigoBarra", ""),
+      referencia: readRowFieldValue(row, "referencia", ""),
+      nombre: readRowFieldValue(row, "nombre", ""),
+      cantidad: readRowFieldValue(row, "cantidad", ""),
+      costo: readRowFieldValue(row, "costo", ""),
+    }))
+    .filter((item) => item.codigoBarra || item.referencia || item.nombre || item.cantidad);
+
+  return {
+    numero: currentDraft.numero,
+    fecha: readFormFieldValue(form, "fecha", currentDraft.fecha),
+    tipo: readFormFieldValue(form, "tipo", currentDraft.tipo || "positivo"),
+    tipoAjuste: resolveAdjustmentTypeId(readFormFieldValue(form, "tipo", currentDraft.tipo || "positivo")),
+    idLote: readFormFieldValue(form, "idLote", currentDraft.idLote),
+    observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
+    status: currentDraft.status,
+    items: items.length ? items : [createEmptyAdjustmentLineDraft()],
+  };
+}
+
+function validateAdjustmentDraft(draft) {
+  const validLines = (draft.items || []).filter((item) => String(item.codigoBarra || "").trim());
+
+  if (!validLines.length) {
+    return "El ajuste debe tener al menos un renglon.";
+  }
+
+  for (const item of validLines) {
+    const cantidad = Number(item.cantidad || 0);
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      return `La cantidad del articulo ${item.codigoBarra || ""} debe ser mayor a cero.`;
+    }
+  }
+
+  return "";
+}
+
+function buildAdjustmentPayload(draft) {
+  const tipo = String(draft.tipo || "positivo");
+  const idLote = Number.parseInt(String(draft.idLote || ""), 10);
+
+  return {
+    tipo,
+    fecha: toApiDateTime(draft.fecha),
+    observacion: String(draft.observacion || "").trim() || undefined,
+    idLote: Number.isInteger(idLote) ? idLote : undefined,
+    tipoAjuste: resolveAdjustmentTypeId(tipo),
+    items: (draft.items || [])
+      .filter((item) => String(item.codigoBarra || "").trim())
+      .map((item) => ({
+        codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
+        cantidad: String(item.cantidad || "").trim(),
+        costo: String(item.costo || "").trim() || undefined,
+      })),
+  };
+}
+
+function adjustmentToDraft(adjustment, metadata = state.adjustments?.metadata) {
+  const tipo = adjustment?.tipo || (Number(adjustment?.signo || 1) === -1 ? "negativo" : "positivo");
+
+  return {
+    numero: adjustment?.numero ?? null,
+    fecha: toDateInputValue(adjustment?.fecha),
+    tipo,
+    tipoAjuste: String(adjustment?.tipoAjuste ?? resolveAdjustmentTypeId(tipo)),
+    idLote: String(adjustment?.idLote ?? metadata?.defaults?.idLote ?? ""),
+    observacion: adjustment?.observacion || "",
+    status: Number(adjustment?.status ?? 0),
+    items: Array.isArray(adjustment?.items) && adjustment.items.length > 0
+      ? adjustment.items.map((item) => ({
+          codigoBarra: item.codigoBarra || "",
+          referencia: item.referencia || "",
+          nombre: item.nombre || "",
+          cantidad: toInputValue(item.cantidad),
+          costo: toInputValue(item.costo),
+          existenciaActual: toInputValue(item.existenciaActual),
+        }))
+      : [createEmptyAdjustmentLineDraft()],
+  };
+}
+
+function resolveAdjustmentTypeId(tipo) {
+  return String(tipo || "positivo") === "negativo" ? 2 : 1;
+}
+
+function computeAdjustmentDraftQuantity(draft) {
+  return (draft.items || []).reduce((total, item) => {
+    const quantity = Number(item?.cantidad || 0);
+    return total + (Number.isFinite(quantity) ? quantity : 0);
+  }, 0);
 }
 
 function resolveTransferLineLotLabel() {
@@ -5896,4 +6520,23 @@ function formatDateDisplay(value) {
     dateStyle: "short",
     timeStyle: "short",
   });
+}
+
+function formatDateOnlyDisplay(value) {
+  if (!value) {
+    return "";
+  }
+
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return `${day}/${month}/${year}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleDateString("es-VE");
 }

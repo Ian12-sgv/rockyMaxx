@@ -8,6 +8,7 @@ import { UserView } from "../users/user-view.util";
 import { ApproveTransferDto } from "./dto/approve-transfer.dto";
 import { CreateTransferDto } from "./dto/create-transfer.dto";
 import { FindTransfersDto } from "./dto/find-transfers.dto";
+import { FindTransferSyncOutboxDto, PushTransferSyncDto, RegisterTransferSyncNodeDto } from "./dto/transfer-sync.dto";
 import { UpdateTransferDto } from "./dto/update-transfer.dto";
 import { TransfersService } from "./transfers.service";
 
@@ -25,6 +26,51 @@ export class TransfersController {
   @Get()
   async findAll(@Query() findTransfersDto: FindTransfersDto) {
     return this.transfersService.searchTransfers(findTransfersDto);
+  }
+
+  @Get("sync/nodes")
+  async listSyncNodes() {
+    return this.transfersService.listTransferSyncNodes();
+  }
+
+  @Post("sync/nodes")
+  async registerSyncNode(@Body() registerTransferSyncNodeDto: RegisterTransferSyncNodeDto) {
+    return this.transfersService.registerTransferSyncNode(registerTransferSyncNodeDto);
+  }
+
+  @Get("sync/outbox")
+  async listSyncOutbox(@Query() findTransferSyncOutboxDto: FindTransferSyncOutboxDto) {
+    return this.transfersService.listTransferSyncOutbox(findTransferSyncOutboxDto);
+  }
+
+  @Post("sync/push")
+  async pushPendingSync(@Body() pushTransferSyncDto: PushTransferSyncDto) {
+    return this.transfersService.pushPendingTransferSync(pushTransferSyncDto);
+  }
+
+  @Post("sync/outbox/:globalId/sent")
+  async markSyncOutboxSent(@Param("globalId") globalId: string) {
+    return this.transfersService.markTransferSyncOutboxSent(globalId);
+  }
+
+  @Post("sync/import")
+  async importSyncPackage(@Body() body: Record<string, unknown>) {
+    return this.transfersService.importTransferSyncPackage(body);
+  }
+
+  @Get("inbound")
+  async findInbound(@Query() findTransfersDto: FindTransfersDto) {
+    return this.transfersService.searchInboundTransfers(findTransfersDto);
+  }
+
+  @Get("inbound/:numero")
+  async findInboundOne(@Param("numero", ParseIntPipe) numero: number) {
+    return this.transfersService.findInboundOne(numero);
+  }
+
+  @Post("inbound/:numero/load")
+  async loadInbound(@Param("numero", ParseIntPipe) numero: number) {
+    return this.transfersService.loadInboundTransfer(numero);
   }
 
   @Get(":numero")
@@ -48,6 +94,11 @@ export class TransfersController {
   @Post(":numero/approve")
   async approve(@Param("numero", ParseIntPipe) numero: number, @Body() approveTransferDto: ApproveTransferDto) {
     return this.transfersService.approveTransfer(numero, approveTransferDto);
+  }
+
+  @Post(":numero/sync/requeue")
+  async requeueSyncPackage(@Param("numero", ParseIntPipe) numero: number) {
+    return this.transfersService.requeueTransferSyncPackage(numero);
   }
 
   @Delete(":numero")
