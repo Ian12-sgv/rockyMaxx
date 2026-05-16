@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Prisma, PrismaClient } from "@prisma/client";
 import * as XLSX from "xlsx";
 
@@ -181,9 +183,13 @@ type CompleteMerchandisePayload = {
 
 @Injectable()
 export class InventoryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
 
   async getCreationMetadata() {
+    const canCreateArticles = this.canCreateArticlesInCurrentInstance();
     const [marcas, tallas, colores, fabricantes, categorias, impuestos] = await Promise.all([
       this.prisma.marcas.findMany({ orderBy: { Codigo: "asc" } }),
       this.prisma.tallas.findMany({ orderBy: { Codigo: "asc" } }),
@@ -223,6 +229,11 @@ export class InventoryService {
           { codigo: 1, nombre: "activo" },
           { codigo: 0, nombre: "inactivo" },
         ],
+      },
+      contexto: {
+        puedeCrearArticulos: canCreateArticles,
+        esBodegaPrincipal: canCreateArticles,
+        baseDatos: this.getCurrentDatabaseName(),
       },
       catalogos: {
         marcas: marcas.map((item) => ({ codigo: item.Codigo, nombre: item.Nombre, status: item.Status })),
@@ -650,6 +661,7 @@ export class InventoryService {
   }
 
   async createMerchandise(createMerchandiseDto: CreateMerchandiseDto) {
+    this.assertCanCreateArticles();
     const normalized = this.normalizeMerchandisePayload(createMerchandiseDto);
     const codigoBarra = this.requireString(normalized.codigoBarra, "Debe indicar el codigo de barra");
     const referencia = this.requireString(normalized.referencia, "Debe indicar la referencia del articulo");
@@ -829,6 +841,25 @@ export class InventoryService {
 
       throw error;
     }
+  }
+
+  private assertCanCreateArticles() {
+    if (this.canCreateArticlesInCurrentInstance()) {
+      return;
+    }
+
+    throw new ForbiddenException("Solo la bodega principal puede crear articulos.");
+  }
+
+  private canCreateArticlesInCurrentInstance() {
+    const databaseName = this.getCurrentDatabaseName();
+    return databaseName.toLowerCase() === "rocky_maxx";
+  }
+
+  private getCurrentDatabaseName() {
+    const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "");
+    const databaseNameMatch = databaseUrl.match(/\/([^/?]+)(\?|$)/);
+    return String(databaseNameMatch?.[1] || "").trim();
   }
 
   private buildSearchWhere(findMerchandiseDto: FindMerchandiseDto): Prisma.InventarioWhereInput {

@@ -4036,6 +4036,8 @@ function renderArticleEditor() {
   const brandOptions = state.metadata?.catalogos?.marcas || [];
   const canDelete = state.formMode === "edit" && Boolean(state.activeArticleCode);
   const isDeletingCurrent = Boolean(state.deletingCode) && state.deletingCode === state.activeArticleCode;
+  const canCreateArticles = userCanCreateArticlesInCurrentInstance();
+  const creatingBlocked = state.formMode !== "edit" && !canCreateArticles;
 
   if (state.loadingForm) {
     return `
@@ -4050,10 +4052,14 @@ function renderArticleEditor() {
     <div class="article-commandbar">
       <div class="article-commandbar-copy">
         <h2>Articulo</h2>
-        <p>Edita la informacion, variantes y precios del producto.</p>
+        <p>${
+          canCreateArticles
+            ? "Edita la informacion, variantes y precios del producto."
+            : "En esta instancia puedes consultar y editar articulos existentes. Los nuevos solo se crean en la bodega principal."
+        }</p>
       </div>
       <div class="article-commandbar-actions">
-        <button class="article-command-button" type="button" data-toolbar-new ${state.submittingForm ? "disabled" : ""}>
+        <button class="article-command-button" type="button" data-toolbar-new ${state.submittingForm || !canCreateArticles ? "disabled" : ""}>
           Nuevo
         </button>
         <button class="article-command-button" type="button" data-toolbar-search ${state.submittingForm ? "disabled" : ""}>
@@ -4078,9 +4084,9 @@ function renderArticleEditor() {
           class="article-command-button article-command-button-primary"
           type="submit"
           form="article-form"
-          ${state.submittingForm ? "disabled" : ""}
+          ${state.submittingForm || creatingBlocked ? "disabled" : ""}
         >
-          ${state.submittingForm ? "Guardando..." : "Guardar"}
+          ${state.submittingForm ? "Guardando..." : creatingBlocked ? "Solo principal" : "Guardar"}
         </button>
       </div>
     </div>
@@ -4899,7 +4905,9 @@ function bindShellEvents() {
   document.querySelectorAll("[data-new-article]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.currentView = "articulos";
-      resetArticleForm();
+      if (userCanCreateArticlesInCurrentInstance()) {
+        resetArticleForm();
+      }
       render();
 
       if (userCanAccessFullInventory()) {
@@ -5206,6 +5214,12 @@ function bindArticleEvents() {
   });
 
   document.querySelector("[data-toolbar-new]")?.addEventListener("click", () => {
+    if (!userCanCreateArticlesInCurrentInstance()) {
+      setFlash("Solo la bodega principal puede crear articulos nuevos.", "error");
+      render();
+      return;
+    }
+
     resetArticleForm();
     render();
   });
@@ -7294,9 +7308,16 @@ async function loadArticleForEdit(code) {
 async function saveArticle() {
   const draft = withDraftDefaults(state.formDraft || createEmptyDraft());
   const validationMessage = validateDraft(draft);
+  const isEditing = state.formMode === "edit" && Boolean(state.activeArticleCode);
 
   if (validationMessage) {
     setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  if (!isEditing && !userCanCreateArticlesInCurrentInstance()) {
+    setFlash("Solo la bodega principal puede crear articulos nuevos.", "error");
     render();
     return;
   }
@@ -7306,7 +7327,6 @@ async function saveArticle() {
   render();
 
   try {
-    const isEditing = state.formMode === "edit" && Boolean(state.activeArticleCode);
     const payload = buildArticlePayload(draft, !isEditing);
     const response = isEditing
       ? await apiFetch(`/inventory/${encodeURIComponent(state.activeArticleCode)}`, {
@@ -8574,6 +8594,10 @@ function getCurrentUserPermissionCodes() {
 
 function userCanAccessFullInventory() {
   return getCurrentUserGroupCodes().includes("ADMI");
+}
+
+function userCanCreateArticlesInCurrentInstance() {
+  return Boolean(state.metadata?.contexto?.puedeCrearArticulos);
 }
 
 function userIsSystemOperator() {
