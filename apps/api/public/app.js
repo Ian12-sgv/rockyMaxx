@@ -3,6 +3,9 @@ const TOKEN_STORAGE_KEY = "rocky.maxx.access-token";
 const USER_STORAGE_KEY = "rocky.maxx.user";
 const REMEMBER_SESSION_STORAGE_KEY = "rocky.maxx.remember-session";
 const CATALOG_IMPORT_EXCEL_PERMISSION_CODE = "CATALOG_IMPORT_EXCEL";
+const EXISTENCE_AUTO_REFRESH_MS = 30000;
+
+let existenceAutoRefreshHandle = null;
 
 const state = {
   booting: true,
@@ -46,6 +49,23 @@ const state = {
     loading: false,
     items: [],
   },
+  inventoryExistence: {
+    loading: false,
+    refreshing: false,
+    items: [],
+    lastUpdatedAt: "",
+    pagination: {
+      page: 1,
+      limit: 25,
+      total: 0,
+      totalPages: 0,
+    },
+    search: {
+      buscar: "",
+      status: "",
+      tipo: "",
+    },
+  },
   catalogImport: {
     uploadingKind: "",
     loadingKind: "",
@@ -77,6 +97,44 @@ const state = {
     receiptNumero: null,
     draft: createEmptyTransferDraft(),
   },
+  devReturns: {
+    loadingMetadata: false,
+    loadingDetail: false,
+    loadingDashboard: false,
+    loadingInboundDetail: false,
+    saving: false,
+    exporting: false,
+    approvingInbound: false,
+    items: [],
+    inboundItems: [],
+    inboundDetail: null,
+    metadata: null,
+    search: {
+      buscar: "",
+      status: "",
+      limit: "50",
+    },
+    selectedNumero: null,
+    selectedInboundGlobalId: "",
+    draft: createEmptyDevReturnDraft(),
+  },
+  devReturnRecords: {
+    loading: false,
+    loadingDetail: false,
+    exporting: false,
+    items: [],
+    detail: null,
+    selectedNumero: null,
+  },
+  devReturnInbound: {
+    loading: false,
+    loadingDetail: false,
+    approving: false,
+    items: [],
+    detail: null,
+    selectedNumero: null,
+    selectedCodigoEnvia: "",
+  },
   adjustments: {
     loadingMetadata: false,
     saving: false,
@@ -84,10 +142,21 @@ const state = {
     metadata: null,
     draft: createEmptyAdjustmentDraft(),
   },
+  adjustmentLookup: {
+    open: false,
+    loading: false,
+    items: [],
+  },
   transferLookup: {
     open: false,
     loading: false,
     items: [],
+  },
+  devReturnLookup: {
+    open: false,
+    loading: false,
+    items: [],
+    mode: "drafts",
   },
   sucursales: {
     loading: false,
@@ -147,6 +216,23 @@ async function hydrateAuthenticatedState() {
     loading: false,
     items: [],
   };
+  state.inventoryExistence = {
+    loading: false,
+    refreshing: false,
+    items: [],
+    lastUpdatedAt: "",
+    pagination: {
+      page: 1,
+      limit: 25,
+      total: 0,
+      totalPages: 0,
+    },
+    search: {
+      buscar: "",
+      status: "",
+      tipo: "",
+    },
+  };
   state.catalogImport = {
     uploadingKind: "",
     loadingKind: "",
@@ -178,6 +264,44 @@ async function hydrateAuthenticatedState() {
     receiptNumero: null,
     draft: createEmptyTransferDraft(),
   };
+  state.devReturns = {
+    loadingMetadata: false,
+    loadingDetail: false,
+    loadingDashboard: false,
+    loadingInboundDetail: false,
+    saving: false,
+    exporting: false,
+    approvingInbound: false,
+    items: [],
+    inboundItems: [],
+    inboundDetail: null,
+    metadata: null,
+    search: {
+      buscar: "",
+      status: "",
+      limit: "50",
+    },
+    selectedNumero: null,
+    selectedInboundGlobalId: "",
+    draft: createEmptyDevReturnDraft(),
+  };
+  state.devReturnRecords = {
+    loading: false,
+    loadingDetail: false,
+    exporting: false,
+    items: [],
+    detail: null,
+    selectedNumero: null,
+  };
+  state.devReturnInbound = {
+    loading: false,
+    loadingDetail: false,
+    approving: false,
+    items: [],
+    detail: null,
+    selectedNumero: null,
+    selectedCodigoEnvia: "",
+  };
   state.adjustments = {
     loadingMetadata: false,
     saving: false,
@@ -185,10 +309,21 @@ async function hydrateAuthenticatedState() {
     metadata: null,
     draft: createEmptyAdjustmentDraft(),
   };
+  state.adjustmentLookup = {
+    open: false,
+    loading: false,
+    items: [],
+  };
   state.transferLookup = {
     open: false,
     loading: false,
     items: [],
+  };
+  state.devReturnLookup = {
+    open: false,
+    loading: false,
+    items: [],
+    mode: "drafts",
   };
   state.sucursales = {
     loading: false,
@@ -213,11 +348,13 @@ function render() {
   }
 
   if (state.booting) {
+    clearExistenceAutoRefresh();
     app.innerHTML = renderBootScreen();
     return;
   }
 
   if (!state.token || !state.user) {
+    clearExistenceAutoRefresh();
     app.innerHTML = renderLoginView();
     bindLoginEvents();
     bindFlashEvents();
@@ -227,6 +364,7 @@ function render() {
   app.innerHTML = renderShellView();
   bindShellEvents();
   bindFlashEvents();
+  syncExistenceAutoRefresh();
 }
 
 function renderBootScreen() {
@@ -483,7 +621,9 @@ function renderShellView() {
         </section>
       </section>
       ${renderArticleLookupModal()}
+      ${renderAdjustmentLookupModal()}
       ${renderTransferLookupModal()}
+      ${renderDevReturnLookupModal()}
     </main>
   `;
 }
@@ -545,6 +685,10 @@ function renderDesktopWorkspace() {
     return renderDesktopArticlesWorkspaceV2();
   }
 
+  if (state.currentView === "existencia") {
+    return renderInventoryExistenceWorkspace();
+  }
+
   if (state.currentView === "desktop") {
     return renderDesktopDashboardV2();
   }
@@ -555,6 +699,18 @@ function renderDesktopWorkspace() {
 
   if (state.currentView === "transferencias" || state.currentView === "registro-transferencia") {
     return renderTransfersWorkspace();
+  }
+
+  if (state.currentView === "borrador-devoluciones") {
+    return renderDevReturnsWorkspace();
+  }
+
+  if (state.currentView === "registro-devoluciones") {
+    return renderDevReturnRecordsWorkspace();
+  }
+
+  if (state.currentView === "cargar-devoluciones") {
+    return renderLoadDevReturnsWorkspace();
   }
 
   if (state.currentView === "cargar-transferencia") {
@@ -695,6 +851,7 @@ function renderDesktopArchivoMenuV2() {
           ? `
             <div class="modern-archive-submenu">
               ${renderDesktopMenuLink("articulos", "Articulos")}
+              ${renderDesktopMenuLink("existencia", "Existencia")}
               ${renderDesktopMenuLink("tallas", "Tallas")}
               ${renderDesktopMenuLink("colores", "Colores")}
               ${renderDesktopMenuLink("fabricantes", "Fabricantes")}
@@ -1361,6 +1518,1155 @@ function renderTransfersWorkspace() {
   `;
 }
 
+function renderDevReturnsWorkspace() {
+  const draft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
+  const isLocked = Boolean(draft.numero) && Number(draft.status) !== 0;
+  const isBusy = state.devReturns.saving
+    || state.devReturns.exporting
+    || state.devReturns.loadingMetadata
+    || state.devReturns.loadingDashboard
+    || state.devReturns.loadingInboundDetail
+    || state.devReturns.approvingInbound;
+  const inboundDetail = state.devReturns.inboundDetail;
+
+  return `
+    <div class="modern-page transfer-register-page dev-return-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Borrador devoluciones"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Borrador de devoluciones</h1>
+          <p>Gestiona los borradores locales, los envios exportados y las aprobaciones recibidas desde la bodega.</p>
+        </div>
+      </div>
+
+      <section class="transfer-register-shell adjustment-window dev-return-window">
+        <form id="dev-return-form" class="transfer-register-form adjustment-form dev-return-form">
+          <div class="transfer-command-bar adjustment-command-bar dev-return-command-bar" role="toolbar" aria-label="Acciones de borrador devoluciones">
+            <button class="transfer-command-button" type="button" data-dev-return-new ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Nueva
+            </button>
+            <button class="transfer-command-button" type="button" data-dev-return-open-lookup ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">B</span>
+              Buscar
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" ${isLocked || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${state.devReturns.saving ? "Guardando" : "Guardar"}
+            </button>
+            <button
+              class="transfer-command-button transfer-command-primary"
+              type="button"
+              data-dev-return-export
+              ${draft.numero && Number(draft.status) === 0 && !isBusy ? "" : "disabled"}
+            >
+              <span class="transfer-command-icon">E</span>
+              ${state.devReturns.exporting ? "Exportando" : "Exportar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-dev-return-exit ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">S</span>
+              Salir
+            </button>
+          </div>
+
+          <div class="adjustment-header-panel dev-return-header-panel">
+            <label class="adjustment-field adjustment-number-field">
+              <span>Numero</span>
+              <input type="text" name="numero" value="${escapeHtml(draft.numero ? String(draft.numero) : "")}" readonly />
+            </label>
+            <div class="adjustment-status ${renderDevReturnStatusClass(draft.status)}">
+              ${escapeHtml(renderDevReturnStatusText(draft.status))}
+            </div>
+            <label class="adjustment-field adjustment-date-field">
+              <span>Fecha</span>
+              <input type="date" name="fecha" value="${escapeHtml(toInputValue(draft.fecha))}" ${isLocked ? "disabled" : ""} />
+            </label>
+            <label class="adjustment-field dev-return-destination-field">
+              <span>Destino</span>
+              <select name="codigoDestino" ${isLocked ? "disabled" : ""}>
+                ${renderDevReturnDestinationOptions(String(draft.codigoDestino || ""))}
+              </select>
+            </label>
+            <label class="adjustment-field adjustment-observation-field">
+              <span>Observacion</span>
+              <input name="observacion" maxlength="250" value="${escapeHtml(toInputValue(draft.observacion))}" ${isLocked ? "disabled" : ""} />
+            </label>
+          </div>
+
+          <div class="adjustment-lines-panel dev-return-lines-panel">
+            ${renderDevReturnLinesEditor(draft, { isLocked })}
+          </div>
+
+          <div class="transfer-summary-row dev-return-summary-row">
+            <strong>F2 = Cambiar N de Caja</strong>
+            <label>
+              <span>Total Caja N 1</span>
+              <input type="text" value="${escapeHtml(formatTransferAmount(computeDevReturnDraftTotal(draft)))}" readonly />
+            </label>
+            <label>
+              <span>Cantidad</span>
+              <input type="text" value="${escapeHtml(formatTransferQuantity(computeDevReturnDraftQuantity(draft)))}" readonly />
+            </label>
+          </div>
+        </form>
+      </section>
+
+      ${
+        inboundDetail
+          ? `
+            <section class="modern-card dev-return-inbound-detail-card">
+              <div class="panel-heading">
+                <div>
+                  <h2>Revisión de borrador recibido</h2>
+                  <p>Valida el borrador recibido desde la sucursal y apruébalo para disparar el registro en origen.</p>
+                </div>
+                <div class="dev-return-inline-actions">
+                  <button class="button button-ghost" type="button" data-dev-return-close-inbound-detail ${isBusy ? "disabled" : ""}>
+                    Cerrar detalle
+                  </button>
+                  <button
+                    class="button button-primary"
+                    type="button"
+                    data-dev-return-approve-inbound
+                    ${String(inboundDetail.status || "").toUpperCase() === "RECEIVED" && !isBusy ? "" : "disabled"}
+                  >
+                    ${state.devReturns.approvingInbound ? "Aprobando..." : "Aprobar borrador"}
+                  </button>
+                </div>
+              </div>
+              ${renderDevReturnInboundDraftDetail(inboundDetail)}
+            </section>
+          `
+          : ""
+      }
+
+      <section class="modern-card dev-return-board-card">
+        <div class="panel-heading">
+          <div>
+            <h2>Bandejas</h2>
+            <p>Consulta lo que ya salió hacia la bodega y lo que llegó pendiente por revisar.</p>
+          </div>
+        </div>
+        <div class="dev-return-board-grid">
+          <section class="dev-return-board-pane">
+            <div class="dev-return-pane-header">
+              <div>
+                <h3>Enviados</h3>
+                <p>${escapeHtml(String((state.devReturns.items || []).length))} borrador(es)</p>
+              </div>
+              <button class="button button-ghost" type="button" data-dev-return-refresh-board ${isBusy ? "disabled" : ""}>
+                Actualizar
+              </button>
+            </div>
+            ${renderDevReturnSentDraftsTable(state.devReturns.items || [])}
+          </section>
+          <section class="dev-return-board-pane">
+            <div class="dev-return-pane-header">
+              <div>
+                <h3>Recibidos</h3>
+                <p>${escapeHtml(String((state.devReturns.inboundItems || []).length))} borrador(es)</p>
+              </div>
+            </div>
+            ${renderDevReturnReceivedDraftsTable(state.devReturns.inboundItems || [])}
+          </section>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderInventoryExistenceWorkspace() {
+  if (!userCanAccessFullInventory()) {
+    return renderDesktopPlaceholderWindowV2(
+      "Existencia",
+      "Este modulo requiere acceso completo al inventario.",
+    );
+  }
+
+  const items = Array.isArray(state.inventoryExistence.items) ? state.inventoryExistence.items : [];
+  const pagination = state.inventoryExistence.pagination || {
+    page: 1,
+    limit: 25,
+    total: 0,
+    totalPages: 0,
+  };
+  const isBusy = state.inventoryExistence.loading || state.inventoryExistence.refreshing;
+  const syncedLabel = state.inventoryExistence.lastUpdatedAt
+    ? `Actualizado ${formatDateDisplay(state.inventoryExistence.lastUpdatedAt)}`
+    : "Sin consulta reciente";
+
+  return `
+    <div class="modern-page inventory-existence-page">
+      ${renderDesktopBreadcrumb(["Archivos", "Inventario", "Existencia"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Existencia</h1>
+          <p>Consulta viva del inventario con todos los atributos actuales de cada articulo.</p>
+        </div>
+        <div class="modern-page-actions">
+          <span class="modern-chip">${escapeHtml(String(pagination.total || 0))} articulos</span>
+          <span class="modern-chip">${escapeHtml(syncedLabel)}</span>
+          <button class="button button-ghost" type="button" data-existence-refresh ${isBusy ? "disabled" : ""}>
+            ${state.inventoryExistence.loading ? "Consultando..." : state.inventoryExistence.refreshing ? "Actualizando..." : "Actualizar"}
+          </button>
+        </div>
+      </div>
+
+      <section class="modern-card inventory-existence-card">
+        <div class="modern-search-wrap inventory-existence-search-wrap">
+          ${renderInventoryExistenceSearchForm()}
+        </div>
+        ${renderInventoryExistenceTable(items)}
+        ${renderInventoryExistencePagination()}
+      </section>
+    </div>
+  `;
+}
+
+function renderInventoryExistenceSearchForm() {
+  const metadata = state.metadata || {};
+  const statusOptions = Array.isArray(metadata?.opciones?.status) ? metadata.opciones.status : [];
+  const typeOptions = Array.isArray(metadata?.opciones?.tipos) ? metadata.opciones.tipos : [];
+  const search = state.inventoryExistence.search || {};
+  const pagination = state.inventoryExistence.pagination || {};
+
+  return `
+    <form class="search-form inventory-existence-search-grid" data-existence-search-form>
+      <label class="field">
+        <span>Buscar</span>
+        <input
+          type="text"
+          name="buscar"
+          placeholder="Codigo, referencia, nombre, familia"
+          value="${escapeHtml(search.buscar || "")}"
+        />
+      </label>
+      <label class="field">
+        <span>Status</span>
+        <select name="status">
+          <option value="">Todos</option>
+          ${statusOptions.map((option) => `
+            <option value="${escapeHtml(String(option.codigo))}" ${String(search.status || "") === String(option.codigo) ? "selected" : ""}>
+              ${escapeHtml(capitalize(option.nombre || String(option.codigo)))}
+            </option>
+          `).join("")}
+        </select>
+      </label>
+      <label class="field">
+        <span>Tipo</span>
+        <select name="tipo">
+          <option value="">Todos</option>
+          ${typeOptions.map((option) => `
+            <option value="${escapeHtml(String(option.codigo))}" ${String(search.tipo || "") === String(option.codigo) ? "selected" : ""}>
+              ${escapeHtml(capitalize(option.nombre || String(option.codigo)))}
+            </option>
+          `).join("")}
+        </select>
+      </label>
+      <label class="field">
+        <span>Limite</span>
+        <select name="limit">
+          ${["25", "50", "100"].map((value) => `
+            <option value="${value}" ${String(pagination.limit || 25) === value ? "selected" : ""}>${value}</option>
+          `).join("")}
+        </select>
+      </label>
+      <div class="search-actions inventory-existence-search-actions">
+        <button class="button button-primary" type="submit" ${state.inventoryExistence.loading ? "disabled" : ""}>
+          ${state.inventoryExistence.loading ? "Consultando..." : "Consultar"}
+        </button>
+        <button class="button button-ghost" type="button" data-existence-clear>
+          Limpiar
+        </button>
+      </div>
+    </form>
+  `;
+}
+
+function renderInventoryExistenceTable(items) {
+  if (state.inventoryExistence.loading && items.length === 0) {
+    return `
+      <div class="empty-state">
+        <h3>Cargando existencia</h3>
+        <p>Estamos consultando el inventario actualizado para mostrar todos sus atributos.</p>
+      </div>
+    `;
+  }
+
+  if (!items.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin articulos</h3>
+        <p>No hay resultados con los filtros actuales.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap inventory-existence-table-wrap">
+      <table class="data-table inventory-existence-table">
+        <thead>
+          <tr>
+            <th>Codigo barra</th>
+            <th>Referencia</th>
+            <th>Nombre</th>
+            <th>Familia</th>
+            <th>Categoria</th>
+            <th>Fabricante</th>
+            <th>Marca</th>
+            <th>Talla</th>
+            <th>Color</th>
+            <th>Tipo</th>
+            <th>Status</th>
+            <th>Impuesto</th>
+            <th>% Imp.</th>
+            <th>Detal</th>
+            <th>Mayor</th>
+            <th>Afiliado</th>
+            <th>Promocion</th>
+            <th>% Desc.</th>
+            <th>Precio promo</th>
+            <th>Costo inicial</th>
+            <th>Costo promedio</th>
+            <th>Ultimo costo</th>
+            <th>Costo dolar</th>
+            <th>Existencia inicial</th>
+            <th>Existencia actual</th>
+            <th>Punto recorte</th>
+            <th>Serializado</th>
+            <th>Nota</th>
+            <th>Fecha promo desde</th>
+            <th>Fecha promo hasta</th>
+            <th>Primer movimiento</th>
+            <th>Ultima actualizacion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(renderInventoryExistenceRow).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderInventoryExistenceRow(article) {
+  return `
+    <tr>
+      <td><strong>${escapeHtml(article.codigoBarra || "-")}</strong></td>
+      <td>${escapeHtml(article.referencia || "-")}</td>
+      <td>${escapeHtml(article.general?.nombre || "-")}</td>
+      <td>${escapeHtml(article.general?.familia || "-")}</td>
+      <td>${escapeHtml(formatInventoryCatalogLabel(article.general?.categoria))}</td>
+      <td>${escapeHtml(formatInventoryCatalogLabel(article.general?.fabricante))}</td>
+      <td>${escapeHtml(formatInventoryCatalogLabel(article.general?.marca))}</td>
+      <td>${escapeHtml(article.tallasColores?.talla?.codigo || "-")}</td>
+      <td>${escapeHtml(formatInventoryCatalogLabel(article.tallasColores?.colores))}</td>
+      <td>${escapeHtml(capitalize(article.general?.tipo?.nombre || "-"))}</td>
+      <td>${escapeHtml(capitalize(article.general?.status?.nombre || "-"))}</td>
+      <td>${escapeHtml(formatInventoryCatalogLabel(article.precios?.impuesto))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.precios?.impuesto?.porcentaje))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.precios?.detal))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.precios?.mayor))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.precios?.afiliado))}</td>
+      <td>${escapeHtml(formatInventoryBoolean(article.precios?.promocion?.activa))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.precios?.promocion?.porcentajeDescuento))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.precios?.promocion?.precio))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.inventario?.costos?.inicial))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.inventario?.costos?.promedio))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.inventario?.costos?.ultimo))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.inventario?.costos?.dolar))}</td>
+      <td>${escapeHtml(formatInventoryNumeric(article.inventario?.existenciaInicial))}</td>
+      <td><strong>${escapeHtml(formatInventoryNumeric(article.inventario?.existenciaActual))}</strong></td>
+      <td>${escapeHtml(formatInventoryNumeric(article.general?.puntoRecorte))}</td>
+      <td>${escapeHtml(formatInventoryBoolean(article.inventario?.serializado))}</td>
+      <td>${escapeHtml(article.general?.nota || "-")}</td>
+      <td>${escapeHtml(formatInventoryDate(article.precios?.promocion?.desde))}</td>
+      <td>${escapeHtml(formatInventoryDate(article.precios?.promocion?.hasta))}</td>
+      <td>${escapeHtml(formatInventoryDate(article.inventario?.fechas?.fechaPrimerMovimiento))}</td>
+      <td>${escapeHtml(formatInventoryDate(article.inventario?.fechas?.ultimaActualizacion))}</td>
+    </tr>
+  `;
+}
+
+function renderInventoryExistencePagination() {
+  const pagination = state.inventoryExistence.pagination || {};
+  const page = pagination.page || 1;
+  const totalPages = pagination.totalPages || 1;
+
+  return `
+    <div class="pagination inventory-existence-pagination">
+      <div class="pagination-summary">
+        Pagina ${escapeHtml(String(page))} de ${escapeHtml(String(totalPages))}
+      </div>
+      <div class="pagination-actions">
+        <button
+          class="button button-ghost"
+          type="button"
+          data-existence-page="prev"
+          ${page <= 1 || state.inventoryExistence.loading ? "disabled" : ""}
+        >
+          Anterior
+        </button>
+        <button
+          class="button button-ghost"
+          type="button"
+          data-existence-page="next"
+          ${page >= totalPages || state.inventoryExistence.loading ? "disabled" : ""}
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderDevReturnStatusText(status) {
+  const normalizedStatus = Number(status || 0);
+  if (normalizedStatus === 1) {
+    return "EXPORTADA";
+  }
+
+  if (normalizedStatus === 2) {
+    return "APROBADA";
+  }
+
+  if (normalizedStatus === 3) {
+    return "REGISTRADA";
+  }
+
+  if (normalizedStatus === 4) {
+    return "COMPLETADA";
+  }
+
+  return "GUARDADA";
+}
+
+function renderDevReturnStatusClass(status) {
+  return Number(status || 0) > 0 ? "adjustment-status-approved" : "adjustment-status-pending";
+}
+
+function renderDevReturnSyncStatusChip(label, tone = "neutral") {
+  const toneClass =
+    tone === "success"
+      ? "modern-chip-success"
+      : tone === "warning"
+        ? "modern-chip-warning"
+        : tone === "danger"
+          ? "modern-chip-danger"
+          : "";
+
+  return `<span class="modern-chip ${toneClass}">${escapeHtml(label || "-")}</span>`;
+}
+
+function renderDevReturnDestinationOptions(selectedValue) {
+  const destinos = Array.isArray(state.devReturns.metadata?.destinos) ? state.devReturns.metadata.destinos : [];
+  if (!destinos.length) {
+    return `<option value="">Sin bodegas</option>`;
+  }
+
+  return destinos
+    .map((item) => `
+      <option value="${escapeHtml(String(item.codigo || ""))}" ${String(selectedValue || "") === String(item.codigo || "") ? "selected" : ""}>
+        ${escapeHtml(item.nombre || item.codigo || "")}
+      </option>
+    `)
+    .join("");
+}
+
+function renderDevReturnLinesEditor(draft, { isLocked = false } = {}) {
+  const rows = [...(draft.items || [])];
+  while (rows.length < 15) {
+    rows.push(createEmptyDevReturnLineDraft());
+  }
+
+  return `
+    <div class="adjustment-grid-wrap">
+      <table class="adjustment-grid dev-return-grid">
+        <thead>
+          <tr>
+            <th class="adjustment-row-number"></th>
+            <th>Codigo Barra</th>
+            <th>Referencia</th>
+            <th>Nombre</th>
+            <th>Caja</th>
+            <th>Cantidad</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((line, index) => `
+              <tr data-dev-return-line-row="${index}">
+                <td class="adjustment-row-number">${index + 1}</td>
+                <td>
+                  <input
+                    name="codigoBarra"
+                    data-dev-return-barcode-input="${index}"
+                    value="${escapeHtml(toInputValue(line.codigoBarra))}"
+                    maxlength="15"
+                    ${isLocked ? "disabled" : ""}
+                  />
+                </td>
+                <td>
+                  <input name="referencia" value="${escapeHtml(toInputValue(line.referencia))}" readonly />
+                </td>
+                <td>
+                  <input name="nombre" value="${escapeHtml(toInputValue(line.nombre))}" readonly />
+                  <input type="hidden" name="costo" value="${escapeHtml(toInputValue(line.costo))}" />
+                </td>
+                <td>
+                  <input
+                    name="numeroCaja"
+                    value="${escapeHtml(toInputValue(line.numeroCaja))}"
+                    inputmode="numeric"
+                    ${isLocked ? "disabled" : ""}
+                  />
+                </td>
+                <td>
+                  <input
+                    class="adjustment-quantity-input"
+                    name="cantidad"
+                    value="${escapeHtml(toInputValue(line.cantidad))}"
+                    inputmode="decimal"
+                    ${isLocked ? "disabled" : ""}
+                  />
+                </td>
+              </tr>
+            `)
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDevReturnSentDraftsTable(items) {
+  if (!items.length) {
+    return `
+      <div class="empty-state dev-return-mini-empty">
+        <h3>Sin enviados</h3>
+        <p>Todavía no has exportado borradores desde esta instancia.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table dev-return-board-table">
+        <thead>
+          <tr>
+            <th>Numero</th>
+            <th>Fecha</th>
+            <th>Destino</th>
+            <th>Status</th>
+            <th>Total</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+              <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+              <td>${escapeHtml(item.codigoDestinoInfo?.nombre || item.codigoDestino || "-")}</td>
+              <td>${renderDevReturnSyncStatusChip(renderDevReturnStatusText(item.status), Number(item.status || 0) > 0 ? "success" : "warning")}</td>
+              <td>${escapeHtml(formatTransferAmount(item.totalValor))}</td>
+              <td>
+                <button class="button button-ghost" type="button" data-dev-return-open-draft="${escapeHtml(String(item.numero || ""))}">
+                  Abrir
+                </button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDevReturnReceivedDraftsTable(items) {
+  if (!items.length) {
+    return `
+      <div class="empty-state dev-return-mini-empty">
+        <h3>Sin recibidos</h3>
+        <p>No hay borradores remotos pendientes por revisar en esta base.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table dev-return-board-table">
+        <thead>
+          <tr>
+            <th>Numero</th>
+            <th>Origen</th>
+            <th>Fecha</th>
+            <th>Status</th>
+            <th>Total</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+              <td>${escapeHtml(item.codigoOrigen || "-")}</td>
+              <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+              <td>${renderDevReturnSyncStatusChip(item.statusNombre || item.status || "-", String(item.status || "").toUpperCase() === "RECEIVED" ? "warning" : "success")}</td>
+              <td>${escapeHtml(formatTransferAmount(item.totalValor))}</td>
+              <td>
+                <button class="button button-ghost" type="button" data-dev-return-open-inbound="${escapeHtml(String(item.globalId || ""))}">
+                  Revisar
+                </button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDevReturnInboundDraftDetail(detail) {
+  return `
+    <div class="dev-return-detail-grid">
+      <div class="dev-return-detail-meta">
+        <div><strong>Numero:</strong> ${escapeHtml(String(detail.numero || "-"))}</div>
+        <div><strong>Origen:</strong> ${escapeHtml(detail.codigoOrigen || "-")}</div>
+        <div><strong>Destino:</strong> ${escapeHtml(detail.codigoDestino || "-")}</div>
+        <div><strong>Status:</strong> ${renderDevReturnSyncStatusChip(detail.statusNombre || detail.status || "-")}</div>
+        <div><strong>Recibido:</strong> ${escapeHtml(formatDateDisplay(detail.recibido || detail.fecha))}</div>
+        <div><strong>Observacion:</strong> ${escapeHtml(detail.observacion || "-")}</div>
+      </div>
+      ${renderDevReturnReadOnlyLines(detail.items || [], "Cantidad")}
+    </div>
+  `;
+}
+
+function renderDevReturnReadOnlyLines(items, lastColumnLabel = "Valor") {
+  const showValue = String(lastColumnLabel || "").toLowerCase() === "valor";
+  return `
+    <div class="table-wrap">
+      <table class="data-table dev-return-board-table dev-return-readonly-lines">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Codigo Barra</th>
+            <th>Referencia</th>
+            <th>Nombre</th>
+            <th>Caja</th>
+            <th>${escapeHtml(lastColumnLabel)}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(items || []).map((item) => `
+            <tr>
+              <td>${escapeHtml(String(item.item || "-"))}</td>
+              <td>${escapeHtml(item.codigoBarra || "-")}</td>
+              <td>${escapeHtml(item.articulo?.referencia || item.referencia || "-")}</td>
+              <td>${escapeHtml(item.articulo?.nombre || item.nombre || "-")}</td>
+              <td>${escapeHtml(String(item.numeroCaja ?? "-"))}</td>
+              <td>${escapeHtml(showValue ? formatTransferAmount(item.valor || "0") : formatTransferQuantity(item.cantidad || "0"))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDevReturnLookupModal() {
+  if (!state.devReturnLookup.open) {
+    return "";
+  }
+
+  const isRecordLookup = state.devReturnLookup.mode === "records";
+  const items = Array.isArray(state.devReturnLookup.items) ? state.devReturnLookup.items : [];
+  const totalLabel = state.devReturnLookup.loading
+    ? isRecordLookup ? "Cargando borradores aprobados..." : "Cargando borradores..."
+    : `Catalogo (${escapeHtml(String(items.length))} Registros)`;
+  const titleEyebrow = isRecordLookup ? "Registro de devoluciones" : "Borradores";
+  const description = isRecordLookup
+    ? "Haz clic sobre un borrador aprobado por el destino para cargarlo en el registro."
+    : "Haz clic sobre un borrador guardado o exportado para cargarlo en el formulario.";
+  const loadingTitle = isRecordLookup ? "Cargando aprobados" : "Cargando borradores";
+  const loadingCopy = isRecordLookup
+    ? "Estamos trayendo los borradores que ya fueron aprobados por el destino."
+    : "Estamos trayendo los borradores guardados y exportados.";
+  const emptyTitle = isRecordLookup ? "Sin aprobados" : "Sin borradores";
+  const emptyCopy = isRecordLookup
+    ? "No hay borradores aprobados por el destino para mostrar en este catalogo."
+    : "No hay borradores para mostrar en este catalogo.";
+
+  return `
+    <div class="article-lookup-overlay adjustment-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-dev-return-lookup-close aria-label="Cerrar catalogo"></button>
+      <section class="article-lookup-dialog adjustment-lookup-dialog dev-return-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="dev-return-lookup-title">
+        <div class="article-lookup-header adjustment-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">${titleEyebrow}</p>
+            <h3 id="dev-return-lookup-title">${totalLabel}</h3>
+            <p>${description}</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">
+              ${state.devReturnLookup.loading ? "Cargando..." : `${escapeHtml(String(items.length))} registros`}
+            </span>
+            <button class="article-command-button" type="button" data-dev-return-lookup-refresh ${state.devReturnLookup.loading ? "disabled" : ""}>
+              Actualizar
+            </button>
+            <button class="article-command-button" type="button" data-dev-return-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          state.devReturnLookup.loading
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>${loadingTitle}</h3>
+                <p>${loadingCopy}</p>
+              </div>
+            `
+            : items.length === 0
+              ? `
+                <div class="empty-state article-lookup-empty">
+                  <h3>${emptyTitle}</h3>
+                  <p>${emptyCopy}</p>
+                </div>
+              `
+              : `
+                <div class="table-wrap article-lookup-table-wrap adjustment-lookup-table-wrap">
+                  <table class="data-table article-lookup-table adjustment-lookup-table dev-return-lookup-table">
+                    <thead>
+                      <tr>
+                        <th>Numero</th>
+                        <th>Fecha</th>
+                        <th>Destino</th>
+                        <th>Status</th>
+                        <th>Observacion</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${items.map(renderDevReturnLookupRow).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderDevReturnLookupRow(item) {
+  const isExported = Number(item.status || 0) > 0;
+
+  return `
+    <tr class="adjustment-lookup-row ${isExported ? "adjustment-lookup-row-approved" : "adjustment-lookup-row-pending"}" data-dev-return-lookup-select="${escapeHtml(String(item.numero || ""))}">
+      <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+      <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+      <td>${escapeHtml(item.codigoDestinoInfo?.nombre || item.codigoDestino || "-")}</td>
+      <td>${renderDevReturnLookupStatusBadge(item.status)}</td>
+      <td>${escapeHtml(item.observacion || "-")}</td>
+    </tr>
+  `;
+}
+
+function renderDevReturnLookupStatusBadge(status) {
+  return `<span class="modern-chip">${escapeHtml(renderDevReturnStatusText(status))}</span>`;
+}
+
+function renderLegacyDevReturnRecordsWorkspace() {
+  const detail = state.devReturnRecords.detail;
+
+  if (detail) {
+    return `
+      <div class="modern-page transfer-import-detail-page">
+        ${renderDesktopBreadcrumb(["Procesos", "Registro de devoluciones", "Detalle"])}
+        <div class="modern-page-header">
+          <div>
+            <h1>Registro de devoluciones</h1>
+            <p>Documento ${escapeHtml(String(detail.numero || "-"))} listo para seguimiento en origen.</p>
+          </div>
+          <div class="dev-return-inline-actions">
+            <button class="button button-ghost" type="button" data-dev-return-record-back>
+              Volver
+            </button>
+          </div>
+        </div>
+        <section class="modern-card dev-return-inbound-detail-card">
+          <div class="dev-return-detail-meta">
+            <div><strong>Numero:</strong> ${escapeHtml(String(detail.numero || "-"))}</div>
+            <div><strong>Envia:</strong> ${escapeHtml(detail.codigoEnvia || "-")}</div>
+            <div><strong>Recibe:</strong> ${escapeHtml(detail.codigoRecibe || "-")}</div>
+            <div><strong>Status:</strong> ${renderDevReturnSyncStatusChip(detail.statusNombre || "-")}</div>
+            <div><strong>Fecha:</strong> ${escapeHtml(formatDateDisplay(detail.fecha))}</div>
+            <div><strong>Observacion:</strong> ${escapeHtml(detail.observacion || "-")}</div>
+          </div>
+          ${renderDevReturnReadOnlyLines(detail.items || [], "Valor")}
+        </section>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="modern-page transfer-import-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Registro de devoluciones"])}
+      <div class="modern-page-header">
+        <div>
+          <h1>Registro de devoluciones</h1>
+          <p>Revisa las devoluciones ya registradas en origen y su avance hacia el destino.</p>
+        </div>
+      </div>
+      <section class="modern-card dev-return-board-card">
+        <div class="panel-heading">
+          <div>
+            <h2>Documentos</h2>
+            <p>${escapeHtml(String((state.devReturnRecords.items || []).length))} registro(s) visibles.</p>
+          </div>
+          <button class="button button-ghost" type="button" data-dev-return-record-refresh ${state.devReturnRecords.loading ? "disabled" : ""}>
+            ${state.devReturnRecords.loading ? "Actualizando..." : "Actualizar"}
+          </button>
+        </div>
+        ${renderDevReturnRecordsTable(state.devReturnRecords.items || [])}
+      </section>
+    </div>
+  `;
+}
+
+function renderDevReturnRecordsTable(items) {
+  if (!items.length) {
+    return `
+      <div class="empty-state dev-return-mini-empty">
+        <h3>Sin registros</h3>
+        <p>Las devoluciones aprobadas en origen aparecerán aquí.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table dev-return-board-table">
+        <thead>
+          <tr>
+            <th>Numero</th>
+            <th>Fecha</th>
+            <th>Envia</th>
+            <th>Recibe</th>
+            <th>Status</th>
+            <th>Total</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+              <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+              <td>${escapeHtml(item.codigoEnviaInfo?.nombre || item.codigoEnvia || "-")}</td>
+              <td>${escapeHtml(item.codigoRecibeInfo?.nombre || item.codigoRecibe || "-")}</td>
+              <td>${renderDevReturnSyncStatusChip(item.statusNombre || "-")}</td>
+              <td>${escapeHtml(formatTransferAmount(item.totalValor))}</td>
+              <td>
+                <button class="button button-ghost" type="button" data-dev-return-record-open="${escapeHtml(String(item.numero || ""))}">
+                  Ver detalle
+                </button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDevReturnRecordsWorkspace() {
+  const detail = state.devReturnRecords.detail || null;
+  const items = Array.isArray(detail?.items) ? detail.items : [];
+  const totalQuantity = items.reduce((total, item) => total + Number(item?.cantidad || 0), 0);
+  const statusLabel = detail ? String(detail.statusNombre || "-").toUpperCase() : "SIN CARGAR";
+  const statusClass = detail && Number(detail.status || 0) === 1
+    ? "adjustment-status adjustment-status-approved"
+    : "adjustment-status";
+  const branchLabel = detail?.codigoRecibeInfo?.nombre || detail?.codigoRecibe || "";
+  const originLabel = detail?.codigoEnviaInfo?.nombre || detail?.codigoEnvia || "";
+  const alreadyExported = Boolean(detail?.exportacion?.bloqueada);
+  const exportDisabled = !detail || alreadyExported || state.devReturnRecords.exporting || state.devReturnRecords.loadingDetail;
+  const helperCopy = detail
+    ? alreadyExported
+      ? `Documento ${escapeHtml(String(detail.numero || "-"))} ya exportado al destino. El boton queda bloqueado para evitar reenvios duplicados.`
+      : `Documento ${escapeHtml(String(detail.numero || "-"))} listo para seguimiento y exportacion al destino.`
+    : "Usa Buscar para cargar un borrador que ya fue aprobado por el destino.";
+
+  return `
+    <div class="modern-page dev-return-record-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Devoluciones", "Registro de devoluciones"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Registro de devoluciones</h1>
+          <p>${helperCopy}</p>
+        </div>
+      </div>
+
+      <section class="transfer-register-shell dev-return-record-shell">
+        <div class="transfer-register-form dev-return-record-form">
+          <div class="transfer-command-bar" role="toolbar" aria-label="Acciones de registro de devoluciones">
+            <button class="transfer-command-button" type="button" data-dev-return-record-new>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button" type="button" data-dev-return-record-search ${state.devReturnRecords.loading ? "disabled" : ""}>
+              <span class="transfer-command-icon">B</span>
+              Buscar
+            </button>
+            <button
+              class="transfer-command-button transfer-command-primary"
+              type="button"
+              data-dev-return-record-export
+              ${exportDisabled ? "disabled" : ""}
+            >
+              <span class="transfer-command-icon">E</span>
+              ${state.devReturnRecords.exporting ? "Exportando" : alreadyExported ? "Exportada" : "Exportar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-dev-return-record-exit>
+              <span class="transfer-command-icon">S</span>
+              Salir
+            </button>
+          </div>
+
+          <div class="transfer-header-panel dev-return-record-header-panel">
+            <label class="transfer-field transfer-number-field">
+              <span>Numero</span>
+              <input type="text" value="${escapeHtml(detail ? String(detail.numero || "0") : "0")}" readonly />
+            </label>
+            <div class="dev-return-record-status-block">
+              <span>Status</span>
+              <strong class="${statusClass}">${escapeHtml(statusLabel)}</strong>
+            </div>
+            <label class="transfer-field">
+              <span>Fecha</span>
+              <input type="text" value="${escapeHtml(detail ? formatDateDisplay(detail.fecha) : "")}" readonly />
+            </label>
+            <label class="transfer-field">
+              <span>Fecha emision</span>
+              <input type="text" value="${escapeHtml(detail ? formatDateDisplay(detail.fechaEmision) : "")}" readonly />
+            </label>
+
+            <label class="transfer-field transfer-wide-field">
+              <span>Sucursal</span>
+              <input type="text" value="${escapeHtml(branchLabel)}" readonly />
+            </label>
+            <label class="transfer-field">
+              <span>Documento origen</span>
+              <input type="text" value="${escapeHtml(detail?.codigoOrigen || "")}" readonly />
+            </label>
+
+            <label class="transfer-field transfer-full-field">
+              <span>Observacion</span>
+              <input type="text" value="${escapeHtml(detail?.observacion || "")}" readonly />
+            </label>
+
+            <label class="transfer-field dev-return-record-origin-field">
+              <span>Envia</span>
+              <input type="text" value="${escapeHtml(originLabel)}" readonly />
+            </label>
+            <label class="transfer-field">
+              <span>Lote</span>
+              <input type="text" value="${escapeHtml(detail?.lote?.lote || "")}" readonly />
+            </label>
+          </div>
+
+          <div class="transfer-lines-panel dev-return-record-lines-panel">
+            ${renderDevReturnRecordLinesGrid(items)}
+          </div>
+
+          <div class="transfer-summary-row dev-return-record-summary-row">
+            <strong>${detail ? "Documento listo para exportacion y seguimiento." : "Buscar carga un borrador aprobado para convertirlo en registro visible."}</strong>
+            <label>
+              <span>Renglones</span>
+              <input type="text" value="${escapeHtml(String(items.filter(Boolean).length))}" readonly />
+            </label>
+            <label>
+              <span>Cantidad</span>
+              <input type="text" value="${escapeHtml(formatTransferQuantity(totalQuantity))}" readonly />
+            </label>
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderDevReturnRecordLinesGrid(items) {
+  const normalizedItems = Array.isArray(items) ? [...items] : [];
+  const minRows = Math.max(12, normalizedItems.length || 0);
+  while (normalizedItems.length < minRows) {
+    normalizedItems.push(null);
+  }
+
+  return `
+    <div class="adjustment-lines-panel dev-return-record-grid-panel">
+      <div class="adjustment-grid-wrap dev-return-record-grid-wrap">
+        <table class="adjustment-grid dev-return-record-grid">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Codigo Barra</th>
+              <th>Referencia</th>
+              <th>Nombre</th>
+              <th>Caja</th>
+              <th>Cantidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${normalizedItems.map((item, index) => item
+              ? `
+                <tr>
+                  <td class="adjustment-row-number">${index + 1}</td>
+                  <td><span class="dev-return-record-cell">${escapeHtml(item.codigoBarra || "-")}</span></td>
+                  <td><span class="dev-return-record-cell">${escapeHtml(item.articulo?.referencia || item.referencia || "-")}</span></td>
+                  <td><span class="dev-return-record-cell">${escapeHtml(item.articulo?.nombre || item.nombre || "-")}</span></td>
+                  <td><span class="dev-return-record-cell dev-return-record-cell-number">${escapeHtml(String(item.numeroCaja ?? "-"))}</span></td>
+                  <td><span class="dev-return-record-cell dev-return-record-cell-number">${escapeHtml(formatTransferQuantity(item.cantidad || "0"))}</span></td>
+                </tr>
+              `
+              : `
+                <tr class="dev-return-record-empty-row">
+                  <td class="adjustment-row-number">${index + 1}</td>
+                  <td><span class="dev-return-record-cell">&nbsp;</span></td>
+                  <td><span class="dev-return-record-cell">&nbsp;</span></td>
+                  <td><span class="dev-return-record-cell">&nbsp;</span></td>
+                  <td><span class="dev-return-record-cell">&nbsp;</span></td>
+                  <td><span class="dev-return-record-cell">&nbsp;</span></td>
+                </tr>
+              `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderLoadDevReturnsWorkspace() {
+  const detail = state.devReturnInbound.detail;
+
+  if (detail) {
+    return `
+      <div class="modern-page transfer-import-detail-page">
+        ${renderDesktopBreadcrumb(["Procesos", "Carga de devoluciones", "Detalle"])}
+        <div class="modern-page-header">
+          <div>
+            <h1>Carga de devoluciones</h1>
+            <p>Aprueba la devolución recibida para sumar inventario en el destino.</p>
+          </div>
+          <div class="dev-return-inline-actions">
+            <button class="button button-ghost" type="button" data-dev-return-inbound-back ${state.devReturnInbound.approving ? "disabled" : ""}>
+              Volver
+            </button>
+            <button
+              class="button button-primary"
+              type="button"
+              data-dev-return-inbound-approve
+              ${Number(detail.status || 0) === 0 && !state.devReturnInbound.approving ? "" : "disabled"}
+            >
+              ${state.devReturnInbound.approving ? "Aprobando..." : "Aprobar devolución"}
+            </button>
+          </div>
+        </div>
+        <section class="modern-card dev-return-inbound-detail-card">
+          <div class="dev-return-detail-meta">
+            <div><strong>Numero:</strong> ${escapeHtml(String(detail.numero || "-"))}</div>
+            <div><strong>Envia:</strong> ${escapeHtml(detail.codigoEnvia || "-")}</div>
+            <div><strong>Recibe:</strong> ${escapeHtml(detail.codigoRecibe || "-")}</div>
+            <div><strong>Status:</strong> ${renderDevReturnSyncStatusChip(detail.statusNombre || "-")}</div>
+            <div><strong>Fecha:</strong> ${escapeHtml(formatDateDisplay(detail.fecha))}</div>
+            <div><strong>Observacion:</strong> ${escapeHtml(detail.observacion || "-")}</div>
+          </div>
+          ${renderDevReturnReadOnlyLines(detail.items || [], "Cantidad")}
+        </section>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="modern-page transfer-import-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Carga de devoluciones"])}
+      <div class="modern-page-header">
+        <div>
+          <h1>Carga de devoluciones</h1>
+          <p>Estas devoluciones ya fueron registradas en origen y esperan aprobación del destino.</p>
+        </div>
+      </div>
+      <section class="modern-card dev-return-board-card">
+        <div class="panel-heading">
+          <div>
+            <h2>Pendientes del destino</h2>
+            <p>${escapeHtml(String((state.devReturnInbound.items || []).length))} devolución(es) visibles.</p>
+          </div>
+          <button class="button button-ghost" type="button" data-dev-return-inbound-refresh ${state.devReturnInbound.loading ? "disabled" : ""}>
+            ${state.devReturnInbound.loading ? "Actualizando..." : "Actualizar"}
+          </button>
+        </div>
+        ${renderInboundDevReturnTable(state.devReturnInbound.items || [])}
+      </section>
+    </div>
+  `;
+}
+
+function renderInboundDevReturnTable(items) {
+  if (!items.length) {
+    return `
+      <div class="empty-state dev-return-mini-empty">
+        <h3>Sin devoluciones por cargar</h3>
+        <p>Cuando el origen registre una devolución aprobada, aparecerá aquí.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table dev-return-board-table">
+        <thead>
+          <tr>
+            <th>Numero</th>
+            <th>Fecha</th>
+            <th>Envia</th>
+            <th>Status</th>
+            <th>Total</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+              <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+              <td>${escapeHtml(item.codigoEnviaInfo?.nombre || item.codigoEnvia || "-")}</td>
+              <td>${renderDevReturnSyncStatusChip(item.statusNombre || "-", Number(item.status || 0) === 0 ? "warning" : "success")}</td>
+              <td>${escapeHtml(formatTransferAmount(item.totalValor))}</td>
+              <td>
+                <button
+                  class="button button-ghost"
+                  type="button"
+                  data-dev-return-inbound-open="${escapeHtml(String(item.numero || ""))}"
+                  data-dev-return-inbound-source="${escapeHtml(String(item.codigoEnvia || ""))}"
+                >
+                  Ver detalle
+                </button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 function renderInventoryAdjustmentWorkspace() {
   const draft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
   const isApproved = Number(draft.status) === 1;
@@ -1383,6 +2689,10 @@ function renderInventoryAdjustmentWorkspace() {
             <button class="transfer-command-button" type="button" data-adjustment-new ${isBusy ? "disabled" : ""}>
               <span class="transfer-command-icon">+</span>
               Crear
+            </button>
+            <button class="transfer-command-button" type="button" data-adjustment-open-lookup ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">B</span>
+              Buscar
             </button>
             <button class="transfer-command-button transfer-command-primary" type="submit" ${isApproved || isBusy ? "disabled" : ""}>
               <span class="transfer-command-icon">G</span>
@@ -1550,6 +2860,12 @@ function renderLoadTransferWorkspace() {
     return `
       <div class="modern-page transfer-import-detail-page">
         ${renderDesktopBreadcrumb(["Procesos", "Cargar transferencia", "Detalle"])}
+        <div class="modern-page-header">
+          <div>
+            <h1>Importar transferencias de mercancia</h1>
+            <p>Revisa la transferencia recibida y aplicala en inventario cuando los renglones esten correctos.</p>
+          </div>
+        </div>
         ${renderLoadedTransferReceiptPanel()}
       </div>
     `;
@@ -1695,66 +3011,86 @@ function renderLoadedTransferReceiptPanel() {
 
   const isBusy = state.transfers.loadingDetail || state.transfers.approving;
   const originName = draft.codigoEnviaNombre || draft.codigoEnvia || "-";
-  const loadedLabel = draft.cargada ? "Cargada" : "Pendiente de carga";
+  const isLoaded = Boolean(draft.cargada);
+  const loadedLabel = isLoaded ? "Cargada" : "Pendiente de carga";
+  const lineCount = countTransferDraftLines(draft);
+  const quantityTotal = formatTransferQuantity(computeTransferDraftQuantity(draft));
+  const loadButtonLabel = isLoaded ? "Carga aplicada" : state.transfers.approving ? "Cargando" : "Cargar";
+  const detailStatusText = Number(draft.status || 0) === 1 ? "APROBADA" : "PENDIENTE";
 
   return `
     <section class="transfer-register-shell transfer-import-window">
-      <div class="adjustment-titlebar">Importar transferencias de mercancia</div>
-
-      <div class="transfer-command-bar transfer-import-command-bar" role="toolbar" aria-label="Acciones de carga de transferencia">
+      <div class="transfer-register-form transfer-import-form">
+        <div class="transfer-command-bar transfer-import-command-bar" role="toolbar" aria-label="Acciones de carga de transferencia">
         <button
           class="transfer-command-button transfer-command-primary"
           type="button"
           data-load-inbound-transfer
-          ${!draft.numero || isBusy ? "disabled" : ""}
+          ${!draft.numero || isBusy || isLoaded ? "disabled" : ""}
         >
           <span class="transfer-command-icon">C</span>
-          ${state.transfers.approving ? "Cargando" : "Cargar"}
+          ${loadButtonLabel}
         </button>
         <button class="transfer-command-button" type="button" data-clear-loaded-transfer ${isBusy ? "disabled" : ""}>
           <span class="transfer-command-icon">S</span>
           Salir
         </button>
         <span class="transfer-import-load-state">${escapeHtml(loadedLabel)}</span>
-      </div>
+        </div>
 
-      <div class="transfer-header-panel transfer-import-header">
-        <label class="transfer-field transfer-number-field">
-          <span>Numero</span>
-          <input type="text" value="${escapeHtml(toDisplayValue(draft.numero))}" readonly />
-        </label>
-        <strong class="transfer-import-status">APROBADA</strong>
-        <label class="transfer-field">
-          <span>Fecha</span>
-          <input type="text" value="${escapeHtml(formatDateOnlyDisplay(draft.fecha))}" readonly />
-        </label>
-        <label class="transfer-field">
-          <span>Fecha emision</span>
-          <input type="text" value="${escapeHtml(formatDateOnlyDisplay(draft.fechaEmision || draft.fecha))}" readonly />
-        </label>
-        <label class="transfer-field transfer-import-origin">
-          <span>Origen</span>
-          <input type="text" value="${escapeHtml(originName)}" readonly />
-        </label>
-        <label class="transfer-field transfer-full-field">
-          <span>Observacion</span>
-          <input type="text" value="${escapeHtml(toInputValue(draft.observacion))}" readonly />
-        </label>
-      </div>
+        <div class="transfer-header-panel transfer-import-header">
+          <label class="transfer-field transfer-number-field">
+            <span>Numero</span>
+            <input type="text" value="${escapeHtml(toDisplayValue(draft.numero))}" readonly />
+          </label>
+          <strong class="transfer-import-status">${escapeHtml(detailStatusText)}</strong>
+          <label class="transfer-field">
+            <span>Fecha</span>
+            <input type="text" value="${escapeHtml(formatDateOnlyDisplay(draft.fecha))}" readonly />
+          </label>
+          <label class="transfer-field">
+            <span>Fecha emision</span>
+            <input type="text" value="${escapeHtml(formatDateOnlyDisplay(draft.fechaEmision || draft.fecha))}" readonly />
+          </label>
 
-      <div class="transfer-lines-panel transfer-import-lines-panel">
-        ${renderLoadedTransferLines(draft)}
-      </div>
+          <label class="transfer-field transfer-import-origin">
+            <span>Origen</span>
+            <input type="text" value="${escapeHtml(originName)}" readonly />
+          </label>
 
-      <div class="transfer-summary-row transfer-import-summary">
-        <span></span>
-        <label>
-          Cantidad:
-          <input type="text" value="${escapeHtml(formatTransferQuantity(computeTransferDraftQuantity(draft)))}" readonly />
-        </label>
+          <label class="transfer-field transfer-import-status-field">
+            <span>Estado carga</span>
+            <input type="text" value="${escapeHtml(loadedLabel)}" readonly />
+          </label>
+
+          <label class="transfer-field transfer-full-field">
+            <span>Observacion</span>
+            <input type="text" value="${escapeHtml(toInputValue(draft.observacion))}" readonly />
+          </label>
+        </div>
+
+        <div class="transfer-lines-panel transfer-import-lines-panel">
+          ${renderLoadedTransferLines(draft)}
+        </div>
+
+        <div class="transfer-summary-row transfer-import-summary">
+          <strong>${isLoaded ? "Transferencia aplicada en inventario" : "Transferencia lista para cargar"}</strong>
+          <label>
+            Renglones:
+            <input type="text" value="${escapeHtml(String(lineCount))}" readonly />
+          </label>
+          <label>
+            Cantidad:
+            <input type="text" value="${escapeHtml(quantityTotal)}" readonly />
+          </label>
+        </div>
       </div>
     </section>
   `;
+}
+
+function countTransferDraftLines(draft) {
+  return (draft?.items || []).filter((item) => item.codigoBarra || item.referencia || item.articuloNombre).length;
 }
 
 function renderReadonlyTransferField(label, value) {
@@ -2332,7 +3668,7 @@ function getDesktopBreadcrumb(view) {
     return ["Sistema", "Panel principal"];
   }
 
-  if (["articulos", "tallas", "colores", "fabricantes", "marcas", "categorias"].includes(view)) {
+  if (["articulos", "existencia", "tallas", "colores", "fabricantes", "marcas", "categorias"].includes(view)) {
     return ["Archivos", "Inventario", getDesktopViewLabelV2(view)];
   }
 
@@ -2383,6 +3719,7 @@ function getDesktopViewLabelV2(view) {
   const labels = {
     desktop: "Panel principal",
     articulos: "Articulos",
+    existencia: "Existencia",
     tallas: "Tallas",
     colores: "Colores",
     fabricantes: "Fabricantes",
@@ -2486,6 +3823,39 @@ function formatTransferAmount(value) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(toFiniteNumber(value));
+}
+
+function formatInventoryNumeric(value) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  return formatTransferAmount(value);
+}
+
+function formatInventoryBoolean(value) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  return Number(value) === 1 || value === true ? "Si" : "No";
+}
+
+function formatInventoryDate(value) {
+  if (!value) {
+    return "-";
+  }
+
+  return formatDateDisplay(value);
+}
+
+function formatInventoryCatalogLabel(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const parts = [value.codigo, value.nombre].filter(Boolean);
+  return parts.length ? parts.join(" - ") : "-";
 }
 
 function toFiniteNumber(value) {
@@ -2924,6 +4294,96 @@ function renderTransferLookupModal() {
       </section>
     </div>
   `;
+}
+
+function renderAdjustmentLookupModal() {
+  if (!state.adjustmentLookup.open) {
+    return "";
+  }
+
+  const items = Array.isArray(state.adjustmentLookup.items) ? state.adjustmentLookup.items : [];
+  const totalLabel = state.adjustmentLookup.loading
+    ? "Cargando ajustes..."
+    : `Catalogo (${escapeHtml(String(items.length))} Registros)`;
+
+  return `
+    <div class="article-lookup-overlay adjustment-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-adjustment-lookup-close aria-label="Cerrar catalogo"></button>
+      <section class="article-lookup-dialog adjustment-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="adjustment-lookup-title">
+        <div class="article-lookup-header adjustment-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Ajustes</p>
+            <h3 id="adjustment-lookup-title">${totalLabel}</h3>
+            <p>Haz clic sobre un ajuste guardado o aprobado para cargarlo en el formulario.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">
+              ${state.adjustmentLookup.loading ? "Cargando..." : `${escapeHtml(String(items.length))} registros`}
+            </span>
+            <button class="article-command-button" type="button" data-adjustment-lookup-refresh ${state.adjustmentLookup.loading ? "disabled" : ""}>
+              Actualizar
+            </button>
+            <button class="article-command-button" type="button" data-adjustment-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          state.adjustmentLookup.loading
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Cargando ajustes</h3>
+                <p>Estamos trayendo ajustes guardados y aprobados.</p>
+              </div>
+            `
+            : items.length === 0
+              ? `
+                <div class="empty-state article-lookup-empty">
+                  <h3>Sin ajustes</h3>
+                  <p>No hay ajustes para mostrar en este catalogo.</p>
+                </div>
+              `
+              : `
+                <div class="table-wrap article-lookup-table-wrap adjustment-lookup-table-wrap">
+                  <table class="data-table article-lookup-table adjustment-lookup-table">
+                    <thead>
+                      <tr>
+                        <th>Numero</th>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        <th>Observacion</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${items.map(renderAdjustmentLookupRow).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderAdjustmentLookupRow(item) {
+  const isApproved = Number(item.status || 0) === 1;
+
+  return `
+    <tr class="adjustment-lookup-row ${isApproved ? "adjustment-lookup-row-approved" : "adjustment-lookup-row-pending"}" data-adjustment-lookup-select="${escapeHtml(String(item.numero || ""))}">
+      <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+      <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+      <td>${escapeHtml(item.tipo === "negativo" ? "NEGATIVO - RESTA" : "POSITIVO - SUMA")}</td>
+      <td>${escapeHtml(item.observacion || "-")}</td>
+      <td>${renderAdjustmentLookupStatusBadge(item.status)}</td>
+    </tr>
+  `;
+}
+
+function renderAdjustmentLookupStatusBadge(status) {
+  return `<span class="modern-chip">${Number(status || 0) === 1 ? "Aprobada" : "Pendiente"}</span>`;
 }
 
 function renderTransferLookupRow(item) {
@@ -3381,6 +4841,11 @@ function bindShellEvents() {
         return;
       }
 
+      if (nextView === "existencia" && userCanAccessFullInventory()) {
+        await loadInventoryExistenceWorkspace();
+        return;
+      }
+
       if (nextView === "roles") {
         await loadRoleAccess();
         return;
@@ -3388,6 +4853,21 @@ function bindShellEvents() {
 
       if (nextView === "transferencias" || nextView === "registro-transferencia") {
         await loadTransfersMetadata();
+        return;
+      }
+
+      if (nextView === "borrador-devoluciones") {
+        await loadDevReturnsModule();
+        return;
+      }
+
+      if (nextView === "registro-devoluciones") {
+        await loadDevReturnRecords();
+        return;
+      }
+
+      if (nextView === "cargar-devoluciones") {
+        await loadInboundDevReturns();
         return;
       }
 
@@ -3446,7 +4926,9 @@ function bindShellEvents() {
   });
 
   bindArticleEvents();
+  bindInventoryExistenceEvents();
   bindTransferEvents();
+  bindDevReturnEvents();
   bindAdjustmentEvents();
   bindSucursalEvents();
 
@@ -3460,6 +4942,53 @@ function bindShellEvents() {
       }
 
       await setRoleCatalogImportAccess(roleCode, nextEnabled);
+    });
+  });
+}
+
+function bindInventoryExistenceEvents() {
+  document.querySelector("[data-existence-search-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    state.inventoryExistence.search = {
+      buscar: readFormFieldValue(form, "buscar", ""),
+      status: readFormFieldValue(form, "status", ""),
+      tipo: readFormFieldValue(form, "tipo", ""),
+    };
+    state.inventoryExistence.pagination.limit = Number.parseInt(readFormFieldValue(form, "limit", "25"), 10) || 25;
+    await loadInventoryExistence(1);
+  });
+
+  document.querySelector("[data-existence-clear]")?.addEventListener("click", async () => {
+    state.inventoryExistence.search = {
+      buscar: "",
+      status: "",
+      tipo: "",
+    };
+    state.inventoryExistence.pagination.limit = 25;
+    await loadInventoryExistence(1);
+  });
+
+  document.querySelector("[data-existence-refresh]")?.addEventListener("click", async () => {
+    await loadInventoryExistence(state.inventoryExistence.pagination.page || 1);
+  });
+
+  document.querySelectorAll("[data-existence-page]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const direction = button.getAttribute("data-existence-page");
+      const page = state.inventoryExistence.pagination.page || 1;
+      const totalPages = state.inventoryExistence.pagination.totalPages || 1;
+      const nextPage = direction === "prev" ? page - 1 : page + 1;
+
+      if (nextPage < 1 || nextPage > totalPages) {
+        return;
+      }
+
+      await loadInventoryExistence(nextPage);
     });
   });
 }
@@ -3764,6 +5293,58 @@ function bindArticleEvents() {
     });
   });
 
+  document.querySelectorAll("[data-adjustment-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeAdjustmentLookupModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-adjustment-lookup-refresh]")?.addEventListener("click", async () => {
+    await openAdjustmentLookupModal();
+  });
+
+  document.querySelectorAll("[data-adjustment-lookup-select]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      const numero = Number.parseInt(row.getAttribute("data-adjustment-lookup-select") || "", 10);
+      if (!numero) {
+        return;
+      }
+
+      closeAdjustmentLookupModal();
+      await loadAdjustmentForEdit(numero);
+    });
+  });
+
+  document.querySelectorAll("[data-dev-return-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeDevReturnLookupModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-dev-return-lookup-refresh]")?.addEventListener("click", async () => {
+    await openDevReturnLookupModal({ mode: state.devReturnLookup.mode || "drafts" });
+  });
+
+  document.querySelectorAll("[data-dev-return-lookup-select]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      const numero = Number.parseInt(row.getAttribute("data-dev-return-lookup-select") || "", 10);
+      if (!numero) {
+        return;
+      }
+
+      const lookupMode = state.devReturnLookup.mode;
+      closeDevReturnLookupModal();
+      if (lookupMode === "records") {
+        await loadDevReturnRecordDetail(numero);
+        return;
+      }
+
+      await loadDevReturnDraftForEdit(numero);
+    });
+  });
+
   document.querySelector(".desktop-shell")?.addEventListener("click", (event) => {
     if (event.target.closest("[data-catalog-combobox]")) {
       return;
@@ -3925,6 +5506,210 @@ function bindTransferEvents() {
   }
 }
 
+function bindDevReturnEvents() {
+  const form = document.getElementById("dev-return-form");
+  if (form) {
+    form.addEventListener("input", () => {
+      captureDevReturnDraft();
+    });
+
+    form.addEventListener("change", () => {
+      captureDevReturnDraft();
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureDevReturnDraft();
+      await saveDevReturn();
+    });
+
+    document.querySelectorAll("[data-dev-return-barcode-input]").forEach((input) => {
+      input.addEventListener("keydown", async (event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
+
+        event.preventDefault();
+        const index = Number.parseInt(input.getAttribute("data-dev-return-barcode-input") || "-1", 10);
+        const codigoBarra = String(input.value || "").trim();
+        if (index >= 0 && codigoBarra) {
+          await fillDevReturnLineFromInventory(index, codigoBarra);
+        }
+      });
+
+      input.addEventListener("blur", async () => {
+        const index = Number.parseInt(input.getAttribute("data-dev-return-barcode-input") || "-1", 10);
+        const codigoBarra = String(input.value || "").trim();
+        const row = input.closest("[data-dev-return-line-row]");
+        const currentName = row?.querySelector('[name="nombre"]')?.value || "";
+        if (index >= 0 && codigoBarra && !currentName) {
+          await fillDevReturnLineFromInventory(index, codigoBarra);
+        }
+      });
+    });
+  }
+
+  document.querySelector("[data-dev-return-new]")?.addEventListener("click", () => {
+    resetDevReturnDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-dev-return-open-lookup]")?.addEventListener("click", async () => {
+    await openDevReturnLookupModal();
+  });
+
+  document.querySelector("[data-dev-return-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-dev-return-export]")?.addEventListener("click", async () => {
+    captureDevReturnDraft();
+    const numero = Number.parseInt(String(state.devReturns.draft?.numero || ""), 10);
+    if (!Number.isInteger(numero)) {
+      setFlash("Guarda el borrador antes de exportarlo.", "error");
+      render();
+      return;
+    }
+
+    await exportDevReturn(numero);
+  });
+
+  document.querySelector("[data-dev-return-refresh-board]")?.addEventListener("click", async () => {
+    await loadDevReturnsModule();
+  });
+
+  document.querySelectorAll("[data-dev-return-open-draft]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const numero = Number.parseInt(button.getAttribute("data-dev-return-open-draft") || "", 10);
+      if (!Number.isInteger(numero)) {
+        return;
+      }
+
+      await loadDevReturnDraftForEdit(numero);
+    });
+  });
+
+  document.querySelectorAll("[data-dev-return-open-inbound]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const globalId = button.getAttribute("data-dev-return-open-inbound") || "";
+      if (!globalId) {
+        return;
+      }
+
+      await loadInboundDevReturnDraftDetail(globalId);
+    });
+  });
+
+  document.querySelector("[data-dev-return-close-inbound-detail]")?.addEventListener("click", () => {
+    state.devReturns.selectedInboundGlobalId = "";
+    state.devReturns.inboundDetail = null;
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-dev-return-approve-inbound]")?.addEventListener("click", async () => {
+    const globalId = state.devReturns.selectedInboundGlobalId || state.devReturns.inboundDetail?.globalId || "";
+    if (!globalId) {
+      return;
+    }
+
+    await approveInboundDevReturnDraft(globalId);
+  });
+
+  document.querySelector("[data-dev-return-record-refresh]")?.addEventListener("click", async () => {
+    await loadDevReturnRecords();
+  });
+
+  document.querySelector("[data-dev-return-record-new]")?.addEventListener("click", () => {
+    state.devReturnRecords.detail = null;
+    state.devReturnRecords.selectedNumero = null;
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-dev-return-record-search]")?.addEventListener("click", async () => {
+    await openDevReturnLookupModal({ mode: "records" });
+  });
+
+  document.querySelector("[data-dev-return-record-export]")?.addEventListener("click", async () => {
+    const numero = Number.parseInt(String(state.devReturnRecords.detail?.numero || ""), 10);
+    if (!Number.isInteger(numero)) {
+      setFlash("Busca primero un borrador aprobado para exportar su registro.", "error");
+      render();
+      return;
+    }
+
+    await exportDevReturnRecord(numero);
+  });
+
+  document.querySelector("[data-dev-return-record-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-dev-return-record-back]")?.addEventListener("click", () => {
+    state.devReturnRecords.detail = null;
+    state.devReturnRecords.selectedNumero = null;
+    clearFlash();
+    render();
+  });
+
+  document.querySelectorAll("[data-dev-return-record-open]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const numero = Number.parseInt(button.getAttribute("data-dev-return-record-open") || "", 10);
+      if (!Number.isInteger(numero)) {
+        return;
+      }
+
+      await loadDevReturnRecordDetail(numero);
+    });
+  });
+
+  document.querySelector("[data-dev-return-inbound-refresh]")?.addEventListener("click", async () => {
+    await loadInboundDevReturns();
+  });
+
+  document.querySelector("[data-dev-return-inbound-back]")?.addEventListener("click", () => {
+    state.devReturnInbound.detail = null;
+    state.devReturnInbound.selectedNumero = null;
+    state.devReturnInbound.selectedCodigoEnvia = "";
+    clearFlash();
+    render();
+  });
+
+  document.querySelectorAll("[data-dev-return-inbound-open]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const numero = Number.parseInt(button.getAttribute("data-dev-return-inbound-open") || "", 10);
+      const codigoEnvia = button.getAttribute("data-dev-return-inbound-source") || "";
+      if (!Number.isInteger(numero)) {
+        return;
+      }
+
+      await loadInboundDevReturnDetail(numero, codigoEnvia);
+    });
+  });
+
+  document.querySelector("[data-dev-return-inbound-approve]")?.addEventListener("click", async () => {
+    const numero = Number.parseInt(String(state.devReturnInbound.detail?.numero || ""), 10);
+    const codigoEnvia = state.devReturnInbound.detail?.codigoEnvia || state.devReturnInbound.selectedCodigoEnvia || "";
+    if (!Number.isInteger(numero)) {
+      return;
+    }
+
+    await approveInboundDevReturn(numero, codigoEnvia);
+  });
+}
+
 function bindAdjustmentEvents() {
   const form = document.getElementById("adjustment-form");
   if (!form) {
@@ -3949,6 +5734,10 @@ function bindAdjustmentEvents() {
     resetAdjustmentDraft();
     clearFlash();
     render();
+  });
+
+  document.querySelector("[data-adjustment-open-lookup]")?.addEventListener("click", async () => {
+    await openAdjustmentLookupModal();
   });
 
   document.querySelector("[data-adjustment-exit]")?.addEventListener("click", () => {
@@ -4778,6 +6567,380 @@ async function deleteTransfer(numero) {
   }
 }
 
+async function loadDevReturnsMetadata(options = {}) {
+  const { renderAfter = true } = options;
+  state.devReturns.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    state.devReturns.metadata = await apiFetch("/dev-returns/metadata");
+    if (!state.devReturns.draft?.numero) {
+      state.devReturns.draft = createEmptyDevReturnDraft(state.devReturns.metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la configuracion de devoluciones: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devReturns.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadDevReturnsModule(options = {}) {
+  const { renderAfter = true } = options;
+  state.devReturns.loadingDashboard = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    if (!state.devReturns.metadata) {
+      await loadDevReturnsMetadata({ renderAfter: false });
+    }
+
+    const [sentResponse, inboundResponse] = await Promise.all([
+      apiFetch("/dev-returns/drafts?limit=12"),
+      apiFetch("/dev-returns/drafts/inbound?limit=12"),
+    ]);
+    state.devReturns.items = Array.isArray(sentResponse.items) ? sentResponse.items : [];
+    state.devReturns.inboundItems = Array.isArray(inboundResponse.items) ? inboundResponse.items : [];
+    if (!state.devReturns.draft?.numero) {
+      state.devReturns.draft = createEmptyDevReturnDraft(state.devReturns.metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar las bandejas de devoluciones: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devReturns.loadingDashboard = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function openDevReturnLookupModal(options = {}) {
+  const mode = options.mode === "records" ? "records" : "drafts";
+  if (mode === "drafts") {
+    captureDevReturnDraft();
+  }
+  state.devReturnLookup.open = true;
+  state.devReturnLookup.loading = true;
+  state.devReturnLookup.items = [];
+  state.devReturnLookup.mode = mode;
+  render();
+
+  try {
+    const response = await apiFetch("/dev-returns/drafts?limit=50");
+    const items = Array.isArray(response.items) ? response.items : [];
+    state.devReturnLookup.items = mode === "records"
+      ? items.filter((item) => Number(item?.status || 0) >= 2)
+      : items;
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el catalogo de borradores: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devReturnLookup.loading = false;
+    render();
+  }
+}
+
+function closeDevReturnLookupModal() {
+  state.devReturnLookup.open = false;
+  state.devReturnLookup.loading = false;
+  state.devReturnLookup.mode = "drafts";
+}
+
+async function loadDevReturnDraftForEdit(numero) {
+  state.devReturns.loadingDetail = true;
+  clearFlash();
+  render();
+
+  try {
+    if (!state.devReturns.metadata) {
+      await loadDevReturnsMetadata({ renderAfter: false });
+    }
+
+    const response = await apiFetch(`/dev-returns/drafts/${encodeURIComponent(numero)}`);
+    state.devReturns.selectedNumero = numero;
+    state.devReturns.inboundDetail = null;
+    state.devReturns.selectedInboundGlobalId = "";
+    state.devReturns.draft = devReturnToDraft(response.borrador, state.devReturns.metadata);
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el borrador ${numero}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devReturns.loadingDetail = false;
+    render();
+  }
+}
+
+async function loadInboundDevReturnDraftDetail(globalId) {
+  state.devReturns.loadingInboundDetail = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/dev-returns/drafts/inbound/${encodeURIComponent(globalId)}`);
+    state.devReturns.selectedInboundGlobalId = globalId;
+    state.devReturns.inboundDetail = response.borrador || null;
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el borrador recibido: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devReturns.loadingInboundDetail = false;
+    render();
+  }
+}
+
+async function approveInboundDevReturnDraft(globalId) {
+  state.devReturns.approvingInbound = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/dev-returns/drafts/inbound/${encodeURIComponent(globalId)}/approve`, {
+      method: "POST",
+    });
+    state.devReturns.inboundDetail = response.borrador || state.devReturns.inboundDetail;
+    await loadDevReturnsModule({ renderAfter: false });
+    setFlash("Borrador aprobado correctamente. El origen fue notificado para registrar la devolución.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.devReturns.approvingInbound = false;
+    render();
+  }
+}
+
+async function saveDevReturn() {
+  const draft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
+  const validationMessage = validateDevReturnDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.devReturns.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildDevReturnPayload(draft);
+    const response = draft.numero
+      ? await apiFetch(`/dev-returns/drafts/${encodeURIComponent(draft.numero)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/dev-returns/drafts", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.devReturns.selectedNumero = response.borrador?.numero || draft.numero || null;
+    state.devReturns.draft = devReturnToDraft(response.borrador, state.devReturns.metadata);
+    await loadDevReturnsModule({ renderAfter: false });
+    setFlash(
+      draft.numero
+        ? `Borrador ${response.borrador?.numero || draft.numero} actualizado correctamente.`
+        : `Borrador ${response.borrador?.numero || ""} guardado correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.devReturns.saving = false;
+    render();
+  }
+}
+
+async function exportDevReturn(numero) {
+  state.devReturns.exporting = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/dev-returns/drafts/${encodeURIComponent(numero)}/export`, {
+      method: "POST",
+    });
+
+    state.devReturns.selectedNumero = numero;
+    state.devReturns.draft = devReturnToDraft(response.borrador, state.devReturns.metadata);
+    await loadDevReturnsModule({ renderAfter: false });
+    setFlash(`Borrador ${numero} exportado correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.devReturns.exporting = false;
+    render();
+  }
+}
+
+async function loadDevReturnRecords(options = {}) {
+  const { renderAfter = true } = options;
+  state.devReturnRecords.loading = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/dev-returns/returns?limit=25");
+    state.devReturnRecords.items = Array.isArray(response.items) ? response.items : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el registro de devoluciones: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devReturnRecords.loading = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadDevReturnRecordDetail(numero) {
+  state.devReturnRecords.loadingDetail = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/dev-returns/returns/${encodeURIComponent(numero)}`);
+    state.devReturnRecords.selectedNumero = numero;
+    state.devReturnRecords.detail = response.devolucion || null;
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la devolución ${numero}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devReturnRecords.loadingDetail = false;
+    render();
+  }
+}
+
+async function exportDevReturnRecord(numero) {
+  state.devReturnRecords.exporting = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/dev-returns/returns/${encodeURIComponent(numero)}/export`, {
+      method: "POST",
+    });
+    state.devReturnRecords.selectedNumero = numero;
+    state.devReturnRecords.detail = response.devolucion || state.devReturnRecords.detail;
+    await loadDevReturnRecords({ renderAfter: false });
+    setFlash(`Registro de devolución ${numero} exportado correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.devReturnRecords.exporting = false;
+    render();
+  }
+}
+
+async function loadInboundDevReturns(options = {}) {
+  const { renderAfter = true } = options;
+  state.devReturnInbound.loading = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/dev-returns/inbound?limit=25");
+    state.devReturnInbound.items = Array.isArray(response.items) ? response.items : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la bandeja de devoluciones recibidas: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devReturnInbound.loading = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadInboundDevReturnDetail(numero, codigoEnvia) {
+  state.devReturnInbound.loadingDetail = true;
+  clearFlash();
+  render();
+
+  try {
+    const query = codigoEnvia ? `?codigoEnvia=${encodeURIComponent(codigoEnvia)}` : "";
+    const response = await apiFetch(`/dev-returns/inbound/${encodeURIComponent(numero)}${query}`);
+    state.devReturnInbound.selectedNumero = numero;
+    state.devReturnInbound.selectedCodigoEnvia = codigoEnvia || "";
+    state.devReturnInbound.detail = response.devolucion || null;
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la devolución recibida ${numero}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devReturnInbound.loadingDetail = false;
+    render();
+  }
+}
+
+async function approveInboundDevReturn(numero, codigoEnvia) {
+  state.devReturnInbound.approving = true;
+  clearFlash();
+  render();
+
+  try {
+    const query = codigoEnvia ? `?codigoEnvia=${encodeURIComponent(codigoEnvia)}` : "";
+    const response = await apiFetch(`/dev-returns/inbound/${encodeURIComponent(numero)}/approve${query}`, {
+      method: "POST",
+    });
+    state.devReturnInbound.detail = response.devolucion || state.devReturnInbound.detail;
+    await loadInboundDevReturns({ renderAfter: false });
+    setFlash("Devolución aprobada correctamente. El inventario ya fue cargado en destino.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.devReturnInbound.approving = false;
+    render();
+  }
+}
+
+async function fillDevReturnLineFromInventory(index, codigoBarra) {
+  captureDevReturnDraft();
+  const draft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
+  const items = Array.isArray(draft.items) && draft.items.length ? [...draft.items] : [createEmptyDevReturnLineDraft()];
+
+  try {
+    const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
+    const article = response.mercancia || response;
+    const currentLine = items[index] || createEmptyDevReturnLineDraft();
+    const ultimoCosto = article.inventario?.costos?.ultimo ?? article.costos?.ultimo ?? currentLine.costo ?? "";
+
+    items[index] = {
+      ...currentLine,
+      codigoBarra: article.codigoBarra || codigoBarra,
+      referencia: article.referencia || currentLine.referencia || "",
+      nombre: article.general?.nombre || article.nombre || currentLine.nombre || "",
+      costo: toInputValue(ultimoCosto),
+      cantidad: currentLine.cantidad || "1",
+      numeroCaja: currentLine.numeroCaja || "0",
+    };
+
+    state.devReturns.draft = {
+      ...draft,
+      items,
+    };
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el articulo ${codigoBarra}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    render();
+  }
+}
+
 async function loadAdjustmentsMetadata(options = {}) {
   const { renderAfter = true } = options;
   state.adjustments.loadingMetadata = true;
@@ -4934,6 +7097,67 @@ async function loadSucursalForEdit(codigo) {
   } finally {
     state.sucursales.loading = false;
     render();
+  }
+}
+
+async function loadInventoryExistenceWorkspace() {
+  if (!state.metadata && userCanAccessFullInventory()) {
+    await loadCreationMetadata({ renderAfter: false });
+  }
+
+  await loadInventoryExistence(state.inventoryExistence.pagination.page || 1);
+}
+
+async function loadInventoryExistence(page = 1, options = {}) {
+  const { renderAfter = true, background = false } = options;
+
+  if (background) {
+    state.inventoryExistence.refreshing = true;
+  } else {
+    state.inventoryExistence.loading = true;
+  }
+
+  if (renderAfter && !background) {
+    render();
+  }
+
+  try {
+    const params = new URLSearchParams();
+    const pagination = state.inventoryExistence.pagination || {};
+    const search = state.inventoryExistence.search || {};
+    const limit = Math.max(1, Math.min(Number(pagination.limit || 25), 100));
+
+    params.set("page", String(Math.max(page, 1)));
+    params.set("limit", String(limit));
+
+    if (search.buscar) {
+      params.set("buscar", search.buscar);
+    }
+    if (search.status) {
+      params.set("status", search.status);
+    }
+    if (search.tipo) {
+      params.set("tipo", search.tipo);
+    }
+
+    const response = await apiFetch(`/inventory?${params.toString()}`);
+    state.inventoryExistence.items = Array.isArray(response.data) ? response.data : [];
+    state.inventoryExistence.pagination = response.pagination || {
+      page: 1,
+      limit,
+      total: 0,
+      totalPages: 0,
+    };
+    state.inventoryExistence.lastUpdatedAt = new Date().toISOString();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo consultar la existencia del inventario: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.inventoryExistence.loading = false;
+    state.inventoryExistence.refreshing = false;
+    if (renderAfter) {
+      render();
+    }
   }
 }
 
@@ -5189,6 +7413,30 @@ function closeArticleLookupModal() {
   state.articleLookup.loading = false;
 }
 
+async function openAdjustmentLookupModal() {
+  captureAdjustmentDraft();
+  state.adjustmentLookup.open = true;
+  state.adjustmentLookup.loading = true;
+  state.adjustmentLookup.items = [];
+  render();
+
+  try {
+    const response = await apiFetch("/adjustments?limit=50");
+    state.adjustmentLookup.items = Array.isArray(response.items) ? response.items : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el catalogo de ajustes: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.adjustmentLookup.loading = false;
+    render();
+  }
+}
+
+function closeAdjustmentLookupModal() {
+  state.adjustmentLookup.open = false;
+  state.adjustmentLookup.loading = false;
+}
+
 async function openTransferLookupModal() {
   captureTransferDraft();
   state.transferLookup.open = true;
@@ -5212,6 +7460,27 @@ async function openTransferLookupModal() {
 function closeTransferLookupModal() {
   state.transferLookup.open = false;
   state.transferLookup.loading = false;
+}
+
+async function loadAdjustmentForEdit(numero) {
+  state.loadingForm = true;
+  clearFlash();
+  render();
+
+  try {
+    if (!state.adjustments.metadata) {
+      await loadAdjustmentsMetadata({ renderAfter: false });
+    }
+
+    const response = await apiFetch(`/adjustments/${encodeURIComponent(numero)}`);
+    state.adjustments.draft = adjustmentToDraft(response.ajuste, state.adjustments.metadata);
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el ajuste ${numero}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.loadingForm = false;
+    render();
+  }
 }
 
 async function fetchAllArticlesForLookup() {
@@ -5437,6 +7706,142 @@ function formatTransferQuantity(value) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
+}
+
+function resetDevReturnDraft() {
+  state.devReturns.selectedNumero = null;
+  state.devReturns.draft = createEmptyDevReturnDraft(state.devReturns.metadata);
+}
+
+function createEmptyDevReturnDraft(metadata) {
+  return {
+    numero: null,
+    fecha: toDateInputValue(new Date()),
+    codigoDestino: String(metadata?.defaults?.codigoDestino || metadata?.destinos?.[0]?.codigo || "ORIGEN"),
+    observacion: "",
+    status: 0,
+    items: [createEmptyDevReturnLineDraft()],
+  };
+}
+
+function createEmptyDevReturnLineDraft() {
+  return {
+    codigoBarra: "",
+    referencia: "",
+    nombre: "",
+    cantidad: "",
+    numeroCaja: "0",
+    costo: "",
+  };
+}
+
+function captureDevReturnDraft() {
+  const form = document.getElementById("dev-return-form");
+  if (!form) {
+    return;
+  }
+
+  state.devReturns.draft = readDevReturnDraft(form);
+}
+
+function readDevReturnDraft(form) {
+  const currentDraft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
+  const rows = Array.from(form.querySelectorAll("[data-dev-return-line-row]"));
+  const items = rows
+    .map((row) => ({
+      codigoBarra: readRowFieldValue(row, "codigoBarra", ""),
+      referencia: readRowFieldValue(row, "referencia", ""),
+      nombre: readRowFieldValue(row, "nombre", ""),
+      cantidad: readRowFieldValue(row, "cantidad", "1"),
+      numeroCaja: readRowFieldValue(row, "numeroCaja", "0"),
+      costo: readRowFieldValue(row, "costo", ""),
+    }))
+    .filter((item) => item.codigoBarra || item.referencia || item.nombre || item.cantidad);
+
+  return {
+    numero: currentDraft.numero,
+    fecha: readFormFieldValue(form, "fecha", currentDraft.fecha),
+    codigoDestino: readFormFieldValue(form, "codigoDestino", currentDraft.codigoDestino),
+    observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
+    status: currentDraft.status,
+    items: items.length ? items : [createEmptyDevReturnLineDraft()],
+  };
+}
+
+function validateDevReturnDraft(draft) {
+  const codigoDestino = String(draft.codigoDestino || "").trim().toUpperCase();
+  if (!codigoDestino) {
+    return "Debes indicar la bodega destino.";
+  }
+
+  const validLines = (draft.items || []).filter((item) => String(item.codigoBarra || "").trim());
+  if (!validLines.length) {
+    return "El borrador de devolucion debe tener al menos un renglon.";
+  }
+
+  for (const item of validLines) {
+    const cantidad = Number(item.cantidad || 0);
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      return `La cantidad del articulo ${item.codigoBarra || ""} debe ser mayor a cero.`;
+    }
+  }
+
+  return "";
+}
+
+function buildDevReturnPayload(draft) {
+  return {
+    fecha: toApiDateTime(draft.fecha),
+    codigoDestino: String(draft.codigoDestino || "").trim().toUpperCase() || undefined,
+    observacion: String(draft.observacion || "").trim() || undefined,
+    items: (draft.items || [])
+      .filter((item) => String(item.codigoBarra || "").trim())
+      .map((item) => ({
+        codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
+        cantidad: String(item.cantidad || "").trim(),
+        numeroCaja: Number.parseInt(String(item.numeroCaja || "0"), 10) || 0,
+        costo: String(item.costo || "").trim() || undefined,
+      })),
+  };
+}
+
+function devReturnToDraft(draft, metadata = state.devReturns?.metadata) {
+  return {
+    numero: draft?.numero ?? null,
+    fecha: toDateInputValue(draft?.fecha),
+    codigoDestino: draft?.codigoDestino || metadata?.defaults?.codigoDestino || metadata?.destinos?.[0]?.codigo || "ORIGEN",
+    observacion: draft?.observacion || "",
+    status: Number(draft?.status ?? 0),
+    items: Array.isArray(draft?.items) && draft.items.length > 0
+      ? draft.items.map((item) => ({
+          codigoBarra: item.codigoBarra || "",
+          referencia: item.articulo?.referencia || item.referencia || "",
+          nombre: item.articulo?.nombre || item.nombre || "",
+          cantidad: toInputValue(item.cantidad),
+          numeroCaja: toInputValue(item.numeroCaja),
+          costo: toInputValue(item.costo),
+        }))
+      : [createEmptyDevReturnLineDraft()],
+  };
+}
+
+function computeDevReturnDraftTotal(draft) {
+  return (draft.items || []).reduce((total, item) => {
+    const quantity = Number(item?.cantidad || 0);
+    const cost = Number(item?.costo || 0);
+    if (!Number.isFinite(quantity) || !Number.isFinite(cost)) {
+      return total;
+    }
+
+    return total + quantity * cost;
+  }, 0);
+}
+
+function computeDevReturnDraftQuantity(draft) {
+  return (draft.items || []).reduce((total, item) => {
+    const quantity = Number(item?.cantidad || 0);
+    return total + (Number.isFinite(quantity) ? quantity : 0);
+  }, 0);
 }
 
 function resetAdjustmentDraft() {
@@ -6057,10 +8462,57 @@ function getCatalogSingularLabel(singular) {
   return `el ${singular}`;
 }
 
+function syncExistenceAutoRefresh() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (!state.token || state.currentView !== "existencia") {
+    clearExistenceAutoRefresh();
+    return;
+  }
+
+  if (existenceAutoRefreshHandle !== null) {
+    return;
+  }
+
+  existenceAutoRefreshHandle = window.setInterval(async () => {
+    if (!state.token || state.currentView !== "existencia") {
+      clearExistenceAutoRefresh();
+      return;
+    }
+
+    if (state.inventoryExistence.loading || state.inventoryExistence.refreshing) {
+      return;
+    }
+
+    await loadInventoryExistence(state.inventoryExistence.pagination.page || 1, {
+      background: true,
+    });
+  }, EXISTENCE_AUTO_REFRESH_MS);
+}
+
+function clearExistenceAutoRefresh() {
+  if (existenceAutoRefreshHandle === null || typeof window === "undefined") {
+    return;
+  }
+
+  window.clearInterval(existenceAutoRefreshHandle);
+  existenceAutoRefreshHandle = null;
+}
+
 async function preloadAuthenticatedDesktopData() {
   if (!userCanAccessFullInventory()) {
     state.metadata = null;
     state.articles = [];
+    state.inventoryExistence.items = [];
+    state.inventoryExistence.lastUpdatedAt = "";
+    state.inventoryExistence.pagination = {
+      page: 1,
+      limit: 25,
+      total: 0,
+      totalPages: 0,
+    };
     state.pagination = {
       page: 1,
       limit: 10,
@@ -6323,6 +8775,7 @@ function persistUser() {
 }
 
 function clearSession() {
+  clearExistenceAutoRefresh();
   state.token = "";
   state.user = null;
   state.currentView = "desktop";
@@ -6335,6 +8788,23 @@ function clearSession() {
     open: false,
     loading: false,
     items: [],
+  };
+  state.inventoryExistence = {
+    loading: false,
+    refreshing: false,
+    items: [],
+    lastUpdatedAt: "",
+    pagination: {
+      page: 1,
+      limit: 25,
+      total: 0,
+      totalPages: 0,
+    },
+    search: {
+      buscar: "",
+      status: "",
+      tipo: "",
+    },
   };
   state.catalogImport = {
     uploadingKind: "",
@@ -6366,10 +8836,59 @@ function clearSession() {
     selectedNumero: null,
     draft: createEmptyTransferDraft(),
   };
+  state.devReturns = {
+    loadingMetadata: false,
+    loadingDetail: false,
+    loadingDashboard: false,
+    loadingInboundDetail: false,
+    saving: false,
+    exporting: false,
+    approvingInbound: false,
+    items: [],
+    inboundItems: [],
+    inboundDetail: null,
+    metadata: null,
+    search: {
+      buscar: "",
+      status: "",
+      limit: "50",
+    },
+    selectedNumero: null,
+    selectedInboundGlobalId: "",
+    draft: createEmptyDevReturnDraft(),
+  };
+  state.devReturnRecords = {
+    loading: false,
+    loadingDetail: false,
+    exporting: false,
+    items: [],
+    detail: null,
+    selectedNumero: null,
+  };
+  state.devReturnInbound = {
+    loading: false,
+    loadingDetail: false,
+    approving: false,
+    items: [],
+    detail: null,
+    selectedNumero: null,
+    selectedCodigoEnvia: "",
+  };
+  state.adjustmentLookup = {
+    open: false,
+    loading: false,
+    items: [],
+  };
   state.transferLookup = {
     open: false,
     loading: false,
     items: [],
+  };
+  state.devReturnLookup = {
+    open: false,
+    loading: false,
+    items: [],
+    mode: "drafts",
   };
   state.articleEditorTab = "general";
   state.articles = [];

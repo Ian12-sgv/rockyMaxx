@@ -204,3 +204,4 @@ Clave: 123456
 - Continuar pragmaticamente sobre las tablas legacy actuales.
 - Antes de editar, revisar siempre `git status --short` y `git diff --stat`.
 - Si hay cambios pendientes, no revertirlos sin permiso.
+

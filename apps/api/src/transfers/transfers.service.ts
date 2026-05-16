@@ -524,49 +524,7 @@ export class TransfersService {
     await this.ensureTransferSyncSchema();
     const limit = pushTransferSyncDto.limit ?? 50;
     const rows = await this.getTransferSyncOutboxRows(TRANSFER_SYNC_STATUS_PENDING, limit);
-    const results = [];
-
-    for (const row of rows) {
-      try {
-        const destination = await this.resolveDestinationSyncNode(row);
-        if (!destination.ApiUrl) {
-          throw new ConflictException(
-            `El nodo destino ${row.DestinationNodeId || row.CodigoRecibe} no tiene apiUrl configurada.`,
-          );
-        }
-
-        const response = await this.postTransferSyncPackage(destination.ApiUrl, row.Payload);
-        const sent = await this.updateTransferSyncOutboxStatus(
-          row.GlobalId,
-          TRANSFER_SYNC_STATUS_SENT,
-          null,
-        );
-
-        results.push({
-          globalId: row.GlobalId,
-          numero: row.Numero,
-          codigoRecibe: row.CodigoRecibe,
-          status: sent.Status,
-          destino: this.toTransferSyncNodeView(destination),
-          respuestaDestino: response,
-        });
-      } catch (error) {
-        const message = this.extractSyncErrorMessage(error);
-        this.logger.warn(`No se pudo sincronizar ${row.GlobalId}: ${message}`);
-        await this.updateTransferSyncOutboxStatus(
-          row.GlobalId,
-          TRANSFER_SYNC_STATUS_PENDING,
-          message,
-        );
-        results.push({
-          globalId: row.GlobalId,
-          numero: row.Numero,
-          codigoRecibe: row.CodigoRecibe,
-          status: TRANSFER_SYNC_STATUS_PENDING,
-          error: message,
-        });
-      }
-    }
+    const results = await this.pushTransferSyncRows(rows);
 
     return {
       processed: results.length,
@@ -889,8 +847,11 @@ export class TransfersService {
       },
     );
 
+    const sync = await this.pushTransferSyncForNumero(numero);
+
     return {
       transferencia,
+      sync,
     };
   }
 
@@ -1068,6 +1029,90 @@ export class TransfersService {
       status,
       limit,
     );
+  }
+
+  private async getPendingTransferSyncRowsByNumero(numero: number) {
+    return this.prisma.$queryRawUnsafe<TransferSyncOutboxRow[]>(
+      `
+        select
+          "GlobalId",
+          "Numero",
+          "CodigoEnvia",
+          "CodigoRecibe",
+          "SourceNodeId",
+          "DestinationNodeId",
+          "EventType",
+          "Payload",
+          "Status",
+          "CreatedAt",
+          "SentAt",
+          "Attempts",
+          "LastError"
+        from dbo."TRANSFER_SYNC_OUTBOX"
+        where "Numero" = $1 and "Status" = $2
+        order by "CreatedAt" desc
+      `,
+      numero,
+      TRANSFER_SYNC_STATUS_PENDING,
+    );
+  }
+
+  private async pushTransferSyncForNumero(numero: number) {
+    const rows = await this.getPendingTransferSyncRowsByNumero(numero);
+    const results = await this.pushTransferSyncRows(rows);
+
+    return {
+      processed: results.length,
+      results,
+    };
+  }
+
+  private async pushTransferSyncRows(rows: TransferSyncOutboxRow[]) {
+    const results = [];
+
+    for (const row of rows) {
+      try {
+        const destination = await this.resolveDestinationSyncNode(row);
+        if (!destination.ApiUrl) {
+          throw new ConflictException(
+            `El nodo destino ${row.DestinationNodeId || row.CodigoRecibe} no tiene apiUrl configurada.`,
+          );
+        }
+
+        const response = await this.postTransferSyncPackage(destination.ApiUrl, row.Payload);
+        const sent = await this.updateTransferSyncOutboxStatus(
+          row.GlobalId,
+          TRANSFER_SYNC_STATUS_SENT,
+          null,
+        );
+
+        results.push({
+          globalId: row.GlobalId,
+          numero: row.Numero,
+          codigoRecibe: row.CodigoRecibe,
+          status: sent.Status,
+          destino: this.toTransferSyncNodeView(destination),
+          respuestaDestino: response,
+        });
+      } catch (error) {
+        const message = this.extractSyncErrorMessage(error);
+        this.logger.warn(`No se pudo sincronizar ${row.GlobalId}: ${message}`);
+        await this.updateTransferSyncOutboxStatus(
+          row.GlobalId,
+          TRANSFER_SYNC_STATUS_PENDING,
+          message,
+        );
+        results.push({
+          globalId: row.GlobalId,
+          numero: row.Numero,
+          codigoRecibe: row.CodigoRecibe,
+          status: TRANSFER_SYNC_STATUS_PENDING,
+          error: message,
+        });
+      }
+    }
+
+    return results;
   }
 
   private async updateTransferSyncOutboxStatus(
