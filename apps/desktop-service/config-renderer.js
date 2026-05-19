@@ -9,6 +9,8 @@ const schemaValue = document.getElementById("schema-name");
 const portValue = document.getElementById("port-value");
 const hostValue = document.getElementById("host-value");
 const urlsList = document.getElementById("urls-list");
+const mirrorEnabledInput = document.getElementById("mirror-enabled");
+const mirrorUrlInput = document.getElementById("mirror-url");
 
 let currentState = null;
 let saving = false;
@@ -51,6 +53,8 @@ function renderState(state) {
   schemaValue.textContent = state?.health?.database?.schema || "dbo";
   portValue.textContent = String(state?.apiPort || "-");
   hostValue.textContent = state?.apiHost || "-";
+  mirrorEnabledInput.checked = Boolean(state?.mirrorSyncEnabled);
+  mirrorUrlInput.value = state?.mirrorSyncRemoteApiUrl || "";
   renderUrls(state?.urls || []);
 
   saveButton.disabled = saving || !profileSelect.value;
@@ -76,7 +80,11 @@ saveButton.addEventListener("click", async () => {
   setFlash("Guardando configuracion y reiniciando el backend local...", "info");
 
   try {
-    const state = await window.rockyService.saveConfig(profileId);
+    const state = await window.rockyService.saveConfig({
+      profileId,
+      mirrorSyncEnabled: Boolean(mirrorEnabledInput.checked),
+      mirrorSyncRemoteApiUrl: String(mirrorUrlInput.value || "").trim(),
+    });
     renderState(state);
     setFlash("Configuracion guardada. El backend ya esta trabajando con la base seleccionada.", "success");
   } catch (error) {

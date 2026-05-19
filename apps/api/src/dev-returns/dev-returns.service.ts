@@ -9,6 +9,7 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma, type Inventario } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { UserView } from "../users/user-view.util";
 import { ApproveDevReturnDto } from "./dto/approve-dev-return.dto";
 import { CreateDevDraftDto, CreateDevDraftLineDto } from "./dto/create-dev-draft.dto";
@@ -306,6 +307,7 @@ export class DevReturnsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly mirrorSyncService: MirrorSyncService,
   ) {}
 
   async getMetadata() {
@@ -856,6 +858,10 @@ export class DevReturnsService {
         }
 
         await this.applyInventoryDelta(tx, this.aggregateInboundReturnQuantities(existing.iMovDevTransferencias));
+        await this.mirrorSyncService.enqueueInventorySnapshotsTx(
+          tx,
+          existing.iMovDevTransferencias.map((line) => line.CodigoBarra),
+        );
 
         await tx.iDevTransferencias.update({
           where: {
@@ -903,11 +909,15 @@ export class DevReturnsService {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    const sync = await this.pushPendingSyncForGlobalId(result.ackGlobalId);
+    const [sync, mirrorSync] = await Promise.all([
+      this.pushPendingSyncForGlobalId(result.ackGlobalId),
+      this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 }),
+    ]);
 
     return {
       devolucion: this.toInboundReturnDetailView(result.devolucion),
       sync,
+      mirrorSync,
     };
   }
 
@@ -988,11 +998,15 @@ export class DevReturnsService {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    const sync = await this.pushPendingSyncForGlobalId(result.payloadGlobalId);
+    const [sync, mirrorSync] = await Promise.all([
+      this.pushPendingSyncForGlobalId(result.payloadGlobalId),
+      this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 }),
+    ]);
 
     return {
       devolucion: this.toReturnDetailView(result.devolucion),
       sync,
+      mirrorSync,
     };
   }
 
@@ -1107,7 +1121,10 @@ export class DevReturnsService {
       );
 
       if (result.pendingGlobalId) {
-        await this.pushPendingSyncForGlobalId(result.pendingGlobalId);
+        await Promise.all([
+          this.pushPendingSyncForGlobalId(result.pendingGlobalId),
+          this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 }),
+        ]);
       }
 
       return result;
@@ -3158,6 +3175,10 @@ export class DevReturnsService {
     const totalValor = this.calculateDraftTotal(draft.movimientos);
     await this.ensureLocations(tx, [options.codigoEnvia, options.codigoRecibe]);
     await this.applyInventoryDelta(tx, this.aggregateDraftQuantities(draft.movimientos).negated);
+    await this.mirrorSyncService.enqueueInventorySnapshotsTx(
+      tx,
+      draft.movimientos.map((line) => line.CodigoBarra),
+    );
 
     await tx.devTransferencias.create({
       data: {

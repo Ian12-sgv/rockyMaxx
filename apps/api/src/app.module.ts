@@ -7,6 +7,7 @@ import { AuthModule } from "./auth/auth.module";
 import { DevReturnsModule } from "./dev-returns/dev-returns.module";
 import { HealthModule } from "./health/health.module";
 import { InventoryModule } from "./inventory/inventory.module";
+import { MirrorSyncModule } from "./mirror-sync/mirror-sync.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RolesModule } from "./roles/roles.module";
 import { SucursalesModule } from "./sucursales/sucursales.module";
@@ -20,6 +21,7 @@ import { UsersModule } from "./users/users.module";
       envFilePath: ["../../.env", ".env"],
     }),
     PrismaModule,
+    MirrorSyncModule,
     AdjustmentsModule,
     HealthModule,
     AuthModule,

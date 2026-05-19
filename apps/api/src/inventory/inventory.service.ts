@@ -9,6 +9,7 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma, PrismaClient } from "@prisma/client";
 import * as XLSX from "xlsx";
 
+import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCatalogEntryDto } from "./dto/create-catalog-entry.dto";
 import { CreateMerchandiseDto } from "./dto/create-merchandise.dto";
@@ -186,6 +187,7 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly mirrorSyncService: MirrorSyncService,
   ) {}
 
   async getCreationMetadata() {
@@ -293,12 +295,18 @@ export class InventoryService {
     }
 
     const result = await this.persistCatalogImportRows(resolvedType, rows);
+    if (result.codigosSincronizados.length > 0) {
+      await this.mirrorSyncService.enqueueCatalogEntryUpserts(resolvedType, result.codigosSincronizados);
+      await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+    }
+
+    const { codigosSincronizados, ...summary } = result;
 
     return {
       tipo: resolvedType,
       archivo: file.originalname ?? "catalogo.xlsx",
       hoja: firstSheetName,
-      resumen: result,
+      resumen: summary,
     };
   }
 
@@ -386,6 +394,9 @@ export class InventoryService {
         },
       });
 
+      await this.mirrorSyncService.enqueueCatalogEntryUpserts(resolvedType, [created.Codigo]);
+      await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+
       return {
         codigo: created.Codigo,
       };
@@ -426,6 +437,9 @@ export class InventoryService {
       Status: status,
     });
 
+    await this.mirrorSyncService.enqueueCatalogEntryUpserts(resolvedType, [created.Codigo]);
+    await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+
     return {
       codigo: created.Codigo,
       nombre: created.Nombre,
@@ -459,6 +473,9 @@ export class InventoryService {
             where: { Codigo: normalizedCode },
           });
 
+          await this.mirrorSyncService.enqueueCatalogEntryDelete(resolvedType, deleted.Codigo);
+          await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+
           return {
             codigo: deleted.Codigo,
           };
@@ -477,6 +494,9 @@ export class InventoryService {
           const deleted = await this.prisma.categorias.delete({
             where: { Codigo: normalizedCode },
           });
+
+          await this.mirrorSyncService.enqueueCatalogEntryDelete(resolvedType, deleted.Codigo);
+          await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
 
           return {
             codigo: deleted.Codigo,
@@ -499,6 +519,9 @@ export class InventoryService {
             where: { Codigo: normalizedCode },
           });
 
+          await this.mirrorSyncService.enqueueCatalogEntryDelete(resolvedType, deleted.Codigo);
+          await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+
           return {
             codigo: deleted.Codigo,
             nombre: deleted.Nombre,
@@ -520,6 +543,9 @@ export class InventoryService {
             where: { Codigo: normalizedCode },
           });
 
+          await this.mirrorSyncService.enqueueCatalogEntryDelete(resolvedType, deleted.Codigo);
+          await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+
           return {
             codigo: deleted.Codigo,
             nombre: deleted.Nombre,
@@ -540,6 +566,9 @@ export class InventoryService {
           const deleted = await this.prisma.fabricantes.delete({
             where: { Codigo: normalizedCode },
           });
+
+          await this.mirrorSyncService.enqueueCatalogEntryDelete(resolvedType, deleted.Codigo);
+          await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
 
           return {
             codigo: deleted.Codigo,
@@ -692,7 +721,7 @@ export class InventoryService {
         await this.ensureUniqueReferencePerBrand(tx, completePayload.referencia, resolvedCatalogs.marca.codigo);
 
         const now = new Date();
-        return tx.inventario.create({
+        const created = await tx.inventario.create({
           data: {
             CodigoBarra: completePayload.codigoBarra,
             CodigoBarraAnt: completePayload.codigoBarraAnt,
@@ -727,7 +756,12 @@ export class InventoryService {
           },
           include: inventoryInclude,
         });
+
+        await this.mirrorSyncService.enqueueInventorySnapshotsTx(tx, [created.CodigoBarra]);
+        return created;
       });
+
+      await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
 
       return toInventoryView(created);
     } catch (error) {
@@ -765,7 +799,7 @@ export class InventoryService {
           normalizedBarcode,
         );
 
-        return tx.inventario.update({
+        const updated = await tx.inventario.update({
           where: { CodigoBarra: normalizedBarcode },
           data: {
             CodigoBarra: merged.codigoBarra,
@@ -800,7 +834,16 @@ export class InventoryService {
           },
           include: inventoryInclude,
         });
+
+        if (updated.CodigoBarra !== normalizedBarcode) {
+          await this.mirrorSyncService.enqueueInventoryDeleteTx(tx, normalizedBarcode);
+        }
+
+        await this.mirrorSyncService.enqueueInventorySnapshotsTx(tx, [updated.CodigoBarra]);
+        return updated;
       });
+
+      await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
 
       return toInventoryView(updated);
     } catch (error) {
@@ -828,10 +871,17 @@ export class InventoryService {
     }
 
     try {
-      const deleted = await this.prisma.inventario.delete({
-        where: { CodigoBarra: normalizedBarcode },
-        include: inventoryInclude,
+      const deleted = await this.prisma.$transaction(async (tx) => {
+        const removed = await tx.inventario.delete({
+          where: { CodigoBarra: normalizedBarcode },
+          include: inventoryInclude,
+        });
+
+        await this.mirrorSyncService.enqueueInventoryDeleteTx(tx, normalizedBarcode);
+        return removed;
       });
+
+      await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
 
       return toInventoryView(deleted);
     } catch (error) {
@@ -1998,18 +2048,25 @@ export class InventoryService {
     let actualizados = 0;
     let omitidos = 0;
     const detalleErrores: string[] = [];
+    const codigosSincronizados = new Set<string>();
 
     for (const row of rows) {
       try {
         const outcome = await this.upsertCatalogImportRow(catalogType, row);
 
-        if (outcome === "created") {
+        if (outcome.result === "created") {
           creados += 1;
+          if (outcome.codigo) {
+            codigosSincronizados.add(outcome.codigo);
+          }
           continue;
         }
 
-        if (outcome === "updated") {
+        if (outcome.result === "updated") {
           actualizados += 1;
+          if (outcome.codigo) {
+            codigosSincronizados.add(outcome.codigo);
+          }
           continue;
         }
 
@@ -2026,6 +2083,7 @@ export class InventoryService {
       omitidos,
       errores: detalleErrores.length,
       detalleErrores: detalleErrores.slice(0, 10),
+      codigosSincronizados: Array.from(codigosSincronizados),
     };
   }
 
@@ -2036,14 +2094,14 @@ export class InventoryService {
       const codigo = this.normalizeOptionalUpper(row.codigo ?? row.nombre);
 
       if (!codigo) {
-        return "skipped";
+        return { result: "skipped" as const };
       }
 
       this.assertCatalogCodeLength(config.displayName, codigo, config.maxCodeLength);
 
       const existing = await this.prisma.tallas.findUnique({ where: { Codigo: codigo } });
       if (existing) {
-        return "skipped";
+        return { result: "skipped" as const, codigo: existing.Codigo };
       }
 
       await this.prisma.tallas.create({
@@ -2051,11 +2109,11 @@ export class InventoryService {
           Codigo: codigo,
         },
       });
-      return "created";
+      return { result: "created" as const, codigo };
     }
 
     if (!row.codigo && !row.nombre) {
-      return "skipped";
+      return { result: "skipped" as const };
     }
 
     const status = row.status ?? DEFAULT_STATUS;
@@ -2237,7 +2295,7 @@ export class InventoryService {
         Nombre: row.nombre ?? existing.Nombre ?? existing.Codigo,
         Status: status,
       });
-      return "updated";
+      return { result: "updated" as const, codigo: existing.Codigo };
     }
 
     const codigo =
@@ -2252,7 +2310,7 @@ export class InventoryService {
       Nombre: row.nombre ?? codigo,
       Status: status,
     });
-    return "created";
+    return { result: "created" as const, codigo };
   }
 
   private async namedCatalogCodeExists(

@@ -7,8 +7,8 @@ contextBridge.exposeInMainWorld("rockyService", {
   refreshState() {
     return ipcRenderer.invoke("service-config:refresh");
   },
-  saveConfig(profileId) {
-    return ipcRenderer.invoke("service-config:save", profileId);
+  saveConfig(payload) {
+    return ipcRenderer.invoke("service-config:save", payload);
   },
   onState(handler) {
     const listener = (_event, payload) => {

@@ -38,6 +38,8 @@ let currentHealthPayload = null;
 let availableServiceProfiles = [];
 let currentServiceProfile = null;
 let expectedApiShutdownReason = "";
+let configuredMirrorSyncEnabled = false;
+let configuredMirrorSyncRemoteApiUrl = "";
 
 function writeRuntimeLog(message) {
   try {
@@ -283,6 +285,11 @@ function initializeServiceProfile() {
   availableServiceProfiles = loadAvailableServiceProfiles();
   const savedConfig = readServiceConfig();
   const savedProfileId = typeof savedConfig.profileId === "string" ? savedConfig.profileId : "";
+  configuredMirrorSyncEnabled = Boolean(savedConfig.mirrorSyncEnabled);
+  configuredMirrorSyncRemoteApiUrl =
+    typeof savedConfig.mirrorSyncRemoteApiUrl === "string"
+      ? savedConfig.mirrorSyncRemoteApiUrl.trim()
+      : "";
   const selectedProfile =
     availableServiceProfiles.find((profile) => profile.id === savedProfileId) ||
     availableServiceProfiles[0] ||
@@ -425,6 +432,8 @@ function startApiServer() {
     ...profileEnv,
     API_PORT: configuredApiPort,
     API_HOST: configuredApiHost,
+    MIRROR_SYNC_ENABLED: configuredMirrorSyncEnabled ? "true" : "false",
+    MIRROR_SYNC_REMOTE_API_URL: configuredMirrorSyncRemoteApiUrl,
     NODE_ENV: process.env.NODE_ENV || "production",
     NODE_PATH: process.env.NODE_PATH
       ? `${apiVendorModulesDir}${delimiter}${process.env.NODE_PATH}`
@@ -552,6 +561,8 @@ function buildServiceState(errorMessage = "") {
       : null,
     apiPort: configuredApiPort,
     apiHost: configuredApiHost,
+    mirrorSyncEnabled: configuredMirrorSyncEnabled,
+    mirrorSyncRemoteApiUrl: configuredMirrorSyncRemoteApiUrl,
     localUrl,
     healthUrl: getHealthUrl(),
     urls: getLanUrls(),
@@ -654,15 +665,27 @@ ipcMain.handle("service-config:refresh", async () => {
   return state;
 });
 
-ipcMain.handle("service-config:save", async (_event, profileId) => {
+ipcMain.handle("service-config:save", async (_event, payload) => {
   availableServiceProfiles = loadAvailableServiceProfiles();
+  const profileId = typeof payload?.profileId === "string" ? payload.profileId : "";
+  const mirrorSyncEnabled = Boolean(payload?.mirrorSyncEnabled);
+  const mirrorSyncRemoteApiUrl =
+    typeof payload?.mirrorSyncRemoteApiUrl === "string"
+      ? payload.mirrorSyncRemoteApiUrl.trim()
+      : "";
   const selectedProfile = availableServiceProfiles.find((profile) => profile.id === String(profileId || ""));
 
   if (!selectedProfile) {
     throw new Error("No se encontro el perfil de base de datos seleccionado.");
   }
 
-  writeServiceConfig({ profileId: selectedProfile.id });
+  configuredMirrorSyncEnabled = mirrorSyncEnabled;
+  configuredMirrorSyncRemoteApiUrl = mirrorSyncRemoteApiUrl;
+  writeServiceConfig({
+    profileId: selectedProfile.id,
+    mirrorSyncEnabled: configuredMirrorSyncEnabled,
+    mirrorSyncRemoteApiUrl: configuredMirrorSyncRemoteApiUrl,
+  });
   applyServiceProfile(selectedProfile);
 
   try {

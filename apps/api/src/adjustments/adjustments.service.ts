@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma, type Ajustes, type Inventario } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { UserView } from "../users/user-view.util";
 import { CreateAdjustmentDto, CreateAdjustmentLineDto } from "./dto/create-adjustment.dto";
 import { FindAdjustmentsDto } from "./dto/find-adjustments.dto";
@@ -31,7 +32,10 @@ type AdjustmentMovementRow = {
 
 @Injectable()
 export class AdjustmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mirrorSyncService: MirrorSyncService,
+  ) {}
 
   async getMetadata(user: UserView) {
     const defaultLotId = await this.resolveAdjustmentLotId(this.prisma, undefined, user.codUsuario);
@@ -233,6 +237,10 @@ export class AdjustmentsService {
 
         const signo = this.resolveRequiredSign(existing.Signo);
         await this.applyInventoryAdjustment(tx, lines, signo);
+        await this.mirrorSyncService.enqueueInventorySnapshotsTx(
+          tx,
+          lines.map((line) => line.codigoBarra),
+        );
 
         const totalValor = lines.reduce((total, line) => total.plus(line.cantidad.mul(line.costo)), ZERO);
 
@@ -246,6 +254,8 @@ export class AdjustmentsService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+
+    await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
 
     return {
       ajuste: this.toAdjustmentView(ajuste, await this.loadMovements(ajuste.Numero)),

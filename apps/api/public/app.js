@@ -1488,7 +1488,7 @@ function renderTransfersWorkspace() {
               />
             </label>
             <label class="transfer-correction-field">
-              <input type="checkbox" name="transferenciaCorreccion" checked ${isLocked ? "disabled" : ""} />
+              <input type="checkbox" name="transferenciaCorreccion" ${draft.correccion ? "checked" : ""} ${isLocked ? "disabled" : ""} />
               <span>Transferencia de Correccion</span>
             </label>
           </div>
@@ -1501,7 +1501,7 @@ function renderTransfersWorkspace() {
                 Agregar linea
               </button>
             </div>
-              ${renderTransferLinesEditor(draft, { isLocked })}
+              ${renderTransferLinesEditor(draft, { isLocked, allowReferenceEdit: Boolean(draft.correccion) })}
           </div>
 
           <div class="transfer-summary-row">
@@ -3164,7 +3164,7 @@ function renderLoadedTransferLines(draft) {
 }
 
 function renderTransferLinesEditor(draft, options = {}) {
-  const { isLocked = false } = options;
+  const { isLocked = false, allowReferenceEdit = false } = options;
   const lines = Array.isArray(draft.items) && draft.items.length > 0 ? draft.items : [createEmptyTransferLineDraft()];
 
   return `
@@ -3207,6 +3207,7 @@ function renderTransferLinesEditor(draft, options = {}) {
                       value="${escapeHtml(toInputValue(line.referencia))}"
                       maxlength="30"
                       placeholder="Referencia"
+                      ${allowReferenceEdit ? "" : "readonly"}
                       ${isLocked ? "disabled" : ""}
                     />
                   </td>
@@ -5568,6 +5569,13 @@ function bindTransferEvents() {
       captureTransferDraft();
     });
 
+    transferForm.addEventListener("change", (event) => {
+      captureTransferDraft();
+      if (event.target?.name === "transferenciaCorreccion") {
+        render();
+      }
+    });
+
     transferForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       captureTransferDraft();
@@ -6413,11 +6421,14 @@ async function fillTransferLineFromInventory(index, codigoBarra) {
     const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
     const article = response.mercancia || response;
     const currentLine = items[index] || createEmptyTransferLineDraft();
+    const preserveCorrectionReference = Boolean(draft.correccion);
 
     items[index] = {
       ...currentLine,
       codigoBarra: article.codigoBarra || codigoBarra,
-      referencia: article.referencia || currentLine.referencia || "",
+      referencia: preserveCorrectionReference
+        ? currentLine.referencia || article.referencia || ""
+        : article.referencia || currentLine.referencia || "",
       articuloNombre: article.general?.nombre || article.nombre || currentLine.articuloNombre || "",
       existenciaActual: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaActual ?? ""),
       existenciaLote: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaLote ?? ""),
@@ -7615,6 +7626,7 @@ function createEmptyTransferDraft(metadata) {
     observacion: "",
     idDespacho: String(metadata?.defaults?.idDespacho ?? "0"),
     zona: "",
+    correccion: false,
     status: 0,
     syncStatus: "",
     cargada: false,
@@ -7669,6 +7681,7 @@ function readTransferDraft(form) {
     observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
     idDespacho: readFormFieldValue(form, "idDespacho", currentDraft.idDespacho),
     zona: readFormFieldValue(form, "zona", currentDraft.zona),
+    correccion: readFormCheckboxValue(form, "transferenciaCorreccion", currentDraft.correccion),
     status: currentDraft.status,
     items: items.length ? items : [createEmptyTransferLineDraft()],
   };
@@ -7711,6 +7724,7 @@ function buildTransferPayload(draft) {
     observacion: String(draft.observacion || "").trim() || undefined,
     idDespacho: Number.parseInt(String(draft.idDespacho || "0"), 10),
     zona: String(draft.zona || "").trim() || undefined,
+    correccion: Boolean(draft.correccion),
     items: (draft.items || [])
       .filter((item) => String(item.codigoBarra || "").trim())
       .map((item) => ({
@@ -7735,6 +7749,7 @@ function transferToDraft(transfer, metadata = state.transfers?.metadata) {
     observacion: transfer?.observacion || "",
     idDespacho: String(transfer?.idDespacho ?? metadata?.defaults?.idDespacho ?? "0"),
     zona: transfer?.zona || "",
+    correccion: Boolean(transfer?.correccion),
     status: Number(transfer?.status ?? 0),
     syncStatus: transfer?.syncStatus || "",
     cargada: Boolean(transfer?.cargada),

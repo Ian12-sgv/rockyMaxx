@@ -11,6 +11,7 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma, type Inventario, type Sucursales } from "@prisma/client";
 
 import { UserView } from "../users/user-view.util";
+import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { ApproveTransferDto, TransferDuplicateResolutionDto } from "./dto/approve-transfer.dto";
 import { CreateTransferDto, CreateTransferLineDto } from "./dto/create-transfer.dto";
 import { FindTransfersDto } from "./dto/find-transfers.dto";
@@ -235,6 +236,16 @@ type TransferSyncInboxRow = {
   LastError: string | null;
 };
 
+type TransferCorrectionItemRow = {
+  Numero: number;
+  Item: number;
+  NumeroCaja: number;
+  CodigoBarra: string;
+  Referencia: string;
+  CreatedAt: Date;
+  UpdatedAt: Date;
+};
+
 type InboundTransferWithRelations = Prisma.ITransferenciasGetPayload<{
   include: {
     sucursalEnvia: true;
@@ -265,6 +276,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly mirrorSyncService: MirrorSyncService,
   ) {}
 
   onModuleInit() {
@@ -424,6 +436,10 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
         await this.ensureSyncedDispatchType(tx, payload);
         await this.ensureSyncedLot(tx, payload);
         await this.applySyncedDestinationReceipt(tx, payload);
+        await this.mirrorSyncService.enqueueInventorySnapshotsTx(
+          tx,
+          payload.items.map((item) => item.codigoBarra),
+        );
         await this.markTransferSyncInboxApplied(tx, payload.globalId);
 
         return {
@@ -437,6 +453,8 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
       },
     );
+
+    await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
 
     return result;
   }
@@ -719,6 +737,17 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
           })),
         });
 
+        await this.syncTransferCorrectionItems(
+          tx,
+          numero,
+          normalizedDraft.lines,
+          normalizedDraft.correccion,
+        );
+        await this.mirrorSyncService.enqueueInventorySnapshotsTx(
+          tx,
+          normalizedDraft.lines.map((line) => line.codigoBarra),
+        );
+
         return this.findTransferDetailOrThrow(tx, numero);
       },
       {
@@ -726,11 +755,15 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       },
     );
 
-    const sync = await this.pushPendingTransferSync({ limit: 25 });
+    const [sync, mirrorSync] = await Promise.all([
+      this.pushPendingTransferSync({ limit: 25 }),
+      this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 }),
+    ]);
 
     return {
       transferencia,
       sync,
+      mirrorSync,
     };
   }
 
@@ -813,6 +846,20 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
           })),
         });
 
+        await this.syncTransferCorrectionItems(
+          tx,
+          numero,
+          normalizedDraft.lines,
+          normalizedDraft.correccion,
+        );
+        await this.mirrorSyncService.enqueueInventorySnapshotsTx(
+          tx,
+          [
+            ...existing.movTransferencias.map((line) => line.CodigoBarra),
+            ...normalizedDraft.lines.map((line) => line.codigoBarra),
+          ],
+        );
+
         return this.findTransferDetailOrThrow(tx, numero);
       },
       {
@@ -820,8 +867,11 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       },
     );
 
+    const mirrorSync = await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+
     return {
       transferencia,
+      mirrorSync,
     };
   }
 
@@ -848,6 +898,8 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
         );
         const approvedAt = new Date();
 
+        await this.applyTransferCorrectionOverridesToOrigin(tx, numero, existing.Correccion);
+
         await tx.transferencias.update({
           where: { Numero: numero },
           data: {
@@ -859,6 +911,10 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
 
         const approvedTransfer = await this.findTransferForSyncOrThrow(tx, numero);
         await this.recordTransferSyncOutbox(tx, approvedTransfer, currentTotalValor);
+        await this.mirrorSyncService.enqueueInventorySnapshotsTx(
+          tx,
+          approvedTransfer.movTransferencias.map((line) => line.CodigoBarra),
+        );
 
         return this.findTransferDetailOrThrow(tx, numero);
       },
@@ -867,11 +923,15 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       },
     );
 
-    const sync = await this.pushTransferSyncForNumero(numero);
+    const [sync, mirrorSync] = await Promise.all([
+      this.pushTransferSyncForNumero(numero),
+      this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 }),
+    ]);
 
     return {
       transferencia,
       sync,
+      mirrorSync,
     };
   }
 
@@ -972,6 +1032,14 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
           where: { Numero: numero },
         });
 
+        await tx.$executeRawUnsafe(
+          `
+            delete from dbo."TRANSFER_CORRECTION_ITEMS"
+            where "Numero" = $1
+          `,
+          numero,
+        );
+
         await tx.transferencias.delete({
           where: { Numero: numero },
         });
@@ -1054,6 +1122,29 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     await client.$executeRawUnsafe(`
       create index if not exists "IX_TRANSFER_SYNC_INBOX_Status"
       on dbo."TRANSFER_SYNC_INBOX" ("Status", "ReceivedAt")
+    `);
+    await this.ensureTransferCorrectionSchema(client);
+  }
+
+  private async ensureTransferCorrectionSchema(
+    client: PrismaService | TransferTransactionClient = this.prisma,
+  ) {
+    await client.$executeRawUnsafe(`
+      create table if not exists dbo."TRANSFER_CORRECTION_ITEMS" (
+        "Numero" integer not null,
+        "Item" integer not null,
+        "NumeroCaja" integer not null,
+        "CodigoBarra" varchar(15) not null,
+        "Referencia" varchar(30) not null,
+        "CreatedAt" timestamptz not null default now(),
+        "UpdatedAt" timestamptz not null default now(),
+        primary key ("Numero", "Item", "NumeroCaja", "CodigoBarra")
+      )
+    `);
+
+    await client.$executeRawUnsafe(`
+      create index if not exists "IX_TRANSFER_CORRECTION_ITEMS_Numero"
+      on dbo."TRANSFER_CORRECTION_ITEMS" ("Numero")
     `);
   }
 
@@ -1746,6 +1837,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     payload: TransferSyncPayload,
   ) {
     const now = new Date();
+    const correctionTransfer = payload.transfer.correccion;
 
     for (const line of payload.items) {
       const article = line.articulo;
@@ -1756,6 +1848,17 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       });
 
       if (existingArticle) {
+        if (correctionTransfer) {
+          continue;
+        }
+
+        await this.ensureUniqueTransferReferencePerBrand(
+          tx,
+          article.referencia,
+          article.codigoMarca,
+          existingArticle.CodigoBarra,
+        );
+
         await tx.inventario.update({
           where: { CodigoBarra: existingArticle.CodigoBarra },
           data: {
@@ -1766,6 +1869,13 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
 
         continue;
       }
+
+      await this.ensureUniqueTransferReferencePerBrand(
+        tx,
+        article.referencia,
+        article.codigoMarca,
+        article.codigoBarra,
+      );
 
       await tx.inventario.create({
         data: this.buildSyncedInventoryCreateInput(article, ZERO, now),
@@ -1790,6 +1900,13 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       });
 
       if (existingArticle) {
+        await this.ensureUniqueTransferReferencePerBrand(
+          tx,
+          article.referencia,
+          article.codigoMarca,
+          existingArticle.CodigoBarra,
+        );
+
         await tx.inventario.update({
           where: { CodigoBarra: existingArticle.CodigoBarra },
           data: {
@@ -1802,6 +1919,13 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
 
         continue;
       }
+
+      await this.ensureUniqueTransferReferencePerBrand(
+        tx,
+        article.referencia,
+        article.codigoMarca,
+        article.codigoBarra,
+      );
 
       await tx.inventario.create({
         data: this.buildSyncedInventoryCreateInput(article, quantity, now),
@@ -2405,7 +2529,12 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException("El origen y el destino no pueden ser iguales.");
     }
 
-    const lines = await this.normalizeTransferLines(tx, input.items, fecha);
+    const lines = await this.normalizeTransferLines(
+      tx,
+      input.items,
+      fecha,
+      Boolean(input.correccion ?? options?.correccionFallback ?? false),
+    );
 
     const quantitiesByBarcode = this.aggregateLineQuantities(lines);
     const totalValor = lines.reduce((total, line) => total.plus(line.valor.mul(line.cantidad)), ZERO);
@@ -2431,6 +2560,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     tx: TransferTransactionClient,
     items: CreateTransferLineDto[] | undefined,
     fecha: Date,
+    correctionTransfer = false,
   ) {
     if (!Array.isArray(items) || items.length === 0) {
       return [];
@@ -2462,7 +2592,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
 
     const inventoryByCode = new Map(inventoryItems.map((item) => [item.CodigoBarra, item]));
 
-    return meaningfulItems.map((item, index) => {
+    const lines = meaningfulItems.map((item, index) => {
       const codigoBarra = normalizedCodes[index];
       const referencia = normalizedReferences[index] || "";
       const articulo = inventoryByCode.get(codigoBarra);
@@ -2471,7 +2601,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       }
 
       const resolvedReferencia = referencia || String(articulo.Referencia || "").trim().toUpperCase();
-      if (String(articulo.Referencia || "").trim().toUpperCase() !== resolvedReferencia) {
+      if (!correctionTransfer && String(articulo.Referencia || "").trim().toUpperCase() !== resolvedReferencia) {
         throw new BadRequestException(
           `El articulo ${codigoBarra} no coincide con la referencia ${resolvedReferencia} en inventario.`,
         );
@@ -2499,6 +2629,20 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
         articulo,
       };
     });
+
+    const referencesByBarcode = new Map<string, string>();
+    for (const line of lines) {
+      const existingReference = referencesByBarcode.get(line.codigoBarra);
+      if (existingReference && existingReference !== line.referencia) {
+        throw new BadRequestException(
+          `No puedes usar referencias distintas para el articulo ${line.codigoBarra} dentro de la misma transferencia.`,
+        );
+      }
+
+      referencesByBarcode.set(line.codigoBarra, line.referencia);
+    }
+
+    return lines;
   }
 
   private async findTransferDetailOrThrow(
@@ -2515,10 +2659,12 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     }
 
     const originLocations = await this.loadLocationsByCode([transferencia.CodigoEnvia], client);
-
-    return toTransferDetailView(transferencia, {
+    const correctionReferences = await this.getTransferCorrectionReferenceMap(client, numero);
+    const detail = toTransferDetailView(transferencia, {
       codigoEnviaInfo: this.toLocationView(originLocations.get(transferencia.CodigoEnvia)),
     });
+
+    return this.applyTransferCorrectionReferencesToDetail(detail, correctionReferences);
   }
 
   private async findInboundTransferDetailOrThrow(
@@ -2560,10 +2706,19 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       ),
     ]);
 
-    return this.toInboundTransferDetailView(transferencia, {
+    const detail = this.toInboundTransferDetailView(transferencia, {
       codigoRecibeInfo: this.toLocationView(destinationLocations.get(transferencia.CodigoRecibe)),
       syncRow,
     });
+
+    const payload = syncRow
+      ? this.tryNormalizeTransferSyncPayloadFromRaw(syncRow.Payload)
+      : null;
+
+    return this.applyTransferCorrectionReferencesToDetail(
+      detail,
+      payload ? this.buildTransferCorrectionReferenceMapFromPayload(payload) : new Map<string, string>(),
+    );
   }
 
   private async loadInboundSyncRows(
@@ -2948,6 +3103,237 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     }
 
     return result;
+  }
+
+  private async syncTransferCorrectionItems(
+    tx: TransferTransactionClient,
+    numero: number,
+    lines: NormalizedTransferLine[],
+    correctionTransfer: boolean,
+  ) {
+    await this.ensureTransferCorrectionSchema(tx);
+
+    await tx.$executeRawUnsafe(
+      `
+        delete from dbo."TRANSFER_CORRECTION_ITEMS"
+        where "Numero" = $1
+      `,
+      numero,
+    );
+
+    if (!correctionTransfer || lines.length === 0) {
+      return;
+    }
+
+    for (const line of lines) {
+      await tx.$executeRawUnsafe(
+        `
+          insert into dbo."TRANSFER_CORRECTION_ITEMS"
+            ("Numero", "Item", "NumeroCaja", "CodigoBarra", "Referencia", "CreatedAt", "UpdatedAt")
+          values ($1, $2, $3, $4, $5, now(), now())
+          on conflict ("Numero", "Item", "NumeroCaja", "CodigoBarra") do update set
+            "Referencia" = excluded."Referencia",
+            "UpdatedAt" = now()
+        `,
+        numero,
+        line.item,
+        line.numeroCaja,
+        line.codigoBarra,
+        line.referencia,
+      );
+    }
+  }
+
+  private async getTransferCorrectionReferenceMap(
+    client: PrismaService | TransferTransactionClient,
+    numero: number,
+  ) {
+    await this.ensureTransferCorrectionSchema(client);
+
+    const rows = await client.$queryRawUnsafe<TransferCorrectionItemRow[]>(
+      `
+        select
+          "Numero",
+          "Item",
+          "NumeroCaja",
+          "CodigoBarra",
+          "Referencia",
+          "CreatedAt",
+          "UpdatedAt"
+        from dbo."TRANSFER_CORRECTION_ITEMS"
+        where "Numero" = $1
+      `,
+      numero,
+    );
+
+    return new Map(
+      rows.map((row) => [
+        this.buildTransferCorrectionLineKey(row.Item, row.NumeroCaja, row.CodigoBarra),
+        row.Referencia,
+      ]),
+    );
+  }
+
+  private buildTransferCorrectionLineKey(item: number, numeroCaja: number, codigoBarra: string) {
+    return [String(item), String(numeroCaja), String(codigoBarra || "").trim().toUpperCase()].join("|");
+  }
+
+  private applyTransferCorrectionReferencesToDetail<T extends { items?: Array<Record<string, unknown>> }>(
+    detail: T,
+    correctionReferences: Map<string, string>,
+  ) {
+    if (!detail?.items?.length || correctionReferences.size === 0) {
+      return detail;
+    }
+
+    return {
+      ...detail,
+      items: detail.items.map((line) => {
+        const correctionReference = correctionReferences.get(
+          this.buildTransferCorrectionLineKey(
+            Number(line.item || 0),
+            Number(line.numeroCaja || 0),
+            String(line.codigoBarra || ""),
+          ),
+        );
+
+        if (!correctionReference) {
+          return line;
+        }
+
+        const articulo = this.isRecord(line.articulo)
+          ? {
+              ...line.articulo,
+              referencia: correctionReference,
+            }
+          : line.articulo;
+
+        return {
+          ...line,
+          referencia: correctionReference,
+          articulo,
+        };
+      }),
+    };
+  }
+
+  private buildTransferCorrectionReferenceMapFromPayload(payload: TransferSyncPayload) {
+    return new Map(
+      payload.items.map((line) => [
+        this.buildTransferCorrectionLineKey(line.item, line.numeroCaja, line.codigoBarra),
+        line.articulo.referencia,
+      ]),
+    );
+  }
+
+  private tryNormalizeTransferSyncPayloadFromRaw(rawPayload: unknown) {
+    try {
+      return this.normalizeTransferSyncPayload(this.parseRawJson(rawPayload) as Record<string, unknown>);
+    } catch {
+      return null;
+    }
+  }
+
+  private async applyTransferCorrectionOverridesToOrigin(
+    tx: TransferTransactionClient,
+    numero: number,
+    correctionTransfer: boolean,
+  ) {
+    if (!correctionTransfer) {
+      return 0;
+    }
+
+    await this.ensureTransferCorrectionSchema(tx);
+
+    const rows = await tx.$queryRawUnsafe<TransferCorrectionItemRow[]>(
+      `
+        select
+          "Numero",
+          "Item",
+          "NumeroCaja",
+          "CodigoBarra",
+          "Referencia",
+          "CreatedAt",
+          "UpdatedAt"
+        from dbo."TRANSFER_CORRECTION_ITEMS"
+        where "Numero" = $1
+        order by "Item" asc, "NumeroCaja" asc, "CodigoBarra" asc
+      `,
+      numero,
+    );
+
+    if (rows.length === 0) {
+      return 0;
+    }
+
+    const barcodeToReference = new Map<string, string>();
+    for (const row of rows) {
+      const currentReference = barcodeToReference.get(row.CodigoBarra);
+      if (currentReference && currentReference !== row.Referencia) {
+        throw new ConflictException(
+          `No puedes aplicar referencias distintas al articulo ${row.CodigoBarra} dentro de la misma transferencia de correccion.`,
+        );
+      }
+
+      barcodeToReference.set(row.CodigoBarra, row.Referencia);
+    }
+
+    const articles = await tx.inventario.findMany({
+      where: {
+        CodigoBarra: { in: Array.from(barcodeToReference.keys()) },
+      },
+    });
+
+    const articlesByBarcode = new Map(articles.map((item) => [item.CodigoBarra, item]));
+    let updated = 0;
+    const now = new Date();
+
+    for (const [codigoBarra, referencia] of barcodeToReference.entries()) {
+      const article = articlesByBarcode.get(codigoBarra);
+      if (!article) {
+        throw new NotFoundException(`No se encontro el articulo ${codigoBarra} para aplicar la correccion.`);
+      }
+
+      if (String(article.Referencia || "").trim().toUpperCase() === referencia) {
+        continue;
+      }
+
+      await this.ensureUniqueTransferReferencePerBrand(tx, referencia, article.CodigoMarca, article.CodigoBarra);
+      await tx.inventario.update({
+        where: { CodigoBarra: article.CodigoBarra },
+        data: {
+          Referencia: referencia,
+          UltimaActualizacion: now,
+        },
+      });
+      updated += 1;
+    }
+
+    return updated;
+  }
+
+  private async ensureUniqueTransferReferencePerBrand(
+    client: PrismaService | TransferTransactionClient,
+    referencia: string,
+    codigoMarca: string,
+    currentCodigoBarra: string,
+  ) {
+    const duplicate = await client.inventario.findFirst({
+      where: {
+        Referencia: referencia,
+        CodigoMarca: codigoMarca,
+        CodigoBarra: {
+          not: currentCodigoBarra,
+        },
+      },
+      select: {
+        CodigoBarra: true,
+      },
+    });
+
+    if (duplicate) {
+      throw new ConflictException("No puede existir otra mercancia con la misma referencia para esa marca");
+    }
   }
 
   private async applyOriginDelta(
