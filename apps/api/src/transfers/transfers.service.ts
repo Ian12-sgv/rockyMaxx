@@ -4,6 +4,8 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Prisma, type Inventario, type Sucursales } from "@prisma/client";
@@ -30,6 +32,9 @@ const TRANSFER_SYNC_STATUS_SENT = "SENT";
 const TRANSFER_SYNC_STATUS_RECEIVED = "RECEIVED";
 const TRANSFER_SYNC_STATUS_APPLIED = "APPLIED";
 const TRANSFER_SYNC_STATUS_ERROR = "ERROR";
+const DEFAULT_TRANSFER_SYNC_AUTO_RETRY_INTERVAL_MS = 30_000;
+const DEFAULT_TRANSFER_SYNC_AUTO_RETRY_STARTUP_DELAY_MS = 5_000;
+const DEFAULT_TRANSFER_SYNC_AUTO_RETRY_LIMIT = 25;
 const ZERO = new Prisma.Decimal(0);
 
 type TransferTransactionClient = Prisma.TransactionClient;
@@ -251,13 +256,24 @@ type InboundTransferWithRelations = Prisma.ITransferenciasGetPayload<{
 }>;
 
 @Injectable()
-export class TransfersService {
+export class TransfersService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TransfersService.name);
+  private transferSyncAutoRetryTimer: ReturnType<typeof setInterval> | null = null;
+  private transferSyncAutoRetryStartupTimer: ReturnType<typeof setTimeout> | null = null;
+  private transferSyncAutoRetryInProgress = false;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
   ) {}
+
+  onModuleInit() {
+    this.startTransferSyncAutoRetry();
+  }
+
+  onModuleDestroy() {
+    this.stopTransferSyncAutoRetry();
+  }
 
   async getMetadata() {
     await this.ensureTransferSyncSchema();
@@ -830,15 +846,19 @@ export class TransfersService {
           tx,
           existing.movTransferencias,
         );
-        await this.recordTransferSyncOutbox(tx, existing, currentTotalValor);
+        const approvedAt = new Date();
 
         await tx.transferencias.update({
           where: { Numero: numero },
           data: {
             Status: 1,
             TotalValor: currentTotalValor,
+            FechaEmision: approvedAt,
           },
         });
+
+        const approvedTransfer = await this.findTransferForSyncOrThrow(tx, numero);
+        await this.recordTransferSyncOutbox(tx, approvedTransfer, currentTotalValor);
 
         return this.findTransferDetailOrThrow(tx, numero);
       },
@@ -853,6 +873,74 @@ export class TransfersService {
       transferencia,
       sync,
     };
+  }
+
+  private startTransferSyncAutoRetry() {
+    if (!this.isTransferSyncAutoRetryEnabled()) {
+      this.logger.log("Reintento automatico de sincronizacion de transferencias deshabilitado.");
+      return;
+    }
+
+    if (this.transferSyncAutoRetryTimer) {
+      return;
+    }
+
+    const intervalMs = this.getTransferSyncAutoRetryIntervalMs();
+    const startupDelayMs = this.getTransferSyncAutoRetryStartupDelayMs();
+
+    this.transferSyncAutoRetryStartupTimer = setTimeout(() => {
+      this.transferSyncAutoRetryStartupTimer = null;
+      void this.runTransferSyncAutoRetryCycle("startup");
+    }, startupDelayMs);
+
+    this.transferSyncAutoRetryTimer = setInterval(() => {
+      void this.runTransferSyncAutoRetryCycle("interval");
+    }, intervalMs);
+
+    this.logger.log(
+      `Reintento automatico de sincronizacion de transferencias activo cada ${intervalMs} ms.`,
+    );
+  }
+
+  private stopTransferSyncAutoRetry() {
+    if (this.transferSyncAutoRetryStartupTimer) {
+      clearTimeout(this.transferSyncAutoRetryStartupTimer);
+      this.transferSyncAutoRetryStartupTimer = null;
+    }
+
+    if (this.transferSyncAutoRetryTimer) {
+      clearInterval(this.transferSyncAutoRetryTimer);
+      this.transferSyncAutoRetryTimer = null;
+    }
+  }
+
+  private async runTransferSyncAutoRetryCycle(reason: "startup" | "interval") {
+    if (this.transferSyncAutoRetryInProgress) {
+      return;
+    }
+
+    this.transferSyncAutoRetryInProgress = true;
+
+    try {
+      const sync = await this.pushPendingTransferSync({
+        limit: this.getTransferSyncAutoRetryLimit(),
+      });
+
+      if (sync.processed > 0) {
+        const sent = sync.results.filter((item) => item.status === TRANSFER_SYNC_STATUS_SENT).length;
+        const pending = sync.results.filter((item) => item.status === TRANSFER_SYNC_STATUS_PENDING).length;
+        this.logger.log(
+          `Reintento automatico de transferencias (${reason}): ${sync.processed} paquete(s), ${sent} enviado(s), ${pending} pendiente(s).`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Fallo el reintento automatico de sincronizacion de transferencias (${reason}).`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    } finally {
+      this.transferSyncAutoRetryInProgress = false;
+    }
   }
 
   async deletePendingTransfer(numero: number) {
@@ -2603,10 +2691,13 @@ export class TransfersService {
   ) {
     const syncStatus = options.syncRow?.Status ?? null;
     const cargada = syncStatus === TRANSFER_SYNC_STATUS_APPLIED;
+    const fechaAprobacion = item.FechaEmision;
 
     return {
       numero: item.Numero,
       fecha: item.Fecha,
+      fechaRegistro: item.Fecha,
+      fechaAprobacion,
       codigoEnvia: item.CodigoEnvia,
       codigoRecibe: item.CodigoRecibe,
       codigoEnviaInfo: {
@@ -2621,6 +2712,7 @@ export class TransfersService {
       status: item.Status,
       statusNombre: item.Status === 1 ? "aprobada" : `status-${item.Status}`,
       usuario: item.Usuario,
+      fechaEmision: fechaAprobacion,
       editable: false,
       totalItems: item.iMovTransferencias.length,
       inbound: true,
@@ -2641,9 +2733,12 @@ export class TransfersService {
       syncRow?: TransferSyncInboxRow | null;
     } = {},
   ) {
+    const fechaAprobacion = item.FechaEmision;
+
     return {
       ...this.toInboundTransferListItemView(item, options),
-      fechaEmision: item.FechaEmision,
+      fechaEmision: fechaAprobacion,
+      fechaAprobacion,
       interContable: item.InterContable,
       idLote: item.IDLote,
       idDespacho: item.IDDespacho,
@@ -3277,6 +3372,67 @@ export class TransfersService {
 
   private normalizeOptionalCode(value: string | undefined) {
     return String(value || "").trim().toUpperCase();
+  }
+
+  private isTransferSyncAutoRetryEnabled() {
+    return this.readBooleanConfig("TRANSFER_SYNC_AUTO_RETRY_ENABLED", true);
+  }
+
+  private getTransferSyncAutoRetryIntervalMs() {
+    return this.readPositiveIntegerConfig(
+      "TRANSFER_SYNC_AUTO_RETRY_INTERVAL_MS",
+      DEFAULT_TRANSFER_SYNC_AUTO_RETRY_INTERVAL_MS,
+    );
+  }
+
+  private getTransferSyncAutoRetryStartupDelayMs() {
+    return this.readPositiveIntegerConfig(
+      "TRANSFER_SYNC_AUTO_RETRY_STARTUP_DELAY_MS",
+      DEFAULT_TRANSFER_SYNC_AUTO_RETRY_STARTUP_DELAY_MS,
+    );
+  }
+
+  private getTransferSyncAutoRetryLimit() {
+    return this.readPositiveIntegerConfig(
+      "TRANSFER_SYNC_AUTO_RETRY_LIMIT",
+      DEFAULT_TRANSFER_SYNC_AUTO_RETRY_LIMIT,
+    );
+  }
+
+  private readBooleanConfig(name: string, fallback: boolean) {
+    const rawValue = this.configService.get<string | boolean | number | undefined>(name);
+    if (rawValue === undefined || rawValue === null || rawValue === "") {
+      return fallback;
+    }
+
+    if (typeof rawValue === "boolean") {
+      return rawValue;
+    }
+
+    const normalized = String(rawValue).trim().toLowerCase();
+    if (["1", "true", "yes", "si", "on"].includes(normalized)) {
+      return true;
+    }
+
+    if (["0", "false", "no", "off"].includes(normalized)) {
+      return false;
+    }
+
+    return fallback;
+  }
+
+  private readPositiveIntegerConfig(name: string, fallback: number) {
+    const rawValue = this.configService.get<string | number | undefined>(name);
+    if (rawValue === undefined || rawValue === null || rawValue === "") {
+      return fallback;
+    }
+
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return fallback;
+    }
+
+    return Math.floor(parsed);
   }
 
   private async loadLocationsByCode(

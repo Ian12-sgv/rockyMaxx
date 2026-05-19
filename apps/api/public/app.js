@@ -1374,6 +1374,9 @@ function renderTransfersWorkspace() {
   const isApproving = state.transfers.approving;
   const isDeleting = state.transfers.deleting;
   const isBusy = isSaving || isApproving || isDeleting;
+  const transferCreatedAt = draft.fecha || new Date().toISOString();
+  const transferApprovedAt =
+    Number(draft.status) === 1 && draft.fechaEmision ? formatDateDisplay(draft.fechaEmision) : "Pendiente";
 
   return `
     <div class="modern-page transfer-register-page">
@@ -1425,12 +1428,12 @@ function renderTransfersWorkspace() {
               <input type="text" name="numero" value="${escapeHtml(draft.numero ? String(draft.numero) : "0")}" readonly />
             </label>
             <label class="transfer-field">
-              <span>Fecha</span>
-              <input type="date" name="fecha" value="${escapeHtml(toInputValue(draft.fecha))}" ${isLocked ? "disabled" : ""} />
+              <span>Fecha registro</span>
+              <input type="text" value="${escapeHtml(formatDateDisplay(transferCreatedAt))}" readonly />
             </label>
             <label class="transfer-field">
-              <span>Fecha emision</span>
-              <input type="date" name="fechaEmisionVisual" value="${escapeHtml(toInputValue(draft.fecha))}" ${isLocked ? "disabled" : ""} />
+              <span>Fecha aprobacion</span>
+              <input type="text" value="${escapeHtml(transferApprovedAt)}" readonly />
             </label>
             <label class="transfer-check-field">
               <span>Usa lector</span>
@@ -3816,6 +3819,59 @@ function countLoadedCatalogEntries() {
 
 function formatCompactMetric(value) {
   return new Intl.NumberFormat("es-VE").format(toFiniteNumber(value));
+}
+
+function capitalize(value) {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return "";
+  }
+
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+}
+
+function formatDateDisplay(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("es-VE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatDateOnlyDisplay(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("es-VE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function toDisplayValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  return String(value);
 }
 
 function formatTransferAmount(value) {
@@ -7549,8 +7605,8 @@ function readTransferSearch(form) {
 function createEmptyTransferDraft(metadata) {
   return {
     numero: null,
-    fecha: toDateInputValue(new Date()),
-    fechaEmision: toDateInputValue(new Date()),
+    fecha: new Date().toISOString(),
+    fechaEmision: null,
     codigoEnvia: "",
     codigoEnviaNombre: "",
     codigoRecibe: "",
@@ -7605,7 +7661,8 @@ function readTransferDraft(form) {
 
   return {
     numero: currentDraft.numero,
-    fecha: readFormFieldValue(form, "fecha", currentDraft.fecha),
+    fecha: currentDraft.fecha,
+    fechaEmision: currentDraft.fechaEmision,
     codigoEnvia: readFormFieldValue(form, "codigoEnvia", currentDraft.codigoEnvia),
     codigoRecibe: readFormFieldValue(form, "codigoRecibe", currentDraft.codigoRecibe),
     documentoOrigen: readFormFieldValue(form, "documentoOrigen", currentDraft.documentoOrigen),
@@ -7648,7 +7705,6 @@ function validateTransferDraft(draft) {
 
 function buildTransferPayload(draft) {
   return {
-    fecha: toApiDateTime(draft.fecha),
     codigoEnvia: String(draft.codigoEnvia || "").trim().toUpperCase() || undefined,
     codigoRecibe: String(draft.codigoRecibe || "").trim().toUpperCase() || undefined,
     documentoOrigen: String(draft.documentoOrigen || "").trim() || undefined,
@@ -7669,8 +7725,8 @@ function buildTransferPayload(draft) {
 function transferToDraft(transfer, metadata = state.transfers?.metadata) {
   return {
     numero: transfer?.numero ?? null,
-    fecha: toDateInputValue(transfer?.fecha),
-    fechaEmision: toDateInputValue(transfer?.fechaEmision || transfer?.fecha),
+    fecha: transfer?.fecha || new Date().toISOString(),
+    fechaEmision: Number(transfer?.status ?? 0) === 1 ? transfer?.fechaEmision || transfer?.fechaAprobacion || null : null,
     codigoEnvia: transfer?.codigoEnvia || "",
     codigoEnviaNombre: transfer?.codigoEnviaInfo?.nombre || transfer?.codigoEnvia || "",
     codigoRecibe: transfer?.codigoRecibe || "",
@@ -8343,6 +8399,63 @@ function readSearchDraft(form) {
   };
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function toInputValue(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value);
+}
+
+function toDateInputValue(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function toApiDateTime(value, boundary = "start") {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return undefined;
+  }
+
+  const dateOnlyMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    if (boundary === "end") {
+      return `${year}-${month}-${day}T23:59:59.999`;
+    }
+
+    return `${year}-${month}-${day}T00:00:00.000`;
+  }
+
+  const parsed = value instanceof Date ? new Date(value.getTime()) : new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+
+  return parsed.toISOString();
+}
+
 function readArticleDraft(form) {
   const currentDraft = withDraftDefaults(state.formDraft || createEmptyDraft());
 
@@ -8782,7 +8895,7 @@ function clearFlash() {
 }
 
 function persistSession() {
-  const persistent = Boolean(state.loginDraft?.mantenerSesion);
+  const persistent = shouldPersistSession();
   const targetStorage = persistent ? window.localStorage : window.sessionStorage;
   const staleStorage = persistent ? window.sessionStorage : window.localStorage;
 
@@ -8942,6 +9055,10 @@ function clearSession() {
   window.localStorage.removeItem(REMEMBER_SESSION_STORAGE_KEY);
 }
 
+function shouldPersistSession() {
+  return Boolean(state.loginDraft?.mantenerSesion);
+}
+
 function readStoredJson(key) {
   const value = window.sessionStorage.getItem(key) || window.localStorage.getItem(key);
   if (!value) {
@@ -8969,117 +9086,5 @@ function hasPersistentSession() {
 }
 
 function getSessionStorage() {
-  return hasPersistentSession() ? window.localStorage : window.sessionStorage;
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function capitalize(value) {
-  const normalized = String(value || "");
-  if (!normalized) {
-    return "";
-  }
-
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
-function toDisplayValue(value) {
-  if (value === null || value === undefined || value === "") {
-    return "-";
-  }
-
-  return String(value);
-}
-
-function toInputValue(value) {
-  if (value === null || value === undefined) {
-    return "";
-  }
-
-  return String(value);
-}
-
-function toDateInputValue(value) {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const year = String(date.getFullYear());
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function toApiDateTime(value, boundary = "start") {
-  if (!value) {
-    return undefined;
-  }
-
-  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  let date;
-
-  if (dateOnlyMatch) {
-    const [, year, month, day] = dateOnlyMatch;
-    const hours = boundary === "end" ? 23 : 0;
-    const minutes = boundary === "end" ? 59 : 0;
-    const seconds = boundary === "end" ? 59 : 0;
-    const milliseconds = boundary === "end" ? 999 : 0;
-    date = new Date(Number(year), Number(month) - 1, Number(day), hours, minutes, seconds, milliseconds);
-  } else {
-    date = new Date(value);
-  }
-
-  if (Number.isNaN(date.getTime())) {
-    return undefined;
-  }
-
-  return date.toISOString();
-}
-
-function formatDateDisplay(value) {
-  if (!value) {
-    return "Sin fecha";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Sin fecha";
-  }
-
-  return date.toLocaleString("es-VE", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-}
-
-function formatDateOnlyDisplay(value) {
-  if (!value) {
-    return "";
-  }
-
-  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
-  if (dateOnlyMatch) {
-    const [, year, month, day] = dateOnlyMatch;
-    return `${day}/${month}/${year}`;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  return date.toLocaleDateString("es-VE");
+  return shouldPersistSession() || hasPersistentSession() ? window.localStorage : window.sessionStorage;
 }

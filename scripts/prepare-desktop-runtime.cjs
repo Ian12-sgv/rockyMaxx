@@ -1,9 +1,11 @@
-const { cpSync, existsSync, mkdirSync, rmSync } = require("node:fs");
+const { cpSync, existsSync, mkdirSync, readdirSync, rmSync } = require("node:fs");
 const { spawnSync } = require("node:child_process");
 const { dirname, join, relative, sep } = require("node:path");
 
 const rootDir = join(__dirname, "..");
-const desktopDir = join(rootDir, "apps", "desktop");
+const targetArgIndex = process.argv.findIndex((value) => value === "--target");
+const targetRelativePath = targetArgIndex >= 0 ? process.argv[targetArgIndex + 1] : "apps/desktop-service";
+const desktopDir = join(rootDir, targetRelativePath);
 const bundleDir = join(desktopDir, ".bundle");
 const apiBundleDir = join(bundleDir, "api");
 const apiBundleVendorModulesDir = join(apiBundleDir, "vendor_modules");
@@ -30,6 +32,24 @@ function copyOptionalDirectory(sourceDir, targetDir) {
   if (existsSync(sourceDir)) {
     mkdirSync(dirname(targetDir), { recursive: true });
     copyDirectory(sourceDir, targetDir);
+  }
+}
+
+function copyApiEnvironmentFiles(sourceDir, targetDir) {
+  if (!existsSync(sourceDir)) {
+    return;
+  }
+
+  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    if (!entry.name.startsWith(".env") || entry.name.endsWith(".example")) {
+      continue;
+    }
+
+    cpSync(join(sourceDir, entry.name), join(targetDir, entry.name), { force: true });
   }
 }
 
@@ -85,8 +105,9 @@ function main() {
   copyDirectory(join(rootDir, "apps", "api", "dist"), join(apiBundleDir, "dist"));
   copyOptionalDirectory(join(rootDir, "apps", "api", "public"), join(apiBundleDir, "public"));
   copyOptionalDirectory(join(rootDir, "apps", "api", "prisma"), join(apiBundleDir, "prisma"));
+  copyApiEnvironmentFiles(join(rootDir, "apps", "api"), apiBundleDir);
 
-  if (existsSync(join(rootDir, ".env"))) {
+  if (!existsSync(join(apiBundleDir, ".env")) && existsSync(join(rootDir, ".env"))) {
     cpSync(join(rootDir, ".env"), join(apiBundleDir, ".env"), { force: true });
   }
 

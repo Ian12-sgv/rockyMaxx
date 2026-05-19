@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Configurar Rocky Maxx Cliente</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6eedf;
+        --paper: rgba(255, 250, 242, 0.96);
+        --ink: #22323a;
+        --muted: #5f707a;
+        --accent: #2f7f71;
+        --accent-strong: #215d54;
+        --line: rgba(34, 50, 58, 0.12);
+        --gold: #ba8b34;
+        --danger: #a64634;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(186, 139, 52, 0.18), transparent 24%),
+          radial-gradient(circle at bottom right, rgba(47, 127, 113, 0.16), transparent 20%),
+          linear-gradient(135deg, #f6eedf 0%, #efe2c1 45%, #f8f3ea 100%);
+        padding: 28px;
+      }
+
+      .card {
+        width: min(860px, 100%);
+        margin: 0 auto;
+        padding: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 26px;
+        background: var(--paper);
+        box-shadow: 0 24px 60px rgba(26, 42, 56, 0.12);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--gold);
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-family: Georgia, "Palatino Linotype", serif;
+        font-size: 3rem;
+        line-height: 1.03;
+        color: #173458;
+      }
+
+      p {
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .panel {
+        display: grid;
+        gap: 18px;
+        margin-top: 22px;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255,255,255,0.76);
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field span {
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: #1d395f;
+      }
+
+      .field input {
+        min-height: 48px;
+        padding: 0 14px;
+        border: 1px solid rgba(29, 57, 95, 0.14);
+        border-radius: 14px;
+        background: #fffdf8;
+        color: var(--ink);
+        font-size: 1rem;
+      }
+
+      .field small {
+        color: var(--muted);
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      button {
+        min-height: 44px;
+        padding: 0 16px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .button-primary {
+        background: var(--accent);
+        color: #fffefb;
+      }
+
+      .button-primary:hover {
+        background: var(--accent-strong);
+      }
+
+      .button-secondary {
+        border-color: rgba(29, 57, 95, 0.12);
+        background: rgba(255,255,255,0.92);
+        color: #1d395f;
+      }
+
+      .flash {
+        padding: 14px 16px;
+        border-radius: 14px;
+        font-weight: 600;
+      }
+
+      .flash-info {
+        background: rgba(43, 109, 201, 0.1);
+        color: #1d4c8a;
+      }
+
+      .flash-success {
+        background: rgba(47, 127, 113, 0.12);
+        color: var(--accent-strong);
+      }
+
+      .flash-error {
+        background: rgba(166, 70, 52, 0.12);
+        color: var(--danger);
+      }
+
+      .status {
+        display: grid;
+        gap: 8px;
+        padding: 16px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.68);
+      }
+
+      .status strong {
+        color: #173458;
+      }
+
+      code {
+        font-family: Consolas, "Courier New", monospace;
+        color: #143e7c;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <p class="eyebrow">Cliente frontend</p>
+      <h1>Conectar Rocky Maxx</h1>
+      <p>
+        Este ejecutable no levanta base de datos ni backend. Solo abre la interfaz contra la PC principal de la red local.
+      </p>
+
+      <section class="panel">
+        <div id="flash" class="flash flash-info">
+          Indica la URL del servidor local. Ejemplo: <code>http://192.168.1.10:3000</code>
+        </div>
+
+        <label class="field">
+          <span>Servidor Rocky Maxx</span>
+          <input id="server-url" type="url" placeholder="http://192.168.1.10:3000" />
+          <small>Usa la IP de la PC principal donde está arriba el servicio local y PostgreSQL.</small>
+        </label>
+
+        <div class="button-row">
+          <button id="check-button" class="button-secondary" type="button">Probar conexión</button>
+          <button id="save-button" class="button-secondary" type="button">Guardar</button>
+          <button id="open-button" class="button-primary" type="button">Guardar y abrir</button>
+        </div>
+
+        <div id="status-card" class="status" hidden>
+          <strong id="status-title">Servidor listo</strong>
+          <span id="status-text"></span>
+        </div>
+      </section>
+    </main>
+
+    <script src="./config-renderer.js"></script>
+  </body>
+</html>

@@ -4,15 +4,20 @@
   "private": true,
   "workspaces": [
     "apps/api",
-    "apps/desktop"
+    "apps/desktop",
+    "apps/desktop-service"
   ],
   "scripts": {
     "dev:api": "npm run start:dev --workspace=@sistema-arabe/api",
     "build:api": "npm run build --workspace=@sistema-arabe/api",
-    "desktop:start": "npm run build --workspace=@sistema-arabe/api && npm run start --workspace=@sistema-arabe/desktop",
+    "desktop:start": "npm run start --workspace=@sistema-arabe/desktop",
     "desktop:start:direct": "npm run start --workspace=@sistema-arabe/desktop",
-    "desktop:prepare-runtime": "node scripts/prepare-desktop-runtime.cjs",
-    "desktop:dist": "npm run build:api && npm run desktop:prepare-runtime && npm run dist:win --workspace=@sistema-arabe/desktop",
+    "desktop:dist": "npm run client:dist",
+    "client:dist": "npm run dist:win --workspace=@sistema-arabe/desktop",
+    "service:prepare-runtime": "node scripts/prepare-desktop-runtime.cjs --target apps/desktop-service",
+    "service:start": "npm run build:api && npm run service:prepare-runtime && npm run start --workspace=@sistema-arabe/desktop-service",
+    "service:dist": "npm run build:api && npm run service:prepare-runtime && npm run dist:win --workspace=@sistema-arabe/desktop-service",
+    "lan:dist": "npm run client:dist && npm run service:dist",
     "typecheck:api": "npm run typecheck --workspace=@sistema-arabe/api",
     "prisma:generate": "npm run prisma:generate --workspace=@sistema-arabe/api",
     "prisma:validate": "npm run prisma:validate --workspace=@sistema-arabe/api"

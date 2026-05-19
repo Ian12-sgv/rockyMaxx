@@ -12,6 +12,8 @@ apps/api/.env.tienda*
 *.log
 lovable-reference.png
 apps/desktop/.bundle/
+apps/desktop-service/.bundle/
 dist/
 api-deps.json
 backups/
+herramientas/ejecutables/

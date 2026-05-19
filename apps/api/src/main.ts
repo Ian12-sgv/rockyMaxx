@@ -16,6 +16,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const prismaService = app.get(PrismaService);
   const port = Number(configService.get<string>("API_PORT", "3000"));
+  const host = String(configService.get<string>("API_HOST", "0.0.0.0") || "0.0.0.0").trim() || "0.0.0.0";
   const publicPath = resolvePublicPath();
 
   await prismaService.enableShutdownHooks(app);
@@ -33,7 +34,7 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(port);
+  await app.listen(port, host);
 }
 
 function resolvePublicPath() {

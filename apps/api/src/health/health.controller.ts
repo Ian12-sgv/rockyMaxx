@@ -30,6 +30,7 @@ export class HealthController {
     return {
       status: "ok",
       app: "rocky-maxx-api",
+      host: this.configService.get<string>("API_HOST", "0.0.0.0"),
       port: this.configService.get<number>("API_PORT", 3000),
       database,
     };

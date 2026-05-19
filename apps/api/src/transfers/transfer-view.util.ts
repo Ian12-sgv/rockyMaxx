@@ -44,9 +44,13 @@ export function toTransferListItemView(
   item: TransferWithRelations,
   options: TransferViewOptions = {},
 ) {
+  const fechaAprobacion = item.Status === 1 ? item.FechaEmision : null;
+
   return {
     numero: item.Numero,
     fecha: item.Fecha,
+    fechaRegistro: item.Fecha,
+    fechaAprobacion,
     codigoEnvia: item.CodigoEnvia,
     codigoRecibe: item.CodigoRecibe,
     codigoEnviaInfo: options.codigoEnviaInfo
@@ -67,6 +71,7 @@ export function toTransferListItemView(
     status: item.Status,
     statusNombre: toTransferStatusName(item.Status),
     usuario: item.Usuario,
+    fechaEmision: fechaAprobacion,
     editable: item.Status === 0,
     totalItems: item.movTransferencias.length,
   };
@@ -76,9 +81,12 @@ export function toTransferDetailView(
   item: TransferWithRelations,
   options: TransferViewOptions = {},
 ) {
+  const fechaAprobacion = item.Status === 1 ? item.FechaEmision : null;
+
   return {
     ...toTransferListItemView(item, options),
-    fechaEmision: item.FechaEmision,
+    fechaEmision: fechaAprobacion,
+    fechaAprobacion,
     interContable: item.InterContable,
     idLote: item.IDLote,
     idDespacho: item.IDDespacho,

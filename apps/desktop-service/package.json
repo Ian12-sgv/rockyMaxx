@@ -1,8 +1,8 @@
 {
-  "name": "@sistema-arabe/desktop",
+  "name": "@sistema-arabe/desktop-service",
   "version": "2.1.2",
   "private": true,
-  "description": "Cliente de escritorio Rocky Maxx para conectarse al servicio local de la red.",
+  "description": "Servicio local Rocky Maxx para la PC principal.",
   "author": "OpenAI Codex",
   "main": "main.js",
   "scripts": {
@@ -14,17 +14,13 @@
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "com.rockymaxx.client",
-    "productName": "Rocky Maxx Cliente",
-    "executableName": "RockyMaxxCliente",
+    "appId": "com.rockymaxx.localservice",
+    "productName": "Rocky Maxx Servicio Local",
+    "executableName": "RockyMaxxServicioLocal",
     "electronVersion": "41.2.1",
     "asar": true,
-    "extraMetadata": {
-      "name": "rocky-maxx-cliente",
-      "productName": "Rocky Maxx Cliente"
-    },
     "directories": {
-      "output": "../../dist/desktop-client"
+      "output": "../../dist/desktop-service"
     },
     "files": [
       "main.js",
@@ -33,6 +29,12 @@
       "config-renderer.js",
       "start-electron.js",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".bundle/api",
+        "to": "api"
+      }
     ],
     "win": {
       "target": [
