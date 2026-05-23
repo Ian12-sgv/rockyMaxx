@@ -2,6 +2,9 @@ const flash = document.getElementById("flash");
 const profileSelect = document.getElementById("database-profile");
 const saveButton = document.getElementById("save-button");
 const refreshButton = document.getElementById("refresh-button");
+const introCopy = document.getElementById("intro-copy");
+const configForm = document.getElementById("config-form");
+const lockedPanel = document.getElementById("locked-panel");
 const localUrlValue = document.getElementById("local-url");
 const healthUrlValue = document.getElementById("health-url");
 const databaseValue = document.getElementById("database-name");
@@ -18,6 +21,21 @@ let saving = false;
 function setFlash(message, type = "info") {
   flash.textContent = message;
   flash.className = `flash flash-${type}`;
+}
+
+function syncFormInteractivity() {
+  const configurationLocked = Boolean(currentState?.configurationLocked);
+  const hasProfile = Boolean(String(profileSelect.value || "").trim());
+  const mirrorEnabled = Boolean(mirrorEnabledInput.checked);
+  const mirrorUrl = String(mirrorUrlInput.value || "").trim();
+
+  profileSelect.disabled = configurationLocked || saving;
+  mirrorEnabledInput.disabled = saving;
+  mirrorUrlInput.disabled = saving || !mirrorEnabled;
+  saveButton.hidden = false;
+  saveButton.textContent = configurationLocked ? "Guardar replica espejo" : "Guardar configuracion";
+  saveButton.disabled = saving || !hasProfile || (mirrorEnabled && !mirrorUrl);
+  refreshButton.disabled = saving;
 }
 
 function renderUrls(urls) {
@@ -47,6 +65,8 @@ function renderState(state) {
   currentState = state;
   renderProfiles(state?.profiles || [], state?.selectedProfileId || "");
 
+  const configurationLocked = Boolean(state?.configurationLocked);
+
   localUrlValue.textContent = state?.localUrl || "-";
   healthUrlValue.textContent = state?.healthUrl || "-";
   databaseValue.textContent = state?.health?.database?.database || state?.currentProfile?.databaseName || "-";
@@ -57,15 +77,33 @@ function renderState(state) {
   mirrorUrlInput.value = state?.mirrorSyncRemoteApiUrl || "";
   renderUrls(state?.urls || []);
 
-  saveButton.disabled = saving || !profileSelect.value;
-  refreshButton.disabled = saving;
+  if (configForm) {
+    configForm.hidden = false;
+  }
+
+  if (lockedPanel) {
+    lockedPanel.hidden = !configurationLocked;
+  }
+
+  if (introCopy) {
+    introCopy.textContent = configurationLocked
+      ? "La base local de esta instalacion ya quedo fijada y se reutiliza automaticamente en cada arranque. Aun puedes actualizar la replica espejo hacia el VPS cuando haga falta."
+      : "Selecciona la base de datos con la que quieres trabajar en esta PC y guarda la configuracion. La proxima vez que levantes el back, el servicio recordara esa base automaticamente.";
+  }
+
+  syncFormInteractivity();
 }
 
 async function hydrate() {
   setFlash("Cargando configuracion del servicio local...", "info");
   const state = await window.rockyService.getState();
   renderState(state);
-  setFlash("Selecciona la base de datos y guarda la configuracion para reutilizarla en el proximo arranque.", "info");
+  setFlash(
+    state?.configurationLocked
+      ? "La base local ya esta guardada. Si necesitas cambiar el VPS o activar el espejo, puedes hacerlo desde aqui sin reinstalar."
+      : "Selecciona la base de datos y guarda la configuracion para reutilizarla en el proximo arranque.",
+    "info",
+  );
 }
 
 saveButton.addEventListener("click", async () => {
@@ -86,7 +124,10 @@ saveButton.addEventListener("click", async () => {
       mirrorSyncRemoteApiUrl: String(mirrorUrlInput.value || "").trim(),
     });
     renderState(state);
-    setFlash("Configuracion guardada. El backend ya esta trabajando con la base seleccionada.", "success");
+    setFlash(
+      "Configuracion guardada. El backend ya esta trabajando con la base seleccionada y la replica espejo quedo actualizada.",
+      "success",
+    );
   } catch (error) {
     setFlash(error?.message || "No se pudo guardar la configuracion.", "error");
   } finally {
@@ -105,6 +146,18 @@ refreshButton.addEventListener("click", async () => {
   } catch (error) {
     setFlash(error?.message || "No se pudo actualizar el estado.", "error");
   }
+});
+
+profileSelect.addEventListener("change", () => {
+  syncFormInteractivity();
+});
+
+mirrorEnabledInput.addEventListener("change", () => {
+  syncFormInteractivity();
+});
+
+mirrorUrlInput.addEventListener("input", () => {
+  syncFormInteractivity();
 });
 
 window.rockyService.onState((state) => {

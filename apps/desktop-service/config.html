@@ -222,7 +222,7 @@
     <main class="card">
       <p class="eyebrow">PC principal</p>
       <h1>Servicio local Rocky Maxx</h1>
-      <p>
+      <p id="intro-copy">
         Selecciona la base de datos con la que quieres trabajar en esta PC y guarda la configuracion.
         La proxima vez que levantes el back, el servicio recordara esa base automaticamente.
       </p>
@@ -232,31 +232,42 @@
           Cargando configuracion del servicio local...
         </div>
 
-        <label class="field">
-          <span>Base de datos activa</span>
-          <select id="database-profile"></select>
-          <small>El perfil guardado se reutiliza automaticamente en el siguiente arranque del backend.</small>
-        </label>
+        <div id="config-form">
+          <label class="field">
+            <span>Base de datos activa</span>
+            <select id="database-profile"></select>
+            <small>El perfil guardado se reutiliza automaticamente en el siguiente arranque del backend.</small>
+          </label>
 
-        <label class="field">
-          <span>Replica espejo a VPS</span>
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-            <input id="mirror-enabled" type="checkbox" />
-            <span style="font-weight:600;color:#1d395f;">Habilitar guardado espejo</span>
-          </div>
-          <small>Si esta activo, el backend graba local y deja cola pendiente para el VPS cuando haya caidas.</small>
-        </label>
+          <label class="field">
+            <span>Replica espejo a VPS</span>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <input id="mirror-enabled" type="checkbox" />
+              <span style="font-weight:600;color:#1d395f;">Habilitar guardado espejo</span>
+            </div>
+            <small>Si esta activo, el backend graba local y deja cola pendiente para el VPS cuando haya caidas.</small>
+          </label>
 
-        <label class="field">
-          <span>URL API del VPS</span>
-          <input
-            id="mirror-url"
-            type="url"
-            placeholder="https://tu-vps.ejemplo.com"
-            style="min-height:48px;padding:0 14px;border:1px solid rgba(29, 57, 95, 0.14);border-radius:14px;background:#fffdf8;color:var(--ink);font-size:1rem;"
-          />
-          <small>Se guarda en el servicio local y no se muestra dentro del frontend operativo.</small>
-        </label>
+          <label class="field">
+            <span>URL API del VPS</span>
+            <input
+              id="mirror-url"
+              type="url"
+              placeholder="https://tu-vps.ejemplo.com"
+              style="min-height:48px;padding:0 14px;border:1px solid rgba(29, 57, 95, 0.14);border-radius:14px;background:#fffdf8;color:var(--ink);font-size:1rem;"
+            />
+            <small>Se guarda en el servicio local y no se muestra dentro del frontend operativo.</small>
+          </label>
+
+        </div>
+
+        <div id="locked-panel" class="status" hidden>
+          <strong>Configuracion bloqueada</strong>
+          <p style="margin:0;">
+            La base local de esta instalacion ya quedo fija y el servicio la reutiliza automaticamente.
+            Si cambias la replica espejo a VPS, puedes actualizar estos campos sin reinstalar.
+          </p>
+        </div>
 
         <div class="button-row">
           <button id="refresh-button" class="button-secondary" type="button">Actualizar estado</button>

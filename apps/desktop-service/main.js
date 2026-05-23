@@ -5,6 +5,7 @@ const {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } = require("node:fs");
 const { execFile, spawn } = require("node:child_process");
@@ -40,6 +41,7 @@ let currentServiceProfile = null;
 let expectedApiShutdownReason = "";
 let configuredMirrorSyncEnabled = false;
 let configuredMirrorSyncRemoteApiUrl = "";
+let serviceConfigurationLocked = false;
 
 function writeRuntimeLog(message) {
   try {
@@ -124,17 +126,57 @@ function resolveApiNodeExecutable(runtimeDir) {
 }
 
 function getServiceConfigPath() {
+  if (app.isPackaged) {
+    return join(dirname(process.execPath), SERVICE_CONFIG_FILE);
+  }
+
   return join(app.getPath("userData"), SERVICE_CONFIG_FILE);
+}
+
+function getLegacyServiceConfigPath() {
+  return join(app.getPath("userData"), SERVICE_CONFIG_FILE);
+}
+
+function removeLegacyServiceConfig() {
+  const legacyConfigPath = getLegacyServiceConfigPath();
+  const currentConfigPath = getServiceConfigPath();
+
+  if (legacyConfigPath === currentConfigPath || !existsSync(legacyConfigPath)) {
+    return;
+  }
+
+  try {
+    rmSync(legacyConfigPath, { force: true });
+  } catch (error) {
+    writeRuntimeLog(`No se pudo eliminar la configuracion legacy del servicio: ${error.message}`);
+  }
+}
+
+function stripUtf8Bom(raw) {
+  if (typeof raw !== "string" || !raw) {
+    return raw;
+  }
+
+  return raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
 }
 
 function readServiceConfig() {
   try {
     const configPath = getServiceConfigPath();
+    const legacyConfigPath = getLegacyServiceConfigPath();
+
+    if (!existsSync(configPath) && legacyConfigPath !== configPath && existsSync(legacyConfigPath)) {
+      const legacyRaw = readFileSync(legacyConfigPath, "utf8");
+      mkdirSync(dirname(configPath), { recursive: true });
+      writeFileSync(configPath, legacyRaw, "utf8");
+      removeLegacyServiceConfig();
+    }
+
     if (!existsSync(configPath)) {
       return {};
     }
 
-    const raw = readFileSync(configPath, "utf8");
+    const raw = stripUtf8Bom(readFileSync(configPath, "utf8"));
     const parsed = JSON.parse(raw);
     return typeof parsed === "object" && parsed ? parsed : {};
   } catch (error) {
@@ -147,6 +189,7 @@ function writeServiceConfig(config) {
   const configPath = getServiceConfigPath();
   mkdirSync(dirname(configPath), { recursive: true });
   writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  removeLegacyServiceConfig();
 }
 
 function parseEnvValue(rawValue) {
@@ -295,6 +338,10 @@ function initializeServiceProfile() {
     availableServiceProfiles[0] ||
     null;
 
+  serviceConfigurationLocked = Boolean(
+    savedProfileId &&
+      availableServiceProfiles.some((profile) => profile.id === savedProfileId),
+  );
   applyServiceProfile(selectedProfile);
 }
 
@@ -447,7 +494,7 @@ function startApiServer() {
   }
 
   writeRuntimeLog(
-    `Iniciando backend local. perfil=${currentServiceProfile?.id || "sin-perfil"} runtimeDir=${runtimeDir} entry=${apiEntry} node=${nodeExecutable} host=${configuredApiHost} port=${configuredApiPort}`,
+    `Iniciando backend local. perfil=${currentServiceProfile?.id || "sin-perfil"} runtimeDir=${runtimeDir} entry=${apiEntry} node=${nodeExecutable} host=${configuredApiHost} port=${configuredApiPort} mirrorEnabled=${configuredMirrorSyncEnabled} mirrorUrl=${configuredMirrorSyncRemoteApiUrl || "-"}`,
   );
 
   apiProcess = spawn(nodeExecutable, [apiEntry], {
@@ -563,6 +610,7 @@ function buildServiceState(errorMessage = "") {
     apiHost: configuredApiHost,
     mirrorSyncEnabled: configuredMirrorSyncEnabled,
     mirrorSyncRemoteApiUrl: configuredMirrorSyncRemoteApiUrl,
+    configurationLocked: serviceConfigurationLocked,
     localUrl,
     healthUrl: getHealthUrl(),
     urls: getLanUrls(),
@@ -686,6 +734,7 @@ ipcMain.handle("service-config:save", async (_event, payload) => {
     mirrorSyncEnabled: configuredMirrorSyncEnabled,
     mirrorSyncRemoteApiUrl: configuredMirrorSyncRemoteApiUrl,
   });
+  serviceConfigurationLocked = true;
   applyServiceProfile(selectedProfile);
 
   try {

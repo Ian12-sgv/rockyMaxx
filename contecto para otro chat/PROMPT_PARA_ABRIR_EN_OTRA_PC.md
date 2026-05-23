@@ -16,14 +16,15 @@ main
 
 Antes de tocar codigo, lee estos archivos del proyecto en este orden:
 
-1. `contecto para otro chat/CONTEXTO_PARA_OTRO_CHAT.md`
-2. `docs/roadmap.md`
-3. `apps/api/src/transfers/`
-4. `apps/api/src/dev-returns/`
-5. `apps/api/src/adjustments/`
-6. `apps/api/src/sucursales/`
-7. `apps/api/public/app.js`
-8. `apps/api/src/app.module.ts`
+1. `contecto para otro chat/ACCESO_VPS_Y_GUIA_DE_BASES.md`
+2. `contecto para otro chat/CONTEXTO_PARA_OTRO_CHAT.md`
+3. `docs/roadmap.md`
+4. `apps/api/src/transfers/`
+5. `apps/api/src/dev-returns/`
+6. `apps/api/src/adjustments/`
+7. `apps/api/src/sucursales/`
+8. `apps/api/public/app.js`
+9. `apps/api/src/app.module.ts`
 
 Luego revisa:
 
@@ -102,6 +103,30 @@ Cambios recientes ya hechos:
 - En la grilla de transferencia, el boton dice `Agregar linea`.
 - Se quito `Eliminar pendiente` de esa zona.
 - Al presionar Enter en `Codigo barra`, el frontend consulta inventario y llena `Referencia`, `Nombre` y existencia de la linea.
+
+## Contexto de despliegue actual
+
+Ahora el proyecto ya no es solo local. Hay dos capas:
+
+- Local:
+  - central: `rocky_maxx` en `3000`
+  - tienda 001: `rocky_tienda_001` en `3001`
+- VPS:
+  - central: `rocky_sync_central`
+  - tienda 001: `rocky_tienda_001_vps`
+
+El detalle operativo del VPS, servicios, rutas, credenciales y patron para agregar mas tiendas o bodegas ya quedo en:
+
+- `contecto para otro chat/ACCESO_VPS_Y_GUIA_DE_BASES.md`
+
+Ese archivo se debe leer primero si el trabajo toca:
+
+- espejo local -> VPS
+- servicios del VPS
+- Nginx
+- systemd
+- nuevas bases de tiendas o bodegas
+- cambios de infraestructura
 
 ## Como correr en otra PC
 
@@ -190,11 +215,24 @@ Health check:
 Invoke-RestMethod http://localhost:3000/api/health
 ```
 
+Si tambien vas a trabajar con tienda 001:
+
+```powershell
+Invoke-RestMethod http://localhost:3001/api/health
+```
+
 Login inicial:
 
 ```text
 Usuario: admin
 Clave: 123456
+```
+
+Usuario tecnico usado por sincronizacion:
+
+```text
+Usuario: sistema
+Clave: 456789
 ```
 
 ## Restricciones para continuar
@@ -204,4 +242,4 @@ Clave: 123456
 - Continuar pragmaticamente sobre las tablas legacy actuales.
 - Antes de editar, revisar siempre `git status --short` y `git diff --stat`.
 - Si hay cambios pendientes, no revertirlos sin permiso.
-
+- Si el cambio toca infraestructura o VPS, revisar primero `contecto para otro chat/ACCESO_VPS_Y_GUIA_DE_BASES.md`.
