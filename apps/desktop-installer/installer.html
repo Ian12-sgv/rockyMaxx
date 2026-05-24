@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rocky Maxx Instalador</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6eedf;
+        --paper: rgba(255, 250, 242, 0.97);
+        --ink: #22323a;
+        --muted: #5f707a;
+        --accent: #2f7f71;
+        --accent-strong: #215d54;
+        --line: rgba(34, 50, 58, 0.12);
+        --gold: #ba8b34;
+        --danger: #a64634;
+        --blue: #1d4c8a;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(186, 139, 52, 0.18), transparent 24%),
+          radial-gradient(circle at bottom right, rgba(47, 127, 113, 0.16), transparent 20%),
+          linear-gradient(135deg, #f6eedf 0%, #efe2c1 45%, #f8f3ea 100%);
+        padding: 28px;
+      }
+
+      .card {
+        width: min(1120px, 100%);
+        margin: 0 auto;
+        padding: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 26px;
+        background: var(--paper);
+        box-shadow: 0 24px 60px rgba(26, 42, 56, 0.12);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--gold);
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-family: Georgia, "Palatino Linotype", serif;
+        font-size: 3rem;
+        line-height: 1.03;
+        color: #173458;
+      }
+
+      p {
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .flash {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        font-weight: 600;
+      }
+
+      .flash-info {
+        background: rgba(43, 109, 201, 0.1);
+        color: #1d4c8a;
+      }
+
+      .flash-success {
+        background: rgba(47, 127, 113, 0.12);
+        color: var(--accent-strong);
+      }
+
+      .flash-error {
+        background: rgba(166, 70, 52, 0.12);
+        color: var(--danger);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .panel {
+        display: grid;
+        gap: 18px;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.78);
+      }
+
+      .panel h2 {
+        margin: 0;
+        font-size: 1.2rem;
+        color: #173458;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field label {
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: #1d395f;
+      }
+
+      .field input,
+      .field select {
+        min-height: 48px;
+        padding: 0 14px;
+        border: 1px solid rgba(29, 57, 95, 0.14);
+        border-radius: 14px;
+        background: #fffdf8;
+        color: var(--ink);
+        font-size: 1rem;
+      }
+
+      .field input[readonly] {
+        background: rgba(245, 238, 223, 0.9);
+      }
+
+      .field small {
+        color: var(--muted);
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      button {
+        min-height: 44px;
+        padding: 0 16px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+
+      .button-primary {
+        background: var(--accent);
+        color: #fffefb;
+      }
+
+      .button-primary:hover:enabled {
+        background: var(--accent-strong);
+      }
+
+      .button-secondary {
+        border-color: rgba(29, 57, 95, 0.12);
+        background: rgba(255,255,255,0.92);
+        color: #1d395f;
+      }
+
+      .status-card {
+        display: grid;
+        gap: 10px;
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.7);
+      }
+
+      .status-card h3 {
+        margin: 0;
+        color: #173458;
+      }
+
+      .status-line {
+        display: grid;
+        grid-template-columns: 165px 1fr;
+        gap: 12px;
+        align-items: start;
+      }
+
+      .status-line span:first-child {
+        font-weight: 700;
+        color: #1d395f;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 0.92rem;
+        width: fit-content;
+      }
+
+      .chip-ok {
+        background: rgba(47, 127, 113, 0.14);
+        color: var(--accent-strong);
+      }
+
+      .chip-warn {
+        background: rgba(186, 139, 52, 0.16);
+        color: #8b6118;
+      }
+
+      code {
+        font-family: Consolas, "Courier New", monospace;
+        color: var(--blue);
+        word-break: break-word;
+      }
+
+      @media (max-width: 980px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        h1 {
+          font-size: 2.35rem;
+        }
+
+        .status-line {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <p class="eyebrow">Instalacion automatizada</p>
+      <h1>Instalador Rocky Maxx</h1>
+      <p>
+        Este ejecutable instala PostgreSQL y pgAdmin, y despues puede bajar una base elegida del VPS
+        para restaurarla en la PC local. Si la base ya existe, se pedira confirmacion antes de reemplazarla.
+      </p>
+
+      <div id="flash" class="flash flash-info">Cargando estado del instalador...</div>
+
+      <div class="layout">
+        <section class="panel">
+          <h2>1. Instalar PostgreSQL y pgAdmin</h2>
+
+          <div class="grid">
+            <div class="field">
+              <label for="postgres-user">Usuario local PostgreSQL</label>
+              <input id="postgres-user" type="text" />
+              <small>Este usuario se usara como superusuario local y se aplicara tambien al servicio Rocky Maxx si ya esta instalado.</small>
+            </div>
+
+            <div class="field">
+              <label for="postgres-password">Clave local PostgreSQL</label>
+              <input id="postgres-password" type="text" value="123456" readonly />
+              <small>Queda fija en esta version del instalador para simplificar el arranque en otras PCs.</small>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button id="install-postgres" class="button-primary" type="button">Instalar PostgreSQL</button>
+            <button id="install-pgadmin" class="button-secondary" type="button">Instalar pgAdmin</button>
+            <button id="install-both" class="button-secondary" type="button">Instalar ambos</button>
+          </div>
+
+          <div class="status-card">
+            <h3>Estado local detectado</h3>
+            <div class="status-line">
+              <span>PostgreSQL</span>
+              <span id="postgres-status">-</span>
+            </div>
+            <div class="status-line">
+              <span>Version / bin</span>
+              <code id="postgres-bin">-</code>
+            </div>
+            <div class="status-line">
+              <span>pgAdmin</span>
+              <span id="pgadmin-status">-</span>
+            </div>
+            <div class="status-line">
+              <span>Ruta pgAdmin</span>
+              <code id="pgadmin-path">-</code>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>2. Restaurar una sede desde el VPS</h2>
+
+          <div class="grid">
+            <div class="field">
+              <label for="remote-node">Base remota</label>
+              <select id="remote-node"></select>
+              <small>Se descargara un dump de la sede elegida desde el VPS y se restaurara en la base local correspondiente.</small>
+            </div>
+
+            <div class="field">
+              <label for="local-db">Base local destino</label>
+              <input id="local-db" type="text" />
+              <small>Se rellena automaticamente con el nombre tecnico esperado para esa sede, pero puedes ajustarlo si necesitas otro nombre.</small>
+            </div>
+
+            <div class="field">
+              <label for="remote-base-url">URL API VPS</label>
+              <input id="remote-base-url" type="url" />
+              <small>Debe apuntar a la sede exacta, por ejemplo <code>http://68.183.105.135/tienda001</code>.</small>
+            </div>
+
+            <div class="field">
+              <label for="remote-user">Usuario API VPS</label>
+              <input id="remote-user" type="text" />
+              <small>Por defecto se usa el usuario tecnico de sincronizacion.</small>
+            </div>
+
+            <div class="field">
+              <label for="remote-password">Clave API VPS</label>
+              <input id="remote-password" type="password" />
+              <small>Se usa para autenticar la descarga del respaldo desde el VPS.</small>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button id="restore-button" class="button-primary" type="button">Descargar y restaurar</button>
+            <button id="refresh-button" class="button-secondary" type="button">Actualizar estado</button>
+          </div>
+
+          <div class="status-card">
+            <h3>Servicio Rocky Maxx local</h3>
+            <div class="status-line">
+              <span>Runtime detectado</span>
+              <span id="service-status">-</span>
+            </div>
+            <div class="status-line">
+              <span>Ruta runtime</span>
+              <code id="service-path">-</code>
+            </div>
+            <div class="status-line">
+              <span>Observacion</span>
+              <span id="service-note">Si existe el servicio local, el instalador actualizara sus perfiles .env con el usuario PostgreSQL que hayas elegido.</span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="./installer-renderer.js"></script>
+  </body>
+</html>

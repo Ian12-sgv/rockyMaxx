@@ -1,0 +1,51 @@
+{
+  "name": "@sistema-arabe/desktop-installer",
+  "version": "2.1.2",
+  "private": true,
+  "description": "Instalador Rocky Maxx para PostgreSQL, pgAdmin y restauracion desde VPS.",
+  "author": "OpenAI Codex",
+  "main": "main.js",
+  "scripts": {
+    "start": "node start-electron.js",
+    "dist:win": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "41.2.1",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.rockymaxx.installer",
+    "productName": "Rocky Maxx Instalador",
+    "executableName": "RockyMaxxInstalador",
+    "electronVersion": "41.2.1",
+    "asar": true,
+    "directories": {
+      "output": "../../dist/desktop-installer"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "installer.html",
+      "installer-renderer.js",
+      "start-electron.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "requestedExecutionLevel": "requireAdministrator"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "runAfterFinish": true
+    }
+  }
+}

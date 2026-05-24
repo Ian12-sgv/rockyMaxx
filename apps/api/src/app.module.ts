@@ -7,6 +7,7 @@ import { AuthModule } from "./auth/auth.module";
 import { DevReturnsModule } from "./dev-returns/dev-returns.module";
 import { HealthModule } from "./health/health.module";
 import { InventoryModule } from "./inventory/inventory.module";
+import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { MirrorSyncModule } from "./mirror-sync/mirror-sync.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RolesModule } from "./roles/roles.module";
@@ -29,6 +30,7 @@ import { UsersModule } from "./users/users.module";
     UsersModule,
     RolesModule,
     InventoryModule,
+    MaintenanceModule,
     SucursalesModule,
     TransfersModule,
   ],
