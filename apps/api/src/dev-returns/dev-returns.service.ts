@@ -1969,6 +1969,7 @@ export class DevReturnsService {
     const databaseNameMatch = databaseUrl.match(/\/([^/?]+)(\?|$)/);
     const databaseName = databaseNameMatch?.[1] ?? "";
     const storeMatch = databaseName.match(/rocky_tienda_(\d+)/i);
+    const warehouseMatch = databaseName.match(/rocky_bodega_(\d+)/i);
 
     if (storeMatch) {
       const code = storeMatch[1].padStart(3, "0");
@@ -1978,6 +1979,18 @@ export class DevReturnsService {
         nodeId: `TIENDA${code}`,
         nombre: `Tienda ${code}`,
         tipo: "TIENDA",
+        apiUrl: `http://localhost:${apiPort}`,
+      };
+    }
+
+    if (warehouseMatch) {
+      const code = warehouseMatch[1].padStart(3, "0");
+      return {
+        databaseName,
+        sucursalCodigo: `B${code}`,
+        nodeId: `BODEGA${code}`,
+        nombre: `Bodega ${code}`,
+        tipo: "BODEGA",
         apiUrl: `http://localhost:${apiPort}`,
       };
     }
@@ -2132,6 +2145,18 @@ export class DevReturnsService {
         Nombre: `Tienda ${numericCode}`,
         Tipo: "TIENDA",
         ApiUrl: `http://localhost:${3000 + Number(numericCode)}`,
+      };
+    }
+
+    const warehouseMatch = normalized.match(/^(?:BODEGA|B)(\d{3})$/);
+    if (warehouseMatch) {
+      const code = warehouseMatch[1];
+      return {
+        NodeId: `BODEGA${code}`,
+        SucursalCodigo: `B${code}`,
+        Nombre: `Bodega ${code}`,
+        Tipo: "BODEGA",
+        ApiUrl: null,
       };
     }
 

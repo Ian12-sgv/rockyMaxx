@@ -128,6 +128,39 @@ Ese archivo se debe leer primero si el trabajo toca:
 - nuevas bases de tiendas o bodegas
 - cambios de infraestructura
 
+Mapa actual de sedes:
+
+- `ORIGEN` -> `Bodega 001 - GalpoPrincipalMcbo`
+- `001` -> `Tienda 001 - RockyMaxxCentro`
+- `002` -> `Tienda 002 - Moda shop`
+- `003` -> `Tienda 003 - Moda shop 2`
+- `004` -> `Tienda 004 - RockyMaxxMcbo`
+- `005` -> `Tienda 005 - Titan`
+- `006` -> `Tienda 006 - Top shop bqto`
+- `B002` -> `Bodega 002 - galpon barquisimeto`
+
+En la nube ya existen:
+
+- `rocky_sync_central`
+- `rocky_tienda_001_vps`
+- `rocky_tienda_002_vps`
+- `rocky_tienda_003_vps`
+- `rocky_tienda_004_vps`
+- `rocky_tienda_005_vps`
+- `rocky_tienda_006_vps`
+- `rocky_bodega_002_vps`
+
+Y ya responden estas rutas:
+
+- `http://68.183.105.135/api/health`
+- `http://68.183.105.135/tienda001/api/health`
+- `http://68.183.105.135/tienda002/api/health`
+- `http://68.183.105.135/tienda003/api/health`
+- `http://68.183.105.135/tienda004/api/health`
+- `http://68.183.105.135/tienda005/api/health`
+- `http://68.183.105.135/tienda006/api/health`
+- `http://68.183.105.135/bodega002/api/health`
+
 ## Como correr en otra PC
 
 Requisitos:
