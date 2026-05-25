@@ -243,9 +243,9 @@
             <span>Replica espejo a VPS</span>
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
               <input id="mirror-enabled" type="checkbox" />
-              <span style="font-weight:600;color:#1d395f;">Habilitar guardado espejo</span>
+              <span style="font-weight:600;color:#1d395f;">Espejo siempre activo</span>
             </div>
-            <small>Si esta activo, el backend graba local y deja cola pendiente para el VPS cuando haya caidas.</small>
+            <small>El backend siempre graba local y deja cola pendiente para el VPS cuando haya caidas.</small>
           </label>
 
           <label class="field">
@@ -265,7 +265,7 @@
           <strong>Configuracion bloqueada</strong>
           <p style="margin:0;">
             La base local de esta instalacion ya quedo fija y el servicio la reutiliza automaticamente.
-            Si cambias la replica espejo a VPS, puedes actualizar estos campos sin reinstalar.
+            La replica espejo queda siempre activa y solo necesitas revisar la URL del VPS si cambia.
           </p>
         </div>
 

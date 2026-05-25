@@ -43,9 +43,19 @@ export class TransfersController {
     return this.transfersService.listTransferSyncOutbox(findTransferSyncOutboxDto);
   }
 
+  @Get("sync/inbox/export")
+  async exportSyncInbox(@Query() pushTransferSyncDto: PushTransferSyncDto) {
+    return this.transfersService.exportTransferSyncInbox(pushTransferSyncDto);
+  }
+
   @Post("sync/push")
   async pushPendingSync(@Body() pushTransferSyncDto: PushTransferSyncDto) {
     return this.transfersService.pushPendingTransferSync(pushTransferSyncDto);
+  }
+
+  @Post("sync/pull")
+  async pullPendingSync(@Body() pushTransferSyncDto: PushTransferSyncDto) {
+    return this.transfersService.pullRemoteTransferSync(pushTransferSyncDto);
   }
 
   @Post("sync/outbox/:globalId/sent")

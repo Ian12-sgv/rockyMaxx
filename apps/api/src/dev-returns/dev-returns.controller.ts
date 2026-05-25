@@ -130,6 +130,21 @@ export class DevReturnsController {
     return this.devReturnsService.approveInboundReturn(Number(numero), codigoEnvia, user);
   }
 
+  @Get("sync/inbox/export")
+  async exportSyncInbox(@Query() findDevDraftsDto: FindDevDraftsDto) {
+    return this.devReturnsService.exportSyncInbox(findDevDraftsDto.limit);
+  }
+
+  @Post("sync/push")
+  async pushPendingSync(@Body() findDevDraftsDto: FindDevDraftsDto) {
+    return this.devReturnsService.pushPendingSync(findDevDraftsDto.limit);
+  }
+
+  @Post("sync/pull")
+  async pullPendingSync(@Body() findDevDraftsDto: FindDevDraftsDto) {
+    return this.devReturnsService.pullRemoteSync(findDevDraftsDto.limit);
+  }
+
   @Post("sync/import")
   async importSyncPackage(@Body() body: Record<string, unknown>) {
     return this.devReturnsService.importSyncPackage(body);

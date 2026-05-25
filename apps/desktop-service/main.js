@@ -39,7 +39,7 @@ let currentHealthPayload = null;
 let availableServiceProfiles = [];
 let currentServiceProfile = null;
 let expectedApiShutdownReason = "";
-let configuredMirrorSyncEnabled = false;
+let configuredMirrorSyncEnabled = true;
 let configuredMirrorSyncRemoteApiUrl = "";
 let serviceConfigurationLocked = false;
 
@@ -192,6 +192,19 @@ function writeServiceConfig(config) {
   removeLegacyServiceConfig();
 }
 
+function resolveDefaultMirrorSyncRemoteApiUrl(profile) {
+  const profileUrl =
+    typeof profile?.env?.MIRROR_SYNC_REMOTE_API_URL === "string"
+      ? profile.env.MIRROR_SYNC_REMOTE_API_URL.trim()
+      : "";
+  const processUrl =
+    typeof process.env.MIRROR_SYNC_REMOTE_API_URL === "string"
+      ? process.env.MIRROR_SYNC_REMOTE_API_URL.trim()
+      : "";
+
+  return profileUrl || processUrl;
+}
+
 function parseEnvValue(rawValue) {
   let value = String(rawValue ?? "").trim();
   if (!value) {
@@ -328,15 +341,16 @@ function initializeServiceProfile() {
   availableServiceProfiles = loadAvailableServiceProfiles();
   const savedConfig = readServiceConfig();
   const savedProfileId = typeof savedConfig.profileId === "string" ? savedConfig.profileId : "";
-  configuredMirrorSyncEnabled = Boolean(savedConfig.mirrorSyncEnabled);
-  configuredMirrorSyncRemoteApiUrl =
-    typeof savedConfig.mirrorSyncRemoteApiUrl === "string"
-      ? savedConfig.mirrorSyncRemoteApiUrl.trim()
-      : "";
   const selectedProfile =
     availableServiceProfiles.find((profile) => profile.id === savedProfileId) ||
     availableServiceProfiles[0] ||
     null;
+
+  configuredMirrorSyncEnabled = true;
+  configuredMirrorSyncRemoteApiUrl =
+    typeof savedConfig.mirrorSyncRemoteApiUrl === "string" && savedConfig.mirrorSyncRemoteApiUrl.trim()
+      ? savedConfig.mirrorSyncRemoteApiUrl.trim()
+      : resolveDefaultMirrorSyncRemoteApiUrl(selectedProfile);
 
   serviceConfigurationLocked = Boolean(
     savedProfileId &&
@@ -716,7 +730,6 @@ ipcMain.handle("service-config:refresh", async () => {
 ipcMain.handle("service-config:save", async (_event, payload) => {
   availableServiceProfiles = loadAvailableServiceProfiles();
   const profileId = typeof payload?.profileId === "string" ? payload.profileId : "";
-  const mirrorSyncEnabled = Boolean(payload?.mirrorSyncEnabled);
   const mirrorSyncRemoteApiUrl =
     typeof payload?.mirrorSyncRemoteApiUrl === "string"
       ? payload.mirrorSyncRemoteApiUrl.trim()
@@ -727,11 +740,12 @@ ipcMain.handle("service-config:save", async (_event, payload) => {
     throw new Error("No se encontro el perfil de base de datos seleccionado.");
   }
 
-  configuredMirrorSyncEnabled = mirrorSyncEnabled;
-  configuredMirrorSyncRemoteApiUrl = mirrorSyncRemoteApiUrl;
+  configuredMirrorSyncEnabled = true;
+  configuredMirrorSyncRemoteApiUrl =
+    mirrorSyncRemoteApiUrl || resolveDefaultMirrorSyncRemoteApiUrl(selectedProfile);
   writeServiceConfig({
     profileId: selectedProfile.id,
-    mirrorSyncEnabled: configuredMirrorSyncEnabled,
+    mirrorSyncEnabled: true,
     mirrorSyncRemoteApiUrl: configuredMirrorSyncRemoteApiUrl,
   });
   serviceConfigurationLocked = true;

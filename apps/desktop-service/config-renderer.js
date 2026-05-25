@@ -26,15 +26,15 @@ function setFlash(message, type = "info") {
 function syncFormInteractivity() {
   const configurationLocked = Boolean(currentState?.configurationLocked);
   const hasProfile = Boolean(String(profileSelect.value || "").trim());
-  const mirrorEnabled = Boolean(mirrorEnabledInput.checked);
   const mirrorUrl = String(mirrorUrlInput.value || "").trim();
 
   profileSelect.disabled = configurationLocked || saving;
-  mirrorEnabledInput.disabled = saving;
-  mirrorUrlInput.disabled = saving || !mirrorEnabled;
+  mirrorEnabledInput.checked = true;
+  mirrorEnabledInput.disabled = true;
+  mirrorUrlInput.disabled = saving;
   saveButton.hidden = false;
-  saveButton.textContent = configurationLocked ? "Guardar replica espejo" : "Guardar configuracion";
-  saveButton.disabled = saving || !hasProfile || (mirrorEnabled && !mirrorUrl);
+  saveButton.textContent = configurationLocked ? "Guardar configuracion" : "Guardar configuracion";
+  saveButton.disabled = saving || !hasProfile || !mirrorUrl;
   refreshButton.disabled = saving;
 }
 
@@ -87,8 +87,8 @@ function renderState(state) {
 
   if (introCopy) {
     introCopy.textContent = configurationLocked
-      ? "La base local de esta instalacion ya quedo fijada y se reutiliza automaticamente en cada arranque. Aun puedes actualizar la replica espejo hacia el VPS cuando haga falta."
-      : "Selecciona la base de datos con la que quieres trabajar en esta PC y guarda la configuracion. La proxima vez que levantes el back, el servicio recordara esa base automaticamente.";
+      ? "La base local de esta instalacion ya quedo fijada y se reutiliza automaticamente en cada arranque. La replica espejo a VPS queda siempre activa."
+      : "Selecciona la base de datos con la que quieres trabajar en esta PC y guarda la configuracion. La proxima vez que levantes el back, el servicio recordara esa base automaticamente y dejara el espejo activo.";
   }
 
   syncFormInteractivity();
@@ -120,12 +120,12 @@ saveButton.addEventListener("click", async () => {
   try {
     const state = await window.rockyService.saveConfig({
       profileId,
-      mirrorSyncEnabled: Boolean(mirrorEnabledInput.checked),
+      mirrorSyncEnabled: true,
       mirrorSyncRemoteApiUrl: String(mirrorUrlInput.value || "").trim(),
     });
     renderState(state);
     setFlash(
-      "Configuracion guardada. El backend ya esta trabajando con la base seleccionada y la replica espejo quedo actualizada.",
+      "Configuracion guardada. El backend ya esta trabajando con la base seleccionada y la replica espejo quedo activa.",
       "success",
     );
   } catch (error) {
@@ -149,10 +149,6 @@ refreshButton.addEventListener("click", async () => {
 });
 
 profileSelect.addEventListener("change", () => {
-  syncFormInteractivity();
-});
-
-mirrorEnabledInput.addEventListener("change", () => {
   syncFormInteractivity();
 });
 
