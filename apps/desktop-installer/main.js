@@ -309,10 +309,136 @@ function buildState() {
   return {
     config,
     remoteNodes: REMOTE_NODES,
+    winget: detectWingetInstallation(),
     postgres: detectPostgresInstallation(),
     pgAdmin: detectPgAdminInstallation(),
     serviceRuntime: detectServiceRuntime(),
   };
+}
+
+function detectWingetInstallation() {
+  const executablePath = resolveWingetExecutableSync();
+  return {
+    installed: Boolean(executablePath),
+    path: executablePath || "",
+  };
+}
+
+function resolveWingetExecutableSync() {
+  const candidates = [
+    join(process.env.LOCALAPPDATA || "", "Microsoft", "WindowsApps", "winget.exe"),
+    join(process.env.USERPROFILE || "", "AppData", "Local", "Microsoft", "WindowsApps", "winget.exe"),
+    join(app.getPath("home"), "AppData", "Local", "Microsoft", "WindowsApps", "winget.exe"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (candidate && existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+async function resolveDesktopAppInstallerWingetPath() {
+  const script = [
+    "$pkg = Get-AppxPackage Microsoft.DesktopAppInstaller -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1",
+    "if ($pkg -and $pkg.InstallLocation) { Join-Path $pkg.InstallLocation 'winget.exe' }",
+  ].join("; ");
+
+  const { stdout } = await execFileAsync(
+    "powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+    {
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+
+  return String(stdout || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+}
+
+async function canExecuteWinget(candidate) {
+  if (!candidate) {
+    return false;
+  }
+
+  try {
+    await execFileAsync(candidate, ["--version"], {
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    });
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function resolveWingetCommand() {
+  const directExecutable = resolveWingetExecutableSync();
+  if (await canExecuteWinget(directExecutable)) {
+    return {
+      command: directExecutable,
+      argsPrefix: [],
+      description: directExecutable,
+    };
+  }
+
+  try {
+    const packageExecutable = await resolveDesktopAppInstallerWingetPath();
+    if (await canExecuteWinget(packageExecutable)) {
+      return {
+        command: packageExecutable,
+        argsPrefix: [],
+        description: packageExecutable,
+      };
+    }
+  } catch (_error) {
+    // Sigue con el siguiente fallback.
+  }
+
+  try {
+    const { stdout } = await execFileAsync("where.exe", ["winget.exe"], {
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    });
+    const resolved = String(stdout || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean);
+    if (await canExecuteWinget(resolved)) {
+      return {
+        command: resolved,
+        argsPrefix: [],
+        description: resolved,
+      };
+    }
+  } catch (_error) {
+    // Sigue con el siguiente fallback.
+  }
+
+  try {
+    await execFileAsync(
+      "cmd.exe",
+      ["/c", "winget", "--version"],
+      {
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+      },
+    );
+    return {
+      command: "cmd.exe",
+      argsPrefix: ["/c", "winget"],
+      description: "cmd.exe:/c winget",
+    };
+  } catch (_error) {
+    // Sigue con el error final.
+  }
+
+  throw new Error("No se encontro winget en esta PC. Instala App Installer de Microsoft o habilita winget antes de usar este instalador.");
 }
 
 async function runCommand(command, args, options = {}) {
@@ -345,6 +471,7 @@ async function installPostgres(payload) {
   }
 
   const config = saveInstallerConfig(payload);
+  const wingetCommand = await resolveWingetCommand();
   const overrideArgs = [
     "--mode",
     "unattended",
@@ -361,8 +488,9 @@ async function installPostgres(payload) {
   ];
 
   await runCommand(
-    "winget",
+    wingetCommand.command,
     [
+      ...wingetCommand.argsPrefix,
       "install",
       "--id",
       "PostgreSQL.PostgreSQL.18",
@@ -394,7 +522,10 @@ async function installPgAdmin() {
     };
   }
 
-  await runCommand("winget", [
+  const wingetCommand = await resolveWingetCommand();
+
+  await runCommand(wingetCommand.command, [
+    ...wingetCommand.argsPrefix,
     "install",
     "--id",
     "PostgreSQL.pgAdmin",
@@ -447,6 +578,11 @@ async function authenticateAgainstRemote(baseUrl, usuario, password) {
 
   if (!response.ok) {
     const body = await response.text();
+    if (response.status === 401) {
+      throw new Error(
+        `No se pudo autenticar contra ${baseUrl}. Usa el usuario tecnico del VPS, normalmente sistema con clave 456789. No uses usuarios operativos como Caja, admin o vendedores. Detalle: ${body}`.trim(),
+      );
+    }
     throw new Error(`No se pudo autenticar contra ${baseUrl}. Estado ${response.status}. ${body}`.trim());
   }
 
@@ -471,6 +607,11 @@ async function downloadRemoteDump(baseUrl, accessToken) {
   if (!response.ok) {
     const body = await response.text();
     rmSync(dumpDirectory, { recursive: true, force: true });
+    if (response.status === 404) {
+      throw new Error(
+        `La sede ${baseUrl} todavia no tiene habilitada la descarga automatica de respaldos en el VPS. Hay que desplegar primero el endpoint /api/maintenance/database-dump en esa sede remota.`,
+      );
+    }
     throw new Error(`No se pudo descargar el respaldo remoto. Estado ${response.status}. ${body}`.trim());
   }
 
@@ -673,6 +814,45 @@ async function restoreFromVps(payload) {
   };
 }
 
+async function runSelfTest() {
+  const action = String(process.env.ROCKY_INSTALLER_SELFTEST_ACTION || "").trim().toLowerCase();
+  if (!action) {
+    return false;
+  }
+
+  const config = loadInstallerConfig();
+  writeRuntimeLog(`Autoprueba iniciada. action=${action}`);
+
+  let result;
+  switch (action) {
+    case "get-state":
+      result = buildState();
+      break;
+    case "install-postgres":
+      result = await installPostgres(config);
+      break;
+    case "install-pgadmin":
+      result = await installPgAdmin();
+      break;
+    case "install-stack":
+      result = await installStack(config);
+      break;
+    case "restore-from-vps":
+      result = await restoreFromVps({
+        ...config,
+        remoteNodeId: process.env.ROCKY_INSTALLER_SELFTEST_REMOTE_NODE_ID || config.remoteNodeId,
+        remoteBaseUrl: process.env.ROCKY_INSTALLER_SELFTEST_REMOTE_BASE_URL || config.remoteBaseUrl,
+        localDatabaseName: process.env.ROCKY_INSTALLER_SELFTEST_LOCAL_DB || resolveRemoteNode(config).localDatabaseName,
+      });
+      break;
+    default:
+      throw new Error(`Autoprueba desconocida: ${action}`);
+  }
+
+  writeRuntimeLog(`Autoprueba completada. action=${action} result=${JSON.stringify(result)}`);
+  return true;
+}
+
 ipcMain.handle("installer:get-state", async () => buildState());
 
 ipcMain.handle("installer:install-postgres", async (_event, payload) => installPostgres(payload));
@@ -695,7 +875,12 @@ app.on("activate", () => {
   }
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  if (await runSelfTest()) {
+    app.quit();
+    return;
+  }
+
   createMainWindow();
 }).catch((error) => {
   writeRuntimeLog(`Fallo el arranque del instalador: ${error.stack || error.message}`);

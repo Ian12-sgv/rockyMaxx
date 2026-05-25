@@ -115,9 +115,14 @@
         gap: 14px;
       }
 
+      .grid-restore {
+        grid-template-columns: 1fr;
+      }
+
       .field {
         display: grid;
         gap: 8px;
+        align-content: start;
       }
 
       .field label {
@@ -143,6 +148,9 @@
 
       .field small {
         color: var(--muted);
+        display: block;
+        min-height: 2.8em;
+        line-height: 1.45;
       }
 
       .button-row {
@@ -312,7 +320,7 @@
         <section class="panel">
           <h2>2. Restaurar una sede desde el VPS</h2>
 
-          <div class="grid">
+          <div class="grid grid-restore">
             <div class="field">
               <label for="remote-node">Base remota</label>
               <select id="remote-node"></select>
@@ -326,21 +334,21 @@
             </div>
 
             <div class="field">
-              <label for="remote-base-url">URL API VPS</label>
+              <label for="remote-base-url">URL de la sede en el VPS</label>
               <input id="remote-base-url" type="url" />
               <small>Debe apuntar a la sede exacta, por ejemplo <code>http://68.183.105.135/tienda001</code>.</small>
             </div>
 
             <div class="field">
-              <label for="remote-user">Usuario API VPS</label>
+              <label for="remote-user">Usuario tecnico del VPS</label>
               <input id="remote-user" type="text" />
-              <small>Por defecto se usa el usuario tecnico de sincronizacion.</small>
+              <small>Este no es un usuario de tienda como <code>Caja</code> ni uno operativo. Normalmente debe ser <code>sistema</code>.</small>
             </div>
 
             <div class="field">
-              <label for="remote-password">Clave API VPS</label>
+              <label for="remote-password">Clave tecnica del VPS</label>
               <input id="remote-password" type="password" />
-              <small>Se usa para autenticar la descarga del respaldo desde el VPS.</small>
+              <small>Se usa solo para descargar el respaldo desde el VPS. En esta configuracion normalmente es <code>456789</code>.</small>
             </div>
           </div>
 

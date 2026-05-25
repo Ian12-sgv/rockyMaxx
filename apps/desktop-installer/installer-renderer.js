@@ -23,6 +23,14 @@ const refreshButton = document.getElementById("refresh-button");
 let currentState = null;
 let busy = false;
 
+function formatErrorMessage(error) {
+  const raw = String(error?.message || error || "Ocurrio un error inesperado.");
+  return raw
+    .replace(/^Error invoking remote method '[^']+':\s*/i, "")
+    .replace(/^Error:\s*/i, "")
+    .trim();
+}
+
 function setFlash(message, type = "info") {
   flash.textContent = message;
   flash.className = `flash flash-${type}`;
@@ -149,7 +157,7 @@ installPostgresButton.addEventListener("click", async () => {
     const result = await window.rockyInstaller.installPostgres(buildPayload());
     await reloadState(result.message || "PostgreSQL instalado.", "success");
   } catch (error) {
-    setFlash(error?.message || "No se pudo instalar PostgreSQL.", "error");
+    setFlash(formatErrorMessage(error) || "No se pudo instalar PostgreSQL.", "error");
   } finally {
     setBusy(false);
   }
@@ -162,7 +170,7 @@ installPgadminButton.addEventListener("click", async () => {
     const result = await window.rockyInstaller.installPgAdmin();
     await reloadState(result.message || "pgAdmin instalado.", "success");
   } catch (error) {
-    setFlash(error?.message || "No se pudo instalar pgAdmin.", "error");
+    setFlash(formatErrorMessage(error) || "No se pudo instalar pgAdmin.", "error");
   } finally {
     setBusy(false);
   }
@@ -175,7 +183,7 @@ installBothButton.addEventListener("click", async () => {
     const result = await window.rockyInstaller.installStack(buildPayload());
     await reloadState(result.message || "Instalacion completada.", "success");
   } catch (error) {
-    setFlash(error?.message || "No se pudo completar la instalacion.", "error");
+    setFlash(formatErrorMessage(error) || "No se pudo completar la instalacion.", "error");
   } finally {
     setBusy(false);
   }
@@ -188,7 +196,7 @@ restoreButton.addEventListener("click", async () => {
     const result = await window.rockyInstaller.restoreFromVps(buildPayload());
     await reloadState(result.message || "Restauracion completada.", "success");
   } catch (error) {
-    setFlash(error?.message || "No se pudo restaurar la base desde el VPS.", "error");
+    setFlash(formatErrorMessage(error) || "No se pudo restaurar la base desde el VPS.", "error");
   } finally {
     setBusy(false);
   }
@@ -200,12 +208,12 @@ refreshButton.addEventListener("click", async () => {
   try {
     await reloadState("Estado actualizado.", "success");
   } catch (error) {
-    setFlash(error?.message || "No se pudo actualizar el estado.", "error");
+    setFlash(formatErrorMessage(error) || "No se pudo actualizar el estado.", "error");
   } finally {
     setBusy(false);
   }
 });
 
 reloadState().catch((error) => {
-  setFlash(error?.message || "No se pudo cargar el estado inicial del instalador.", "error");
+  setFlash(formatErrorMessage(error) || "No se pudo cargar el estado inicial del instalador.", "error");
 });
