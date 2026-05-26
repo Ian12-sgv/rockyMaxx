@@ -6,6 +6,8 @@ const CATALOG_IMPORT_EXCEL_PERMISSION_CODE = "CATALOG_IMPORT_EXCEL";
 const EXISTENCE_AUTO_REFRESH_MS = 30000;
 
 let existenceAutoRefreshHandle = null;
+let devReturnRemotePullInFlight = false;
+let devReturnRemotePullLastAt = 0;
 
 const state = {
   booting: true,
@@ -1585,10 +1587,16 @@ function renderDevReturnsWorkspace() {
               <span>Fecha</span>
               <input type="date" name="fecha" value="${escapeHtml(toInputValue(draft.fecha))}" ${isLocked ? "disabled" : ""} />
             </label>
+            <label class="adjustment-field dev-return-origin-field">
+              <span>Origen</span>
+              <select name="codigoOrigen" ${isLocked ? "disabled" : ""}>
+                ${renderDevReturnOriginOptions(String(draft.codigoOrigen || ""))}
+              </select>
+            </label>
             <label class="adjustment-field dev-return-destination-field">
               <span>Destino</span>
               <select name="codigoDestino" ${isLocked ? "disabled" : ""}>
-                ${renderDevReturnDestinationOptions(String(draft.codigoDestino || ""))}
+                ${renderDevReturnDestinationOptions(String(draft.codigoDestino || ""), String(draft.codigoOrigen || ""))}
               </select>
             </label>
             <label class="adjustment-field adjustment-observation-field">
@@ -1963,7 +1971,22 @@ function renderDevReturnSyncStatusChip(label, tone = "neutral") {
   return `<span class="modern-chip ${toneClass}">${escapeHtml(label || "-")}</span>`;
 }
 
-function renderDevReturnDestinationOptions(selectedValue) {
+function renderDevReturnOriginOptions(selectedValue) {
+  const origenes = Array.isArray(state.devReturns.metadata?.origenes) ? state.devReturns.metadata.origenes : [];
+  if (!origenes.length) {
+    return `<option value="">Sin origenes</option>`;
+  }
+
+  return origenes
+    .map((item) => `
+      <option value="${escapeHtml(String(item.codigo || ""))}" ${String(selectedValue || "") === String(item.codigo || "") ? "selected" : ""}>
+        ${escapeHtml(formatLocationOptionLabel(item))}
+      </option>
+    `)
+    .join("");
+}
+
+function renderDevReturnDestinationOptions(selectedValue, originValue = "") {
   const destinos = Array.isArray(state.devReturns.metadata?.destinos) ? state.devReturns.metadata.destinos : [];
   if (!destinos.length) {
     return `<option value="">Sin bodegas</option>`;
@@ -1972,10 +1995,20 @@ function renderDevReturnDestinationOptions(selectedValue) {
   return destinos
     .map((item) => `
       <option value="${escapeHtml(String(item.codigo || ""))}" ${String(selectedValue || "") === String(item.codigo || "") ? "selected" : ""}>
-        ${escapeHtml(item.nombre || item.codigo || "")}
+        ${escapeHtml(formatLocationOptionLabel(item))}
       </option>
     `)
     .join("");
+}
+
+function formatLocationOptionLabel(item) {
+  const codigo = String(item?.codigo || "").trim();
+  const nombre = String(item?.nombre || "").trim();
+  if (codigo && nombre) {
+    return `${codigo} - ${nombre}`;
+  }
+
+  return nombre || codigo || "";
 }
 
 function renderDevReturnLinesEditor(draft, { isLocked = false } = {}) {
@@ -2061,6 +2094,7 @@ function renderDevReturnSentDraftsTable(items) {
           <tr>
             <th>Numero</th>
             <th>Fecha</th>
+            <th>Origen</th>
             <th>Destino</th>
             <th>Status</th>
             <th>Total</th>
@@ -2072,6 +2106,7 @@ function renderDevReturnSentDraftsTable(items) {
             <tr>
               <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
               <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+              <td>${escapeHtml(item.codigoOrigenInfo?.nombre || item.codigoOrigen || "-")}</td>
               <td>${escapeHtml(item.codigoDestinoInfo?.nombre || item.codigoDestino || "-")}</td>
               <td>${renderDevReturnSyncStatusChip(renderDevReturnStatusText(item.status), Number(item.status || 0) > 0 ? "success" : "warning")}</td>
               <td>${escapeHtml(formatTransferAmount(item.totalValor))}</td>
@@ -2188,19 +2223,19 @@ function renderDevReturnLookupModal() {
   const isRecordLookup = state.devReturnLookup.mode === "records";
   const items = Array.isArray(state.devReturnLookup.items) ? state.devReturnLookup.items : [];
   const totalLabel = state.devReturnLookup.loading
-    ? isRecordLookup ? "Cargando borradores aprobados..." : "Cargando borradores..."
+    ? isRecordLookup ? "Cargando devoluciones registradas..." : "Cargando borradores..."
     : `Catalogo (${escapeHtml(String(items.length))} Registros)`;
   const titleEyebrow = isRecordLookup ? "Registro de devoluciones" : "Borradores";
   const description = isRecordLookup
-    ? "Haz clic sobre un borrador aprobado por el destino para cargarlo en el registro."
+    ? "Haz clic sobre una devolución ya registrada para cargar su detalle."
     : "Haz clic sobre un borrador guardado o exportado para cargarlo en el formulario.";
-  const loadingTitle = isRecordLookup ? "Cargando aprobados" : "Cargando borradores";
+  const loadingTitle = isRecordLookup ? "Cargando devoluciones" : "Cargando borradores";
   const loadingCopy = isRecordLookup
-    ? "Estamos trayendo los borradores que ya fueron aprobados por el destino."
+    ? "Estamos trayendo las devoluciones ya registradas en esta sede."
     : "Estamos trayendo los borradores guardados y exportados.";
-  const emptyTitle = isRecordLookup ? "Sin aprobados" : "Sin borradores";
+  const emptyTitle = isRecordLookup ? "Sin devoluciones" : "Sin borradores";
   const emptyCopy = isRecordLookup
-    ? "No hay borradores aprobados por el destino para mostrar en este catalogo."
+    ? "No hay devoluciones registradas para mostrar en este catalogo."
     : "No hay borradores para mostrar en este catalogo.";
 
   return `
@@ -2248,6 +2283,7 @@ function renderDevReturnLookupModal() {
                       <tr>
                         <th>Numero</th>
                         <th>Fecha</th>
+                        <th>Origen</th>
                         <th>Destino</th>
                         <th>Status</th>
                         <th>Observacion</th>
@@ -2267,13 +2303,16 @@ function renderDevReturnLookupModal() {
 
 function renderDevReturnLookupRow(item) {
   const isExported = Number(item.status || 0) > 0;
+  const originLabel = item.codigoOrigenInfo?.nombre || item.codigoEnviaInfo?.nombre || item.codigoOrigen || item.codigoEnvia || "-";
+  const destinationLabel = item.codigoDestinoInfo?.nombre || item.codigoRecibeInfo?.nombre || item.codigoDestino || item.codigoRecibe || "-";
 
   return `
     <tr class="adjustment-lookup-row ${isExported ? "adjustment-lookup-row-approved" : "adjustment-lookup-row-pending"}" data-dev-return-lookup-select="${escapeHtml(String(item.numero || ""))}">
       <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
       <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
-      <td>${escapeHtml(item.codigoDestinoInfo?.nombre || item.codigoDestino || "-")}</td>
-      <td>${renderDevReturnLookupStatusBadge(item.status)}</td>
+      <td>${escapeHtml(originLabel)}</td>
+      <td>${escapeHtml(destinationLabel)}</td>
+      <td>${renderDevReturnLookupStatusBadge(item.statusNombre || item.status)}</td>
       <td>${escapeHtml(item.observacion || "-")}</td>
     </tr>
   `;
@@ -5591,9 +5630,34 @@ function bindDevReturnEvents() {
       captureDevReturnDraft();
     });
 
-    form.addEventListener("change", () => {
+    form.addEventListener("change", (event) => {
       captureDevReturnDraft();
+      if (event?.target?.name === "codigoOrigen") {
+        const draft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
+        const destinos = Array.isArray(state.devReturns.metadata?.destinos) ? state.devReturns.metadata.destinos : [];
+        const currentOrigin = String(draft.codigoOrigen || "").trim().toUpperCase();
+        const currentDestination = String(draft.codigoDestino || "").trim().toUpperCase();
+        if (currentOrigin && currentOrigin === currentDestination) {
+          const fallbackDestination = destinos.find(
+            (item) => String(item.codigo || "").trim().toUpperCase() !== currentOrigin,
+          );
+          draft.codigoDestino = fallbackDestination?.codigo || draft.codigoDestino || "";
+          state.devReturns.draft = draft;
+        }
+        render();
+      }
     });
+
+    const destinationSelect = form.elements?.namedItem?.("codigoDestino");
+    if (destinationSelect) {
+      const triggerRemotePull = () => {
+        void pullDevReturnsFromRemoteForDraft();
+      };
+
+      destinationSelect.addEventListener("focus", triggerRemotePull);
+      destinationSelect.addEventListener("click", triggerRemotePull);
+      destinationSelect.addEventListener("change", triggerRemotePull);
+    }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -6683,6 +6747,11 @@ async function loadDevReturnsModule(options = {}) {
       await loadDevReturnsMetadata({ renderAfter: false });
     }
 
+    await pullDevReturnsFromRemoteForDraft({
+      force: true,
+      limit: 100,
+    });
+
     const [sentResponse, inboundResponse] = await Promise.all([
       apiFetch("/dev-returns/drafts?limit=12"),
       apiFetch("/dev-returns/drafts/inbound?limit=12"),
@@ -6703,6 +6772,36 @@ async function loadDevReturnsModule(options = {}) {
   }
 }
 
+async function pullDevReturnsFromRemoteForDraft(options = {}) {
+  if (!state.token || devReturnRemotePullInFlight) {
+    return null;
+  }
+
+  const now = Date.now();
+  const force = Boolean(options.force);
+  const limit = Number.parseInt(String(options.limit || "100"), 10);
+  if (!force && now - devReturnRemotePullLastAt < 5000) {
+    return null;
+  }
+
+  devReturnRemotePullInFlight = true;
+  devReturnRemotePullLastAt = now;
+
+  try {
+    return await apiFetch("/dev-returns/sync/pull", {
+      method: "POST",
+      body: {
+        limit: Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 100,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return null;
+  } finally {
+    devReturnRemotePullInFlight = false;
+  }
+}
+
 async function openDevReturnLookupModal(options = {}) {
   const mode = options.mode === "records" ? "records" : "drafts";
   if (mode === "drafts") {
@@ -6715,11 +6814,9 @@ async function openDevReturnLookupModal(options = {}) {
   render();
 
   try {
-    const response = await apiFetch("/dev-returns/drafts?limit=50");
+    const response = await apiFetch(mode === "records" ? "/dev-returns/returns?limit=50" : "/dev-returns/drafts?limit=50");
     const items = Array.isArray(response.items) ? response.items : [];
-    state.devReturnLookup.items = mode === "records"
-      ? items.filter((item) => Number(item?.status || 0) >= 2)
-      : items;
+    state.devReturnLookup.items = items;
   } catch (error) {
     console.error(error);
     setFlash(`No se pudo cargar el catalogo de borradores: ${extractErrorMessage(error)}`, "error");
@@ -6788,7 +6885,14 @@ async function approveInboundDevReturnDraft(globalId) {
     });
     state.devReturns.inboundDetail = response.borrador || state.devReturns.inboundDetail;
     await loadDevReturnsModule({ renderAfter: false });
-    setFlash("Borrador aprobado correctamente. El origen fue notificado para registrar la devolución.", "success");
+    await loadDevReturnRecords({ renderAfter: false });
+    const returnNumero = Number.parseInt(String(response.returnNumero || ""), 10);
+    setFlash(
+      Number.isInteger(returnNumero)
+        ? `Borrador aprobado correctamente. La devolución ${returnNumero} ya quedó registrada.`
+        : "Borrador aprobado correctamente.",
+      "success",
+    );
   } catch (error) {
     console.error(error);
     setFlash(extractErrorMessage(error), "error");
@@ -6933,6 +7037,11 @@ async function loadInboundDevReturns(options = {}) {
   }
 
   try {
+    await pullDevReturnsFromRemoteForDraft({
+      force: true,
+      limit: 100,
+    });
+
     const response = await apiFetch("/dev-returns/inbound?limit=25");
     state.devReturnInbound.items = Array.isArray(response.items) ? response.items : [];
   } catch (error) {
@@ -6990,12 +7099,16 @@ async function approveInboundDevReturn(numero, codigoEnvia) {
 
 async function fillDevReturnLineFromInventory(index, codigoBarra) {
   captureDevReturnDraft();
-  const draft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
-  const items = Array.isArray(draft.items) && draft.items.length ? [...draft.items] : [createEmptyDevReturnLineDraft()];
+  const initialDraft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
 
   try {
     const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
     const article = response.mercancia || response;
+    captureDevReturnDraft();
+    const latestDraft = state.devReturns.draft || initialDraft;
+    const items = Array.isArray(latestDraft.items) && latestDraft.items.length
+      ? [...latestDraft.items]
+      : [createEmptyDevReturnLineDraft()];
     const currentLine = items[index] || createEmptyDevReturnLineDraft();
     const ultimoCosto = article.inventario?.costos?.ultimo ?? article.costos?.ultimo ?? currentLine.costo ?? "";
 
@@ -7010,7 +7123,7 @@ async function fillDevReturnLineFromInventory(index, codigoBarra) {
     };
 
     state.devReturns.draft = {
-      ...draft,
+      ...latestDraft,
       items,
     };
     clearFlash();
@@ -7808,6 +7921,7 @@ function createEmptyDevReturnDraft(metadata) {
   return {
     numero: null,
     fecha: toDateInputValue(new Date()),
+    codigoOrigen: String(metadata?.defaults?.codigoOrigen || metadata?.origenes?.[0]?.codigo || metadata?.contexto?.sucursalCodigo || "ORIGEN"),
     codigoDestino: String(metadata?.defaults?.codigoDestino || metadata?.destinos?.[0]?.codigo || "ORIGEN"),
     observacion: "",
     status: 0,
@@ -7852,6 +7966,7 @@ function readDevReturnDraft(form) {
   return {
     numero: currentDraft.numero,
     fecha: readFormFieldValue(form, "fecha", currentDraft.fecha),
+    codigoOrigen: readFormFieldValue(form, "codigoOrigen", currentDraft.codigoOrigen),
     codigoDestino: readFormFieldValue(form, "codigoDestino", currentDraft.codigoDestino),
     observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
     status: currentDraft.status,
@@ -7860,9 +7975,18 @@ function readDevReturnDraft(form) {
 }
 
 function validateDevReturnDraft(draft) {
+  const codigoOrigen = String(draft.codigoOrigen || "").trim().toUpperCase();
+  if (!codigoOrigen) {
+    return "Debes indicar la bodega origen.";
+  }
+
   const codigoDestino = String(draft.codigoDestino || "").trim().toUpperCase();
   if (!codigoDestino) {
     return "Debes indicar la bodega destino.";
+  }
+
+  if (codigoOrigen === codigoDestino) {
+    return "El origen y el destino del borrador no pueden ser iguales.";
   }
 
   const validLines = (draft.items || []).filter((item) => String(item.codigoBarra || "").trim());
@@ -7883,6 +8007,7 @@ function validateDevReturnDraft(draft) {
 function buildDevReturnPayload(draft) {
   return {
     fecha: toApiDateTime(draft.fecha),
+    codigoOrigen: String(draft.codigoOrigen || "").trim().toUpperCase() || undefined,
     codigoDestino: String(draft.codigoDestino || "").trim().toUpperCase() || undefined,
     observacion: String(draft.observacion || "").trim() || undefined,
     items: (draft.items || [])
@@ -7900,6 +8025,7 @@ function devReturnToDraft(draft, metadata = state.devReturns?.metadata) {
   return {
     numero: draft?.numero ?? null,
     fecha: toDateInputValue(draft?.fecha),
+    codigoOrigen: draft?.codigoOrigen || metadata?.defaults?.codigoOrigen || metadata?.origenes?.[0]?.codigo || metadata?.contexto?.sucursalCodigo || "ORIGEN",
     codigoDestino: draft?.codigoDestino || metadata?.defaults?.codigoDestino || metadata?.destinos?.[0]?.codigo || "ORIGEN",
     observacion: draft?.observacion || "",
     status: Number(draft?.status ?? 0),

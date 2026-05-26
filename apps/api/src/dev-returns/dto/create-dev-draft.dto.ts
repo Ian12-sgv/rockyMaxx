@@ -50,6 +50,13 @@ export class CreateDevDraftDto {
   @IsDate()
   declare fecha?: Date;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(15)
+  @Type(() => String)
+  @Transform(({ value }) => toUpperTrimmedString(value))
+  declare codigoOrigen?: string;
+
   @IsString()
   @MaxLength(15)
   @Type(() => String)

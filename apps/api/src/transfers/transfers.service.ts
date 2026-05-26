@@ -4005,7 +4005,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     }
 
     const inferredPath = await this.inferTransferSyncRemotePathFromLocalNode();
-    if (!inferredPath) {
+    if (inferredPath === null) {
       return null;
     }
 
@@ -4049,7 +4049,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
 
     const normalizedNodeId = this.normalizeSyncNodeId(localRow.NodeId);
     if (normalizedNodeId === DEFAULT_ORIGIN_CODE) {
-      return null;
+      return "";
     }
 
     const tiendaMatch = normalizedNodeId.match(/^TIENDA(\d+)$/);

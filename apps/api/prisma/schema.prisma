@@ -996,6 +996,7 @@ model MovListaPrecio {
 model DevBorrador {
   Numero       BigInt
   Fecha        DateTime
+  CodigoOrigen String?
   CodigoDestino String?
   Observacion  String
   Usuario      String

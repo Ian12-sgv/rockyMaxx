@@ -35,6 +35,7 @@ const DEV_RETURN_EVENT_RETURN_APPLIED = "DEV_RETURN_APPLIED";
 const DEFAULT_DEV_RETURN_SYNC_AUTO_RETRY_INTERVAL_MS = 30_000;
 const DEFAULT_DEV_RETURN_SYNC_AUTO_RETRY_STARTUP_DELAY_MS = 5_000;
 const DEFAULT_DEV_RETURN_SYNC_AUTO_RETRY_LIMIT = 25;
+const DEFAULT_DEV_RETURN_REMOTE_PULL_LIMIT = 100;
 
 type DevReturnTransactionClient = Prisma.TransactionClient;
 const devDraftInclude = Prisma.validator<Prisma.DevBorradorInclude>()({
@@ -330,9 +331,10 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     await this.ensureDraftSchema();
     await this.ensureDevReturnSyncSchema();
     const current = this.getCurrentInstanceContext();
-    const bodegas = await this.loadWarehouseLocations(this.prisma, {
-      excludeCodes: [current.sucursalCodigo],
-    });
+    const bodegas = await this.loadWarehouseLocations(this.prisma);
+    const origenes = this.buildDraftOriginOptions(current, bodegas);
+    const defaultOriginCode = origenes[0]?.codigo ?? current.sucursalCodigo;
+    const destinos = bodegas.filter((item) => item.codigo !== defaultOriginCode);
     const [sentCount, receivedCount] = await Promise.all([
       this.prisma.devBorrador.count({
         where: { Status: { gt: 0 } },
@@ -344,19 +346,21 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
       defaults: {
         fecha: new Date(),
         status: 0,
-        codigoDestino: bodegas[0]?.codigo ?? "",
-        codigoOrigen: current.sucursalCodigo,
+        codigoOrigen: defaultOriginCode,
+        codigoDestino: destinos[0]?.codigo ?? "",
       },
       contexto: {
         sucursalCodigo: current.sucursalCodigo,
         nodeId: current.nodeId,
         nombre: current.nombre,
         apiUrl: current.apiUrl,
+        tipo: current.tipo,
       },
       bandejas: {
         enviados: sentCount,
         recibidos: receivedCount,
       },
+      origenes,
       destinos: bodegas,
     };
   }
@@ -377,6 +381,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
                 Number.isInteger(Number(buscar)) ? { Numero: BigInt(buscar) } : {},
                 { Observacion: { contains: buscar, mode: "insensitive" } },
                 { Usuario: { contains: buscar, mode: "insensitive" } },
+                { CodigoOrigen: { contains: buscar, mode: "insensitive" } },
                 { CodigoDestino: { contains: buscar, mode: "insensitive" } },
               ],
             }
@@ -386,9 +391,9 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
       orderBy: { Numero: "desc" },
       take: limit,
     });
-    const destinos = await this.loadLocationsByCode(
+    const ubicaciones = await this.loadLocationsByCode(
       this.prisma,
-      items.map((item) => item.CodigoDestino).filter((value): value is string => Boolean(value)),
+      items.flatMap((item) => [item.CodigoOrigen, item.CodigoDestino]).filter((value): value is string => Boolean(value)),
     );
 
     return {
@@ -396,7 +401,8 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
         this.toDraftView(item, {
           origenCodigo: current.sucursalCodigo,
           globalId: this.buildDraftGlobalId(current.nodeId, item.Numero),
-          destinoInfo: item.CodigoDestino ? destinos.get(item.CodigoDestino) : null,
+          origenInfo: item.CodigoOrigen ? ubicaciones.get(item.CodigoOrigen) : null,
+          destinoInfo: item.CodigoDestino ? ubicaciones.get(item.CodigoDestino) : null,
         }),
       ),
     };
@@ -441,16 +447,17 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     await this.ensureDevReturnSyncSchema();
     const current = this.getCurrentInstanceContext();
     const borrador = await this.findDraftOrThrow(this.prisma, numero);
-    const destinos = await this.loadLocationsByCode(
+    const ubicaciones = await this.loadLocationsByCode(
       this.prisma,
-      borrador.CodigoDestino ? [borrador.CodigoDestino] : [],
+      [borrador.CodigoOrigen, borrador.CodigoDestino].filter((value): value is string => Boolean(value)),
     );
 
     return {
       borrador: this.toDraftView(borrador, {
         origenCodigo: current.sucursalCodigo,
         globalId: this.buildDraftGlobalId(current.nodeId, borrador.Numero),
-        destinoInfo: borrador.CodigoDestino ? destinos.get(borrador.CodigoDestino) : null,
+        origenInfo: borrador.CodigoOrigen ? ubicaciones.get(borrador.CodigoOrigen) : null,
+        destinoInfo: borrador.CodigoDestino ? ubicaciones.get(borrador.CodigoDestino) : null,
       }),
     };
   }
@@ -475,7 +482,8 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
         const numero = await this.getNextDraftNumber(tx);
         const fecha = createDevDraftDto.fecha ?? new Date();
         const lines = await this.normalizeDraftLines(tx, createDevDraftDto.items || []);
-        const codigoDestino = await this.resolveDraftDestination(tx, createDevDraftDto.codigoDestino);
+        const codigoOrigen = await this.resolveDraftOrigin(tx, createDevDraftDto.codigoOrigen);
+        const codigoDestino = await this.resolveDraftDestination(tx, createDevDraftDto.codigoDestino, codigoOrigen);
 
         if (lines.length === 0) {
           throw new BadRequestException("El borrador de devolucion debe tener al menos un renglon.");
@@ -485,6 +493,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
           data: {
             Numero: numero,
             Fecha: fecha,
+            CodigoOrigen: codigoOrigen,
             CodigoDestino: codigoDestino,
             Observacion: String(createDevDraftDto.observacion || "").trim(),
             Usuario: user.codUsuario,
@@ -509,16 +518,17 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     );
 
     const current = this.getCurrentInstanceContext();
-    const destinos = await this.loadLocationsByCode(
+    const ubicaciones = await this.loadLocationsByCode(
       this.prisma,
-      borrador.CodigoDestino ? [borrador.CodigoDestino] : [],
+      [borrador.CodigoOrigen, borrador.CodigoDestino].filter((value): value is string => Boolean(value)),
     );
 
     return {
       borrador: this.toDraftView(borrador, {
         origenCodigo: current.sucursalCodigo,
         globalId: this.buildDraftGlobalId(current.nodeId, borrador.Numero),
-        destinoInfo: borrador.CodigoDestino ? destinos.get(borrador.CodigoDestino) : null,
+        origenInfo: borrador.CodigoOrigen ? ubicaciones.get(borrador.CodigoOrigen) : null,
+        destinoInfo: borrador.CodigoDestino ? ubicaciones.get(borrador.CodigoDestino) : null,
       }),
     };
   }
@@ -536,7 +546,8 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
 
         const fecha = createDevDraftDto.fecha ?? existing.Fecha;
         const lines = await this.normalizeDraftLines(tx, createDevDraftDto.items || []);
-        const codigoDestino = await this.resolveDraftDestination(tx, createDevDraftDto.codigoDestino);
+        const codigoOrigen = await this.resolveDraftOrigin(tx, createDevDraftDto.codigoOrigen ?? existing.CodigoOrigen);
+        const codigoDestino = await this.resolveDraftDestination(tx, createDevDraftDto.codigoDestino, codigoOrigen);
 
         if (lines.length === 0) {
           throw new BadRequestException("El borrador de devolucion debe tener al menos un renglon.");
@@ -546,6 +557,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
           where: { Numero: existing.Numero },
           data: {
             Fecha: fecha,
+            CodigoOrigen: codigoOrigen,
             CodigoDestino: codigoDestino,
             Observacion: String(createDevDraftDto.observacion || "").trim(),
           },
@@ -572,16 +584,17 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     );
 
     const current = this.getCurrentInstanceContext();
-    const destinos = await this.loadLocationsByCode(
+    const ubicaciones = await this.loadLocationsByCode(
       this.prisma,
-      borrador.CodigoDestino ? [borrador.CodigoDestino] : [],
+      [borrador.CodigoOrigen, borrador.CodigoDestino].filter((value): value is string => Boolean(value)),
     );
 
     return {
       borrador: this.toDraftView(borrador, {
         origenCodigo: current.sucursalCodigo,
         globalId: this.buildDraftGlobalId(current.nodeId, borrador.Numero),
-        destinoInfo: borrador.CodigoDestino ? destinos.get(borrador.CodigoDestino) : null,
+        origenInfo: borrador.CodigoOrigen ? ubicaciones.get(borrador.CodigoOrigen) : null,
+        destinoInfo: borrador.CodigoDestino ? ubicaciones.get(borrador.CodigoDestino) : null,
       }),
     };
   }
@@ -599,8 +612,9 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
           throw new ConflictException("Solo se pueden exportar borradores guardados.");
         }
 
-        const codigoDestino = await this.resolveDraftDestination(tx, existing.CodigoDestino);
-        await this.ensureLocations(tx, [current.sucursalCodigo, codigoDestino]);
+        const codigoOrigen = await this.resolveDraftOrigin(tx, existing.CodigoOrigen ?? current.sucursalCodigo);
+        const codigoDestino = await this.resolveDraftDestination(tx, existing.CodigoDestino, codigoOrigen);
+        await this.ensureLocations(tx, [codigoOrigen, codigoDestino]);
 
         await tx.devBorrador.update({
           where: { Numero: existing.Numero },
@@ -608,10 +622,10 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
         });
 
         const refreshed = await this.findDraftOrThrow(tx, numero);
-        const sourceNodeId = await this.resolveSyncNodeId(tx, current.sucursalCodigo);
+        const sourceNodeId = await this.resolveSyncNodeId(tx, codigoOrigen);
         const destinationNodeId = await this.resolveSyncNodeId(tx, codigoDestino);
         const payload = this.buildDraftExportPayload(refreshed, {
-          codigoOrigen: current.sucursalCodigo,
+          codigoOrigen,
           sourceNodeId,
           destinationNodeId,
         });
@@ -619,7 +633,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
         await this.recordSyncOutbox(tx, {
           globalId: payload.globalId,
           numeroOrigen: existing.Numero,
-          codigoEnvia: current.sucursalCodigo,
+          codigoEnvia: codigoOrigen,
           codigoRecibe: codigoDestino,
           sourceNodeId,
           destinationNodeId,
@@ -635,18 +649,19 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    const destinos = await this.loadLocationsByCode(
+    const ubicaciones = await this.loadLocationsByCode(
       this.prisma,
-      result.draft.CodigoDestino ? [result.draft.CodigoDestino] : [],
+      [result.draft.CodigoOrigen, result.draft.CodigoDestino].filter((value): value is string => Boolean(value)),
     );
     const current = this.getCurrentInstanceContext();
     const sync = await this.pushPendingSyncForGlobalId(result.payloadGlobalId);
 
     return {
       borrador: this.toDraftView(result.draft, {
-        origenCodigo: current.sucursalCodigo,
+        origenCodigo: result.draft.CodigoOrigen ?? current.sucursalCodigo,
         globalId: result.payloadGlobalId,
-        destinoInfo: result.draft.CodigoDestino ? destinos.get(result.draft.CodigoDestino) : null,
+        origenInfo: result.draft.CodigoOrigen ? ubicaciones.get(result.draft.CodigoOrigen) : null,
+        destinoInfo: result.draft.CodigoDestino ? ubicaciones.get(result.draft.CodigoDestino) : null,
       }),
       sync,
     };
@@ -678,6 +693,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
           null,
         );
 
+        const localReturn = await this.registerReturnFromInboundDraftPayload(tx, payload, user);
         const ackPayload = this.buildDraftApprovedPayload(payload, user);
         await this.recordSyncOutbox(tx, {
           globalId: ackPayload.globalId,
@@ -693,6 +709,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
         return {
           row: await this.getDevReturnSyncInboxRowOrThrow(tx, normalizedGlobalId),
           ackGlobalId: ackPayload.globalId,
+          returnNumero: localReturn.Numero,
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -702,6 +719,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
 
     return {
       borrador: this.toInboundDraftView(result.row),
+      returnNumero: result.returnNumero ?? null,
       sync,
     };
   }
@@ -720,6 +738,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     await this.ensureDraftSchema();
     await this.ensureDevReturnSyncSchema();
     const limit = findDevDraftsDto.limit ?? 25;
+    await this.refreshReturnRecordsFromRemote(limit);
     const buscar = String(findDevDraftsDto.buscar || "").trim();
 
     const items = await this.prisma.devTransferencias.findMany({
@@ -857,10 +876,20 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
 
   private async refreshInboundDevReturnsFromRemote(limit: number) {
     try {
-      await this.pullRemoteSync(limit);
+      await this.pullRemoteSync(this.getDevReturnRemotePullLimit(limit));
     } catch (error) {
       this.logger.warn(
         `No se pudo refrescar el inbox remoto de devoluciones antes de la consulta: ${this.extractSyncErrorMessage(error)}`,
+      );
+    }
+  }
+
+  private async refreshReturnRecordsFromRemote(limit: number) {
+    try {
+      await this.pullRemoteSync(this.getDevReturnRemotePullLimit(limit));
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo refrescar el registro remoto de devoluciones antes de la consulta: ${this.extractSyncErrorMessage(error)}`,
       );
     }
   }
@@ -1022,6 +1051,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
   async pullRemoteSync(limit = 50) {
     await this.ensureDraftSchema();
     await this.ensureDevReturnSyncSchema();
+    const effectiveLimit = this.getDevReturnRemotePullLimit(limit);
 
     const remoteApiUrl = this.resolveRemoteSyncApiUrl();
     if (!remoteApiUrl) {
@@ -1035,7 +1065,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const token = await this.loginRemoteNode(remoteApiUrl);
-    const response = await fetch(`${remoteApiUrl}/api/dev-returns/sync/inbox/export?limit=${limit}`, {
+    const response = await fetch(`${remoteApiUrl}/api/dev-returns/sync/inbox/export?limit=${effectiveLimit}`, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -1074,6 +1104,8 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     return {
       enabled: true,
       remoteApiUrl,
+      requestedLimit: limit,
+      effectiveLimit,
       processed: results.length,
       imported,
       results,
@@ -1181,25 +1213,35 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     try {
       const result = await this.prisma.$transaction(
         async (tx) => {
-          await this.upsertSyncInbox(tx, payload, DEV_RETURN_SYNC_STATUS_RECEIVED);
-          const draft = await this.findDraftOrThrow(tx, BigInt(payload.draft.numero));
-
-          if (draft.Status >= 3) {
-            await this.updateSyncInboxStatus(tx, payload.globalId, DEV_RETURN_SYNC_STATUS_APPLIED, null);
+          const existingInbox = await this.getDevReturnSyncInboxRow(tx, payload.globalId);
+          if (existingInbox?.Status === DEV_RETURN_SYNC_STATUS_APPLIED) {
             return {
               imported: false,
               status: DEV_RETURN_SYNC_STATUS_APPLIED,
               globalId: payload.globalId,
               numero: payload.draft.numero,
-              message: "La devolucion ya estaba registrada en el origen.",
-              pendingGlobalId: null,
+              message: "La aprobacion del borrador ya fue aplicada en esta base.",
             };
           }
 
-          await tx.devBorrador.update({
-            where: { Numero: draft.Numero },
-            data: { Status: 2 },
+          await this.upsertSyncInbox(tx, payload, DEV_RETURN_SYNC_STATUS_RECEIVED);
+          const draft = await tx.devBorrador.findUnique({
+            where: { Numero: BigInt(payload.draft.numero) },
+            include: devDraftInclude,
           });
+
+          // The VPS seat may only broker the approval ACK for a local seat and not
+          // store the draft itself. In that case we keep the ACK in the inbox so
+          // the local seat can pull and apply it later.
+          if (!draft) {
+            return {
+              imported: true,
+              status: DEV_RETURN_SYNC_STATUS_RECEIVED,
+              globalId: payload.globalId,
+              numero: payload.draft.numero,
+              message: "ACK almacenado para descarga local del borrador.",
+            };
+          }
 
           const localLotUserCode = await this.resolveExistingLocalUserCode(
             tx,
@@ -1223,20 +1265,17 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
             nextDraftStatus: 3,
           });
 
-          const returnPayload = this.buildReturnRegisteredPayload(returnDoc, payload.draftGlobalId, {
-            sourceNodeId: payload.destinationNodeId,
-            destinationNodeId: payload.sourceNodeId,
-          });
-          await this.recordSyncOutbox(tx, {
-            globalId: returnPayload.globalId,
-            numeroOrigen: BigInt(returnDoc.Numero),
-            codigoEnvia: returnDoc.CodigoEnvia,
-            codigoRecibe: returnDoc.CodigoRecibe,
-            sourceNodeId: returnPayload.sourceNodeId,
-            destinationNodeId: returnPayload.destinationNodeId,
-            eventType: DEV_RETURN_EVENT_RETURN_REGISTERED,
-            payload: returnPayload,
-          });
+          if (draft.Status >= 3) {
+            await this.updateSyncInboxStatus(tx, payload.globalId, DEV_RETURN_SYNC_STATUS_APPLIED, null);
+            return {
+              imported: false,
+              status: DEV_RETURN_SYNC_STATUS_APPLIED,
+              globalId: payload.globalId,
+              numero: payload.draft.numero,
+              message: "La devolucion ya estaba registrada en el origen.",
+              returnNumero: returnDoc.Numero,
+            };
+          }
 
           await this.updateSyncInboxStatus(tx, payload.globalId, DEV_RETURN_SYNC_STATUS_APPLIED, null);
 
@@ -1245,18 +1284,11 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
             status: DEV_RETURN_SYNC_STATUS_APPLIED,
             globalId: payload.globalId,
             numero: payload.draft.numero,
-            pendingGlobalId: returnPayload.globalId,
+            returnNumero: returnDoc.Numero,
           };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
-
-      if (result.pendingGlobalId) {
-        await Promise.all([
-          this.pushPendingSyncForGlobalId(result.pendingGlobalId),
-          this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 }),
-        ]);
-      }
 
       return result;
     } catch (error) {
@@ -1495,6 +1527,10 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
   private async ensureDraftSchema() {
     await this.prisma.$executeRawUnsafe(`
       alter table dbo."DEVBORRADOR"
+      add column if not exists "CodigoOrigen" varchar(15)
+    `);
+    await this.prisma.$executeRawUnsafe(`
+      alter table dbo."DEVBORRADOR"
       add column if not exists "CodigoDestino" varchar(15)
     `);
   }
@@ -1634,14 +1670,15 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
   private async resolveDraftDestination(
     tx: DevReturnTransactionClient,
     codigoDestino: string | null | undefined,
+    codigoOrigen?: string | null,
   ) {
     const normalizedCode = this.normalizeRequiredCode(
       codigoDestino,
       "Debes indicar el destino del borrador.",
     );
-    const current = this.getCurrentInstanceContext();
-    if (normalizedCode === current.sucursalCodigo) {
-      throw new BadRequestException("El destino del borrador no puede ser la misma sucursal origen.");
+    const normalizedOrigin = String(codigoOrigen || "").trim().toUpperCase();
+    if (normalizedOrigin && normalizedCode === normalizedOrigin) {
+      throw new BadRequestException("El destino del borrador no puede ser la misma bodega origen.");
     }
 
     const destination = await tx.sucursales.findUnique({
@@ -1657,6 +1694,34 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     }
 
     return destination.Codigo;
+  }
+
+  private async resolveDraftOrigin(
+    tx: DevReturnTransactionClient,
+    codigoOrigen: string | null | undefined,
+  ) {
+    const current = this.getCurrentInstanceContext();
+    if (!this.isWarehouseCode(current.sucursalCodigo)) {
+      return current.sucursalCodigo;
+    }
+
+    const normalizedCode = this.normalizeRequiredCode(
+      codigoOrigen ?? current.sucursalCodigo,
+      "Debes indicar la bodega origen del borrador.",
+    );
+    const origin = await tx.sucursales.findUnique({
+      where: { Codigo: normalizedCode },
+    });
+
+    if (!origin) {
+      throw new BadRequestException("La bodega origen no existe.");
+    }
+
+    if (!this.isWarehouseCode(origin.Codigo)) {
+      throw new BadRequestException("El origen del borrador solo puede ser una bodega.");
+    }
+
+    return origin.Codigo;
   }
 
   private async loadWarehouseLocations(
@@ -1681,6 +1746,42 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
         nombre: item.Nombre,
         status: item.Status,
       }));
+  }
+
+  private buildDraftOriginOptions(
+    current: { sucursalCodigo: string; nombre: string; tipo: string },
+    warehouses: Array<{ codigo: string; nombre: string | null; status: number | null }>,
+  ) {
+    if (this.isWarehouseCode(current.sucursalCodigo)) {
+      const currentCode = String(current.sucursalCodigo || "").trim().toUpperCase();
+      const currentLocation = warehouses.find(
+        (item) => String(item.codigo || "").trim().toUpperCase() === currentCode,
+      );
+      const remaining = warehouses.filter(
+        (item) => String(item.codigo || "").trim().toUpperCase() !== currentCode,
+      );
+
+      if (currentLocation) {
+        return [currentLocation, ...remaining];
+      }
+
+      return [
+        {
+          codigo: current.sucursalCodigo,
+          nombre: current.nombre,
+          status: 1,
+        },
+        ...remaining,
+      ];
+    }
+
+    return [
+      {
+        codigo: current.sucursalCodigo,
+        nombre: current.nombre,
+        status: 1,
+      },
+    ];
   }
 
   private async loadLocationsByCode(
@@ -1783,14 +1884,23 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     options: {
       origenCodigo: string;
       globalId: string;
+      origenInfo?: { codigo: string; nombre: string | null; status: number | null } | null;
       destinoInfo?: { codigo: string; nombre: string | null; status: number | null } | null;
     },
   ) {
+    const codigoOrigen = item.CodigoOrigen || options.origenCodigo;
     return {
       globalId: options.globalId,
       numero: item.Numero.toString(),
       fecha: item.Fecha,
-      codigoOrigen: options.origenCodigo,
+      codigoOrigen,
+      codigoOrigenInfo: options.origenInfo
+        ? {
+            codigo: options.origenInfo.codigo,
+            nombre: options.origenInfo.nombre,
+            status: options.origenInfo.status,
+          }
+        : null,
       codigoDestino: item.CodigoDestino ?? "",
       codigoDestinoInfo: options.destinoInfo
         ? {
@@ -2148,7 +2258,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
         nodeId: originNode.NodeId,
         nombre: originNode.Nombre || DEFAULT_WAREHOUSE_CODE,
         tipo: originNode.Tipo || "BODEGA",
-        apiUrl: originNode.ApiUrl || "http://localhost:3000",
+        apiUrl: originNode.ApiUrl || this.buildRemoteNodeApiUrl(DEFAULT_WAREHOUSE_CODE) || "http://localhost:3000",
       });
     }
   }
@@ -2239,10 +2349,18 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     );
 
     if (rows[0]) {
-      const fallback = this.buildFallbackSyncNode(rows[0].SucursalCodigo || row.CodigoRecibe);
+      const targetCode = rows[0].SucursalCodigo || row.CodigoRecibe;
+      const fallback = this.buildFallbackSyncNode(targetCode);
+      const preferredRemoteApiUrl = this.shouldPreferRemoteSyncApiUrl(targetCode)
+        ? this.buildRemoteNodeApiUrl(targetCode)
+        : null;
+
       return {
         ...rows[0],
-        ApiUrl: rows[0].ApiUrl || fallback.ApiUrl,
+        ApiUrl:
+          preferredRemoteApiUrl ||
+          rows[0].ApiUrl ||
+          fallback.ApiUrl,
       };
     }
 
@@ -2257,13 +2375,15 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
 
   private buildFallbackSyncNode(codeOrNodeId: string) {
     const normalized = this.normalizeRequiredCode(codeOrNodeId, "Nodo invalido.");
+    const preferredRemoteApiUrl = this.buildRemoteNodeApiUrl(normalized);
+
     if (normalized === DEFAULT_WAREHOUSE_CODE) {
       return {
         NodeId: DEFAULT_WAREHOUSE_CODE,
         SucursalCodigo: DEFAULT_WAREHOUSE_CODE,
         Nombre: DEFAULT_WAREHOUSE_CODE,
         Tipo: "BODEGA",
-        ApiUrl: "http://localhost:3000",
+        ApiUrl: preferredRemoteApiUrl || "http://localhost:3000",
       };
     }
 
@@ -2275,7 +2395,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
         SucursalCodigo: numericCode,
         Nombre: `Tienda ${numericCode}`,
         Tipo: "TIENDA",
-        ApiUrl: `http://localhost:${3000 + Number(numericCode)}`,
+        ApiUrl: preferredRemoteApiUrl || `http://localhost:${3000 + Number(numericCode)}`,
       };
     }
 
@@ -2287,7 +2407,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
         SucursalCodigo: `B${code}`,
         Nombre: `Bodega ${code}`,
         Tipo: "BODEGA",
-        ApiUrl: null,
+        ApiUrl: preferredRemoteApiUrl,
       };
     }
 
@@ -2296,7 +2416,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
       SucursalCodigo: normalized,
       Nombre: normalized,
       Tipo: "BODEGA",
-      ApiUrl: null,
+      ApiUrl: preferredRemoteApiUrl,
     };
   }
 
@@ -2707,7 +2827,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const pushSync = await this.pushPendingSync(this.getDevReturnSyncAutoRetryLimit());
-      const pullSync = await this.pullRemoteSync(this.getDevReturnSyncAutoRetryLimit());
+      const pullSync = await this.pullRemoteSync(this.getDevReturnRemotePullLimit());
 
       if (pushSync.processed > 0 || pullSync.processed > 0) {
         const sent = pushSync.results.filter((item) => item.status === DEV_RETURN_SYNC_STATUS_SENT).length;
@@ -2772,15 +2892,17 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
           "LastError"
         from dbo."DEV_RETURN_SYNC_INBOX"
         where "Status" in ($1, $2, $3)
-          and "EventType" in ($4, $5)
+          and "EventType" in ($4, $5, $6, $7)
         order by "ReceivedAt" desc
-        limit $6
+        limit $8
       `,
       DEV_RETURN_SYNC_STATUS_RECEIVED,
       DEV_RETURN_SYNC_STATUS_APPROVED,
       DEV_RETURN_SYNC_STATUS_APPLIED,
       DEV_RETURN_EVENT_DRAFT_EXPORTED,
       DEV_RETURN_EVENT_RETURN_REGISTERED,
+      DEV_RETURN_EVENT_DRAFT_APPROVED,
+      DEV_RETURN_EVENT_RETURN_APPLIED,
       limit,
     );
   }
@@ -3538,6 +3660,95 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     return this.findReturnOrThrow(tx, Number(draft.Numero));
   }
 
+  private async registerReturnFromInboundDraftPayload(
+    tx: DevReturnTransactionClient,
+    payload: DraftExportPayload,
+    user: UserView,
+  ) {
+    const numero = this.toPositiveInteger(payload.draft.numero, "Numero de borrador invalido.");
+    const existingReturn = await tx.devTransferencias.findUnique({
+      where: { Numero: numero },
+      include: devReturnInclude,
+    });
+
+    if (existingReturn) {
+      return existingReturn;
+    }
+
+    await this.ensureLocations(tx, [payload.draft.codigoDestino, payload.draft.codigoOrigen]);
+    for (const line of payload.items) {
+      await this.ensureSyncedInventoryDetails(tx, line.articulo);
+    }
+
+    const localLotUserCode = await this.resolveExistingLocalUserCode(
+      tx,
+      user.codUsuario,
+      "admin",
+    );
+    const lotId = await this.ensureDefaultReturnLot(tx, localLotUserCode);
+    const returnUserCode = this.normalizeOptionalCode(user.codUsuario)
+      || localLotUserCode
+      || "sistema";
+
+    const lineValues = payload.items.map((line) => ({
+      item: line.item,
+      codigoBarra: line.codigoBarra,
+      cantidad: this.parsePositiveDecimal(line.cantidad, "Cantidad invalida."),
+      numeroCaja: line.numeroCaja,
+      costo: this.parseNonNegativeDecimal(line.costo, "Costo invalido."),
+      articulo: line.articulo,
+    }));
+
+    const inventoryDelta = lineValues.reduce((map, line) => {
+      const currentValue = map.get(line.codigoBarra) || ZERO;
+      map.set(line.codigoBarra, currentValue.sub(line.cantidad));
+      return map;
+    }, new Map<string, Prisma.Decimal>());
+
+    await this.applyInventoryDelta(tx, inventoryDelta);
+    await this.mirrorSyncService.enqueueInventorySnapshotsTx(
+      tx,
+      lineValues.map((line) => line.codigoBarra),
+    );
+
+    await tx.devTransferencias.create({
+      data: {
+        Numero: numero,
+        Fecha: new Date(payload.draft.fecha),
+        CodigoEnvia: payload.draft.codigoDestino,
+        CodigoRecibe: payload.draft.codigoOrigen,
+        DocumentoOrigen: this.buildReturnDocumentOrigin(payload.globalId, numero),
+        TotalValor: lineValues.reduce(
+          (total, line) => total.add(line.cantidad.mul(line.costo)),
+          ZERO,
+        ),
+        Observacion: payload.draft.observacion || "",
+        Status: 0,
+        Usuario: returnUserCode,
+        FechaEmision: new Date(),
+        InterContable: 0,
+        IDLote: lotId,
+      },
+    });
+
+    await tx.movDevTransferencias.createMany({
+      data: lineValues.map((line) => ({
+        Numero: numero,
+        Fecha: new Date(payload.draft.fecha),
+        CodigoBarra: line.codigoBarra,
+        Cantidad: line.cantidad,
+        Valor: line.costo,
+        NumeroCaja: line.numeroCaja,
+        Item: line.item,
+        UltimoCosto: this.parseNonNegativeDecimal(line.articulo.ultimoCosto, "Ultimo costo invalido."),
+        CostoInicial: this.parseNonNegativeDecimal(line.articulo.costoInicial, "Costo inicial invalido."),
+        CostoDolar: this.parseNonNegativeDecimal(line.articulo.costoDolar, "Costo dolar invalido."),
+      })),
+    });
+
+    return this.findReturnOrThrow(tx, numero);
+  }
+
   private async ensureDefaultReturnLot(tx: DevReturnTransactionClient, userCode: string | null) {
     const existing = await tx.lotes.findUnique({
       where: { Lote: DEFAULT_RETURN_LOT },
@@ -4048,7 +4259,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
 
     const current = this.getCurrentInstanceContext();
     if (current.nodeId === DEFAULT_WAREHOUSE_CODE) {
-      return null;
+      return baseUrl;
     }
 
     if (current.tipo === "TIENDA") {
@@ -4060,6 +4271,54 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     }
 
     return null;
+  }
+
+  private resolveRemoteSyncApiRootUrl() {
+    const explicitUrl = this.configService.get<string>("DEV_RETURN_SYNC_REMOTE_API_URL");
+    const transferUrl = this.configService.get<string>("TRANSFER_SYNC_REMOTE_API_URL");
+    const mirrorUrl = this.configService.get<string>("MIRROR_SYNC_REMOTE_API_URL");
+    const configuredUrl = this.normalizeOptionalApiUrl(explicitUrl || transferUrl || mirrorUrl);
+    if (!configuredUrl) {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(configuredUrl);
+      return `${parsed.protocol}//${parsed.host}`;
+    } catch {
+      return null;
+    }
+  }
+
+  private buildRemoteNodeApiUrl(codeOrNodeId: string) {
+    const rootUrl = this.resolveRemoteSyncApiRootUrl();
+    if (!rootUrl) {
+      return null;
+    }
+
+    const normalized = this.normalizeRequiredCode(codeOrNodeId, "Nodo invalido.");
+    if (normalized === DEFAULT_WAREHOUSE_CODE) {
+      return rootUrl;
+    }
+
+    const fromNodeId = normalized.match(/^TIENDA(\d{3})$/);
+    const numericCode = fromNodeId?.[1] ?? (/^\d+$/.test(normalized) ? normalized.padStart(3, "0") : null);
+    if (numericCode) {
+      return `${rootUrl}/tienda${numericCode}`;
+    }
+
+    const warehouseMatch = normalized.match(/^(?:BODEGA|B)(\d{3})$/);
+    if (warehouseMatch) {
+      return `${rootUrl}/bodega${warehouseMatch[1]}`;
+    }
+
+    return null;
+  }
+
+  private shouldPreferRemoteSyncApiUrl(codeOrNodeId: string) {
+    const current = this.getCurrentInstanceContext();
+    const normalized = this.normalizeRequiredCode(codeOrNodeId, "Nodo invalido.");
+    return normalized !== current.sucursalCodigo && normalized !== current.nodeId;
   }
 
   private isDevReturnSyncAutoRetryEnabled() {
@@ -4084,6 +4343,18 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     return this.readPositiveIntegerConfig(
       "TRANSFER_SYNC_AUTO_RETRY_LIMIT",
       DEFAULT_DEV_RETURN_SYNC_AUTO_RETRY_LIMIT,
+    );
+  }
+
+  private getDevReturnRemotePullLimit(limit?: number) {
+    const requested = typeof limit === "number" && Number.isFinite(limit) ? Math.trunc(limit) : 0;
+    return Math.min(
+      100,
+      Math.max(
+      requested > 0 ? requested : 0,
+      this.getDevReturnSyncAutoRetryLimit(),
+      DEFAULT_DEV_RETURN_REMOTE_PULL_LIMIT,
+      ),
     );
   }
 
