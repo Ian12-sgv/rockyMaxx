@@ -1,8 +1,8 @@
 const electronModule = require("electron");
-const { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
+const { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
-const { join, resolve } = require("node:path");
+const { dirname, join, resolve } = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const app = typeof electronModule === "string" ? null : electronModule.app;
@@ -60,6 +60,11 @@ if (!app || !BrowserWindow || !dialog || !ipcMain || !shell) {
   process.exit(0);
 }
 
+const singleInstanceLock = app.requestSingleInstanceLock();
+if (!singleInstanceLock) {
+  process.exit(0);
+}
+
 app.setName("Rocky Maxx Cliente");
 
 function normalizeServerUrl(value) {
@@ -74,6 +79,170 @@ function normalizeServerUrl(value) {
   }
 
   return normalized;
+}
+
+function isLoopbackHostname(hostname) {
+  const normalized = String(hostname || "").trim().toLowerCase();
+  return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "0.0.0.0";
+}
+
+function getServiceConfigCandidates() {
+  const candidates = [
+    join(process.env.LOCALAPPDATA || "", "Programs", "@sistema-arabedesktop-service", "service-config.json"),
+    join(app.getPath("appData"), "@sistema-arabe", "desktop-service", "service-config.json"),
+    join(__dirname, "..", "desktop-service", "service-config.json"),
+  ];
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function getServiceRuntimeCandidates() {
+  const candidates = [
+    join(process.env.LOCALAPPDATA || "", "Programs", "@sistema-arabedesktop-service", "resources", "api"),
+    join(__dirname, "..", "desktop-service", ".bundle", "api"),
+  ];
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function parseEnvValue(rawValue) {
+  let value = String(rawValue ?? "").trim();
+  if (!value) {
+    return "";
+  }
+
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+
+  return value;
+}
+
+function parseEnvFile(filePath) {
+  const env = {};
+  const raw = readFileSync(filePath, "utf8");
+
+  for (const rawLine of raw.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1);
+    env[key] = parseEnvValue(value);
+  }
+
+  return env;
+}
+
+function extractDatabaseName(databaseUrl) {
+  const match = String(databaseUrl || "").match(/\/([^/?]+)(\?|$)/);
+  return String(match?.[1] || "").trim();
+}
+
+function readServiceConfigProfileId() {
+  for (const candidate of getServiceConfigCandidates()) {
+    if (!existsSync(candidate)) {
+      continue;
+    }
+
+    try {
+      const raw = JSON.parse(readFileSync(candidate, "utf8"));
+      const profileId = typeof raw?.profileId === "string" ? raw.profileId.trim() : "";
+      if (profileId) {
+        return profileId;
+      }
+    } catch (error) {
+      writeRuntimeLog(`No se pudo leer la configuracion del Servicio Local en ${candidate}: ${error.message}`);
+    }
+  }
+
+  return "";
+}
+
+function readServiceProfiles() {
+  for (const runtimeDir of getServiceRuntimeCandidates()) {
+    if (!existsSync(runtimeDir)) {
+      continue;
+    }
+
+    try {
+      const profiles = new Map();
+      for (const entry of readdirSync(runtimeDir, { withFileTypes: true })) {
+        if (!entry.isFile()) {
+          continue;
+        }
+
+        if (!entry.name.startsWith(".env") || entry.name.endsWith(".example")) {
+          continue;
+        }
+
+        const filePath = join(runtimeDir, entry.name);
+        const env = parseEnvFile(filePath);
+        profiles.set(entry.name, {
+          id: entry.name,
+          env,
+          apiPort: String(env.API_PORT || "3000").trim() || "3000",
+          apiHost: String(env.API_HOST || "0.0.0.0").trim() || "0.0.0.0",
+          databaseName: extractDatabaseName(env.DATABASE_URL),
+        });
+      }
+
+      if (profiles.size > 0) {
+        return profiles;
+      }
+    } catch (error) {
+      writeRuntimeLog(`No se pudieron leer los perfiles del Servicio Local: ${error.message}`);
+    }
+  }
+
+  return new Map();
+}
+
+function resolveServerUrlFromServiceProfile(serverUrl) {
+  const normalized = normalizeServerUrl(serverUrl);
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    const parsedUrl = new URL(normalized);
+    if (!isLoopbackHostname(parsedUrl.hostname)) {
+      return normalized;
+    }
+
+    const profileId = readServiceConfigProfileId();
+    if (!profileId) {
+      return normalized;
+    }
+
+    const profiles = readServiceProfiles();
+    const profile = profiles.get(profileId);
+    if (!profile?.apiPort) {
+      return normalized;
+    }
+
+    parsedUrl.hostname = "127.0.0.1";
+    parsedUrl.port = profile.apiPort;
+    parsedUrl.pathname = "";
+    parsedUrl.search = "";
+    parsedUrl.hash = "";
+    const resolved = normalizeServerUrl(parsedUrl.toString());
+    writeRuntimeLog(`Cliente resolvio URL local desde Servicio Local. perfil=${profileId} db=${profile.databaseName || "-"} url=${resolved}`);
+    return resolved;
+  } catch (error) {
+    writeRuntimeLog(`No se pudo resolver la URL local desde el Servicio Local: ${error.message}`);
+    return normalized;
+  }
 }
 
 function getConfigPath() {
@@ -137,7 +306,7 @@ function saveClientConfig(serverUrl) {
 }
 
 function buildHealthUrl(serverUrl) {
-  return `${normalizeServerUrl(serverUrl)}/api/health`;
+  return `${resolveServerUrlFromServiceProfile(serverUrl)}/api/health`;
 }
 
 function request(url) {
@@ -162,7 +331,7 @@ function request(url) {
 }
 
 async function probeServer(serverUrl) {
-  const normalized = normalizeServerUrl(serverUrl);
+  const normalized = resolveServerUrlFromServiceProfile(serverUrl);
   if (!normalized) {
     throw new Error("Debes indicar la URL del servidor.");
   }
@@ -356,6 +525,22 @@ ipcMain.handle("client-server:open", async (_event, serverUrl) => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
+  }
+});
+
+app.on("second-instance", () => {
+  if (configWindow?.isMinimized()) {
+    configWindow.restore();
+  }
+  if (mainWindow?.isMinimized()) {
+    mainWindow.restore();
+  }
+  if (configWindow) {
+    configWindow.focus();
+    return;
+  }
+  if (mainWindow) {
+    mainWindow.focus();
   }
 });
 

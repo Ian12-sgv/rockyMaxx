@@ -64,10 +64,12 @@ checkButton.addEventListener("click", async () => {
     return;
   }
 
+  currentServerUrl = normalizeUrl(result.serverUrl || serverUrl);
+  serverUrlInput.value = currentServerUrl;
   setFlash("Servidor encontrado correctamente.", "success");
   const databaseName = result.payload?.database?.database || "Sin datos";
   const port = result.payload?.port || "3000";
-  setStatus("Servidor listo", `Base: ${databaseName}. Puerto: ${port}.`);
+  setStatus("Servidor listo", `Base: ${databaseName}. Puerto: ${port}. URL activa: ${currentServerUrl}.`);
 });
 
 saveButton.addEventListener("click", async () => {
@@ -93,8 +95,10 @@ openButton.addEventListener("click", async () => {
 
   try {
     const result = await window.rockyClient.openServer(serverUrl);
+    currentServerUrl = normalizeUrl(result.serverUrl || serverUrl);
+    serverUrlInput.value = currentServerUrl;
     const databaseName = result.payload?.database?.database || "Sin datos";
-    setStatus("Servidor listo", `Base: ${databaseName}.`);
+    setStatus("Servidor listo", `Base: ${databaseName}. URL activa: ${currentServerUrl}.`);
   } catch (error) {
     setFlash(error?.message || "No se pudo abrir el servidor.", "error");
   }

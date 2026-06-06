@@ -28,6 +28,7 @@ const RUNTIME_LOG_DIR = join(process.env.TEMP || process.cwd(), "rocky-maxx");
 const RUNTIME_LOG_PATH = join(RUNTIME_LOG_DIR, "service-runtime.log");
 const SERVICE_CONFIG_FILE = "service-config.json";
 const execFileAsync = promisify(execFile);
+const ANSI_ESCAPE_PATTERN = /\u001b\[[0-9;]*m/g;
 
 let configuredApiPort = DEFAULT_API_PORT;
 let configuredApiHost = DEFAULT_API_HOST;
@@ -42,6 +43,10 @@ let expectedApiShutdownReason = "";
 let configuredMirrorSyncEnabled = true;
 let configuredMirrorSyncRemoteApiUrl = "";
 let serviceConfigurationLocked = false;
+let serviceConfigurationPersisted = false;
+let lastBackendDiagnostic = "";
+let lastServiceErrorMessage = "";
+let lastRemoteMirrorStatus = null;
 
 function writeRuntimeLog(message) {
   try {
@@ -76,12 +81,116 @@ if (!app || !BrowserWindow || !dialog || !shell || !ipcMain) {
   process.exit(0);
 }
 
+const singleInstanceLock = app.requestSingleInstanceLock();
+if (!singleInstanceLock) {
+  process.exit(0);
+}
+
+function stripAnsi(text) {
+  return String(text || "").replace(ANSI_ESCAPE_PATTERN, "");
+}
+
+function appendBackendDiagnostic(chunk) {
+  const next = stripAnsi(chunk).trim();
+  if (!next) {
+    return;
+  }
+
+  const combined = [lastBackendDiagnostic, next].filter(Boolean).join("\n");
+  lastBackendDiagnostic = combined.slice(-16000);
+}
+
+function setServiceErrorMessage(message) {
+  lastServiceErrorMessage = String(message || "").trim();
+}
+
+function clearServiceErrorMessage() {
+  lastServiceErrorMessage = "";
+}
+
+function formatBackendFailureMessage(rawError) {
+  const text = stripAnsi(rawError).trim();
+  const lower = text.toLowerCase();
+
+  if (lower.includes("environment variable not found: database_url")) {
+    return "Falta la configuracion DATABASE_URL del perfil seleccionado. Reinstala Rocky Maxx Servicio Local o restaura los archivos .env del runtime.";
+  }
+
+  if (lower.includes("eaddrinuse") || lower.includes("address already in use")) {
+    return `El puerto ${configuredApiPort} ya esta ocupado por otro proceso. Cierra otras instancias del Servicio Local o del backend y vuelve a intentar.`;
+  }
+
+  if (
+    lower.includes("can't reach database server") ||
+    lower.includes("connection refused") ||
+    lower.includes("connect econnrefused") ||
+    lower.includes("p1001")
+  ) {
+    return "No se pudo conectar a PostgreSQL en esta PC. Verifica que PostgreSQL este instalado y encendido.";
+  }
+
+  if ((lower.includes("database") && lower.includes("does not exist")) || lower.includes("p1003")) {
+    return `La base de datos ${currentServiceProfile?.databaseName || "configurada"} no existe todavia. Si es una PC nueva, primero usa Rocky Maxx Instalador para restaurarla.`;
+  }
+
+  if (
+    lower.includes("password authentication failed") ||
+    lower.includes("authentication failed") ||
+    lower.includes("p1000")
+  ) {
+    return "PostgreSQL rechazo el usuario o la clave configurados. Revisa el usuario local y la clave de la base.";
+  }
+
+  if (lower.includes("el backend local no respondio a tiempo")) {
+    return "El backend no respondio a tiempo. Revisa PostgreSQL, la base seleccionada y que el puerto no este ocupado.";
+  }
+
+  if (lower.includes("no se encontro el runtime del api")) {
+    return "No se encontro el runtime del API dentro del Servicio Local. Reinstala Rocky Maxx Servicio Local.";
+  }
+
+  return "No se pudo iniciar el backend local. Revisa PostgreSQL, la base seleccionada y vuelve a intentar.";
+}
+
+function ensureMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createMainWindow();
+  }
+}
+
+function reportBackendFailure(error, options = {}) {
+  const showDialog = options.showDialog !== false;
+  const rawMessage = [error?.stack || error?.message || String(error || ""), lastBackendDiagnostic]
+    .filter(Boolean)
+    .join("\n");
+  const friendlyMessage = formatBackendFailureMessage(rawMessage);
+  setServiceErrorMessage(friendlyMessage);
+  writeRuntimeLog(`Diagnostico de fallo del backend local: ${rawMessage}`);
+  ensureMainWindow();
+  broadcastServiceState(friendlyMessage);
+
+  if (showDialog) {
+    dialog.showErrorBox("Rocky Maxx Servicio Local", friendlyMessage);
+  }
+
+  return friendlyMessage;
+}
+
 function getApiUrl() {
   return `http://127.0.0.1:${configuredApiPort}`;
 }
 
 function getHealthUrl() {
   return `${getApiUrl()}/api/health`;
+}
+
+function buildRemoteHealthUrl(apiUrl) {
+  const normalized = String(apiUrl || "").trim().replace(/\/+$/, "");
+  if (!normalized) {
+    return "";
+  }
+
+  return `${normalized}/api/health`;
 }
 
 function resolveApiRuntimeDir() {
@@ -252,7 +361,7 @@ function extractDatabaseName(databaseUrl) {
 function formatProfileLabel(fileName, databaseName, apiPort) {
   const resolvedDatabaseName = databaseName || "sin base";
   if (fileName === ".env") {
-    return `Principal - ${resolvedDatabaseName} - puerto ${apiPort}`;
+    return `CENTRAL - ${resolvedDatabaseName} - puerto ${apiPort}`;
   }
 
   const suffix = fileName.replace(/^\.env\.?/, "").replace(/\./g, " ");
@@ -294,6 +403,7 @@ function loadAvailableServiceProfiles() {
         databaseName,
         apiPort,
         apiHost,
+        defaultMirrorSyncRemoteApiUrl: resolveDefaultMirrorSyncRemoteApiUrl({ env }),
         label: formatProfileLabel(entry.name, databaseName, apiPort),
       });
     } catch (error) {
@@ -313,21 +423,12 @@ function loadAvailableServiceProfiles() {
       databaseName: extractDatabaseName(process.env.DATABASE_URL),
       apiPort: String(process.env.API_PORT || DEFAULT_API_PORT || "3000"),
       apiHost: String(process.env.API_HOST || DEFAULT_API_HOST || "0.0.0.0"),
+      defaultMirrorSyncRemoteApiUrl: String(process.env.MIRROR_SYNC_REMOTE_API_URL || "").trim(),
       label: `Runtime - ${extractDatabaseName(process.env.DATABASE_URL) || "sin base"} - puerto ${process.env.API_PORT || DEFAULT_API_PORT || "3000"}`,
     });
   }
 
-  return profiles.sort((left, right) => {
-    if (left.fileName === ".env") {
-      return -1;
-    }
-
-    if (right.fileName === ".env") {
-      return 1;
-    }
-
-    return left.label.localeCompare(right.label, "es");
-  });
+  return profiles.sort((left, right) => left.label.localeCompare(right.label, "es"));
 }
 
 function applyServiceProfile(profile) {
@@ -335,27 +436,26 @@ function applyServiceProfile(profile) {
   configuredApiPort = String(profile?.apiPort || DEFAULT_API_PORT || "3000").trim() || "3000";
   configuredApiHost = String(profile?.apiHost || DEFAULT_API_HOST || "0.0.0.0").trim() || "0.0.0.0";
   currentHealthPayload = null;
+  lastBackendDiagnostic = "";
 }
 
 function initializeServiceProfile() {
   availableServiceProfiles = loadAvailableServiceProfiles();
   const savedConfig = readServiceConfig();
   const savedProfileId = typeof savedConfig.profileId === "string" ? savedConfig.profileId : "";
-  const selectedProfile =
-    availableServiceProfiles.find((profile) => profile.id === savedProfileId) ||
-    availableServiceProfiles[0] ||
-    null;
+  const savedProfile = availableServiceProfiles.find((profile) => profile.id === savedProfileId) || null;
+  const selectedProfile = savedProfile || null;
 
   configuredMirrorSyncEnabled = true;
   configuredMirrorSyncRemoteApiUrl =
     typeof savedConfig.mirrorSyncRemoteApiUrl === "string" && savedConfig.mirrorSyncRemoteApiUrl.trim()
       ? savedConfig.mirrorSyncRemoteApiUrl.trim()
-      : resolveDefaultMirrorSyncRemoteApiUrl(selectedProfile);
+      : savedProfile
+        ? resolveDefaultMirrorSyncRemoteApiUrl(savedProfile)
+        : "";
 
-  serviceConfigurationLocked = Boolean(
-    savedProfileId &&
-      availableServiceProfiles.some((profile) => profile.id === savedProfileId),
-  );
+  serviceConfigurationPersisted = Boolean(savedProfile);
+  serviceConfigurationLocked = false;
   applyServiceProfile(selectedProfile);
 }
 
@@ -399,6 +499,7 @@ async function isApiReady() {
     const response = await getHealthPayload();
     if (response.statusCode >= 200 && response.statusCode < 500) {
       currentHealthPayload = response.payload;
+      clearServiceErrorMessage();
       return true;
     }
     return false;
@@ -510,6 +611,7 @@ function startApiServer() {
   writeRuntimeLog(
     `Iniciando backend local. perfil=${currentServiceProfile?.id || "sin-perfil"} runtimeDir=${runtimeDir} entry=${apiEntry} node=${nodeExecutable} host=${configuredApiHost} port=${configuredApiPort} mirrorEnabled=${configuredMirrorSyncEnabled} mirrorUrl=${configuredMirrorSyncRemoteApiUrl || "-"}`,
   );
+  lastBackendDiagnostic = "";
 
   apiProcess = spawn(nodeExecutable, [apiEntry], {
     cwd: runtimeDir,
@@ -530,6 +632,7 @@ function startApiServer() {
   apiProcess.stderr?.on("data", (chunk) => {
     const text = String(chunk).trim();
     if (text) {
+      appendBackendDiagnostic(text);
       writeRuntimeLog(`[api stderr] ${text}`);
     }
   });
@@ -563,8 +666,7 @@ function startApiServer() {
         ? `El backend local se cerro con codigo ${code}.`
         : `El backend local se cerro por la senal ${signal || "desconocida"}.`;
 
-    dialog.showErrorBox("Rocky Maxx Servicio Local", `${reason}\n\nEl servicio se cerrara.`);
-    app.quit();
+    reportBackendFailure(new Error(reason));
   });
 }
 
@@ -572,6 +674,18 @@ async function ensureApiRunning() {
   writeRuntimeLog(
     `Arranque del servicio local. pid=${process.pid} execPath=${process.execPath} resourcesPath=${process.resourcesPath || "sin-resourcesPath"} perfil=${currentServiceProfile?.id || "sin-perfil"}`,
   );
+
+  if (!currentServiceProfile) {
+    setServiceErrorMessage("Selecciona una base de datos y guarda la configuracion para iniciar el backend local.");
+    writeRuntimeLog("No se intento arrancar el backend porque no hay perfil seleccionado.");
+    return;
+  }
+
+  if (!serviceConfigurationPersisted) {
+    setServiceErrorMessage("Selecciona la base de datos que quieres usar y guarda la configuracion. El backend no arrancara hasta que confirmes la sede.");
+    writeRuntimeLog(`No se intento arrancar el backend porque el perfil ${currentServiceProfile.id} aun no se ha guardado.`);
+    return;
+  }
 
   if (await isApiReady()) {
     writeRuntimeLog("Se detecto un backend local ya disponible en el puerto configurado.");
@@ -581,6 +695,52 @@ async function ensureApiRunning() {
   await releaseApiPort();
   startApiServer();
   await waitForApiReady();
+  clearServiceErrorMessage();
+}
+
+async function probeRemoteMirrorHealth() {
+  const remoteApiUrl = String(configuredMirrorSyncRemoteApiUrl || "").trim();
+  if (!remoteApiUrl) {
+    return {
+      code: "missing",
+      message: "Base local activa y VPS no encontrado.",
+      url: "",
+    };
+  }
+
+  const remoteHealthUrl = buildRemoteHealthUrl(remoteApiUrl);
+  if (!remoteHealthUrl) {
+    return {
+      code: "missing",
+      message: "Base local activa y VPS no encontrado.",
+      url: remoteApiUrl,
+    };
+  }
+
+  try {
+    const response = await request(remoteHealthUrl);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return {
+        code: "active",
+        message: "Base local activa y VPS activo.",
+        url: remoteApiUrl,
+      };
+    }
+
+    return {
+      code: "missing",
+      message: "Base local activa y VPS no encontrado.",
+      url: remoteApiUrl,
+      detail: `HTTP ${response.statusCode}`,
+    };
+  } catch (error) {
+    return {
+      code: "missing",
+      message: "Base local activa y VPS no encontrado.",
+      url: remoteApiUrl,
+      detail: error?.message || String(error || ""),
+    };
+  }
 }
 
 function getLanUrls() {
@@ -602,6 +762,7 @@ function getLanUrls() {
 
 function buildServiceState(errorMessage = "") {
   const localUrl = getApiUrl();
+  const resolvedErrorMessage = String(errorMessage || lastServiceErrorMessage || "").trim();
   return {
     selectedProfileId: currentServiceProfile?.id || "",
     profiles: availableServiceProfiles.map((profile) => ({
@@ -610,6 +771,7 @@ function buildServiceState(errorMessage = "") {
       databaseName: profile.databaseName,
       apiPort: profile.apiPort,
       apiHost: profile.apiHost,
+      defaultMirrorSyncRemoteApiUrl: profile.defaultMirrorSyncRemoteApiUrl || "",
     })),
     currentProfile: currentServiceProfile
       ? {
@@ -618,18 +780,21 @@ function buildServiceState(errorMessage = "") {
           databaseName: currentServiceProfile.databaseName,
           apiPort: currentServiceProfile.apiPort,
           apiHost: currentServiceProfile.apiHost,
+          defaultMirrorSyncRemoteApiUrl: currentServiceProfile.defaultMirrorSyncRemoteApiUrl || "",
         }
       : null,
     apiPort: configuredApiPort,
     apiHost: configuredApiHost,
     mirrorSyncEnabled: configuredMirrorSyncEnabled,
     mirrorSyncRemoteApiUrl: configuredMirrorSyncRemoteApiUrl,
+    remoteMirrorStatus: lastRemoteMirrorStatus,
     configurationLocked: serviceConfigurationLocked,
+    configurationSaved: serviceConfigurationPersisted,
     localUrl,
     healthUrl: getHealthUrl(),
     urls: getLanUrls(),
     health: currentHealthPayload,
-    errorMessage,
+    errorMessage: resolvedErrorMessage,
   };
 }
 
@@ -711,17 +876,35 @@ function createMainWindow() {
 
 ipcMain.handle("service-config:get-state", async () => {
   availableServiceProfiles = loadAvailableServiceProfiles();
-  if (!currentServiceProfile && availableServiceProfiles.length > 0) {
-    applyServiceProfile(availableServiceProfiles[0]);
+  if (currentServiceProfile?.id) {
+    currentServiceProfile =
+      availableServiceProfiles.find((profile) => profile.id === currentServiceProfile.id) || null;
   }
-
   await isApiReady();
   return buildServiceState();
 });
 
 ipcMain.handle("service-config:refresh", async () => {
   availableServiceProfiles = loadAvailableServiceProfiles();
+  if (currentServiceProfile?.id) {
+    currentServiceProfile =
+      availableServiceProfiles.find((profile) => profile.id === currentServiceProfile.id) || null;
+  }
+  const apiReady = await isApiReady();
+
+  if (!apiReady) {
+    try {
+      await ensureApiRunning();
+    } catch (error) {
+      const message = reportBackendFailure(error, { showDialog: false });
+      const failedState = buildServiceState(message);
+      broadcastServiceState(message);
+      return failedState;
+    }
+  }
+
   await isApiReady();
+  lastRemoteMirrorStatus = await probeRemoteMirrorHealth();
   const state = buildServiceState();
   broadcastServiceState();
   return state;
@@ -748,19 +931,30 @@ ipcMain.handle("service-config:save", async (_event, payload) => {
     mirrorSyncEnabled: true,
     mirrorSyncRemoteApiUrl: configuredMirrorSyncRemoteApiUrl,
   });
-  serviceConfigurationLocked = true;
+  serviceConfigurationPersisted = true;
+  serviceConfigurationLocked = false;
   applyServiceProfile(selectedProfile);
 
   try {
     await restartApiWithCurrentProfile();
+    clearServiceErrorMessage();
+    lastRemoteMirrorStatus = await probeRemoteMirrorHealth();
     const state = buildServiceState();
     broadcastServiceState();
     return state;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "No se pudo reiniciar el backend local.";
+    const message = reportBackendFailure(error, { showDialog: false });
     broadcastServiceState(message);
-    throw error;
+    throw new Error(message);
   }
+});
+
+app.on("second-instance", () => {
+  ensureMainWindow();
+  if (mainWindow?.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow?.focus();
 });
 
 app.on("before-quit", () => {
@@ -781,16 +975,13 @@ app.on("activate", () => {
 });
 
 app.whenReady().then(async () => {
+  initializeServiceProfile();
+  createMainWindow();
+
   try {
-    initializeServiceProfile();
     await ensureApiRunning();
-    createMainWindow();
   } catch (error) {
     writeRuntimeLog(`Fallo el arranque del servicio local: ${error.stack || error.message}`);
-    dialog.showErrorBox(
-      "Rocky Maxx Servicio Local",
-      `No se pudo iniciar el backend local.\n\n${error.message}`,
-    );
-    app.quit();
+    reportBackendFailure(error);
   }
 });
