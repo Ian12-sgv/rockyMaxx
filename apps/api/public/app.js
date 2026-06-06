@@ -169,6 +169,17 @@ const state = {
     selectedCodigo: "",
     draft: createEmptySucursalDraft(),
   },
+  cashRegisters: {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedKey: "",
+    draft: createEmptyCashRegisterDraft(),
+  },
   loadingForm: false,
   submittingForm: false,
   deletingCode: "",
@@ -335,6 +346,17 @@ async function hydrateAuthenticatedState() {
     search: "",
     selectedCodigo: "",
     draft: createEmptySucursalDraft(),
+  };
+  state.cashRegisters = {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedKey: "",
+    draft: createEmptyCashRegisterDraft(),
   };
   state.articleEditorTab = "general";
   state.formMode = "create";
@@ -711,6 +733,10 @@ function renderDesktopWorkspace() {
     return renderDevReturnRecordsWorkspace();
   }
 
+  if (state.currentView === "cajas") {
+    return renderCashRegistersWorkspace();
+  }
+
   if (state.currentView === "cargar-devoluciones") {
     return renderLoadDevReturnsWorkspace();
   }
@@ -875,6 +901,7 @@ function renderDesktopProcesosMenu() {
       <div class="modern-mega-column modern-mega-column-root">
         ${renderDesktopMenuLink("borrador-devoluciones", "Borrador devoluciones")}
         ${renderDesktopMenuLink("ajuste-inventario", "Ajuste de inventario")}
+        ${renderDesktopMenuLink("cajas", "Caja")}
         <button
           class="modern-dropdown-link modern-dropdown-link-with-arrow ${transfersOpen ? "modern-dropdown-link-open" : ""}"
           type="button"
@@ -3346,6 +3373,279 @@ function renderTransferStatusBadge(status) {
   return `<span class="modern-chip">${escapeHtml(label)}</span>`;
 }
 
+function renderCashRegistersWorkspace() {
+  const draft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  const metadata = state.cashRegisters.metadata || {};
+  const existingSeries = Array.isArray(metadata.series) ? metadata.series : [];
+  const isSaving = state.cashRegisters.saving;
+  const isDeleting = state.cashRegisters.deleting;
+  const isBusy = isSaving || isDeleting;
+
+  return `
+    <div class="modern-page sucursales-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Facturacion", "Caja"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Caja</h1>
+          <p>Apertura, seguimiento y cierre operativo de cajas usando CAJAS y DIARIOCAJA.</p>
+        </div>
+      </div>
+
+      <div class="sucursal-command-bar" role="toolbar" aria-label="Acciones de caja">
+        <button class="sucursal-command-button" type="button" data-new-caja ${isBusy ? "disabled" : ""}>
+          <span class="sucursal-command-icon">+</span>
+          Nuevo
+        </button>
+        <button class="sucursal-command-button sucursal-command-primary" type="submit" form="caja-form" ${isBusy ? "disabled" : ""}>
+          <span class="sucursal-command-icon">G</span>
+          ${isSaving ? "Guardando" : "Guardar"}
+        </button>
+        <button class="sucursal-command-button" type="button" data-caja-exit ${isBusy ? "disabled" : ""}>
+          <span class="sucursal-command-icon">S</span>
+          Salir
+        </button>
+      </div>
+
+      <div class="sucursal-layout">
+        <section class="modern-card modern-card-list sucursal-list-card">
+          <div class="modern-card-head">
+            <div>
+              <h2>Cajas registradas</h2>
+              <p>${escapeHtml(String(state.cashRegisters.items.length || 0))} registro(s) visibles.</p>
+            </div>
+            <div class="modern-chip">${state.cashRegisters.loading ? "Cargando" : "Listas"}</div>
+          </div>
+          <div class="sucursal-search-row">
+            <label class="field">
+              <span>Buscar</span>
+              <input
+                type="search"
+                name="cajaBuscar"
+                data-caja-search
+                value="${escapeHtml(toInputValue(state.cashRegisters.search))}"
+                placeholder="Serie, numero de caja o factura"
+              />
+            </label>
+            <button class="button button-ghost" type="button" data-refresh-cajas ${state.cashRegisters.loading || isBusy ? "disabled" : ""}>
+              ${state.cashRegisters.loading ? "Actualizando..." : "Actualizar"}
+            </button>
+          </div>
+          ${state.cashRegisters.loading ? renderLoadingState("Cargando cajas...") : renderCashRegistersTable()}
+        </section>
+
+        <aside class="modern-card modern-card-editor sucursal-form-card">
+          <form id="caja-form" class="sucursal-editor-form">
+            <div class="sucursal-form-title">
+              <div>
+                <span class="article-editor-eyebrow">Facturacion</span>
+                <h2>${draft.originalSerie ? `Caja ${escapeHtml(String(draft.serie || ""))}` : "Nueva caja"}</h2>
+              </div>
+              ${renderCashRegisterStatusBadge(draft.status)}
+            </div>
+
+            <div class="sucursal-data-panel">
+              <label class="sucursal-field-row sucursal-field-code">
+                <span>Serie</span>
+                <input
+                  type="text"
+                  name="serie"
+                  value="${escapeHtml(toInputValue(draft.serie))}"
+                  maxlength="15"
+                  placeholder="CAJA01"
+                  list="cash-register-series"
+                  ${draft.originalSerie ? "disabled" : ""}
+                />
+              </label>
+
+              <datalist id="cash-register-series">
+                ${existingSeries
+                  .map((item) => `<option value="${escapeHtml(item.serie || "")}">${escapeHtml(item.nombreImpresora || "")}</option>`)
+                  .join("")}
+              </datalist>
+
+              <label class="sucursal-field-row">
+                <span>Fecha</span>
+                <input
+                  type="date"
+                  name="fecha"
+                  value="${escapeHtml(toInputValue(draft.fecha))}"
+                  ${draft.originalSerie ? "disabled" : ""}
+                />
+              </label>
+
+              <label class="sucursal-field-row">
+                <span>Numero de caja</span>
+                <input
+                  type="number"
+                  name="numeroCaja"
+                  min="0"
+                  step="1"
+                  value="${escapeHtml(toInputValue(draft.numeroCaja))}"
+                  placeholder="1"
+                />
+              </label>
+
+              <label class="sucursal-field-row">
+                <span>Factura iniciar</span>
+                <input
+                  type="number"
+                  name="facturaInicial"
+                  min="0"
+                  step="1"
+                  value="${escapeHtml(toInputValue(draft.facturaInicial))}"
+                  placeholder="1"
+                />
+              </label>
+
+              <label class="sucursal-field-row">
+                <span>Ultima factura</span>
+                <input
+                  type="number"
+                  name="ultimaFactura"
+                  min="0"
+                  step="1"
+                  value="${escapeHtml(toInputValue(draft.ultimaFactura))}"
+                  placeholder="0"
+                />
+              </label>
+
+              <label class="sucursal-field-row">
+                <span>Hora de apertura</span>
+                <input
+                  type="time"
+                  name="horaApertura"
+                  value="${escapeHtml(toInputValue(draft.horaApertura))}"
+                />
+              </label>
+
+              <label class="sucursal-field-row">
+                <span>Hora de cierre</span>
+                <input
+                  type="time"
+                  name="horaCierre"
+                  value="${escapeHtml(toInputValue(draft.horaCierre))}"
+                />
+              </label>
+
+              <fieldset class="sucursal-status-row">
+                <legend>Status</legend>
+                <label>
+                  <input type="radio" name="status" value="0" ${String(draft.status ?? "0") === "0" ? "checked" : ""} />
+                  Apertura hecha
+                </label>
+                <label>
+                  <input type="radio" name="status" value="1" ${String(draft.status ?? "0") === "1" ? "checked" : ""} />
+                  Apertura con ventas
+                </label>
+                <label>
+                  <input type="radio" name="status" value="2" ${String(draft.status ?? "0") === "2" ? "checked" : ""} />
+                  Caja cerrada
+                </label>
+              </fieldset>
+
+              <div class="sucursal-form-footer">
+                <button class="button button-ghost" type="button" data-caja-reset ${isBusy ? "disabled" : ""}>
+                  Limpiar campos
+                </button>
+              </div>
+            </div>
+          </form>
+        </aside>
+      </div>
+    </div>
+  `;
+}
+
+function renderCashRegistersTable() {
+  const items = Array.isArray(state.cashRegisters.items) ? state.cashRegisters.items : [];
+  const search = normalizeSearchText(state.cashRegisters.search);
+  const visibleItems = search
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.serie || ""} ${item.numeroCaja || ""} ${item.facturaInicial || ""} ${item.ultimaFactura || ""} ${item.statusNombre || ""}`,
+        ).includes(search),
+      )
+    : items;
+
+  if (!visibleItems.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin cajas</h3>
+        <p>${search ? "No hay resultados para la busqueda actual." : "No hay aperturas de caja registradas todavia."}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Serie</th>
+            <th>Fecha</th>
+            <th>N. caja</th>
+            <th>Factura inicial</th>
+            <th>Ultima factura</th>
+            <th>Status</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleItems
+            .map((item) => {
+              const key = buildCashRegisterKey(item.serie, item.fecha);
+              const isSelected = String(state.cashRegisters.selectedKey || "") === key;
+
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(item.serie || "-")}</strong></td>
+                  <td>${escapeHtml(formatDateOnlyDisplay(item.fecha))}</td>
+                  <td>${escapeHtml(toDisplayValue(item.numeroCaja))}</td>
+                  <td>${escapeHtml(toDisplayValue(item.facturaInicial))}</td>
+                  <td>${escapeHtml(toDisplayValue(item.ultimaFactura))}</td>
+                  <td>${renderCashRegisterStatusBadge(item.status)}</td>
+                  <td class="sucursal-row-actions">
+                    <button
+                      class="button button-ghost"
+                      type="button"
+                      data-caja-select="${escapeHtml(item.serie || "")}"
+                      data-caja-fecha="${escapeHtml(toDateInputValue(item.fecha))}"
+                    >
+                      Abrir
+                    </button>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-delete-caja="${escapeHtml(item.serie || "")}"
+                      data-delete-caja-fecha="${escapeHtml(toDateInputValue(item.fecha))}"
+                      ${state.cashRegisters.deleting || Number(item.status || 0) !== 0 ? "disabled" : ""}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderCashRegisterStatusBadge(status) {
+  const numericStatus = Number(status ?? 0);
+  let label = "Apertura hecha";
+  if (numericStatus === 1) {
+    label = "Apertura con ventas";
+  } else if (numericStatus === 2) {
+    label = "Caja cerrada";
+  }
+
+  return `<span class="modern-chip">${escapeHtml(label)}</span>`;
+}
+
 function renderSucursalesWorkspace() {
   const draft = state.sucursales.draft || createEmptySucursalDraft();
   const isSaving = state.sucursales.saving;
@@ -3735,6 +4035,10 @@ function getDesktopBreadcrumb(view) {
     return ["Procesos", "Ajuste de inventario"];
   }
 
+  if (view === "cajas") {
+    return ["Procesos", "Facturacion", "Caja"];
+  }
+
   if (view === "borrador-devoluciones") {
     return ["Procesos", "Borrador devoluciones"];
   }
@@ -3775,6 +4079,7 @@ function getDesktopViewLabelV2(view) {
     "registro-transferencia": "Registro de transferencias",
     "cargar-transferencia": "Carga de transferencias",
     "ajuste-inventario": "Ajuste de inventario",
+    cajas: "Caja",
     "borrador-devoluciones": "Borrador devoluciones",
     "registro-devoluciones": "Registro de devoluciones",
     "cargar-devoluciones": "Carga de devoluciones",
@@ -4983,6 +5288,11 @@ function bindShellEvents() {
         return;
       }
 
+      if (nextView === "cajas") {
+        await loadCashRegisters();
+        return;
+      }
+
       if (nextView === "sucursales") {
         await loadSucursales();
       }
@@ -5035,6 +5345,7 @@ function bindShellEvents() {
   bindDevReturnEvents();
   bindAdjustmentEvents();
   bindSucursalEvents();
+  bindCashRegisterEvents();
 
   document.querySelectorAll("[data-role-import-toggle]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -6023,6 +6334,117 @@ function bindSucursalEvents() {
       if (sucursalForm) {
         captureSucursalDraft();
         await saveSucursal();
+      }
+      return;
+    }
+
+    if (key === "s") {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    }
+  };
+}
+
+function bindCashRegisterEvents() {
+  document.querySelector("[data-refresh-cajas]")?.addEventListener("click", async () => {
+    await loadCashRegisters();
+  });
+
+  document.querySelector("[data-new-caja]")?.addEventListener("click", () => {
+    resetCashRegisterDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelectorAll("[data-delete-caja]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const serie = button.getAttribute("data-delete-caja") || "";
+      const fecha = button.getAttribute("data-delete-caja-fecha") || "";
+      if (!serie || !fecha) {
+        return;
+      }
+
+      await deleteCashRegister(serie, fecha);
+    });
+  });
+
+  document.querySelector("[data-caja-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-caja-reset]")?.addEventListener("click", () => {
+    resetCashRegisterDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-caja-search]")?.addEventListener("input", (event) => {
+    state.cashRegisters.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelectorAll("[data-caja-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const serie = button.getAttribute("data-caja-select") || "";
+      const fecha = button.getAttribute("data-caja-fecha") || "";
+      if (!serie || !fecha) {
+        return;
+      }
+
+      await loadCashRegisterForEdit(serie, fecha);
+    });
+  });
+
+  const cajaForm = document.getElementById("caja-form");
+  if (cajaForm) {
+    cajaForm.addEventListener("input", () => {
+      captureCashRegisterDraft();
+    });
+
+    cajaForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureCashRegisterDraft();
+      await saveCashRegister();
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "cajas" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "s"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.cashRegisters.saving || state.cashRegisters.deleting) {
+      return;
+    }
+
+    if (key === "c") {
+      resetCashRegisterDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      const cajaFormElement = document.getElementById("caja-form");
+      if (cajaFormElement) {
+        captureCashRegisterDraft();
+        await saveCashRegister();
       }
       return;
     }
@@ -7355,6 +7777,134 @@ async function loadInventoryExistence(page = 1, options = {}) {
   }
 }
 
+async function loadCashRegisters(options = {}) {
+  const { renderAfter = true } = options;
+  state.cashRegisters.loading = true;
+  state.cashRegisters.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const [metadata, response] = await Promise.all([
+      apiFetch("/cajas/metadata"),
+      apiFetch("/cajas"),
+    ]);
+
+    state.cashRegisters.metadata = metadata;
+    state.cashRegisters.items = Array.isArray(response.cajas) ? response.cajas : [];
+
+    if (!state.cashRegisters.draft?.originalSerie) {
+      state.cashRegisters.draft = createEmptyCashRegisterDraft(metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la informacion de cajas: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.cashRegisters.loading = false;
+    state.cashRegisters.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadCashRegisterForEdit(serie, fecha) {
+  state.cashRegisters.loading = true;
+  clearFlash();
+  render();
+
+  try {
+    if (!state.cashRegisters.metadata) {
+      await loadCashRegisters({ renderAfter: false });
+    }
+
+    const response = await apiFetch(`/cajas/${encodeURIComponent(serie)}/${encodeURIComponent(fecha)}`);
+    state.cashRegisters.selectedKey = buildCashRegisterKey(serie, fecha);
+    state.cashRegisters.draft = cashRegisterToDraft(response.caja);
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la caja ${serie} ${fecha}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.cashRegisters.loading = false;
+    render();
+  }
+}
+
+async function saveCashRegister() {
+  const draft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  const validationMessage = validateCashRegisterDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.cashRegisters.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildCashRegisterPayload(draft);
+    const response = draft.originalSerie
+      ? await apiFetch(`/cajas/${encodeURIComponent(draft.originalSerie)}/${encodeURIComponent(draft.originalFecha)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/cajas", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.cashRegisters.selectedKey = buildCashRegisterKey(response.caja?.serie, response.caja?.fecha);
+    state.cashRegisters.draft = cashRegisterToDraft(response.caja);
+    await loadCashRegisters({ renderAfter: false });
+    setFlash(
+      draft.originalSerie
+        ? `Caja ${response.caja?.serie || draft.originalSerie} actualizada correctamente.`
+        : `Caja ${response.caja?.serie || ""} guardada correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.cashRegisters.saving = false;
+    render();
+  }
+}
+
+async function deleteCashRegister(serie, fecha) {
+  if (!serie || !fecha) {
+    return;
+  }
+
+  const confirmed = window.confirm(`Se eliminara la caja ${serie} del ${fecha}. Deseas continuar?`);
+  if (!confirmed) {
+    return;
+  }
+
+  state.cashRegisters.deleting = true;
+  clearFlash();
+  render();
+
+  try {
+    await apiFetch(`/cajas/${encodeURIComponent(serie)}/${encodeURIComponent(fecha)}`, {
+      method: "DELETE",
+    });
+
+    resetCashRegisterDraft();
+    await loadCashRegisters({ renderAfter: false });
+    setFlash(`Caja ${serie} eliminada correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.cashRegisters.deleting = false;
+    render();
+  }
+}
+
 async function saveSucursal() {
   const draft = state.sucursales.draft || createEmptySucursalDraft();
   state.sucursales.saving = true;
@@ -8266,6 +8816,116 @@ function sucursalToDraft(sucursal) {
     status: String(sucursal?.status ?? 1),
     porcentajeDeRedondeo: toInputValue(sucursal?.porcentajeDeRedondeo ?? "0"),
   };
+}
+
+function resetCashRegisterDraft() {
+  state.cashRegisters.selectedKey = "";
+  state.cashRegisters.draft = createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+}
+
+function createEmptyCashRegisterDraft(metadata) {
+  const defaults = metadata?.defaults || {};
+  return {
+    originalSerie: "",
+    originalFecha: "",
+    serie: "",
+    fecha: toDateInputValue(defaults.fecha || new Date()),
+    numeroCaja: toInputValue(defaults.numeroCaja ?? "1"),
+    facturaInicial: toInputValue(defaults.facturaInicial ?? "1"),
+    ultimaFactura: toInputValue(defaults.ultimaFactura ?? "0"),
+    horaApertura: toInputValue(defaults.horaApertura || ""),
+    horaCierre: toInputValue(defaults.horaCierre || ""),
+    status: String(defaults.status ?? 0),
+  };
+}
+
+function captureCashRegisterDraft() {
+  const form = document.getElementById("caja-form");
+  if (!form) {
+    return;
+  }
+
+  state.cashRegisters.draft = readCashRegisterDraft(form);
+}
+
+function readCashRegisterDraft(form) {
+  const currentDraft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+
+  return {
+    originalSerie: currentDraft.originalSerie || "",
+    originalFecha: currentDraft.originalFecha || "",
+    serie: currentDraft.originalSerie || readFormFieldValue(form, "serie", currentDraft.serie),
+    fecha: currentDraft.originalFecha || readFormFieldValue(form, "fecha", currentDraft.fecha),
+    numeroCaja: readFormFieldValue(form, "numeroCaja", currentDraft.numeroCaja || "1"),
+    facturaInicial: readFormFieldValue(form, "facturaInicial", currentDraft.facturaInicial || "1"),
+    ultimaFactura: readFormFieldValue(form, "ultimaFactura", currentDraft.ultimaFactura || "0"),
+    horaApertura: readFormFieldValue(form, "horaApertura", currentDraft.horaApertura),
+    horaCierre: readFormFieldValue(form, "horaCierre", currentDraft.horaCierre),
+    status: readFormFieldValue(form, "status", currentDraft.status || "0"),
+  };
+}
+
+function validateCashRegisterDraft(draft) {
+  const serie = String(draft.serie || "").trim().toUpperCase();
+  if (!serie) {
+    return "Debes indicar la serie de la caja.";
+  }
+
+  if (!String(draft.fecha || "").trim()) {
+    return "Debes indicar la fecha de la caja.";
+  }
+
+  const numeroCaja = Number(draft.numeroCaja || 0);
+  if (!Number.isInteger(numeroCaja) || numeroCaja < 0) {
+    return "El numero de caja no es valido.";
+  }
+
+  const facturaInicial = Number(draft.facturaInicial || 0);
+  const ultimaFactura = Number(draft.ultimaFactura || 0);
+  if (!Number.isFinite(facturaInicial) || facturaInicial < 0) {
+    return "La factura inicial no es valida.";
+  }
+  if (!Number.isFinite(ultimaFactura) || ultimaFactura < 0) {
+    return "La ultima factura no es valida.";
+  }
+
+  if (!String(draft.horaApertura || "").trim()) {
+    return "Debes indicar la hora de apertura.";
+  }
+
+  return "";
+}
+
+function buildCashRegisterPayload(draft) {
+  return {
+    serie: String(draft.serie || "").trim().toUpperCase(),
+    fecha: toApiDateTime(draft.fecha),
+    numeroCaja: Number.parseInt(String(draft.numeroCaja || "0"), 10),
+    facturaInicial: String(draft.facturaInicial || "").trim() || undefined,
+    ultimaFactura: String(draft.ultimaFactura || "").trim() || undefined,
+    horaApertura: String(draft.horaApertura || "").trim() || undefined,
+    horaCierre: String(draft.horaCierre || "").trim() || undefined,
+    status: Number.parseInt(String(draft.status ?? "0"), 10),
+  };
+}
+
+function cashRegisterToDraft(item) {
+  return {
+    originalSerie: item?.serie || "",
+    originalFecha: toDateInputValue(item?.fecha),
+    serie: item?.serie || "",
+    fecha: toDateInputValue(item?.fecha),
+    numeroCaja: toInputValue(item?.numeroCaja ?? "1"),
+    facturaInicial: toInputValue(item?.facturaInicial ?? "1"),
+    ultimaFactura: toInputValue(item?.ultimaFactura ?? "0"),
+    horaApertura: toInputValue(item?.horaApertura || ""),
+    horaCierre: toInputValue(item?.horaCierre || ""),
+    status: String(item?.status ?? 0),
+  };
+}
+
+function buildCashRegisterKey(serie, fecha) {
+  return `${String(serie || "").trim().toUpperCase()}::${toDateInputValue(fecha)}`;
 }
 
 function resetArticleForm() {
