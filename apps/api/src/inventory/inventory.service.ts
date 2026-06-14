@@ -56,6 +56,7 @@ type TaxRecord = {
   Codigo: number;
   Nombre: string | null;
   PorcentajeImpuesto: Prisma.Decimal | null;
+  Status: number | null;
 };
 
 type NamedCatalogAutofill = {
@@ -93,6 +94,7 @@ type ResolvedCatalogs = {
     codigo: number;
     nombre: string | null;
     porcentajeImpuesto: string | null;
+    status: number;
     existente: boolean;
   };
 };
@@ -108,12 +110,13 @@ type TaxInput = {
   porcentajeImpuesto?: string;
 };
 
-type CatalogImportKind = "categorias" | "marcas" | "tallas" | "colores" | "fabricantes";
+type CatalogImportKind = "categorias" | "marcas" | "tallas" | "colores" | "fabricantes" | "impuestos";
 
 type CatalogImportRow = {
   codigo?: string;
   nombre?: string;
   status?: number;
+  porcentajeImpuesto?: string;
   rowNumber: number;
 };
 
@@ -184,6 +187,8 @@ type CompleteMerchandisePayload = {
 
 @Injectable()
 export class InventoryService {
+  private ensureImpuestosStatusColumnPromise: Promise<void> | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
@@ -191,6 +196,8 @@ export class InventoryService {
   ) {}
 
   async getCreationMetadata() {
+    await this.ensureImpuestosStatusColumn();
+
     const canCreateArticles = this.canCreateArticlesInCurrentInstance();
     const [marcas, tallas, colores, fabricantes, categorias, impuestos] = await Promise.all([
       this.prisma.marcas.findMany({ orderBy: { Codigo: "asc" } }),
@@ -200,6 +207,7 @@ export class InventoryService {
       this.prisma.categorias.findMany({ orderBy: { Codigo: "asc" } }),
       this.prisma.impuestos.findMany({ orderBy: { Codigo: "asc" } }),
     ]);
+    const activeTax = this.pickPreferredTaxRecord(impuestos);
 
     return {
       defaults: {
@@ -216,7 +224,7 @@ export class InventoryService {
           },
         },
         precios: {
-          impuesto: DEFAULT_TAX_CODE,
+          impuesto: activeTax?.Codigo ?? DEFAULT_TAX_CODE,
           promocion: {
             activa: false,
           },
@@ -247,6 +255,7 @@ export class InventoryService {
           codigo: item.Codigo,
           nombre: item.Nombre,
           porcentajeImpuesto: item.PorcentajeImpuesto,
+          status: item.Status ?? 0,
         })),
       },
     };
@@ -362,6 +371,18 @@ export class InventoryService {
           nombre: item.Nombre,
           status: item.Status,
         }));
+      case "impuestos":
+        await this.ensureImpuestosStatusColumn();
+        return (
+          await this.prisma.impuestos.findMany({
+            orderBy: { Codigo: "asc" },
+          })
+        ).map((item) => ({
+          codigo: String(item.Codigo),
+          nombre: item.Nombre,
+          porcentajeImpuesto: item.PorcentajeImpuesto?.toString() ?? "0",
+          status: item.Status ?? 0,
+        }));
       default:
         return [];
     }
@@ -399,6 +420,70 @@ export class InventoryService {
 
       return {
         codigo: created.Codigo,
+      };
+    }
+
+    if (resolvedType === "impuestos") {
+      await this.ensureImpuestosStatusColumn();
+
+      const nombre = this.normalizeOptionalName(createCatalogEntryDto.nombre);
+      const explicitCode = this.parseTaxCatalogCode(createCatalogEntryDto.codigo);
+      const porcentajeImpuesto = this.parseTaxCatalogPercentage(createCatalogEntryDto.porcentajeImpuesto);
+
+      if (!nombre) {
+        throw new BadRequestException("Debe indicar el nombre del impuesto");
+      }
+
+      const codigo =
+        explicitCode ??
+        ((await this.prisma.impuestos.aggregate({ _max: { Codigo: true } }))._max.Codigo ?? 0) + 1;
+
+      const existingByCode = await this.prisma.impuestos.findUnique({
+        where: { Codigo: codigo },
+      });
+      const status = this.normalizeTaxStatus(
+        createCatalogEntryDto.status,
+        existingByCode?.Status ?? DEFAULT_STATUS,
+      );
+
+      const existingByName = await this.prisma.impuestos.findFirst({
+        where: { Nombre: { equals: nombre, mode: "insensitive" } },
+      });
+
+      if (existingByName && existingByName.Codigo !== codigo) {
+        throw new ConflictException("El nombre ya existe");
+      }
+
+      const saved = existingByCode
+        ? await this.prisma.impuestos.update({
+            where: { Codigo: codigo },
+            data: {
+              Nombre: nombre,
+              PorcentajeImpuesto: porcentajeImpuesto,
+              Status: status,
+            },
+          })
+        : await this.prisma.impuestos.create({
+            data: {
+              Codigo: codigo,
+              Nombre: nombre,
+              PorcentajeImpuesto: porcentajeImpuesto,
+              Status: status,
+            },
+          });
+
+      if (status === 1) {
+        await this.deactivateOtherTaxes(saved.Codigo);
+      }
+
+      await this.mirrorSyncService.enqueueCatalogEntryUpserts(resolvedType, [String(saved.Codigo)]);
+      await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+
+      return {
+        codigo: String(saved.Codigo),
+        nombre: saved.Nombre,
+        porcentajeImpuesto: saved.PorcentajeImpuesto?.toString() ?? "0",
+        status: saved.Status ?? 0,
       };
     }
 
@@ -574,6 +659,42 @@ export class InventoryService {
             codigo: deleted.Codigo,
             nombre: deleted.Nombre,
             status: deleted.Status,
+          };
+        }
+        case "impuestos": {
+          await this.ensureImpuestosStatusColumn();
+
+          const taxCode = this.parseTaxCatalogCode(normalizedCode);
+          if (taxCode === undefined) {
+            throw new BadRequestException("Debe indicar el codigo del impuesto");
+          }
+
+          const existing = await this.prisma.impuestos.findUnique({
+            where: { Codigo: taxCode },
+          });
+
+          if (!existing) {
+            throw new NotFoundException(`No se encontro ${this.getCatalogDisplayLabel(config.displayName)}.`);
+          }
+
+          await this.assertCatalogNotUsedByArticles(resolvedType, String(taxCode), config.displayName);
+
+          const deleted = await this.prisma.impuestos.delete({
+            where: { Codigo: taxCode },
+          });
+
+          if ((deleted.Status ?? 0) === 1) {
+            await this.activateFallbackTax(deleted.Codigo);
+          }
+
+          await this.mirrorSyncService.enqueueCatalogEntryDelete(resolvedType, String(deleted.Codigo));
+          await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+
+          return {
+            codigo: String(deleted.Codigo),
+            nombre: deleted.Nombre,
+            porcentajeImpuesto: deleted.PorcentajeImpuesto?.toString() ?? "0",
+            status: deleted.Status ?? 0,
           };
         }
         default:
@@ -930,11 +1051,13 @@ export class InventoryService {
           { CodigoBarra: { contains: buscar, mode: "insensitive" } },
           { Referencia: { contains: buscar, mode: "insensitive" } },
           { CodigoBarraAnt: { contains: buscar, mode: "insensitive" } },
+          { CodigoMarca: { contains: buscar.toUpperCase(), mode: "insensitive" } },
           { Nombre: { contains: buscar, mode: "insensitive" } },
           { Categoria: { contains: buscar.toUpperCase(), mode: "insensitive" } },
           { Fabricante: { contains: buscar.toUpperCase(), mode: "insensitive" } },
           { CodigoColor: { contains: buscar.toUpperCase(), mode: "insensitive" } },
           { Talla: { contains: buscar.toUpperCase(), mode: "insensitive" } },
+          { marcaRef: { is: { Nombre: { contains: buscar, mode: "insensitive" } } } },
           { categoriaRef: { is: { Nombre: { contains: buscar, mode: "insensitive" } } } },
           { fabricanteRef: { is: { Nombre: { contains: buscar, mode: "insensitive" } } } },
           { colorRef: { is: { Nombre: { contains: buscar, mode: "insensitive" } } } },
@@ -1358,11 +1481,13 @@ export class InventoryService {
       update: {
         Nombre: payload.impuesto.nombre,
         PorcentajeImpuesto: payload.impuesto.porcentajeImpuesto,
+        Status: payload.impuesto.status,
       },
       create: {
         Codigo: payload.impuesto.codigo,
         Nombre: payload.impuesto.nombre,
         PorcentajeImpuesto: payload.impuesto.porcentajeImpuesto,
+        Status: payload.impuesto.status,
       },
     });
   }
@@ -1601,6 +1726,8 @@ export class InventoryService {
   }
 
   private async resolveTaxInput(input: TaxInput) {
+    await this.ensureImpuestosStatusColumn();
+
     const explicitCode = input.codigo;
     const explicitName = this.normalizeOptionalName(input.nombre);
     const explicitPercentage = this.normalizeOptionalNumericString(input.porcentajeImpuesto);
@@ -1612,6 +1739,7 @@ export class InventoryService {
           codigo: record.Codigo,
           nombre: this.normalizeOptionalName(record.Nombre),
           porcentajeImpuesto: record.PorcentajeImpuesto ? record.PorcentajeImpuesto.toString() : null,
+          status: record.Status ?? DEFAULT_STATUS,
           existente: true,
         };
       }
@@ -1627,18 +1755,20 @@ export class InventoryService {
           codigo: record.Codigo,
           nombre: this.normalizeOptionalName(record.Nombre),
           porcentajeImpuesto: record.PorcentajeImpuesto ? record.PorcentajeImpuesto.toString() : null,
+          status: record.Status ?? DEFAULT_STATUS,
           existente: true,
         };
       }
     }
 
     if (!explicitName && !explicitPercentage && typeof explicitCode !== "number") {
-      const defaultTax = await this.prisma.impuestos.findUnique({ where: { Codigo: DEFAULT_TAX_CODE } });
+      const defaultTax = await this.findActiveTaxRecord();
       if (defaultTax) {
         return {
           codigo: defaultTax.Codigo,
           nombre: this.normalizeOptionalName(defaultTax.Nombre),
           porcentajeImpuesto: defaultTax.PorcentajeImpuesto ? defaultTax.PorcentajeImpuesto.toString() : null,
+          status: defaultTax.Status ?? DEFAULT_STATUS,
           existente: true,
         };
       }
@@ -1662,8 +1792,129 @@ export class InventoryService {
       codigo: explicitCode ?? ((aggregate._max.Codigo ?? 0) + 1),
       nombre: explicitName,
       porcentajeImpuesto: explicitPercentage,
+      status: DEFAULT_STATUS,
       existente: false,
     };
+  }
+
+  private normalizeTaxStatus(status: number | null | undefined, fallback = DEFAULT_STATUS) {
+    if (status === 0) {
+      return 0;
+    }
+
+    if (status === 1) {
+      return 1;
+    }
+
+    return fallback === 0 ? 0 : 1;
+  }
+
+  private async ensureImpuestosStatusColumn() {
+    if (!this.ensureImpuestosStatusColumnPromise) {
+      this.ensureImpuestosStatusColumnPromise = (async () => {
+        const columns = await this.prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
+          `SELECT column_name FROM information_schema.columns WHERE table_schema = 'dbo' AND table_name = 'IMPUESTOS' AND column_name = 'Status'`,
+        );
+
+        if (!columns.length) {
+          await this.prisma.$executeRawUnsafe(`ALTER TABLE dbo."IMPUESTOS" ADD COLUMN "Status" INTEGER`);
+        }
+
+        const activeRows = await this.prisma.$queryRawUnsafe<Array<{ count: number }>>(
+          `SELECT COUNT(*)::int AS count FROM dbo."IMPUESTOS" WHERE COALESCE("Status", 0) = 1`,
+        );
+
+        if ((activeRows[0]?.count ?? 0) === 0) {
+          const preferredRows = await this.prisma.$queryRawUnsafe<Array<{ Codigo: number }>>(
+            `SELECT "Codigo" FROM dbo."IMPUESTOS" ORDER BY CASE WHEN "Codigo" = ${DEFAULT_TAX_CODE} THEN 0 ELSE 1 END, "Codigo" ASC LIMIT 1`,
+          );
+          const preferredCode = preferredRows[0]?.Codigo;
+
+          if (typeof preferredCode === "number") {
+            await this.prisma.$executeRawUnsafe(
+              `UPDATE dbo."IMPUESTOS" SET "Status" = CASE WHEN "Codigo" = ${preferredCode} THEN 1 ELSE 0 END`,
+            );
+          }
+          return;
+        }
+
+        await this.prisma.$executeRawUnsafe(`UPDATE dbo."IMPUESTOS" SET "Status" = 0 WHERE "Status" IS NULL`);
+      })().catch((error) => {
+        this.ensureImpuestosStatusColumnPromise = null;
+        throw error;
+      });
+    }
+
+    await this.ensureImpuestosStatusColumnPromise;
+  }
+
+  private pickPreferredTaxRecord(records: TaxRecord[]) {
+    return (
+      records.find((record) => (record.Status ?? 0) === 1) ??
+      records.find((record) => record.Codigo === DEFAULT_TAX_CODE) ??
+      records[0] ??
+      null
+    );
+  }
+
+  private async findActiveTaxRecord() {
+    await this.ensureImpuestosStatusColumn();
+
+    const activeTax = await this.prisma.impuestos.findFirst({
+      where: { Status: 1 },
+      orderBy: { Codigo: "asc" },
+    });
+
+    if (activeTax) {
+      return activeTax;
+    }
+
+    const fallbackTax = await this.prisma.impuestos.findUnique({
+      where: { Codigo: DEFAULT_TAX_CODE },
+    });
+
+    if (fallbackTax) {
+      return fallbackTax;
+    }
+
+    return this.prisma.impuestos.findFirst({
+      orderBy: { Codigo: "asc" },
+    });
+  }
+
+  private async deactivateOtherTaxes(activeCode: number) {
+    await this.prisma.impuestos.updateMany({
+      where: {
+        Codigo: { not: activeCode },
+        Status: { not: 0 },
+      },
+      data: {
+        Status: 0,
+      },
+    });
+  }
+
+  private async activateFallbackTax(excludedCode?: number) {
+    await this.ensureImpuestosStatusColumn();
+
+    const fallback = await this.prisma.impuestos.findFirst({
+      where: excludedCode == null ? undefined : { Codigo: { not: excludedCode } },
+      orderBy: [
+        {
+          Codigo: "asc",
+        },
+      ],
+    });
+
+    if (!fallback) {
+      return;
+    }
+
+    await this.prisma.impuestos.update({
+      where: { Codigo: fallback.Codigo },
+      data: { Status: 1 },
+    });
+    await this.deactivateOtherTaxes(fallback.Codigo);
   }
 
   private async fetchCatalogRecords(payload: {
@@ -1674,6 +1925,10 @@ export class InventoryService {
     categoria?: string;
     tipoImpuesto?: number;
   }) {
+    if (typeof payload.tipoImpuesto === "number") {
+      await this.ensureImpuestosStatusColumn();
+    }
+
     return Promise.all([
       payload.codigoMarca ? this.prisma.marcas.findUnique({ where: { Codigo: payload.codigoMarca } }) : Promise.resolve(null),
       payload.talla ? this.prisma.tallas.findUnique({ where: { Codigo: payload.talla } }) : Promise.resolve(null),
@@ -1968,13 +2223,14 @@ export class InventoryService {
       normalizedType === "marcas" ||
       normalizedType === "tallas" ||
       normalizedType === "colores" ||
-      normalizedType === "fabricantes"
+      normalizedType === "fabricantes" ||
+      normalizedType === "impuestos"
     ) {
       return normalizedType;
     }
 
     throw new BadRequestException(
-      "Tipo de catalogo no soportado. Usa categorias, marcas, tallas, colores o fabricantes.",
+      "Tipo de catalogo no soportado. Usa categorias, marcas, tallas, colores, fabricantes o impuestos.",
     );
   }
 
@@ -1993,8 +2249,12 @@ export class InventoryService {
     const status = config.supportsStatus
       ? this.parseImportStatusValue(this.extractImportRowValue(row, statusAliases), rowNumber)
       : undefined;
+    const porcentajeImpuesto = catalogType === "impuestos"
+      ? this.normalizeOptionalNumericString(this.extractImportRowValue(row, ["porcentaje", "porcentajeimpuesto", "iva", "impuesto"]))
+        ?? undefined
+      : undefined;
 
-    if (!codigo && !nombre && status === undefined) {
+    if (!codigo && !nombre && status === undefined && porcentajeImpuesto === undefined) {
       return null;
     }
 
@@ -2002,6 +2262,7 @@ export class InventoryService {
       codigo,
       nombre,
       status,
+      porcentajeImpuesto,
       rowNumber,
     };
   }
@@ -2112,6 +2373,62 @@ export class InventoryService {
       return { result: "created" as const, codigo };
     }
 
+    if (catalogType === "impuestos") {
+      await this.ensureImpuestosStatusColumn();
+
+      const nombre = this.normalizeOptionalName(row.nombre);
+      if (!row.codigo && !nombre && row.porcentajeImpuesto === undefined) {
+        return { result: "skipped" as const };
+      }
+
+      if (!nombre) {
+        throw new BadRequestException(`Fila ${row.rowNumber}: debe indicar el nombre del impuesto.`);
+      }
+
+      const explicitCode = this.parseTaxCatalogCode(row.codigo);
+      const porcentajeImpuesto = this.parseTaxCatalogPercentage(row.porcentajeImpuesto);
+      const codigo =
+        explicitCode ??
+        ((await this.prisma.impuestos.aggregate({ _max: { Codigo: true } }))._max.Codigo ?? 0) + 1;
+
+      const existingByCode = await this.prisma.impuestos.findUnique({ where: { Codigo: codigo } });
+      const status = this.normalizeTaxStatus(row.status, existingByCode?.Status ?? DEFAULT_STATUS);
+      const existingByName = await this.prisma.impuestos.findFirst({
+        where: { Nombre: { equals: nombre, mode: "insensitive" } },
+      });
+
+      if (existingByName && existingByName.Codigo !== codigo) {
+        return { result: "skipped" as const, codigo: String(existingByName.Codigo) };
+      }
+
+      const saved = existingByCode
+        ? await this.prisma.impuestos.update({
+            where: { Codigo: codigo },
+            data: {
+              Nombre: nombre,
+              PorcentajeImpuesto: porcentajeImpuesto,
+              Status: status,
+            },
+          })
+        : await this.prisma.impuestos.create({
+            data: {
+              Codigo: codigo,
+              Nombre: nombre,
+              PorcentajeImpuesto: porcentajeImpuesto,
+              Status: status,
+            },
+          });
+
+      if (status === 1) {
+        await this.deactivateOtherTaxes(saved.Codigo);
+      }
+
+      return {
+        result: existingByCode ? ("updated" as const) : ("created" as const),
+        codigo: String(saved.Codigo),
+      };
+    }
+
     if (!row.codigo && !row.nombre) {
       return { result: "skipped" as const };
     }
@@ -2184,6 +2501,17 @@ export class InventoryService {
           supportsStatus: true,
           codeAliases: ["codigo", "cod", "codigofabricante", "codfabricante", "id"],
           nameAliases: ["nombre", "descripcion", "detalle", "fabricante", "fabricantes"],
+        };
+      case "impuestos":
+        return {
+          displayName: "impuesto",
+          defaultName: "IVA",
+          maxCodeLength: 6,
+          maxNameLength: 60,
+          supportsName: true,
+          supportsStatus: true,
+          codeAliases: ["codigo", "cod", "codigoimpuesto", "codimpuesto", "id"],
+          nameAliases: ["nombre", "descripcion", "detalle", "impuesto", "impuestos", "iva"],
         };
       default:
         return {
@@ -2314,7 +2642,7 @@ export class InventoryService {
   }
 
   private async namedCatalogCodeExists(
-    catalogType: Exclude<CatalogImportKind, "tallas">,
+    catalogType: Exclude<CatalogImportKind, "tallas" | "impuestos">,
     codigo: string,
   ) {
     switch (catalogType) {
@@ -2330,7 +2658,7 @@ export class InventoryService {
   }
 
   private async namedCatalogNameExists(
-    catalogType: Exclude<CatalogImportKind, "tallas">,
+    catalogType: Exclude<CatalogImportKind, "tallas" | "impuestos">,
     nombre: string,
   ) {
     switch (catalogType) {
@@ -2362,7 +2690,7 @@ export class InventoryService {
   }
 
   private async createNamedCatalogRecord(
-    catalogType: Exclude<CatalogImportKind, "tallas">,
+    catalogType: Exclude<CatalogImportKind, "tallas" | "impuestos">,
     data: { Codigo: string; Nombre: string; Status: number },
   ) {
     switch (catalogType) {
@@ -2510,6 +2838,19 @@ export class InventoryService {
             },
           },
         });
+      case "impuestos":
+        {
+          const taxCode = this.parseTaxCatalogCode(codigo);
+          if (taxCode === undefined) {
+            return 0;
+          }
+
+        return this.prisma.inventario.count({
+          where: {
+            TipoImpuesto: taxCode,
+          },
+        });
+        }
       default:
         return 0;
     }
@@ -2694,5 +3035,32 @@ export class InventoryService {
 
   private normalizeOptionalNumericString(value: string | null | undefined) {
     return typeof value === "string" ? value.trim() || null : null;
+  }
+
+  private parseTaxCatalogCode(value: string | undefined) {
+    const normalized = this.normalizeOptionalUpper(value);
+    if (!normalized) {
+      return undefined;
+    }
+
+    if (!/^\d+$/.test(normalized)) {
+      throw new BadRequestException("El codigo del impuesto debe ser numerico.");
+    }
+
+    return Number.parseInt(normalized, 10);
+  }
+
+  private parseTaxCatalogPercentage(value: string | undefined) {
+    const normalized = this.normalizeOptionalNumericString(value);
+    if (!normalized) {
+      return "0";
+    }
+
+    const parsed = Number(normalized.replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      throw new BadRequestException("El porcentaje del impuesto no es valido.");
+    }
+
+    return parsed.toString();
   }
 }

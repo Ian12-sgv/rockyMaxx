@@ -19,4 +19,11 @@ export class CreateCatalogEntryDto {
   @IsOptional()
   @IsInt()
   status?: number;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(20)
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  porcentajeImpuesto?: string;
 }

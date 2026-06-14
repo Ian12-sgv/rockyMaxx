@@ -295,6 +295,7 @@ model Impuestos {
   Codigo             Int           @id
   Nombre             String?
   PorcentajeImpuesto Decimal?
+  Status             Int?
   inventario         Inventario[]
 
   @@map("IMPUESTOS")

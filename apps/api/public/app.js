@@ -4,10 +4,13 @@ const USER_STORAGE_KEY = "rocky.maxx.user";
 const REMEMBER_SESSION_STORAGE_KEY = "rocky.maxx.remember-session";
 const CATALOG_IMPORT_EXCEL_PERMISSION_CODE = "CATALOG_IMPORT_EXCEL";
 const EXISTENCE_AUTO_REFRESH_MS = 30000;
+const FACTURACION_FROZEN_STORAGE_KEY = "rocky.maxx.facturacion.frozen";
+const FACTURACION_PRICE_LIST_ORDER = ["detal", "mayor", "afiliado"];
 
 let existenceAutoRefreshHandle = null;
 let devReturnRemotePullInFlight = false;
 let devReturnRemotePullLastAt = 0;
+let articlePromotionLastEditedField = "descuento";
 
 const state = {
   booting: true,
@@ -169,6 +172,47 @@ const state = {
     selectedCodigo: "",
     draft: createEmptySucursalDraft(),
   },
+  clientes: {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedCodigo: "",
+    draft: createEmptyClienteDraft(),
+  },
+  trabajadores: {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedCedula: "",
+    draft: createEmptyTrabajadorDraft(),
+  },
+  impuestos: {
+    loading: false,
+    saving: false,
+    items: [],
+    selectedCodigo: "",
+    draft: createEmptyImpuestoDraft(),
+    lookup: {
+      open: false,
+      loading: false,
+      items: [],
+    },
+  },
+  exchangeRateRegister: {
+    loading: false,
+    saving: false,
+    draft: createEmptyExchangeRateRegisterDraft(),
+    savedDraft: createEmptyExchangeRateRegisterDraft(),
+    updatedAt: "",
+  },
   cashRegisters: {
     loading: false,
     loadingMetadata: false,
@@ -179,6 +223,33 @@ const state = {
     search: "",
     selectedKey: "",
     draft: createEmptyCashRegisterDraft(),
+  },
+  facturacion: {
+    draft: createEmptyFacturacionDraft(),
+    exchangeRate: createEmptyFacturacionExchangeRateState(),
+    selectedLineIndex: -1,
+    discountAuth: createEmptyFacturacionDiscountAuthState(),
+    lookup: {
+      open: false,
+      loading: false,
+      type: "",
+      items: [],
+    },
+    lineLookup: {
+      open: false,
+      loading: false,
+      lineIndex: -1,
+      search: "",
+      items: [],
+      activeIndex: -1,
+    },
+    clientEditor: {
+      open: false,
+      loading: false,
+      saving: false,
+      draft: createEmptyClienteDraft(),
+    },
+    frozenLookup: createEmptyFacturacionFrozenLookupState(),
   },
   loadingForm: false,
   submittingForm: false,
@@ -346,6 +417,47 @@ async function hydrateAuthenticatedState() {
     search: "",
     selectedCodigo: "",
     draft: createEmptySucursalDraft(),
+  };
+  state.clientes = {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedCodigo: "",
+    draft: createEmptyClienteDraft(),
+  };
+  state.trabajadores = {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedCedula: "",
+    draft: createEmptyTrabajadorDraft(),
+  };
+  state.impuestos = {
+    loading: false,
+    saving: false,
+    items: [],
+    selectedCodigo: "",
+    draft: createEmptyImpuestoDraft(),
+    lookup: {
+      open: false,
+      loading: false,
+      items: [],
+    },
+  };
+  state.exchangeRateRegister = {
+    loading: false,
+    saving: false,
+    draft: createEmptyExchangeRateRegisterDraft(),
+    savedDraft: createEmptyExchangeRateRegisterDraft(),
+    updatedAt: "",
   };
   state.cashRegisters = {
     loading: false,
@@ -648,6 +760,12 @@ function renderShellView() {
       ${renderAdjustmentLookupModal()}
       ${renderTransferLookupModal()}
       ${renderDevReturnLookupModal()}
+      ${renderImpuestosLookupModal()}
+      ${renderFacturacionLookupModal()}
+      ${renderFacturacionClientEditorModal()}
+      ${renderFacturacionLineLookupModal()}
+      ${renderFacturacionFrozenLookupModal()}
+      ${renderFacturacionDiscountAuthModal()}
     </main>
   `;
 }
@@ -680,7 +798,8 @@ function renderDesktopArchivoMenu() {
         </button>
         <button class="modern-dropdown-link" type="button" data-menu-view="clientes">Clientes</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="sucursales">Sucursales</button>
-        <button class="modern-dropdown-link" type="button" data-menu-view="personal">Personal</button>
+        <button class="modern-dropdown-link" type="button" data-menu-view="trabajadores">Trabajadores</button>
+        <button class="modern-dropdown-link" type="button" data-menu-view="impuestos">Impuesto</button>
       </div>
       <div class="modern-mega-column">
         <button class="modern-mega-head" type="button" data-menu-view="articulos">
@@ -733,6 +852,14 @@ function renderDesktopWorkspace() {
     return renderDevReturnRecordsWorkspace();
   }
 
+  if (state.currentView === "facturacion") {
+    return renderFacturacionWorkspace();
+  }
+
+  if (state.currentView === "registrar-tasa-cambio") {
+    return renderExchangeRateRegisterWorkspace();
+  }
+
   if (state.currentView === "cajas") {
     return renderCashRegistersWorkspace();
   }
@@ -751,6 +878,18 @@ function renderDesktopWorkspace() {
 
   if (state.currentView === "sucursales") {
     return renderSucursalesWorkspace();
+  }
+
+  if (state.currentView === "clientes") {
+    return renderClientesWorkspace();
+  }
+
+  if (state.currentView === "trabajadores" || state.currentView === "personal") {
+    return renderTrabajadoresWorkspace();
+  }
+
+  if (state.currentView === "impuestos") {
+    return renderImpuestosWorkspace();
   }
 
   if (["categorias", "marcas", "tallas", "colores", "fabricantes"].includes(state.currentView)) {
@@ -845,7 +984,10 @@ function getDesktopViewLabel(view) {
     categorias: "Categorías",
     clientes: "Clientes",
     sucursales: "Sucursales",
-    personal: "Personal",
+    personal: "Trabajadores",
+    trabajadores: "Trabajadores",
+    impuestos: "Impuesto",
+    "registrar-tasa-cambio": "Registrar tasa cambio",
     reportes: "Reportes",
     usuarios: "Usuarios",
     roles: "Roles",
@@ -872,7 +1014,8 @@ function renderDesktopArchivoMenuV2() {
         </button>
         ${renderDesktopMenuLink("clientes", "Clientes")}
         ${renderDesktopMenuLink("sucursales", "Sucursales")}
-        ${renderDesktopMenuLink("personal", "Personal")}
+        ${renderDesktopMenuLink("trabajadores", "Trabajadores")}
+        ${renderDesktopMenuLink("impuestos", "Impuesto")}
       </div>
       ${
         inventoryOpen
@@ -899,9 +1042,11 @@ function renderDesktopProcesosMenu() {
   return `
     <div class="modern-mega-menu">
       <div class="modern-mega-column modern-mega-column-root">
+        ${renderDesktopMenuLink("facturacion", "Facturacion")}
+        ${renderDesktopMenuLink("registrar-tasa-cambio", "Registrar tasa cambio")}
         ${renderDesktopMenuLink("borrador-devoluciones", "Borrador devoluciones")}
         ${renderDesktopMenuLink("ajuste-inventario", "Ajuste de inventario")}
-        ${renderDesktopMenuLink("cajas", "Caja")}
+        ${renderDesktopMenuLink("cajas", "Apertura de caja")}
         <button
           class="modern-dropdown-link modern-dropdown-link-with-arrow ${transfersOpen ? "modern-dropdown-link-open" : ""}"
           type="button"
@@ -3373,6 +3518,655 @@ function renderTransferStatusBadge(status) {
   return `<span class="modern-chip">${escapeHtml(label)}</span>`;
 }
 
+function renderFacturacionWorkspace() {
+  const draft = state.facturacion.draft || createEmptyFacturacionDraft();
+  const items = Array.isArray(draft.items) && draft.items.length ? draft.items : createEmptyFacturacionItems();
+  const activeTax = getActiveFacturacionTax();
+  const exchangeRate = state.facturacion.exchangeRate || createEmptyFacturacionExchangeRateState();
+  const summary = calculateFacturacionSummary(items, activeTax, exchangeRate, draft);
+  const exchangeRateLabel = formatFacturacionExchangeRateLabel(exchangeRate);
+  const selectedLineIndex = getFacturacionSelectedLineIndex();
+  const currentPriceListLabel = getFacturacionPriceListLabel(getFacturacionSelectedLinePriceList());
+  const discountPercentInputValue = getFacturacionDiscountPercentInputValue(draft, summary);
+  const lineRows = items.map((item, index) => {
+    const rowNumber = index + 1;
+    const normalizedLine = normalizeFacturacionLineDraft(item);
+    const isSelected = index === selectedLineIndex;
+    const priceListCode = String(normalizedLine.codigoBarra || "").trim()
+      ? getFacturacionPriceListShortLabel(normalizedLine.priceList)
+      : "";
+    return `
+      <tr class="${isSelected ? "facturacion-line-selected" : ""}" data-facturacion-select-line="${rowNumber}">
+        <td class="facturacion-row-number">${rowNumber}</td>
+        <td class="facturacion-price-list-cell">${escapeHtml(priceListCode)}</td>
+        <td><input type="text" data-facturacion-line-codigo="${rowNumber}" value="${escapeHtml(toInputValue(normalizedLine.codigoBarra))}" /></td>
+        <td><input type="text" value="${escapeHtml(toInputValue(normalizedLine.nombre))}" readonly /></td>
+        <td><input type="text" value="${escapeHtml(toInputValue(normalizedLine.precio))}" class="facturacion-cell-right" readonly /></td>
+        <td><input type="text" value="${escapeHtml(toInputValue(normalizedLine.cantidad))}" class="facturacion-cell-right" readonly /></td>
+        <td><input type="text" value="${escapeHtml(toInputValue(normalizedLine.subtotal))}" class="facturacion-cell-right" readonly /></td>
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <div class="modern-page facturacion-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Facturacion"])}
+
+      <section class="transfer-register-shell adjustment-window facturacion-window">
+        <div class="adjustment-titlebar facturacion-titlebar">
+          <span>Facturacion - (Factura Nro 1)</span>
+          <div class="facturacion-titlebar-hints">
+            <span>(F2 - Consultar Precios)</span>
+            <span>(F3 - Consultar Reglas Activas)</span>
+          </div>
+        </div>
+
+        <div class="facturacion-form">
+          <div class="facturacion-header-panel">
+            <div class="facturacion-field-row">
+              <label class="facturacion-field-label">Cliente</label>
+              <input class="facturacion-code-input" type="text" data-facturacion-cliente-codigo value="${escapeHtml(toInputValue(draft.clienteCodigo))}" />
+              <button type="button" class="facturacion-lookup-button" data-facturacion-open-cliente-lookup title="Buscar cliente">...</button>
+              <input class="facturacion-name-input" type="text" data-facturacion-cliente-nombre value="${escapeHtml(toInputValue(draft.clienteNombre))}" readonly />
+              <input class="facturacion-side-input" type="text" data-facturacion-cliente-info value="${escapeHtml(toInputValue(draft.clienteInfo))}" readonly />
+            </div>
+
+            <div class="facturacion-field-row">
+              <label class="facturacion-field-label">Vendedor</label>
+              <input class="facturacion-code-input" type="text" data-facturacion-vendedor-cedula value="${escapeHtml(toInputValue(draft.vendedorCedula))}" />
+              <button type="button" class="facturacion-lookup-button" data-facturacion-open-vendedor-lookup title="Buscar vendedor">...</button>
+              <input class="facturacion-name-input" type="text" data-facturacion-vendedor-nombre value="${escapeHtml(toInputValue(draft.vendedorNombre))}" readonly />
+              <input class="facturacion-side-input" type="text" data-facturacion-vendedor-info value="${escapeHtml(toInputValue(draft.vendedorInfo))}" readonly />
+            </div>
+
+            <label class="facturacion-checkbox-row">
+              <input type="checkbox" data-facturacion-contingencia ${draft.emisionContingencia ? "checked" : ""} />
+              <span>Emision de Contingencia</span>
+            </label>
+          </div>
+
+          <div class="facturacion-lines-panel">
+            <div class="facturacion-grid-shell">
+              <table class="facturacion-grid-table">
+                <thead>
+                  <tr>
+                    <th class="facturacion-index-head">-</th>
+                    <th class="facturacion-empty-head"></th>
+                    <th>Codigo Barra</th>
+                    <th>Nombre</th>
+                    <th>Precio</th>
+                    <th>Cant.</th>
+                    <th>Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${lineRows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="facturacion-summary-panel">
+            <div class="facturacion-summary-grid">
+              <div class="facturacion-summary-block">
+                <span class="facturacion-summary-label">Valor de la mercancia</span>
+                <div class="facturacion-summary-input-row">
+                  <input type="text" value="${escapeHtml(summary.valorMercanciaDisplay)}" class="facturacion-cell-right" readonly />
+                </div>
+              </div>
+
+              <div class="facturacion-summary-block">
+                <span class="facturacion-summary-label">Descuento</span>
+                <div class="facturacion-summary-inline-head">
+                  <span>%</span>
+                  <input
+                    type="text"
+                    value="${escapeHtml(discountPercentInputValue)}"
+                    class="facturacion-cell-right facturacion-small-input ${draft.overrideDiscountAuthorized ? "facturacion-discount-enabled" : ""}"
+                    data-facturacion-global-discount
+                    ${draft.overrideDiscountAuthorized ? "" : "readonly"}
+                  />
+                </div>
+                <div class="facturacion-summary-formula facturacion-summary-formula-with-symbols">
+                  <span>-</span>
+                  <input type="text" value="${escapeHtml(summary.descuentoMontoDisplay)}" class="facturacion-cell-right" readonly />
+                </div>
+              </div>
+
+              <div class="facturacion-summary-block">
+                <span class="facturacion-summary-label">SubTotal</span>
+                <div class="facturacion-summary-formula facturacion-summary-formula-with-symbols">
+                  <span>=</span>
+                  <input type="text" value="${escapeHtml(summary.subtotalDisplay)}" class="facturacion-cell-right" readonly />
+                  <span>+</span>
+                </div>
+              </div>
+
+              <div class="facturacion-summary-block">
+                <span class="facturacion-summary-label">Impuesto</span>
+                <div class="facturacion-summary-inline-head">
+                  <span>%</span>
+                  <input
+                    type="text"
+                    value="${escapeHtml(summary.impuestoPorcentajeDisplay)}"
+                    class="facturacion-cell-right facturacion-small-input"
+                    readonly
+                  />
+                </div>
+                <div class="facturacion-summary-formula facturacion-summary-formula-with-symbols">
+                  <input
+                    type="text"
+                    value="${escapeHtml(summary.impuestoMontoDisplay)}"
+                    class="facturacion-cell-right"
+                    readonly
+                  />
+                  <span>=</span>
+                </div>
+              </div>
+
+              <div class="facturacion-summary-total">
+                <div class="facturacion-total-caption">
+                  <strong>${escapeHtml(summary.totalUnidadesDisplay)}</strong>
+                  <span>Total unidades</span>
+                </div>
+                <div class="facturacion-total-caption">
+                  <span>Total venta</span>
+                </div>
+                <input type="text" value="${escapeHtml(summary.totalVentaDisplay)}" class="facturacion-total-input facturacion-cell-right" readonly />
+              </div>
+            </div>
+
+            <div class="facturacion-usd-row">
+              <span>TOTAL USD:</span>
+              <input
+                type="text"
+                value="${escapeHtml(summary.totalUsdDisplay)}"
+                class="facturacion-cell-right facturacion-usd-input"
+                readonly
+              />
+            </div>
+            <div class="muted">${escapeHtml(exchangeRateLabel)}</div>
+          </div>
+
+          <div class="facturacion-actions-panel">
+            <div class="facturacion-actions-left">
+              <button type="button" class="button button-ghost" data-facturacion-action="descuento">Descuento</button>
+              <button type="button" class="button button-ghost" data-facturacion-action="congelar">Congelar</button>
+              <button type="button" class="button button-ghost" data-facturacion-action="descongelar">Descongelar</button>
+              <button type="button" class="button button-ghost" data-facturacion-action="cambiar-lista">Cambiar Lista (${escapeHtml(currentPriceListLabel)})</button>
+              <button type="button" class="button button-ghost" data-facturacion-action="salir-vista">Salir</button>
+              <button type="button" class="button button-danger" data-facturacion-action="cancelar-documento">Cancelar</button>
+            </div>
+            <button type="button" class="button button-primary facturacion-preview-button" data-facturacion-action="previsualizar">
+              Previsualizar
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderFacturacionLookupModal() {
+  const lookup = state.facturacion.lookup;
+  if (!lookup?.open) {
+    return "";
+  }
+
+  const isWorkerLookup = lookup.type === "trabajadores";
+  const items = Array.isArray(lookup.items) ? lookup.items : [];
+  const totalLabel = lookup.loading
+    ? "Cargando registros..."
+    : `${isWorkerLookup ? "Trabajadores" : "Clientes"} (${escapeHtml(String(items.length))} Registros)`;
+
+  return `
+    <div class="article-lookup-overlay facturacion-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-facturacion-lookup-close aria-label="Cerrar buscador"></button>
+      <section class="article-lookup-dialog facturacion-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="facturacion-lookup-title">
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">${isWorkerLookup ? "Vendedores" : "Clientes"}</p>
+            <h3 id="facturacion-lookup-title">${totalLabel}</h3>
+            <p>${isWorkerLookup ? "Selecciona un trabajador para cargarlo como vendedor." : "Selecciona un cliente para cargarlo en la factura."}</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">
+              ${lookup.loading ? "Cargando..." : `${escapeHtml(String(items.length))} registros`}
+            </span>
+            <button class="article-command-button" type="button" data-facturacion-lookup-refresh ${lookup.loading ? "disabled" : ""}>
+              Actualizar
+            </button>
+            <button class="article-command-button" type="button" data-facturacion-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          lookup.loading
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Cargando datos</h3>
+                <p>Estamos trayendo los registros disponibles para esta factura.</p>
+              </div>
+            `
+            : items.length === 0
+              ? `
+                <div class="empty-state article-lookup-empty">
+                  <h3>Sin registros</h3>
+                  <p>No hay datos disponibles para mostrar en este catalogo.</p>
+                </div>
+              `
+              : `
+                <div class="table-wrap article-lookup-table-wrap facturacion-lookup-table-wrap">
+                  <table class="data-table article-lookup-table facturacion-lookup-table">
+                    <thead>
+                      <tr>
+                        ${
+                          isWorkerLookup
+                            ? `
+                              <th>Cedula</th>
+                              <th>Nombre</th>
+                              <th>Cargo</th>
+                              <th>Status</th>
+                            `
+                            : `
+                              <th>Cedula / RIF</th>
+                              <th>Nombre</th>
+                              <th>Tipo</th>
+                              <th>Status</th>
+                            `
+                        }
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${items.map((item) => renderFacturacionLookupRow(item, lookup.type)).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderFacturacionLookupRow(item, type) {
+  const isWorkerLookup = type === "trabajadores";
+  const recordId = isWorkerLookup ? String(item.cedula || "") : String(item.codigo || "");
+  const secondary = isWorkerLookup ? (item.cargoNombre || item.cargo || "-") : (item.tipoNombre || "-");
+  const statusLabel = item.statusNombre || (Number(item.status ?? 1) === 1 ? "Activo" : "Inactivo");
+
+  return `
+    <tr class="article-lookup-row" data-facturacion-lookup-select="${escapeHtml(recordId)}">
+      <td><strong>${escapeHtml(recordId || "-")}</strong></td>
+      <td>${escapeHtml(item.nombre || "-")}</td>
+      <td>${escapeHtml(secondary)}</td>
+      <td>${escapeHtml(statusLabel)}</td>
+    </tr>
+  `;
+}
+
+function renderFacturacionClientEditorModal() {
+  const editor = state.facturacion.clientEditor;
+  if (!editor?.open) {
+    return "";
+  }
+
+  const metadata = state.clientes.metadata || {};
+  const draft = editor.draft || createEmptyClienteDraft(metadata);
+  const tiposCliente = Array.isArray(metadata.tiposCliente) ? metadata.tiposCliente : [];
+  const tiposContribuyente = Array.isArray(metadata.tiposContribuyente) ? metadata.tiposContribuyente : [];
+  const isBusy = editor.loading || editor.saving;
+
+  return `
+    <div class="article-lookup-overlay facturacion-client-editor-overlay">
+      <button class="article-lookup-backdrop" type="button" data-facturacion-client-editor-close aria-label="Cerrar cliente"></button>
+      <section class="transfer-register-shell adjustment-window clients-window facturacion-client-editor-modal" role="dialog" aria-modal="true" aria-labelledby="facturacion-client-editor-title">
+        <div class="adjustment-titlebar" id="facturacion-client-editor-title">Clientes</div>
+        <form id="facturacion-client-editor-form" class="adjustment-form clients-form">
+          <div class="transfer-command-bar adjustment-command-bar clients-command-bar facturacion-client-editor-command-bar" role="toolbar" aria-label="Acciones de cliente">
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="facturacion-client-editor-form" ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${editor.saving ? "Guardando" : "Guardar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-facturacion-client-editor-edit ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">E</span>
+              ${editor.loading ? "Cargando" : "Editar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-facturacion-client-editor-close ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">S</span>
+              Salir
+            </button>
+          </div>
+
+          <div class="clients-panel">
+            <div class="clients-grid">
+              <label class="clients-field clients-field-code">
+                <span>Cedula / RIF</span>
+                <input
+                  type="text"
+                  name="codigo"
+                  value="${escapeHtml(toInputValue(draft.codigo))}"
+                  maxlength="15"
+                  placeholder="V12345678"
+                  ${draft.originalCodigo ? "disabled" : ""}
+                />
+              </label>
+
+              <label class="clients-field clients-field-date">
+                <span>F. Ingreso</span>
+                <input
+                  type="date"
+                  name="fechaIngreso"
+                  value="${escapeHtml(toDateInputValue(draft.fechaIngreso))}"
+                />
+              </label>
+
+              <label class="clients-field clients-field-wide">
+                <span>Nombre</span>
+                <input
+                  type="text"
+                  name="nombre"
+                  value="${escapeHtml(toInputValue(draft.nombre))}"
+                  maxlength="120"
+                  placeholder="Nombre del cliente"
+                />
+              </label>
+
+              <label class="clients-field clients-field-type">
+                <span>Tipo</span>
+                <select name="tipo">
+                  ${renderSelectOptions(
+                    tiposCliente.map((item) => ({ value: String(item.codigo), label: `${item.codigo} - ${item.nombre}` })),
+                    String(draft.tipo || ""),
+                  )}
+                </select>
+              </label>
+
+              <label class="clients-field clients-field-phone">
+                <span>Telefono</span>
+                <input
+                  type="text"
+                  name="telefono"
+                  value="${escapeHtml(toInputValue(draft.telefono))}"
+                  maxlength="15"
+                  placeholder="Telefono"
+                />
+              </label>
+
+              <label class="clients-field clients-field-wide clients-field-address">
+                <span>Direccion</span>
+                <textarea name="direccion" rows="3" maxlength="300" placeholder="Direccion">${escapeHtml(toInputValue(draft.direccion))}</textarea>
+              </label>
+
+              <label class="clients-field clients-field-wide clients-field-contribuyente">
+                <span>Contribuyente</span>
+                <select name="tipoContribuyente">
+                  ${renderSelectOptions(
+                    tiposContribuyente.map((item) => ({ value: String(item.codigo), label: `${item.codigo} - ${item.nombre}` })),
+                    String(draft.tipoContribuyente || ""),
+                  )}
+                </select>
+              </label>
+
+              <fieldset class="clients-status-row">
+                <legend>Status</legend>
+                <label>
+                  <input type="radio" name="status" value="1" ${Number(draft.status ?? 1) === 1 ? "checked" : ""} />
+                  Activo
+                </label>
+                <label>
+                  <input type="radio" name="status" value="0" ${Number(draft.status ?? 1) === 0 ? "checked" : ""} />
+                  Inactivo
+                </label>
+              </fieldset>
+            </div>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderFacturacionLineLookupModal() {
+  const lookup = state.facturacion.lineLookup;
+  if (!lookup?.open) {
+    return "";
+  }
+
+  const items = Array.isArray(lookup.items) ? lookup.items : [];
+  const activeIndex = Number.isInteger(lookup.activeIndex) ? lookup.activeIndex : -1;
+  const totalLabel = lookup.loading
+    ? "Cargando coincidencias..."
+    : `Coincidencias (${escapeHtml(String(items.length))} Registros)`;
+
+  return `
+    <div class="article-lookup-overlay facturacion-line-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-facturacion-line-lookup-close aria-label="Cerrar buscador"></button>
+      <section class="article-lookup-dialog facturacion-line-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="facturacion-line-lookup-title" tabindex="-1" data-facturacion-line-lookup-dialog>
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Articulos</p>
+            <h3 id="facturacion-line-lookup-title">${totalLabel}</h3>
+            <p>Selecciona el articulo correcto para esta linea de la factura.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">
+              ${lookup.loading ? "Cargando..." : `${escapeHtml(String(items.length))} registros`}
+            </span>
+            <button class="article-command-button" type="button" data-facturacion-line-lookup-refresh ${lookup.loading ? "disabled" : ""}>
+              Actualizar
+            </button>
+            <button class="article-command-button" type="button" data-facturacion-line-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          lookup.loading
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Buscando articulos</h3>
+                <p>Estamos consultando inventario con la referencia o marca indicada.</p>
+              </div>
+            `
+            : items.length === 0
+              ? `
+                <div class="empty-state article-lookup-empty">
+                  <h3>Sin coincidencias</h3>
+                  <p>No se encontraron articulos para la busqueda actual.</p>
+                </div>
+              `
+              : `
+                <div class="table-wrap article-lookup-table-wrap facturacion-line-lookup-table-wrap">
+                  <table class="data-table article-lookup-table facturacion-line-lookup-table">
+                    <thead>
+                      <tr>
+                        <th>Codigo Barra</th>
+                        <th>Referencia</th>
+                        <th>Marca</th>
+                        <th>Nombre</th>
+                        <th>Precio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${items.map((item, index) => renderFacturacionLineLookupRow(item, index, index === activeIndex)).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderFacturacionLineLookupRow(item, index, isActive) {
+  const lineIndex = Number.isInteger(state.facturacion?.lineLookup?.lineIndex) ? state.facturacion.lineLookup.lineIndex : -1;
+  const precio = resolveFacturacionPriceForList(item, getFacturacionLinePriceList(lineIndex));
+
+  return `
+    <tr
+      class="article-lookup-row ${isActive ? "article-lookup-row-active" : ""}"
+      data-facturacion-line-lookup-select="${escapeHtml(String(index))}"
+      tabindex="0"
+      aria-selected="${isActive ? "true" : "false"}"
+    >
+      <td><strong>${escapeHtml(item.codigoBarra || "-")}</strong></td>
+      <td>${escapeHtml(item.referencia || "-")}</td>
+      <td>${escapeHtml(item.general?.marca?.nombre || item.general?.marca?.codigo || "-")}</td>
+      <td>${escapeHtml(item.general?.nombre || item.nombre || "-")}</td>
+      <td class="facturacion-cell-right">${escapeHtml(formatTransferAmount(precio))}</td>
+    </tr>
+  `;
+}
+
+function renderFacturacionFrozenLookupModal() {
+  const lookup = state.facturacion.frozenLookup;
+  if (!lookup?.open) {
+    return "";
+  }
+
+  const items = Array.isArray(lookup.items) ? lookup.items : [];
+  const activeTax = getActiveFacturacionTax();
+  const totalLabel = `Facturas congeladas (${escapeHtml(String(items.length))} Registros)`;
+
+  return `
+    <div class="article-lookup-overlay facturacion-frozen-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-facturacion-frozen-close aria-label="Cerrar facturas congeladas"></button>
+      <section class="article-lookup-dialog facturacion-frozen-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="facturacion-frozen-lookup-title">
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Facturacion</p>
+            <h3 id="facturacion-frozen-lookup-title">${totalLabel}</h3>
+            <p>Selecciona una factura congelada para retomarla exactamente donde quedo.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">${escapeHtml(String(items.length))} registros</span>
+            <button class="article-command-button" type="button" data-facturacion-frozen-refresh>
+              Actualizar
+            </button>
+            <button class="article-command-button" type="button" data-facturacion-frozen-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          items.length === 0
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Sin facturas congeladas</h3>
+                <p>Todavia no hay ventas congeladas guardadas en esta PC para este usuario.</p>
+              </div>
+            `
+            : `
+              <div class="table-wrap article-lookup-table-wrap facturacion-frozen-lookup-table-wrap">
+                <table class="data-table article-lookup-table facturacion-frozen-lookup-table">
+                  <thead>
+                    <tr>
+                      <th>Guardada</th>
+                      <th>Cliente</th>
+                      <th>Vendedor</th>
+                      <th>Lista</th>
+                      <th>Items</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${items.map((item) => renderFacturacionFrozenLookupRow(item, activeTax)).join("")}
+                  </tbody>
+                </table>
+              </div>
+            `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderFacturacionFrozenLookupRow(item, activeTax) {
+  const draft = normalizeFacturacionDraft(item?.draft);
+  const exchangeRate = normalizeFacturacionExchangeRateState(item?.exchangeRate);
+  const summary = calculateFacturacionSummary(draft.items, activeTax, exchangeRate, draft);
+  const clientLabel = [draft.clienteCodigo, draft.clienteNombre].filter(Boolean).join(" - ") || "Sin cliente";
+  const sellerLabel = [draft.vendedorCedula, draft.vendedorNombre].filter(Boolean).join(" - ") || "Sin vendedor";
+  const lineCount = draft.items.filter((line) => String(line?.codigoBarra || "").trim()).length;
+
+  return `
+    <tr class="article-lookup-row" data-facturacion-frozen-select="${escapeHtml(String(item.id || ""))}">
+      <td><strong>${escapeHtml(formatDateDisplay(item.savedAt))}</strong></td>
+      <td>${escapeHtml(clientLabel)}</td>
+      <td>${escapeHtml(sellerLabel)}</td>
+      <td>${escapeHtml(getFacturacionDraftPriceListSummaryLabel(draft))}</td>
+      <td class="facturacion-cell-right">${escapeHtml(String(lineCount))}</td>
+      <td class="facturacion-cell-right">${escapeHtml(summary.totalVentaDisplay)}</td>
+    </tr>
+  `;
+}
+
+function renderFacturacionDiscountAuthModal() {
+  const authState = state.facturacion.discountAuth;
+  if (!authState?.open) {
+    return "";
+  }
+
+  return `
+    <div class="article-lookup-overlay facturacion-discount-auth-overlay">
+      <button class="article-lookup-backdrop" type="button" data-facturacion-discount-auth-close aria-label="Cerrar autorizacion"></button>
+      <section class="article-lookup-dialog facturacion-discount-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="facturacion-discount-auth-title">
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Descuento global</p>
+            <h3 id="facturacion-discount-auth-title">Autorizacion administrativa</h3>
+            <p>Ingresa un usuario administrador para habilitar el descuento general de toda la factura.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <button class="article-command-button" type="button" data-facturacion-discount-auth-close ${authState.submitting ? "disabled" : ""}>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        <form id="facturacion-discount-auth-form" class="exchange-rate-panel facturacion-discount-auth-form">
+          <label class="exchange-rate-field">
+            <span>Usuario</span>
+            <input
+              type="text"
+              name="usuario"
+              value="${escapeHtml(toInputValue(authState.usuario))}"
+              autocomplete="username"
+              ${authState.submitting ? "disabled" : ""}
+            />
+          </label>
+
+          <label class="exchange-rate-field">
+            <span>Clave</span>
+            <input
+              type="password"
+              name="password"
+              value="${escapeHtml(toInputValue(authState.password))}"
+              autocomplete="current-password"
+              ${authState.submitting ? "disabled" : ""}
+            />
+          </label>
+
+          <div class="exchange-rate-actions facturacion-discount-auth-actions">
+            <button class="button button-primary" type="submit" ${authState.submitting ? "disabled" : ""}>
+              ${authState.submitting ? "Validando..." : "Validar"}
+            </button>
+            <button class="button button-ghost" type="button" data-facturacion-discount-auth-close ${authState.submitting ? "disabled" : ""}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
 function renderCashRegistersWorkspace() {
   const draft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
   const metadata = state.cashRegisters.metadata || {};
@@ -3380,179 +4174,155 @@ function renderCashRegistersWorkspace() {
   const isSaving = state.cashRegisters.saving;
   const isDeleting = state.cashRegisters.deleting;
   const isBusy = isSaving || isDeleting;
+  const openingStatusLabel = renderCashRegisterConditionText(draft.status);
 
   return `
-    <div class="modern-page sucursales-page">
-      ${renderDesktopBreadcrumb(["Procesos", "Facturacion", "Caja"])}
+    <div class="modern-page transfer-register-page cash-register-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Facturacion", "Apertura de caja"])}
 
-      <div class="modern-page-header">
-        <div>
-          <h1>Caja</h1>
-          <p>Apertura, seguimiento y cierre operativo de cajas usando CAJAS y DIARIOCAJA.</p>
-        </div>
-      </div>
-
-      <div class="sucursal-command-bar" role="toolbar" aria-label="Acciones de caja">
-        <button class="sucursal-command-button" type="button" data-new-caja ${isBusy ? "disabled" : ""}>
-          <span class="sucursal-command-icon">+</span>
-          Nuevo
-        </button>
-        <button class="sucursal-command-button sucursal-command-primary" type="submit" form="caja-form" ${isBusy ? "disabled" : ""}>
-          <span class="sucursal-command-icon">G</span>
-          ${isSaving ? "Guardando" : "Guardar"}
-        </button>
-        <button class="sucursal-command-button" type="button" data-caja-exit ${isBusy ? "disabled" : ""}>
-          <span class="sucursal-command-icon">S</span>
-          Salir
-        </button>
-      </div>
-
-      <div class="sucursal-layout">
-        <section class="modern-card modern-card-list sucursal-list-card">
-          <div class="modern-card-head">
-            <div>
-              <h2>Cajas registradas</h2>
-              <p>${escapeHtml(String(state.cashRegisters.items.length || 0))} registro(s) visibles.</p>
-            </div>
-            <div class="modern-chip">${state.cashRegisters.loading ? "Cargando" : "Listas"}</div>
-          </div>
-          <div class="sucursal-search-row">
-            <label class="field">
-              <span>Buscar</span>
-              <input
-                type="search"
-                name="cajaBuscar"
-                data-caja-search
-                value="${escapeHtml(toInputValue(state.cashRegisters.search))}"
-                placeholder="Serie, numero de caja o factura"
-              />
-            </label>
-            <button class="button button-ghost" type="button" data-refresh-cajas ${state.cashRegisters.loading || isBusy ? "disabled" : ""}>
-              ${state.cashRegisters.loading ? "Actualizando..." : "Actualizar"}
+      <section class="transfer-register-shell adjustment-window cash-register-window">
+        <div class="adjustment-titlebar">Apertura de caja</div>
+        <form id="caja-form" class="transfer-register-form adjustment-form cash-register-form">
+          <div class="transfer-command-bar adjustment-command-bar cash-register-command-bar" role="toolbar" aria-label="Acciones de caja">
+            <button class="transfer-command-button" type="button" data-new-caja ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Nuevo
+            </button>
+            <button class="transfer-command-button" type="button" data-open-caja-lookup ${state.cashRegisters.loading || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">B</span>
+              Buscar
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="caja-form" ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : "Guardar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-caja-exit ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">S</span>
+              Salir
             </button>
           </div>
-          ${state.cashRegisters.loading ? renderLoadingState("Cargando cajas...") : renderCashRegistersTable()}
-        </section>
 
-        <aside class="modern-card modern-card-editor sucursal-form-card">
-          <form id="caja-form" class="sucursal-editor-form">
-            <div class="sucursal-form-title">
+          <div class="cash-register-header-panel">
+            <label class="cash-register-field cash-register-field-serie">
+              <span>Serie</span>
+              <input
+                type="text"
+                name="serie"
+                value="${escapeHtml(toInputValue(draft.serie))}"
+                maxlength="15"
+                placeholder="ESTACION"
+                list="cash-register-series"
+                ${draft.originalSerie ? "disabled" : ""}
+              />
+            </label>
+
+            <datalist id="cash-register-series">
+              ${existingSeries
+                .map((item) => `<option value="${escapeHtml(item.serie || "")}">${escapeHtml(item.nombreImpresora || "")}</option>`)
+                .join("")}
+            </datalist>
+
+            <label class="cash-register-field">
+              <span>Fecha</span>
+              <input
+                type="date"
+                name="fecha"
+                value="${escapeHtml(toInputValue(draft.fecha))}"
+                ${draft.originalSerie ? "disabled" : ""}
+              />
+            </label>
+
+            <label class="cash-register-field cash-register-field-number">
+              <span>Caja #</span>
+              <input
+                type="number"
+                name="numeroCaja"
+                min="0"
+                step="1"
+                value="${escapeHtml(toInputValue(draft.numeroCaja))}"
+                placeholder="1"
+              />
+            </label>
+          </div>
+
+          <div class="cash-register-condition-row">
+            <span>Condicion actual de la caja:</span>
+            <strong>${escapeHtml(openingStatusLabel)}</strong>
+          </div>
+
+          <div class="cash-register-detail-panel">
+            <label class="cash-register-field">
+              <span>Factura inicial</span>
+              <input
+                type="number"
+                name="facturaInicial"
+                min="0"
+                step="1"
+                value="${escapeHtml(toInputValue(draft.facturaInicial))}"
+                placeholder="1"
+              />
+            </label>
+
+            <label class="cash-register-field">
+              <span>Ultima factura</span>
+              <input
+                type="number"
+                name="ultimaFactura"
+                min="0"
+                step="1"
+                value="${escapeHtml(toInputValue(draft.ultimaFactura))}"
+                placeholder="0"
+              />
+            </label>
+
+            <label class="cash-register-field">
+              <span>Hora apertura</span>
+              <input
+                type="time"
+                name="horaApertura"
+                value="${escapeHtml(toInputValue(draft.horaApertura))}"
+              />
+            </label>
+
+            <label class="cash-register-field">
+              <span>Hora cierre</span>
+              <input
+                type="time"
+                name="horaCierre"
+                value="${escapeHtml(toInputValue(draft.horaCierre))}"
+              />
+            </label>
+          </div>
+
+          <div class="cash-register-history-panel">
+            <div class="cash-register-history-head">
               <div>
-                <span class="article-editor-eyebrow">Facturacion</span>
-                <h2>${draft.originalSerie ? `Caja ${escapeHtml(String(draft.serie || ""))}` : "Nueva caja"}</h2>
+                <h2>Aperturas registradas</h2>
+                <p>${escapeHtml(String(state.cashRegisters.items.length || 0))} registro(s) visibles.</p>
               </div>
-              ${renderCashRegisterStatusBadge(draft.status)}
-            </div>
-
-            <div class="sucursal-data-panel">
-              <label class="sucursal-field-row sucursal-field-code">
-                <span>Serie</span>
-                <input
-                  type="text"
-                  name="serie"
-                  value="${escapeHtml(toInputValue(draft.serie))}"
-                  maxlength="15"
-                  placeholder="CAJA01"
-                  list="cash-register-series"
-                  ${draft.originalSerie ? "disabled" : ""}
-                />
-              </label>
-
-              <datalist id="cash-register-series">
-                ${existingSeries
-                  .map((item) => `<option value="${escapeHtml(item.serie || "")}">${escapeHtml(item.nombreImpresora || "")}</option>`)
-                  .join("")}
-              </datalist>
-
-              <label class="sucursal-field-row">
-                <span>Fecha</span>
-                <input
-                  type="date"
-                  name="fecha"
-                  value="${escapeHtml(toInputValue(draft.fecha))}"
-                  ${draft.originalSerie ? "disabled" : ""}
-                />
-              </label>
-
-              <label class="sucursal-field-row">
-                <span>Numero de caja</span>
-                <input
-                  type="number"
-                  name="numeroCaja"
-                  min="0"
-                  step="1"
-                  value="${escapeHtml(toInputValue(draft.numeroCaja))}"
-                  placeholder="1"
-                />
-              </label>
-
-              <label class="sucursal-field-row">
-                <span>Factura iniciar</span>
-                <input
-                  type="number"
-                  name="facturaInicial"
-                  min="0"
-                  step="1"
-                  value="${escapeHtml(toInputValue(draft.facturaInicial))}"
-                  placeholder="1"
-                />
-              </label>
-
-              <label class="sucursal-field-row">
-                <span>Ultima factura</span>
-                <input
-                  type="number"
-                  name="ultimaFactura"
-                  min="0"
-                  step="1"
-                  value="${escapeHtml(toInputValue(draft.ultimaFactura))}"
-                  placeholder="0"
-                />
-              </label>
-
-              <label class="sucursal-field-row">
-                <span>Hora de apertura</span>
-                <input
-                  type="time"
-                  name="horaApertura"
-                  value="${escapeHtml(toInputValue(draft.horaApertura))}"
-                />
-              </label>
-
-              <label class="sucursal-field-row">
-                <span>Hora de cierre</span>
-                <input
-                  type="time"
-                  name="horaCierre"
-                  value="${escapeHtml(toInputValue(draft.horaCierre))}"
-                />
-              </label>
-
-              <fieldset class="sucursal-status-row">
-                <legend>Status</legend>
-                <label>
-                  <input type="radio" name="status" value="0" ${String(draft.status ?? "0") === "0" ? "checked" : ""} />
-                  Apertura hecha
+              <div class="cash-register-history-actions">
+                <label class="field">
+                  <span>Buscar</span>
+                  <input
+                    type="search"
+                    name="cajaBuscar"
+                    data-caja-search
+                    value="${escapeHtml(toInputValue(state.cashRegisters.search))}"
+                    placeholder="Serie, numero de caja o factura"
+                  />
                 </label>
-                <label>
-                  <input type="radio" name="status" value="1" ${String(draft.status ?? "0") === "1" ? "checked" : ""} />
-                  Apertura con ventas
-                </label>
-                <label>
-                  <input type="radio" name="status" value="2" ${String(draft.status ?? "0") === "2" ? "checked" : ""} />
-                  Caja cerrada
-                </label>
-              </fieldset>
-
-              <div class="sucursal-form-footer">
+                <button class="button button-ghost" type="button" data-refresh-cajas ${state.cashRegisters.loading || isBusy ? "disabled" : ""}>
+                  ${state.cashRegisters.loading ? "Actualizando..." : "Actualizar"}
+                </button>
                 <button class="button button-ghost" type="button" data-caja-reset ${isBusy ? "disabled" : ""}>
-                  Limpiar campos
+                  Limpiar
                 </button>
               </div>
             </div>
-          </form>
-        </aside>
-      </div>
+            ${state.cashRegisters.loading ? renderLoadingState("Cargando cajas...") : renderCashRegistersTable()}
+          </div>
+        </form>
+      </section>
     </div>
   `;
 }
@@ -3571,20 +4341,20 @@ function renderCashRegistersTable() {
   if (!visibleItems.length) {
     return `
       <div class="empty-state">
-        <h3>Sin cajas</h3>
+        <h3>Sin aperturas</h3>
         <p>${search ? "No hay resultados para la busqueda actual." : "No hay aperturas de caja registradas todavia."}</p>
       </div>
     `;
   }
 
   return `
-    <div class="table-wrap">
+    <div class="table-wrap cash-register-table-wrap">
       <table class="data-table">
         <thead>
           <tr>
             <th>Serie</th>
             <th>Fecha</th>
-            <th>N. caja</th>
+            <th>Caja</th>
             <th>Factura inicial</th>
             <th>Ultima factura</th>
             <th>Status</th>
@@ -3644,6 +4414,19 @@ function renderCashRegisterStatusBadge(status) {
   }
 
   return `<span class="modern-chip">${escapeHtml(label)}</span>`;
+}
+
+function renderCashRegisterConditionText(status) {
+  const numericStatus = Number(status ?? 0);
+  if (numericStatus === 2) {
+    return "Cerrada";
+  }
+
+  if (numericStatus === 1) {
+    return "Abierta con ventas";
+  }
+
+  return "Abierta";
 }
 
 function renderSucursalesWorkspace() {
@@ -3869,6 +4652,762 @@ function renderSucursalStatusBadge(status) {
   return `<span class="modern-chip">${numericStatus === 0 ? "Cerrada" : "Abierta"}</span>`;
 }
 
+function renderClientesWorkspace() {
+  const draft = state.clientes.draft || createEmptyClienteDraft(state.clientes.metadata);
+  const metadata = state.clientes.metadata || {};
+  const tiposCliente = Array.isArray(metadata.tiposCliente) ? metadata.tiposCliente : [];
+  const tiposContribuyente = Array.isArray(metadata.tiposContribuyente) ? metadata.tiposContribuyente : [];
+  const isSaving = state.clientes.saving;
+  const isDeleting = state.clientes.deleting;
+  const isBusy = isSaving || isDeleting;
+
+  return `
+    <div class="modern-page clients-page">
+      ${renderDesktopBreadcrumb(["Archivos", "Clientes"])}
+
+      <section class="transfer-register-shell adjustment-window clients-window">
+        <div class="adjustment-titlebar">Clientes</div>
+        <form id="cliente-form" class="adjustment-form clients-form">
+          <div class="transfer-command-bar adjustment-command-bar clients-command-bar" role="toolbar" aria-label="Acciones de clientes">
+            <button class="transfer-command-button" type="button" data-new-cliente ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button" type="button" data-open-cliente-lookup ${state.clientes.loading || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">B</span>
+              Buscar
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="cliente-form" ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : "Guardar"}
+            </button>
+          </div>
+
+          <div class="clients-panel">
+            <div class="clients-grid">
+              <label class="clients-field clients-field-code">
+                <span>Cedula / RIF</span>
+                <input
+                  type="text"
+                  name="codigo"
+                  value="${escapeHtml(toInputValue(draft.codigo))}"
+                  maxlength="15"
+                  placeholder="V12345678"
+                  ${draft.originalCodigo ? "disabled" : ""}
+                />
+              </label>
+
+              <label class="clients-field clients-field-date">
+                <span>F. Ingreso</span>
+                <input
+                  type="date"
+                  name="fechaIngreso"
+                  value="${escapeHtml(toInputValue(draft.fechaIngreso))}"
+                />
+              </label>
+
+              <label class="clients-field clients-field-wide">
+                <span>Nombre</span>
+                <input
+                  type="text"
+                  name="nombre"
+                  value="${escapeHtml(toInputValue(draft.nombre))}"
+                  maxlength="120"
+                  placeholder="Nombre del cliente"
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>Tipo</span>
+                <select name="tipo">
+                  ${renderSelectOptions(
+                    [
+                      { value: "", label: "Selecciona un tipo" },
+                      ...tiposCliente.map((item) => ({
+                        value: String(item.codigo ?? ""),
+                        label: `${item.codigo ?? ""} - ${item.nombre ?? item.codigo ?? ""}`,
+                      })),
+                    ],
+                    draft.tipo || "",
+                  )}
+                </select>
+              </label>
+
+              <label class="clients-field">
+                <span>Telefono</span>
+                <input
+                  type="text"
+                  name="telefono"
+                  value="${escapeHtml(toInputValue(draft.telefono))}"
+                  maxlength="15"
+                  placeholder="Telefono"
+                />
+              </label>
+
+              <label class="clients-field clients-field-wide clients-field-address">
+                <span>Direccion</span>
+                <textarea name="direccion" rows="2" maxlength="300" placeholder="Direccion">${escapeHtml(toInputValue(draft.direccion))}</textarea>
+              </label>
+
+              <label class="clients-field clients-field-wide">
+                <span>Contribuyente</span>
+                <select name="tipoContribuyente">
+                  ${renderSelectOptions(
+                    [
+                      { value: "", label: "Selecciona un tipo de contribuyente" },
+                      ...tiposContribuyente.map((item) => ({
+                        value: String(item.codigo ?? ""),
+                        label: `${item.codigo ?? ""} - ${item.nombre ?? item.codigo ?? ""}`,
+                      })),
+                    ],
+                    draft.tipoContribuyente || "",
+                  )}
+                </select>
+              </label>
+
+              <fieldset class="clients-status-row">
+                <legend>Status</legend>
+                <label>
+                  <input type="radio" name="status" value="1" ${String(draft.status ?? "1") === "1" ? "checked" : ""} />
+                  Activo
+                </label>
+                <label>
+                  <input type="radio" name="status" value="0" ${String(draft.status ?? "1") === "0" ? "checked" : ""} />
+                  Inactivo
+                </label>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="clients-history-panel">
+            <div class="clients-history-head">
+              <div>
+                <h2>Clientes registrados</h2>
+                <p>${escapeHtml(String(state.clientes.items.length || 0))} registro(s) visibles.</p>
+              </div>
+              <div class="clients-history-actions">
+                <label class="field">
+                  <span>Buscar</span>
+                  <input
+                    type="search"
+                    name="clienteBuscar"
+                    data-cliente-search
+                    value="${escapeHtml(toInputValue(state.clientes.search))}"
+                    placeholder="Cedula, nombre o telefono"
+                  />
+                </label>
+                <button class="button button-ghost" type="button" data-refresh-clientes ${state.clientes.loading || isBusy ? "disabled" : ""}>
+                  ${state.clientes.loading ? "Actualizando..." : "Actualizar"}
+                </button>
+                <button class="button button-ghost" type="button" data-cliente-reset ${isBusy ? "disabled" : ""}>
+                  Limpiar
+                </button>
+              </div>
+            </div>
+            ${state.clientes.loading ? renderLoadingState("Cargando clientes...") : renderClientesTable()}
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderClientesTable() {
+  const items = Array.isArray(state.clientes.items) ? state.clientes.items : [];
+  const search = normalizeSearchText(state.clientes.search);
+  const visibleItems = search
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.codigo || ""} ${item.nombre || ""} ${item.telefono || ""} ${item.direccion || ""} ${item.tipoNombre || ""} ${item.tipoContribuyenteNombre || ""}`,
+        ).includes(search),
+      )
+    : items;
+
+  if (!visibleItems.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin clientes</h3>
+        <p>${search ? "No hay resultados para la busqueda actual." : "No hay clientes registrados todavia."}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap clients-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Cedula / RIF</th>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>Telefono</th>
+            <th>Status</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleItems
+            .map((item) => {
+              const isSelected = String(state.clientes.selectedCodigo || "") === String(item.codigo || "");
+
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(item.codigo || "-")}</strong></td>
+                  <td>${escapeHtml(item.nombre || "-")}</td>
+                  <td>${escapeHtml(item.tipoNombre || "-")}</td>
+                  <td>${escapeHtml(item.telefono || "-")}</td>
+                  <td>${renderClienteStatusBadge(item.status)}</td>
+                  <td class="sucursal-row-actions">
+                    <button class="button button-ghost" type="button" data-cliente-select="${escapeHtml(item.codigo || "")}">
+                      Abrir
+                    </button>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-delete-cliente="${escapeHtml(item.codigo || "")}"
+                      ${state.clientes.deleting ? "disabled" : ""}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderClienteStatusBadge(status) {
+  const numericStatus = Number(status ?? 1);
+  return `<span class="modern-chip">${numericStatus === 0 ? "Inactivo" : "Activo"}</span>`;
+}
+
+function renderTrabajadoresWorkspace() {
+  const draft = state.trabajadores.draft || createEmptyTrabajadorDraft(state.trabajadores.metadata);
+  const metadata = state.trabajadores.metadata || {};
+  const cargos = Array.isArray(metadata.cargos) ? metadata.cargos : [];
+  const isSaving = state.trabajadores.saving;
+  const isDeleting = state.trabajadores.deleting;
+  const isBusy = isSaving || isDeleting;
+
+  return `
+    <div class="modern-page workers-page">
+      ${renderDesktopBreadcrumb(["Archivos", "Trabajadores"])}
+
+      <section class="transfer-register-shell adjustment-window workers-window">
+        <div class="adjustment-titlebar">Trabajadores</div>
+        <form id="trabajador-form" class="adjustment-form workers-form">
+          <div class="transfer-command-bar adjustment-command-bar workers-command-bar" role="toolbar" aria-label="Acciones de trabajadores">
+            <button class="transfer-command-button" type="button" data-new-trabajador ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button" type="button" data-open-trabajador-lookup ${state.trabajadores.loading || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">B</span>
+              Buscar
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="trabajador-form" ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : "Guardar"}
+            </button>
+          </div>
+
+          <div class="workers-panel">
+            <div class="workers-grid">
+              <label class="workers-field workers-field-cedula">
+                <span>Cedula ID</span>
+                <input
+                  type="text"
+                  name="cedula"
+                  value="${escapeHtml(toInputValue(draft.cedula))}"
+                  maxlength="15"
+                  placeholder="V12345678"
+                  ${draft.originalCedula ? "disabled" : ""}
+                />
+              </label>
+
+              <label class="workers-field workers-field-code">
+                <span>Codigo</span>
+                <input
+                  type="number"
+                  name="codigo"
+                  min="1"
+                  step="1"
+                  value="${escapeHtml(toInputValue(draft.codigo))}"
+                  placeholder="1"
+                  readonly
+                />
+              </label>
+
+              <label class="workers-field workers-field-wide">
+                <span>Nombre</span>
+                <input
+                  type="text"
+                  name="nombre"
+                  value="${escapeHtml(toInputValue(draft.nombre))}"
+                  maxlength="70"
+                  placeholder="Nombre completo"
+                />
+              </label>
+
+              <label class="workers-field workers-field-cargo">
+                <span>Cargo</span>
+                <select name="cargo">
+                  ${renderSelectOptions(
+                    [
+                      { value: "", label: "Selecciona un cargo" },
+                      ...cargos.map((item) => ({
+                        value: item.codigo,
+                        label: `${item.codigo || ""} - ${item.nombre || item.codigo || ""}`,
+                      })),
+                    ],
+                    draft.cargo || "",
+                  )}
+                </select>
+              </label>
+
+              <label class="workers-field">
+                <span>F. Ingreso</span>
+                <input
+                  type="date"
+                  name="fechaIngreso"
+                  value="${escapeHtml(toInputValue(draft.fechaIngreso))}"
+                />
+              </label>
+
+              <label class="workers-field">
+                <span>F. Nacimiento</span>
+                <input
+                  type="date"
+                  name="fechaNacimiento"
+                  value="${escapeHtml(toInputValue(draft.fechaNacimiento))}"
+                />
+              </label>
+
+              <label class="workers-field workers-field-address workers-field-wide">
+                <span>Direccion</span>
+                <textarea name="direccion" rows="2" maxlength="200" placeholder="Direccion">${escapeHtml(toInputValue(draft.direccion))}</textarea>
+              </label>
+
+              <label class="workers-field">
+                <span>Telefono</span>
+                <input
+                  type="text"
+                  name="telefono"
+                  value="${escapeHtml(toInputValue(draft.telefono))}"
+                  maxlength="15"
+                  placeholder="Telefono"
+                />
+              </label>
+
+              <label class="workers-field">
+                <span>Celular</span>
+                <input
+                  type="text"
+                  name="celular"
+                  value="${escapeHtml(toInputValue(draft.celular))}"
+                  maxlength="15"
+                  placeholder="Celular"
+                />
+              </label>
+
+              <fieldset class="workers-status-row">
+                <legend>Status</legend>
+                <label>
+                  <input type="radio" name="status" value="1" ${String(draft.status ?? "1") === "1" ? "checked" : ""} />
+                  Activo
+                </label>
+                <label>
+                  <input type="radio" name="status" value="0" ${String(draft.status ?? "1") === "0" ? "checked" : ""} />
+                  Inactivo
+                </label>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="workers-history-panel">
+            <div class="workers-history-head">
+              <div>
+                <h2>Trabajadores registrados</h2>
+                <p>${escapeHtml(String(state.trabajadores.items.length || 0))} registro(s) visibles.</p>
+              </div>
+              <div class="workers-history-actions">
+                <label class="field">
+                  <span>Buscar</span>
+                  <input
+                    type="search"
+                    name="trabajadorBuscar"
+                    data-trabajador-search
+                    value="${escapeHtml(toInputValue(state.trabajadores.search))}"
+                    placeholder="Cedula, codigo, nombre o cargo"
+                  />
+                </label>
+                <button class="button button-ghost" type="button" data-refresh-trabajadores ${state.trabajadores.loading || isBusy ? "disabled" : ""}>
+                  ${state.trabajadores.loading ? "Actualizando..." : "Actualizar"}
+                </button>
+                <button class="button button-ghost" type="button" data-trabajador-reset ${isBusy ? "disabled" : ""}>
+                  Limpiar
+                </button>
+              </div>
+            </div>
+            ${state.trabajadores.loading ? renderLoadingState("Cargando trabajadores...") : renderTrabajadoresTable()}
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderImpuestosWorkspace() {
+  const draft = state.impuestos.draft || createEmptyImpuestoDraft();
+  const isSaving = state.impuestos.saving;
+
+  return `
+    <div class="modern-page taxes-page">
+      ${renderDesktopBreadcrumb(["Archivos", "Impuesto"])}
+
+      <section class="transfer-register-shell adjustment-window taxes-window">
+        <div class="adjustment-titlebar">Impuestos</div>
+        <form id="impuesto-form" class="adjustment-form taxes-form">
+          <div class="transfer-command-bar adjustment-command-bar taxes-command-bar" role="toolbar" aria-label="Acciones de impuestos">
+            <button class="transfer-command-button" type="button" data-new-impuesto ${isSaving ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Nuevo
+            </button>
+            <button class="transfer-command-button" type="button" data-open-impuesto-lookup ${state.impuestos.loading || isSaving ? "disabled" : ""}>
+              <span class="transfer-command-icon">B</span>
+              Buscar
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="impuesto-form" ${isSaving ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : "Guardar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-impuesto-exit ${isSaving ? "disabled" : ""}>
+              <span class="transfer-command-icon">S</span>
+              Salir
+            </button>
+          </div>
+
+          <div class="taxes-panel">
+            <label class="taxes-field taxes-field-code">
+              <span>Código</span>
+              <input
+                type="number"
+                name="codigo"
+                min="1"
+                step="1"
+                value="${escapeHtml(toInputValue(draft.codigo))}"
+                placeholder="1"
+              />
+            </label>
+
+            <label class="taxes-field taxes-field-wide">
+              <span>Nombre</span>
+              <input
+                type="text"
+                name="nombre"
+                value="${escapeHtml(toInputValue(draft.nombre))}"
+                maxlength="60"
+                placeholder="IVA NORMAL"
+              />
+            </label>
+
+            <label class="taxes-field taxes-field-percent">
+              <span>Porcentaje</span>
+              <input
+                type="text"
+                name="porcentajeImpuesto"
+                value="${escapeHtml(toInputValue(draft.porcentajeImpuesto))}"
+                maxlength="20"
+                placeholder="16"
+                inputmode="decimal"
+              />
+            </label>
+
+            <fieldset class="taxes-field taxes-field-status">
+              <span>Status</span>
+              <div class="taxes-status-group" role="radiogroup" aria-label="Estado del impuesto">
+                <label class="taxes-status-option">
+                  <input
+                    type="radio"
+                    name="status"
+                    value="1"
+                    ${String(draft.status ?? "1") === "1" ? "checked" : ""}
+                  />
+                  <span>Activo</span>
+                </label>
+                <label class="taxes-status-option">
+                  <input
+                    type="radio"
+                    name="status"
+                    value="0"
+                    ${String(draft.status ?? "1") === "0" ? "checked" : ""}
+                  />
+                  <span>Inactivo</span>
+                </label>
+              </div>
+            </fieldset>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderExchangeRateRegisterWorkspace() {
+  const draft = state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
+  const updatedAt = String(state.exchangeRateRegister.updatedAt || draft.actualizadoEn || "").trim();
+  const updatedAtLabel = updatedAt
+    ? `Ultima actualizacion: ${escapeHtml(formatDateDisplay(updatedAt))}`
+    : "Todavia no se ha registrado una tasa manual.";
+  const isBusy = state.exchangeRateRegister.loading || state.exchangeRateRegister.saving;
+
+  return `
+    <div class="modern-page exchange-rate-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Registrar tasa cambio"])}
+
+      <section class="transfer-register-shell adjustment-window exchange-rate-window">
+        <div class="adjustment-titlebar">Registrar tasa cambio</div>
+        <form id="exchange-rate-form" class="adjustment-form exchange-rate-form">
+          <div class="exchange-rate-panel">
+            <label class="exchange-rate-field">
+              <span>Valor Del Cambio</span>
+              <input
+                type="text"
+                name="valorCambio"
+                value="${escapeHtml(toInputValue(draft.valorCambio))}"
+                inputmode="decimal"
+                maxlength="20"
+                placeholder="0,00"
+              />
+            </label>
+
+            <label class="exchange-rate-field">
+              <span>Confirmar Valor</span>
+              <input
+                type="text"
+                name="confirmarValorCambio"
+                value="${escapeHtml(toInputValue(draft.confirmarValorCambio))}"
+                inputmode="decimal"
+                maxlength="20"
+                placeholder="0,00"
+              />
+            </label>
+
+            <div class="exchange-rate-divider" aria-hidden="true"></div>
+
+            <label class="exchange-rate-field">
+              <span>Valor Del Mayor</span>
+              <input
+                type="text"
+                name="valorMayor"
+                value="${escapeHtml(toInputValue(draft.valorMayor))}"
+                inputmode="decimal"
+                maxlength="20"
+                placeholder="0,00"
+              />
+            </label>
+
+            <label class="exchange-rate-field">
+              <span>Confirmar Mayor</span>
+              <input
+                type="text"
+                name="confirmarValorMayor"
+                value="${escapeHtml(toInputValue(draft.confirmarValorMayor))}"
+                inputmode="decimal"
+                maxlength="20"
+                placeholder="0,00"
+              />
+            </label>
+
+            <div class="exchange-rate-divider" aria-hidden="true"></div>
+
+            <div class="exchange-rate-meta">${updatedAtLabel}</div>
+
+            <div class="exchange-rate-actions">
+              <button
+                class="button button-primary"
+                type="submit"
+                form="exchange-rate-form"
+                ${isBusy ? "disabled" : ""}
+              >
+                ${state.exchangeRateRegister.saving ? "Actualizando..." : "Actualizar"}
+              </button>
+              <button
+                class="button button-danger"
+                type="button"
+                data-exchange-rate-cancel
+                ${isBusy ? "disabled" : ""}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderImpuestosLookupModal() {
+  const lookup = state.impuestos.lookup;
+  if (!lookup?.open) {
+    return "";
+  }
+
+  const items = Array.isArray(lookup.items) ? lookup.items : [];
+  const totalLabel = lookup.loading
+    ? "Cargando impuestos..."
+    : `Impuestos (${escapeHtml(String(items.length))} Registros)`;
+
+  return `
+    <div class="article-lookup-overlay taxes-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-impuesto-lookup-close aria-label="Cerrar buscador"></button>
+      <section class="article-lookup-dialog taxes-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="impuestos-lookup-title">
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Impuestos</p>
+            <h3 id="impuestos-lookup-title">${totalLabel}</h3>
+            <p>Selecciona un impuesto para cargarlo en la vista.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">
+              ${lookup.loading ? "Cargando..." : `${escapeHtml(String(items.length))} registros`}
+            </span>
+            <button class="article-command-button" type="button" data-impuesto-lookup-refresh ${lookup.loading ? "disabled" : ""}>
+              Actualizar
+            </button>
+            <button class="article-command-button" type="button" data-impuesto-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          lookup.loading
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Cargando datos</h3>
+                <p>Estamos trayendo los impuestos registrados.</p>
+              </div>
+            `
+            : items.length === 0
+              ? `
+                <div class="empty-state article-lookup-empty">
+                  <h3>Sin impuestos</h3>
+                  <p>No hay impuestos registrados todavia.</p>
+                </div>
+              `
+              : `
+                <div class="table-wrap article-lookup-table-wrap taxes-lookup-table-wrap">
+                  <table class="data-table article-lookup-table taxes-lookup-table">
+                    <thead>
+                      <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Porcentaje</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${items.map(renderImpuestoLookupRow).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderImpuestoLookupRow(item) {
+  return `
+    <tr class="article-lookup-row" data-impuesto-lookup-select="${escapeHtml(String(item.codigo || ""))}">
+      <td><strong>${escapeHtml(String(item.codigo || "-"))}</strong></td>
+      <td>${escapeHtml(item.nombre || "-")}</td>
+      <td class="facturacion-cell-right">${escapeHtml(formatTransferAmount(item.porcentajeImpuesto || "0"))}</td>
+    </tr>
+  `;
+}
+
+function renderTrabajadoresTable() {
+  const items = Array.isArray(state.trabajadores.items) ? state.trabajadores.items : [];
+  const search = normalizeSearchText(state.trabajadores.search);
+  const visibleItems = search
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.cedula || ""} ${item.codigo || ""} ${item.nombre || ""} ${item.cargoNombre || item.cargo || ""} ${item.telefono || ""} ${item.celular || ""}`,
+        ).includes(search),
+      )
+    : items;
+
+  if (!visibleItems.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin trabajadores</h3>
+        <p>${search ? "No hay resultados para la busqueda actual." : "No hay trabajadores registrados todavia."}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap workers-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Cedula</th>
+            <th>Codigo</th>
+            <th>Nombre</th>
+            <th>Cargo</th>
+            <th>Ingreso</th>
+            <th>Status</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleItems
+            .map((item) => {
+              const isSelected = String(state.trabajadores.selectedCedula || "") === String(item.cedula || "");
+
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(item.cedula || "-")}</strong></td>
+                  <td>${escapeHtml(toDisplayValue(item.codigo))}</td>
+                  <td>${escapeHtml(item.nombre || "-")}</td>
+                  <td>${escapeHtml(item.cargoNombre || item.cargo || "-")}</td>
+                  <td>${escapeHtml(formatDateOnlyDisplay(item.fechaIngreso))}</td>
+                  <td>${renderTrabajadorStatusBadge(item.status)}</td>
+                  <td class="sucursal-row-actions">
+                    <button class="button button-ghost" type="button" data-trabajador-select="${escapeHtml(item.cedula || "")}">
+                      Abrir
+                    </button>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-delete-trabajador="${escapeHtml(item.cedula || "")}"
+                      ${state.trabajadores.deleting ? "disabled" : ""}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderTrabajadorStatusBadge(status) {
+  const numericStatus = Number(status ?? 1);
+  return `<span class="modern-chip">${numericStatus === 0 ? "Inactivo" : "Activo"}</span>`;
+}
+
 function renderLoadingState(message) {
   return `
     <div class="empty-state">
@@ -4015,7 +5554,7 @@ function getDesktopBreadcrumb(view) {
     return ["Archivos", "Inventario", getDesktopViewLabelV2(view)];
   }
 
-  if (["clientes", "sucursales", "personal"].includes(view)) {
+  if (["clientes", "sucursales", "personal", "trabajadores"].includes(view)) {
     return ["Archivos", "Inventario", getDesktopViewLabelV2(view)];
   }
 
@@ -4036,7 +5575,11 @@ function getDesktopBreadcrumb(view) {
   }
 
   if (view === "cajas") {
-    return ["Procesos", "Facturacion", "Caja"];
+    return ["Procesos", "Facturacion", "Apertura de caja"];
+  }
+
+  if (view === "facturacion") {
+    return ["Procesos", "Facturacion"];
   }
 
   if (view === "borrador-devoluciones") {
@@ -4074,12 +5617,15 @@ function getDesktopViewLabelV2(view) {
     categorias: "Categorias",
     clientes: "Clientes",
     sucursales: "Sucursales",
-    personal: "Personal",
+    personal: "Trabajadores",
+    trabajadores: "Trabajadores",
+    impuestos: "Impuesto",
     transferencias: "Transferencias",
     "registro-transferencia": "Registro de transferencias",
     "cargar-transferencia": "Carga de transferencias",
     "ajuste-inventario": "Ajuste de inventario",
-    cajas: "Caja",
+    facturacion: "Facturacion",
+    cajas: "Apertura de caja",
     "borrador-devoluciones": "Borrador devoluciones",
     "registro-devoluciones": "Registro de devoluciones",
     "cargar-devoluciones": "Carga de devoluciones",
@@ -4226,6 +5772,14 @@ function formatTransferAmount(value) {
   }).format(toFiniteNumber(value));
 }
 
+function formatFacturacionUsdAmount(value) {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: false,
+  }).format(toFiniteNumber(value));
+}
+
 function formatInventoryNumeric(value) {
   if (value === null || value === undefined || value === "") {
     return "-";
@@ -4262,6 +5816,11 @@ function formatInventoryCatalogLabel(value) {
 function toFiniteNumber(value) {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function roundToTwoDecimals(value) {
+  const numericValue = toFiniteNumber(value);
+  return Math.round((numericValue + Number.EPSILON) * 100) / 100;
 }
 
 function renderSearchForm() {
@@ -5017,7 +6576,7 @@ function renderArticleVariantsPanel(draft) {
 
 function renderArticlePricesPanel(draft, promotionActive, taxOptions) {
   const promoMessage = promotionActive
-    ? "Promocion activa: completa descuento o precio con rango de fechas."
+    ? "Promocion activa: el % descuento recalcula el precio final promocional y viceversa."
     : "Promocion inactiva: el precio promocional no se aplicara.";
 
   return `
@@ -5232,6 +6791,9 @@ function bindShellEvents() {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
       const nextView = button.getAttribute("data-menu-view") || "articulos";
+      if (state.currentView === "facturacion" && nextView !== "facturacion") {
+        resetFacturacionState();
+      }
       state.currentView = nextView;
       state.navigation.openMenu = "";
       state.navigation.openSubmenu = "";
@@ -5240,6 +6802,11 @@ function bindShellEvents() {
 
       if (isCatalogImportView(nextView)) {
         await loadCatalogImportItems(nextView);
+        return;
+      }
+
+      if (nextView === "impuestos") {
+        await loadImpuestos();
         return;
       }
 
@@ -5293,8 +6860,32 @@ function bindShellEvents() {
         return;
       }
 
+      if (nextView === "facturacion") {
+        if (userCanAccessFullInventory()) {
+          await loadCreationMetadata({ renderAfter: false });
+        }
+        await loadFacturacionExchangeRate({ renderAfter: false, silent: true });
+        render();
+        return;
+      }
+
+      if (nextView === "registrar-tasa-cambio") {
+        await loadExchangeRateRegister();
+        return;
+      }
+
       if (nextView === "sucursales") {
         await loadSucursales();
+        return;
+      }
+
+      if (nextView === "clientes") {
+        await loadClientes();
+        return;
+      }
+
+      if (nextView === "trabajadores" || nextView === "personal") {
+        await loadTrabajadores();
       }
     });
   });
@@ -5345,6 +6936,11 @@ function bindShellEvents() {
   bindDevReturnEvents();
   bindAdjustmentEvents();
   bindSucursalEvents();
+  bindClienteEvents();
+  bindTrabajadorEvents();
+  bindImpuestoEvents();
+  bindExchangeRateRegisterEvents();
+  bindFacturacionEvents();
   bindCashRegisterEvents();
 
   document.querySelectorAll("[data-role-import-toggle]").forEach((button) => {
@@ -5494,11 +7090,13 @@ function bindArticleEvents() {
 
   const articleForm = document.getElementById("article-form");
   if (articleForm) {
-    articleForm.addEventListener("input", () => {
+    articleForm.addEventListener("input", (event) => {
+      syncArticlePromotionFields(articleForm, event.target?.name || "");
       syncArticleFormPreview(articleForm);
     });
 
     articleForm.addEventListener("change", (event) => {
+      syncArticlePromotionFields(articleForm, event.target?.name || "");
       syncArticleFormPreview(articleForm);
 
       if (event.target && event.target.name === "promocionActiva") {
@@ -5508,6 +7106,7 @@ function bindArticleEvents() {
 
     articleForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      syncArticlePromotionFields(articleForm, articlePromotionLastEditedField);
       syncArticleFormPreview(articleForm);
       await saveArticle();
     });
@@ -6349,6 +7948,759 @@ function bindSucursalEvents() {
   };
 }
 
+function bindTrabajadorEvents() {
+  document.querySelector("[data-refresh-trabajadores]")?.addEventListener("click", async () => {
+    await loadTrabajadores();
+  });
+
+  document.querySelector("[data-new-trabajador]")?.addEventListener("click", () => {
+    resetTrabajadorDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-open-trabajador-lookup]")?.addEventListener("click", () => {
+    const searchField = document.querySelector("[data-trabajador-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  });
+
+  document.querySelector("[data-trabajador-reset]")?.addEventListener("click", () => {
+    resetTrabajadorDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-trabajador-search]")?.addEventListener("input", (event) => {
+    state.trabajadores.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelectorAll("[data-trabajador-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const cedula = button.getAttribute("data-trabajador-select") || "";
+      if (!cedula) {
+        return;
+      }
+
+      await loadTrabajadorForEdit(cedula);
+    });
+  });
+
+  document.querySelectorAll("[data-delete-trabajador]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const cedula = button.getAttribute("data-delete-trabajador") || "";
+      if (!cedula) {
+        return;
+      }
+
+      await deleteTrabajador(cedula);
+    });
+  });
+
+  const trabajadorForm = document.getElementById("trabajador-form");
+  if (trabajadorForm) {
+    trabajadorForm.addEventListener("input", () => {
+      captureTrabajadorDraft();
+    });
+
+    trabajadorForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureTrabajadorDraft();
+      await saveTrabajador();
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (!["trabajadores", "personal"].includes(state.currentView) || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "b"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.trabajadores.saving || state.trabajadores.deleting) {
+      return;
+    }
+
+    if (key === "c") {
+      resetTrabajadorDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      captureTrabajadorDraft();
+      await saveTrabajador();
+      return;
+    }
+
+    const searchField = document.querySelector("[data-trabajador-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  };
+}
+
+function bindClienteEvents() {
+  document.querySelector("[data-refresh-clientes]")?.addEventListener("click", async () => {
+    await loadClientes();
+  });
+
+  document.querySelector("[data-new-cliente]")?.addEventListener("click", () => {
+    resetClienteDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-open-cliente-lookup]")?.addEventListener("click", () => {
+    const searchField = document.querySelector("[data-cliente-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  });
+
+  document.querySelector("[data-cliente-reset]")?.addEventListener("click", () => {
+    resetClienteDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-cliente-search]")?.addEventListener("input", (event) => {
+    state.clientes.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelectorAll("[data-cliente-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codigo = button.getAttribute("data-cliente-select") || "";
+      if (!codigo) {
+        return;
+      }
+
+      await loadClienteForEdit(codigo);
+    });
+  });
+
+  document.querySelectorAll("[data-delete-cliente]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codigo = button.getAttribute("data-delete-cliente") || "";
+      if (!codigo) {
+        return;
+      }
+
+      await deleteCliente(codigo);
+    });
+  });
+
+  const clienteForm = document.getElementById("cliente-form");
+  if (clienteForm) {
+    clienteForm.addEventListener("input", () => {
+      captureClienteDraft();
+    });
+
+    clienteForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureClienteDraft();
+      await saveCliente();
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "clientes" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "b"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.clientes.saving || state.clientes.deleting) {
+      return;
+    }
+
+    if (key === "c") {
+      resetClienteDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      captureClienteDraft();
+      await saveCliente();
+      return;
+    }
+
+    const searchField = document.querySelector("[data-cliente-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  };
+}
+
+function bindImpuestoEvents() {
+  document.querySelector("[data-new-impuesto]")?.addEventListener("click", () => {
+    resetImpuestoDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-open-impuesto-lookup]")?.addEventListener("click", async () => {
+    if (!Array.isArray(state.impuestos.items) || !state.impuestos.items.length) {
+      await loadImpuestos({ renderAfter: false });
+    }
+
+    openImpuestoLookupModal();
+    clearFlash();
+    render();
+  });
+
+  document.querySelectorAll("[data-impuesto-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeImpuestoLookupModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-impuesto-lookup-refresh]")?.addEventListener("click", async () => {
+    await loadImpuestos({ renderAfter: false });
+    openImpuestoLookupModal();
+    render();
+  });
+
+  document.querySelectorAll("[data-impuesto-lookup-select]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const codigo = row.getAttribute("data-impuesto-lookup-select") || "";
+      const selected = (state.impuestos.items || []).find((item) => String(item.codigo || "") === codigo);
+      if (!selected) {
+        return;
+      }
+
+      state.impuestos.selectedCodigo = codigo;
+      state.impuestos.draft = impuestoToDraft(selected);
+      closeImpuestoLookupModal();
+      clearFlash();
+      render();
+    });
+  });
+
+  document.querySelector("[data-impuesto-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+  const impuestoForm = document.getElementById("impuesto-form");
+  if (impuestoForm instanceof HTMLFormElement) {
+    impuestoForm.addEventListener("input", () => {
+      captureImpuestoDraft();
+    });
+
+    impuestoForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureImpuestoDraft();
+      await saveImpuesto();
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "impuestos" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "b", "s"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.impuestos.saving) {
+      return;
+    }
+
+    if (key === "c") {
+      resetImpuestoDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      captureImpuestoDraft();
+      await saveImpuesto();
+      return;
+    }
+
+    if (key === "b") {
+      if (!Array.isArray(state.impuestos.items) || !state.impuestos.items.length) {
+        await loadImpuestos({ renderAfter: false });
+      }
+
+      openImpuestoLookupModal();
+      clearFlash();
+      render();
+      return;
+    }
+
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  };
+}
+
+function bindExchangeRateRegisterEvents() {
+  document.querySelector("[data-exchange-rate-cancel]")?.addEventListener("click", () => {
+    resetExchangeRateRegisterDraft();
+    clearFlash();
+    render();
+  });
+
+  const exchangeRateForm = document.getElementById("exchange-rate-form");
+  if (exchangeRateForm instanceof HTMLFormElement) {
+    exchangeRateForm.addEventListener("input", () => {
+      captureExchangeRateRegisterDraft();
+    });
+
+    exchangeRateForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureExchangeRateRegisterDraft();
+      await saveExchangeRateRegister();
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "registrar-tasa-cambio" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["g", "c"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.exchangeRateRegister.loading || state.exchangeRateRegister.saving) {
+      return;
+    }
+
+    if (key === "g") {
+      captureExchangeRateRegisterDraft();
+      await saveExchangeRateRegister();
+      return;
+    }
+
+    resetExchangeRateRegisterDraft();
+    clearFlash();
+    render();
+  };
+}
+
+function bindFacturacionEvents() {
+  document.querySelectorAll("[data-facturacion-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      captureFacturacionDraft();
+      const action = button.getAttribute("data-facturacion-action") || "";
+
+      if (action === "salir" || action === "salir-vista") {
+        resetFacturacionState();
+        state.currentView = "desktop";
+        state.navigation.openMenu = "";
+        state.navigation.openSubmenu = "";
+        state.navigation.menuPinned = false;
+        clearFlash();
+        render();
+        return;
+      }
+
+      if (action === "nuevo" || action === "cancelar" || action === "cancelar-documento") {
+        const currentPriceList = getCurrentFacturacionPriceList();
+        state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentPriceList });
+        state.facturacion.selectedLineIndex = -1;
+        state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
+        clearFlash();
+        render();
+        return;
+      }
+
+      if (action === "descuento") {
+        const currentDraft = normalizeFacturacionDraft(state.facturacion.draft);
+        if (currentDraft.overrideDiscountAuthorized) {
+          focusFacturacionGlobalDiscountInput();
+          return;
+        }
+
+        openFacturacionDiscountAuthModal();
+        render();
+        return;
+      }
+
+      if (action === "congelar") {
+        freezeCurrentFacturacionDraft();
+        return;
+      }
+
+      if (action === "descongelar") {
+        openFacturacionFrozenLookupModal();
+        render();
+        return;
+      }
+
+      if (action === "cambiar-lista") {
+        const currentDraft = normalizeFacturacionDraft(state.facturacion.draft);
+        const selectedLineIndex = getFacturacionSelectedLineIndex();
+        if (selectedLineIndex < 0) {
+          setFlash("Selecciona primero una linea de la factura para cambiar su lista de precios.", "error");
+          render();
+          return;
+        }
+
+        const selectedLine = currentDraft.items[selectedLineIndex];
+        if (!selectedLine || !String(selectedLine.codigoBarra || "").trim()) {
+          setFlash("La linea seleccionada no tiene un articulo cargado.", "error");
+          render();
+          return;
+        }
+
+        const nextPriceList = getNextFacturacionPriceList(selectedLine.priceList);
+        state.facturacion.draft = recalculateFacturacionDraftLinePriceList(currentDraft, selectedLineIndex, nextPriceList);
+        clearFlash();
+        setFlash(`Lista de precios del articulo ${selectedLineIndex + 1}: ${getFacturacionPriceListLabel(nextPriceList)}.`, "success");
+        render();
+        return;
+      }
+
+      const labels = {
+        nuevo: "Nuevo documento",
+        buscar: "Buscar cliente o vendedor",
+        guardar: "Guardar factura",
+        cancelar: "Cancelar factura",
+        descuento: "Descuento global",
+        previsualizar: "Previsualizar factura",
+        "cancelar-documento": "Cancelar documento",
+      };
+
+      setFlash(`${labels[action] || "Accion"} lista para conectar con la logica de facturacion.`, "info");
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-facturacion-discount-auth-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeFacturacionDiscountAuthModal();
+      render();
+    });
+  });
+
+  const facturacionDiscountAuthForm = document.getElementById("facturacion-discount-auth-form");
+  if (facturacionDiscountAuthForm instanceof HTMLFormElement) {
+    facturacionDiscountAuthForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureFacturacionDiscountAuthDraft();
+      await authorizeFacturacionGlobalDiscount();
+    });
+  }
+
+  document.querySelectorAll("[data-facturacion-frozen-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeFacturacionFrozenLookupModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-frozen-refresh]")?.addEventListener("click", () => {
+    openFacturacionFrozenLookupModal();
+    render();
+  });
+
+  document.querySelectorAll("[data-facturacion-frozen-select]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      const recordId = row.getAttribute("data-facturacion-frozen-select") || "";
+      if (!recordId) {
+        return;
+      }
+
+      await restoreFacturacionFrozenDraft(recordId);
+    });
+  });
+
+  document.querySelectorAll("[data-facturacion-select-line]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const rowNumber = Number.parseInt(row.getAttribute("data-facturacion-select-line") || "", 10);
+      if (!Number.isInteger(rowNumber) || rowNumber < 1) {
+        return;
+      }
+
+      selectFacturacionLine(rowNumber - 1);
+      renderFacturacionAndFocusLine(rowNumber);
+    });
+  });
+
+  document.querySelector("[data-facturacion-cliente-codigo]")?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    await resolveFacturacionClienteFromField();
+  });
+
+  document.querySelector("[data-facturacion-vendedor-cedula]")?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    await resolveFacturacionTrabajadorFromField();
+  });
+
+  document.querySelector("[data-facturacion-open-vendedor-lookup]")?.addEventListener("click", async () => {
+    captureFacturacionDraft();
+    await openFacturacionLookupModal("trabajadores");
+  });
+
+  document.querySelector("[data-facturacion-open-cliente-lookup]")?.addEventListener("click", async () => {
+    captureFacturacionDraft();
+    await openFacturacionClientEditor();
+  });
+
+  document.querySelectorAll("[data-facturacion-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeFacturacionLookupModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-lookup-refresh]")?.addEventListener("click", async () => {
+    const type = state.facturacion.lookup?.type || "trabajadores";
+    await openFacturacionLookupModal(type);
+  });
+
+  document.querySelectorAll("[data-facturacion-lookup-select]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      const recordId = row.getAttribute("data-facturacion-lookup-select") || "";
+      if (!recordId) {
+        return;
+      }
+
+      const type = state.facturacion.lookup?.type;
+      if (type === "trabajadores") {
+        const selected = (state.facturacion.lookup.items || []).find((item) => String(item.cedula || "") === recordId);
+        if (selected) {
+          applyTrabajadorToFacturacionDraft(selected);
+        }
+      } else {
+        const selected = (state.facturacion.lookup.items || []).find((item) => String(item.codigo || "") === recordId);
+        if (selected) {
+          applyClienteToFacturacionDraft(selected);
+        }
+      }
+
+      closeFacturacionLookupModal();
+      clearFlash();
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-facturacion-client-editor-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeFacturacionClientEditor();
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-client-editor-edit]")?.addEventListener("click", async () => {
+    captureFacturacionClientEditorDraft();
+    await loadFacturacionClientEditorForEdit();
+  });
+
+  const facturacionClientEditorForm = document.getElementById("facturacion-client-editor-form");
+  if (facturacionClientEditorForm instanceof HTMLFormElement) {
+    facturacionClientEditorForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureFacturacionClientEditorDraft();
+      await saveFacturacionClientEditor();
+    });
+  }
+
+  document.querySelectorAll("[data-facturacion-line-codigo]").forEach((input) => {
+    input.addEventListener("input", () => {
+      captureFacturacionDraft();
+    });
+
+    input.addEventListener("focus", () => {
+      const rowNumber = Number.parseInt(input.getAttribute("data-facturacion-line-codigo") || "0", 10);
+      if (!rowNumber) {
+        return;
+      }
+
+      selectFacturacionLine(rowNumber - 1);
+    });
+
+    input.addEventListener("keydown", async (event) => {
+      const rowNumber = Number.parseInt(input.getAttribute("data-facturacion-line-codigo") || "0", 10);
+      if (!rowNumber) {
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusFacturacionLineInput(rowNumber + 1);
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusFacturacionLineInput(rowNumber - 1);
+        return;
+      }
+
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      await resolveFacturacionLineFromField(rowNumber - 1);
+    });
+  });
+
+  const facturacionGlobalDiscountInput = document.querySelector("[data-facturacion-global-discount]");
+  if (facturacionGlobalDiscountInput instanceof HTMLInputElement) {
+    facturacionGlobalDiscountInput.addEventListener("focus", () => {
+      facturacionGlobalDiscountInput.select();
+    });
+
+    facturacionGlobalDiscountInput.addEventListener("change", () => {
+      applyFacturacionGlobalDiscountFromField(facturacionGlobalDiscountInput.value);
+    });
+
+    facturacionGlobalDiscountInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      applyFacturacionGlobalDiscountFromField(facturacionGlobalDiscountInput.value);
+    });
+  }
+
+  document.querySelectorAll("[data-facturacion-line-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const { lineIndex } = state.facturacion.lineLookup || {};
+      closeFacturacionLineLookupModal();
+      if (typeof lineIndex === "number" && lineIndex >= 0) {
+        renderFacturacionAndFocusLine(lineIndex + 1);
+        return;
+      }
+
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-line-lookup-refresh]")?.addEventListener("click", async () => {
+    const { lineIndex } = state.facturacion.lineLookup || {};
+    if (typeof lineIndex !== "number" || lineIndex < 0) {
+      return;
+    }
+
+    await resolveFacturacionLineFromField(lineIndex);
+  });
+
+  document.querySelectorAll("[data-facturacion-line-lookup-select]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const selectedIndex = Number.parseInt(row.getAttribute("data-facturacion-line-lookup-select") || "", 10);
+      if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+        return;
+      }
+
+      const lookup = state.facturacion.lineLookup;
+      const selected = (lookup.items || [])[selectedIndex];
+      if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+        return;
+      }
+
+      fillFacturacionLineFromInventory(lookup.lineIndex, selected);
+      closeFacturacionLineLookupModal();
+      clearFlash();
+      renderFacturacionAndFocusLine(lookup.lineIndex + 1);
+    });
+  });
+
+  const facturacionLineLookupDialog = document.querySelector("[data-facturacion-line-lookup-dialog]");
+  if (facturacionLineLookupDialog instanceof HTMLElement) {
+    queueMicrotask(() => {
+      facturacionLineLookupDialog.focus();
+    });
+
+    facturacionLineLookupDialog.addEventListener("keydown", (event) => {
+      const lookup = state.facturacion.lineLookup;
+      const items = Array.isArray(lookup?.items) ? lookup.items : [];
+      if (!lookup?.open || !items.length) {
+        return;
+      }
+
+      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0
+        ? lookup.activeIndex
+        : 0;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.facturacion.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex + 1) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.facturacion.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex - 1 + items.length) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const selected = items[currentIndex];
+        if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+          return;
+        }
+
+        fillFacturacionLineFromInventory(lookup.lineIndex, selected);
+        closeFacturacionLineLookupModal();
+        clearFlash();
+        renderFacturacionAndFocusLine(lookup.lineIndex + 1);
+        return;
+      }
+    });
+  }
+}
+
 function bindCashRegisterEvents() {
   document.querySelector("[data-refresh-cajas]")?.addEventListener("click", async () => {
     await loadCashRegisters();
@@ -6358,6 +8710,14 @@ function bindCashRegisterEvents() {
     resetCashRegisterDraft();
     clearFlash();
     render();
+  });
+
+  document.querySelector("[data-open-caja-lookup]")?.addEventListener("click", () => {
+    const searchField = document.querySelector("[data-caja-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
   });
 
   document.querySelectorAll("[data-delete-caja]").forEach((button) => {
@@ -7134,6 +9494,41 @@ async function deleteTransfer(numero) {
   }
 }
 
+async function loadFacturacionExchangeRate(options = {}) {
+  const { renderAfter = true, silent = false } = options;
+  const previous = state.facturacion.exchangeRate || createEmptyFacturacionExchangeRateState();
+
+  state.facturacion.exchangeRate = {
+    ...previous,
+    loading: true,
+    error: "",
+  };
+
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/exchange-rates/manual");
+    applyManualRateToFacturacionState(response?.item || {});
+  } catch (error) {
+    console.error(error);
+    state.facturacion.exchangeRate = {
+      ...previous,
+      loading: false,
+      error: extractErrorMessage(error),
+    };
+
+    if (!silent) {
+      setFlash(`No se pudo consultar la tasa manual de cambio: ${extractErrorMessage(error)}`, "error");
+    }
+  } finally {
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
 async function loadDevReturnsMetadata(options = {}) {
   const { renderAfter = true } = options;
   state.devReturns.loadingMetadata = true;
@@ -7716,6 +10111,380 @@ async function loadSucursalForEdit(codigo) {
   }
 }
 
+async function loadClientes(options = {}) {
+  const renderAfter = options.renderAfter !== false;
+  state.clientes.loading = true;
+  state.clientes.loadingMetadata = true;
+
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const [metadata, response] = await Promise.all([
+      apiFetch("/clientes/metadata"),
+      apiFetch("/clientes"),
+    ]);
+
+    state.clientes.metadata = metadata;
+    state.clientes.items = Array.isArray(response.clientes) ? response.clientes : [];
+
+    if (!state.clientes.draft?.originalCodigo) {
+      state.clientes.draft = createEmptyClienteDraft(metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar los clientes: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.clientes.loading = false;
+    state.clientes.loadingMetadata = false;
+
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadClienteForEdit(codigo) {
+  if (!codigo) {
+    return;
+  }
+
+  state.clientes.loading = true;
+  render();
+
+  try {
+    const response = await apiFetch(`/clientes/${encodeURIComponent(codigo)}`);
+    state.clientes.selectedCodigo = response.cliente?.codigo || codigo;
+    state.clientes.draft = clienteToDraft(response.cliente, state.clientes.metadata);
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el cliente: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.clientes.loading = false;
+    render();
+  }
+}
+
+async function saveCliente() {
+  const draft = state.clientes.draft || createEmptyClienteDraft(state.clientes.metadata);
+  const validationError = validateClienteDraft(draft);
+  if (validationError) {
+    setFlash(validationError, "error");
+    render();
+    return;
+  }
+
+  state.clientes.saving = true;
+  render();
+
+  try {
+    const payload = buildClientePayload(draft);
+    const response = draft.originalCodigo
+      ? await apiFetch(`/clientes/${encodeURIComponent(draft.originalCodigo)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/clientes", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.clientes.selectedCodigo = response.cliente?.codigo || draft.originalCodigo || draft.codigo;
+    state.clientes.draft = clienteToDraft(response.cliente, state.clientes.metadata);
+    await loadClientes({ renderAfter: false });
+    setFlash(draft.originalCodigo ? "Cliente actualizado correctamente." : "Cliente guardado correctamente.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.clientes.saving = false;
+    render();
+  }
+}
+
+async function deleteCliente(codigo) {
+  const normalizedCodigo = String(codigo || "").trim();
+  if (!normalizedCodigo) {
+    return;
+  }
+
+  state.clientes.deleting = true;
+  render();
+
+  try {
+    await apiFetch(`/clientes/${encodeURIComponent(normalizedCodigo)}`, {
+      method: "DELETE",
+    });
+
+    if (String(state.clientes.selectedCodigo || "") === normalizedCodigo) {
+      resetClienteDraft();
+    }
+
+    await loadClientes({ renderAfter: false });
+    setFlash("Cliente eliminado correctamente.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.clientes.deleting = false;
+    render();
+  }
+}
+
+async function loadTrabajadores(options = {}) {
+  const { renderAfter = true } = options;
+  state.trabajadores.loading = true;
+  state.trabajadores.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const [metadata, response] = await Promise.all([
+      apiFetch("/trabajadores/metadata"),
+      apiFetch("/trabajadores"),
+    ]);
+
+    state.trabajadores.metadata = metadata;
+    state.trabajadores.items = Array.isArray(response.trabajadores) ? response.trabajadores : [];
+
+    if (!state.trabajadores.draft?.originalCedula) {
+      state.trabajadores.draft = createEmptyTrabajadorDraft(metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar los trabajadores: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.trabajadores.loading = false;
+    state.trabajadores.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadTrabajadorForEdit(cedula) {
+  state.trabajadores.loading = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/trabajadores/${encodeURIComponent(cedula)}`);
+    state.trabajadores.selectedCedula = response.trabajador?.cedula || cedula;
+    state.trabajadores.draft = trabajadorToDraft(response.trabajador, state.trabajadores.metadata);
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el trabajador ${cedula}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.trabajadores.loading = false;
+    render();
+  }
+}
+
+async function saveTrabajador() {
+  const draft = state.trabajadores.draft || createEmptyTrabajadorDraft(state.trabajadores.metadata);
+  const validationMessage = validateTrabajadorDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.trabajadores.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildTrabajadorPayload(draft);
+    const response = draft.originalCedula
+      ? await apiFetch(`/trabajadores/${encodeURIComponent(draft.originalCedula)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/trabajadores", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.trabajadores.selectedCedula = response.trabajador?.cedula || draft.originalCedula || draft.cedula;
+    state.trabajadores.draft = trabajadorToDraft(response.trabajador, state.trabajadores.metadata);
+    await loadTrabajadores({ renderAfter: false });
+    setFlash(
+      draft.originalCedula
+        ? `Trabajador ${response.trabajador?.cedula || draft.originalCedula} actualizado correctamente.`
+        : `Trabajador ${response.trabajador?.cedula || ""} guardado correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.trabajadores.saving = false;
+    render();
+  }
+}
+
+async function deleteTrabajador(cedula) {
+  const normalizedCedula = String(cedula || "").trim().toUpperCase();
+  if (!normalizedCedula) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Vas a eliminar al trabajador ${normalizedCedula}. Esta accion no se puede deshacer. ¿Deseas continuar?`,
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  state.trabajadores.deleting = true;
+  clearFlash();
+  render();
+
+  try {
+    await apiFetch(`/trabajadores/${encodeURIComponent(normalizedCedula)}`, {
+      method: "DELETE",
+    });
+
+    resetTrabajadorDraft();
+    await loadTrabajadores({ renderAfter: false });
+    setFlash(`Trabajador ${normalizedCedula} eliminado correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.trabajadores.deleting = false;
+    render();
+  }
+}
+
+async function loadImpuestos(options = {}) {
+  const { renderAfter = true } = options;
+  state.impuestos.loading = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/inventory/catalogs/impuestos");
+    state.impuestos.items = Array.isArray(response.items) ? response.items : [];
+
+    if (!state.impuestos.draft?.codigo) {
+      state.impuestos.draft = createEmptyImpuestoDraft(state.impuestos.items);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar los impuestos: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.impuestos.loading = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function saveImpuesto() {
+  const draft = state.impuestos.draft || createEmptyImpuestoDraft(state.impuestos.items);
+  const validationMessage = validateImpuestoDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.impuestos.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch("/inventory/catalogs/impuestos", {
+      method: "POST",
+      body: buildImpuestoPayload(draft),
+    });
+
+    state.impuestos.selectedCodigo = response.item?.codigo || draft.codigo;
+    state.impuestos.draft = impuestoToDraft(response.item);
+    await loadImpuestos({ renderAfter: false });
+    if (userCanAccessFullInventory()) {
+      await loadCreationMetadata({ renderAfter: false });
+    }
+    setFlash(`Impuesto ${response.item?.codigo || draft.codigo} guardado correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.impuestos.saving = false;
+    render();
+  }
+}
+
+async function loadExchangeRateRegister(options = {}) {
+  const { renderAfter = true, silent = false } = options;
+  state.exchangeRateRegister.loading = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/exchange-rates/manual");
+    const item = response?.item || {};
+    const nextDraft = exchangeRateItemToDraft(item);
+
+    state.exchangeRateRegister.draft = nextDraft;
+    state.exchangeRateRegister.savedDraft = nextDraft;
+    state.exchangeRateRegister.updatedAt = String(item.actualizadoEn || "").trim();
+    applyManualRateToFacturacionState(item);
+  } catch (error) {
+    console.error(error);
+    if (!silent) {
+      setFlash(`No se pudo cargar la tasa de cambio: ${extractErrorMessage(error)}`, "error");
+    }
+  } finally {
+    state.exchangeRateRegister.loading = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function saveExchangeRateRegister() {
+  const draft = state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
+  const validationMessage = validateExchangeRateRegisterDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.exchangeRateRegister.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch("/exchange-rates/manual", {
+      method: "PUT",
+      body: buildExchangeRateRegisterPayload(draft),
+    });
+
+    const item = response?.item || {};
+    const nextDraft = exchangeRateItemToDraft(item);
+    state.exchangeRateRegister.draft = nextDraft;
+    state.exchangeRateRegister.savedDraft = nextDraft;
+    state.exchangeRateRegister.updatedAt = String(item.actualizadoEn || "").trim();
+    applyManualRateToFacturacionState(item);
+    setFlash("Tasa de cambio actualizada correctamente.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.exchangeRateRegister.saving = false;
+    render();
+  }
+}
+
 async function loadInventoryExistenceWorkspace() {
   if (!state.metadata && userCanAccessFullInventory()) {
     await loadCreationMetadata({ renderAfter: false });
@@ -7903,6 +10672,306 @@ async function deleteCashRegister(serie, fecha) {
     state.cashRegisters.deleting = false;
     render();
   }
+}
+
+async function openFacturacionLookupModal(type) {
+  state.facturacion.lookup = {
+    open: true,
+    loading: true,
+    type,
+    items: [],
+  };
+  render();
+
+  try {
+    const params = new URLSearchParams();
+    params.set("status", "1");
+    params.set("limit", "100");
+
+    const response = await apiFetch(`/${type}?${params.toString()}`);
+    state.facturacion.lookup = {
+      open: true,
+      loading: false,
+      type,
+      items: Array.isArray(response[type]) ? response[type] : [],
+    };
+  } catch (error) {
+    console.error(error);
+    state.facturacion.lookup = {
+      open: true,
+      loading: false,
+      type,
+      items: [],
+    };
+    setFlash(
+      `No se pudo cargar el catalogo de ${type === "trabajadores" ? "vendedores" : "clientes"}: ${extractErrorMessage(error)}`,
+      "error",
+    );
+  }
+
+  render();
+}
+
+function closeFacturacionLookupModal() {
+  state.facturacion.lookup = {
+    open: false,
+    loading: false,
+    type: "",
+    items: [],
+  };
+}
+
+async function resolveFacturacionClienteFromField() {
+  captureFacturacionDraft();
+  const codigo = String(state.facturacion.draft?.clienteCodigo || "").trim();
+
+  if (!codigo) {
+    clearFacturacionCliente();
+    render();
+    return;
+  }
+
+  try {
+    let cliente = null;
+
+    try {
+      const response = await apiFetch(`/clientes/${encodeURIComponent(codigo)}`);
+      cliente = response.cliente || null;
+    } catch (_error) {
+      const searchValue = normalizeIdentityComparable(codigo) || codigo;
+      const response = await apiFetch(`/clientes?buscar=${encodeURIComponent(searchValue)}&limit=100`);
+      const items = Array.isArray(response.clientes) ? response.clientes : [];
+      cliente = items.find((item) => identityValuesMatch(codigo, item.codigo)) || null;
+    }
+
+    if (!cliente) {
+      throw new Error("CLIENTE_NOT_FOUND");
+    }
+
+    applyClienteToFacturacionDraft(cliente);
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    clearFacturacionCliente();
+    setFlash(`No se encontro un cliente registrado con la cedula o RIF ${codigo}.`, "error");
+  }
+
+  render();
+}
+
+async function resolveFacturacionTrabajadorFromField() {
+  captureFacturacionDraft();
+  const cedula = String(state.facturacion.draft?.vendedorCedula || "").trim();
+
+  if (!cedula) {
+    clearFacturacionTrabajador();
+    render();
+    return;
+  }
+
+  try {
+    let trabajador = null;
+
+    try {
+      const response = await apiFetch(`/trabajadores/${encodeURIComponent(cedula)}`);
+      trabajador = response.trabajador || null;
+    } catch (_error) {
+      const searchValue = normalizeIdentityComparable(cedula) || cedula;
+      const response = await apiFetch(`/trabajadores?buscar=${encodeURIComponent(searchValue)}&limit=100`);
+      const items = Array.isArray(response.trabajadores) ? response.trabajadores : [];
+      trabajador = items.find((item) => identityValuesMatch(cedula, item.cedula)) || null;
+    }
+
+    if (!trabajador) {
+      throw new Error("TRABAJADOR_NOT_FOUND");
+    }
+
+    applyTrabajadorToFacturacionDraft(trabajador);
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    clearFacturacionTrabajador();
+    setFlash(`No se encontro un trabajador registrado con la cedula ${cedula}.`, "error");
+  }
+
+  render();
+}
+
+async function ensureClientesMetadataLoaded() {
+  if (state.clientes.metadata?.tiposCliente && state.clientes.metadata?.tiposContribuyente) {
+    return;
+  }
+
+  state.clientes.metadata = await apiFetch("/clientes/metadata");
+}
+
+async function openFacturacionClientEditor() {
+  captureFacturacionDraft();
+  state.facturacion.clientEditor.open = true;
+  state.facturacion.clientEditor.loading = true;
+  state.facturacion.clientEditor.saving = false;
+  render();
+
+  try {
+    await ensureClientesMetadataLoaded();
+    const prefillCode = String(state.facturacion.draft?.clienteCodigo || "").trim().toUpperCase();
+    resetFacturacionClientEditorDraft(prefillCode);
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo abrir el formulario del cliente: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.facturacion.clientEditor.loading = false;
+    render();
+  }
+}
+
+function closeFacturacionClientEditor() {
+  state.facturacion.clientEditor = {
+    open: false,
+    loading: false,
+    saving: false,
+    draft: createEmptyClienteDraft(state.clientes.metadata),
+  };
+}
+
+async function loadFacturacionClientEditorForEdit() {
+  const draft = state.facturacion.clientEditor.draft || createEmptyClienteDraft(state.clientes.metadata);
+  const codigo = String(draft.codigo || "").trim();
+
+  if (!codigo) {
+    setFlash("Debes indicar la cedula o RIF del cliente para editarlo.", "error");
+    render();
+    return;
+  }
+
+  state.facturacion.clientEditor.loading = true;
+  render();
+
+  try {
+    let cliente = null;
+
+    try {
+      const response = await apiFetch(`/clientes/${encodeURIComponent(codigo)}`);
+      cliente = response.cliente || null;
+    } catch (_error) {
+      const searchValue = normalizeIdentityComparable(codigo) || codigo;
+      const response = await apiFetch(`/clientes?buscar=${encodeURIComponent(searchValue)}&limit=100`);
+      const items = Array.isArray(response.clientes) ? response.clientes : [];
+      cliente = items.find((item) => identityValuesMatch(codigo, item.codigo)) || null;
+    }
+
+    if (!cliente) {
+      throw new Error("CLIENTE_NOT_FOUND");
+    }
+
+    state.facturacion.clientEditor.draft = clienteToDraft(cliente, state.clientes.metadata);
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se encontro un cliente registrado con la cedula o RIF ${codigo}.`, "error");
+  } finally {
+    state.facturacion.clientEditor.loading = false;
+    render();
+  }
+}
+
+async function saveFacturacionClientEditor() {
+  const draft = state.facturacion.clientEditor.draft || createEmptyClienteDraft(state.clientes.metadata);
+  const validationMessage = validateClienteDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.facturacion.clientEditor.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildClientePayload(draft);
+    const response = draft.originalCodigo
+      ? await apiFetch(`/clientes/${encodeURIComponent(draft.originalCodigo)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/clientes", {
+          method: "POST",
+          body: payload,
+        });
+
+    const cliente = response.cliente;
+    applyClienteToFacturacionDraft(cliente);
+    closeFacturacionClientEditor();
+    setFlash(`Cliente ${cliente?.codigo || ""} guardado correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.facturacion.clientEditor.saving = false;
+    render();
+  }
+}
+
+async function resolveFacturacionLineFromField(index) {
+  captureFacturacionDraft();
+  const draft = state.facturacion.draft || createEmptyFacturacionDraft();
+  const items = Array.isArray(draft.items) && draft.items.length ? draft.items : createEmptyFacturacionItems();
+  const line = items[index] || createEmptyFacturacionLineDraft();
+  const searchValue = String(line.codigoBarra || "").trim();
+
+  if (!searchValue) {
+    clearFacturacionLine(index);
+    renderFacturacionAndFocusLine(index + 1);
+    return;
+  }
+
+  try {
+    const params = new URLSearchParams();
+    params.set("buscar", searchValue);
+    params.set("limit", "25");
+    params.set("status", "activo");
+
+    const response = await apiFetch(`/inventory?${params.toString()}`);
+    const itemsFound = Array.isArray(response.data) ? response.data : [];
+    const normalizedSearch = String(searchValue).trim().toUpperCase();
+    const exactBarcodeMatch = itemsFound.find(
+      (item) => String(item.codigoBarra || "").trim().toUpperCase() === normalizedSearch,
+    );
+
+    if (!itemsFound.length) {
+      throw new Error("ARTICULO_NOT_FOUND");
+    }
+
+    if (exactBarcodeMatch) {
+      fillFacturacionLineFromInventory(index, exactBarcodeMatch);
+      closeFacturacionLineLookupModal();
+      clearFlash();
+      renderFacturacionAndFocusLine(index + 1);
+      return;
+    }
+
+    if (itemsFound.length === 1) {
+      fillFacturacionLineFromInventory(index, itemsFound[0]);
+      closeFacturacionLineLookupModal();
+      clearFlash();
+      renderFacturacionAndFocusLine(index + 1);
+      return;
+    }
+
+    openFacturacionLineLookupModal(index, searchValue, itemsFound);
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    clearFacturacionLine(index, searchValue);
+    closeFacturacionLineLookupModal();
+    setFlash(`No se encontro un articulo para ${searchValue}.`, "error");
+    renderFacturacionAndFocusLine(index + 1);
+    return;
+  }
+
+  render();
 }
 
 async function saveSucursal() {
@@ -8818,6 +11887,1472 @@ function sucursalToDraft(sucursal) {
   };
 }
 
+function resetTrabajadorDraft() {
+  state.trabajadores.selectedCedula = "";
+  state.trabajadores.draft = createEmptyTrabajadorDraft(state.trabajadores.metadata);
+}
+
+function resetClienteDraft() {
+  state.clientes.selectedCodigo = "";
+  state.clientes.draft = createEmptyClienteDraft(state.clientes.metadata);
+}
+
+function createEmptyClienteDraft(metadata) {
+  const defaults = metadata?.defaults || {};
+  return {
+    originalCodigo: "",
+    codigo: defaults.codigo || "",
+    nombre: "",
+    fechaIngreso: defaults.fechaIngreso ? toDateInputValue(defaults.fechaIngreso) : toDateInputValue(new Date()),
+    telefono: "",
+    direccion: "",
+    status: defaults.status ?? 1,
+    tipo: defaults.tipo ? String(defaults.tipo) : "",
+    tipoContribuyente: defaults.tipoContribuyente ? String(defaults.tipoContribuyente) : "",
+  };
+}
+
+function captureClienteDraft() {
+  const form = document.getElementById("cliente-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  state.clientes.draft = readClienteDraft(form);
+}
+
+function readClienteDraft(form) {
+  const currentDraft = state.clientes.draft || createEmptyClienteDraft(state.clientes.metadata);
+  return {
+    originalCodigo: currentDraft.originalCodigo || "",
+    codigo: readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
+    nombre: readFormFieldValue(form, "nombre", ""),
+    fechaIngreso: readFormFieldValue(form, "fechaIngreso", toDateInputValue(new Date())),
+    telefono: readFormFieldValue(form, "telefono", ""),
+    direccion: readFormFieldValue(form, "direccion", ""),
+    status: Number.parseInt(readFormFieldValue(form, "status", String(currentDraft.status ?? 1)), 10) || 1,
+    tipo: readFormFieldValue(form, "tipo", currentDraft.tipo || ""),
+    tipoContribuyente: readFormFieldValue(form, "tipoContribuyente", currentDraft.tipoContribuyente || ""),
+  };
+}
+
+function validateClienteDraft(draft) {
+  if (!String(draft.codigo || "").trim()) {
+    return "Debes indicar la cedula o RIF del cliente.";
+  }
+
+  if (!String(draft.nombre || "").trim()) {
+    return "Debes indicar el nombre del cliente.";
+  }
+
+  if (!String(draft.fechaIngreso || "").trim()) {
+    return "Debes indicar la fecha de ingreso.";
+  }
+
+  if (!String(draft.tipo || "").trim()) {
+    return "Debes indicar el tipo de cliente.";
+  }
+
+  if (!String(draft.tipoContribuyente || "").trim()) {
+    return "Debes indicar el tipo de contribuyente.";
+  }
+
+  return "";
+}
+
+function buildClientePayload(draft) {
+  return {
+    codigo: String(draft.codigo || "").trim(),
+    nombre: String(draft.nombre || "").trim(),
+    fechaIngreso: new Date(`${draft.fechaIngreso}T00:00:00`).toISOString(),
+    telefono: String(draft.telefono || "").trim(),
+    direccion: String(draft.direccion || "").trim(),
+    status: Number.parseInt(String(draft.status ?? 1), 10) || 1,
+    tipo: Number.parseInt(String(draft.tipo || ""), 10),
+    tipoContribuyente: Number.parseInt(String(draft.tipoContribuyente || ""), 10),
+  };
+}
+
+function clienteToDraft(item, metadata = state.clientes?.metadata) {
+  if (!item) {
+    return createEmptyClienteDraft(metadata);
+  }
+
+  return {
+    originalCodigo: item.codigo || "",
+    codigo: item.codigo || "",
+    nombre: item.nombre || "",
+    fechaIngreso: toDateInputValue(item.fechaIngreso),
+    telefono: item.telefono || "",
+    direccion: item.direccion || "",
+    status: item.status ?? 1,
+    tipo: item.tipo !== null && item.tipo !== undefined ? String(item.tipo) : "",
+    tipoContribuyente:
+      item.tipoContribuyente !== null && item.tipoContribuyente !== undefined ? String(item.tipoContribuyente) : "",
+  };
+}
+
+function createEmptyTrabajadorDraft(metadata) {
+  const defaults = metadata?.defaults || {};
+  return {
+    originalCedula: "",
+    cedula: "",
+    codigo: toInputValue(defaults.codigo ?? ""),
+    nombre: "",
+    cargo: "",
+    fechaIngreso: toDateInputValue(defaults.fechaIngreso || new Date()),
+    fechaNacimiento: toDateInputValue(defaults.fechaNacimiento || defaults.fechaIngreso || new Date()),
+    direccion: "",
+    telefono: "",
+    celular: "",
+    status: String(defaults.status ?? 1),
+  };
+}
+
+function captureTrabajadorDraft() {
+  const form = document.getElementById("trabajador-form");
+  if (!form) {
+    return;
+  }
+
+  state.trabajadores.draft = readTrabajadorDraft(form);
+}
+
+function readTrabajadorDraft(form) {
+  const currentDraft = state.trabajadores.draft || createEmptyTrabajadorDraft(state.trabajadores.metadata);
+
+  return {
+    originalCedula: currentDraft.originalCedula || "",
+    cedula: currentDraft.originalCedula || readFormFieldValue(form, "cedula", currentDraft.cedula),
+    codigo: readFormFieldValue(form, "codigo", currentDraft.codigo),
+    nombre: readFormFieldValue(form, "nombre", currentDraft.nombre),
+    cargo: readFormFieldValue(form, "cargo", currentDraft.cargo),
+    fechaIngreso: readFormFieldValue(form, "fechaIngreso", currentDraft.fechaIngreso),
+    fechaNacimiento: readFormFieldValue(form, "fechaNacimiento", currentDraft.fechaNacimiento),
+    direccion: readFormFieldValue(form, "direccion", currentDraft.direccion),
+    telefono: readFormFieldValue(form, "telefono", currentDraft.telefono),
+    celular: readFormFieldValue(form, "celular", currentDraft.celular),
+    status: readFormFieldValue(form, "status", currentDraft.status || "1"),
+  };
+}
+
+function validateTrabajadorDraft(draft) {
+  if (!String(draft.cedula || "").trim()) {
+    return "Debes indicar la cedula del trabajador.";
+  }
+
+  const codigo = Number.parseInt(String(draft.codigo || "0"), 10);
+  if (!Number.isInteger(codigo) || codigo <= 0) {
+    return "El codigo del trabajador no es valido.";
+  }
+
+  if (!String(draft.nombre || "").trim()) {
+    return "Debes indicar el nombre del trabajador.";
+  }
+
+  if (!String(draft.cargo || "").trim()) {
+    return "Debes seleccionar el cargo del trabajador.";
+  }
+
+  if (!String(draft.fechaIngreso || "").trim()) {
+    return "Debes indicar la fecha de ingreso.";
+  }
+
+  return "";
+}
+
+function buildTrabajadorPayload(draft) {
+  return {
+    cedula: String(draft.cedula || "").trim().toUpperCase(),
+    codigo: Number.parseInt(String(draft.codigo || "0"), 10),
+    nombre: String(draft.nombre || "").trim() || undefined,
+    cargo: String(draft.cargo || "").trim().toUpperCase() || undefined,
+    fechaIngreso: toApiDateTime(draft.fechaIngreso),
+    fechaNacimiento: String(draft.fechaNacimiento || "").trim() ? toApiDateTime(draft.fechaNacimiento) : undefined,
+    direccion: String(draft.direccion || "").trim() || undefined,
+    telefono: String(draft.telefono || "").trim() || undefined,
+    celular: String(draft.celular || "").trim() || undefined,
+    status: Number.parseInt(String(draft.status ?? "1"), 10),
+  };
+}
+
+function trabajadorToDraft(item, metadata = state.trabajadores?.metadata) {
+  return {
+    originalCedula: item?.cedula || "",
+    cedula: item?.cedula || "",
+    codigo: toInputValue(item?.codigo ?? metadata?.defaults?.codigo ?? ""),
+    nombre: item?.nombre || "",
+    cargo: item?.cargo || "",
+    fechaIngreso: toDateInputValue(item?.fechaIngreso || metadata?.defaults?.fechaIngreso || new Date()),
+    fechaNacimiento: toDateInputValue(item?.fechaNacimiento),
+    direccion: item?.direccion || "",
+    telefono: item?.telefono || "",
+    celular: item?.celular || "",
+    status: String(item?.status ?? 1),
+  };
+}
+
+function createEmptyImpuestoDraft(items = []) {
+  const maxCode = (Array.isArray(items) ? items : [])
+    .map((item) => Number.parseInt(String(item?.codigo || "0"), 10))
+    .filter((value) => Number.isInteger(value) && value > 0)
+    .reduce((max, value) => Math.max(max, value), 0);
+
+  return {
+    codigo: maxCode > 0 ? String(maxCode + 1) : "1",
+    nombre: "",
+    porcentajeImpuesto: "0",
+    status: "1",
+  };
+}
+
+function captureImpuestoDraft() {
+  const form = document.getElementById("impuesto-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  state.impuestos.draft = readImpuestoDraft(form);
+}
+
+function readImpuestoDraft(form) {
+  const currentDraft = state.impuestos.draft || createEmptyImpuestoDraft(state.impuestos.items);
+  return {
+    codigo: readFormFieldValue(form, "codigo", currentDraft.codigo),
+    nombre: readFormFieldValue(form, "nombre", currentDraft.nombre),
+    porcentajeImpuesto: readFormFieldValue(form, "porcentajeImpuesto", currentDraft.porcentajeImpuesto),
+    status: readRadioValue(form, "status", currentDraft.status || "1"),
+  };
+}
+
+function validateImpuestoDraft(draft) {
+  const codigo = Number.parseInt(String(draft.codigo || "0"), 10);
+  if (!Number.isInteger(codigo) || codigo <= 0) {
+    return "Debes indicar un código numérico válido para el impuesto.";
+  }
+
+  if (!String(draft.nombre || "").trim()) {
+    return "Debes indicar el nombre del impuesto.";
+  }
+
+  const porcentaje = Number(String(draft.porcentajeImpuesto || "").trim().replace(",", "."));
+  if (!Number.isFinite(porcentaje) || porcentaje < 0) {
+    return "Debes indicar un porcentaje válido para el impuesto.";
+  }
+
+  return "";
+}
+
+function buildImpuestoPayload(draft) {
+  return {
+    codigo: String(draft.codigo || "").trim(),
+    nombre: String(draft.nombre || "").trim(),
+    porcentajeImpuesto: String(draft.porcentajeImpuesto || "0").trim().replace(",", "."),
+    status: Number.parseInt(String(draft.status || "1"), 10) === 0 ? 0 : 1,
+  };
+}
+
+function impuestoToDraft(item) {
+  if (!item) {
+    return createEmptyImpuestoDraft(state.impuestos.items);
+  }
+
+  return {
+    codigo: String(item.codigo || ""),
+    nombre: item.nombre || "",
+    porcentajeImpuesto: item.porcentajeImpuesto == null ? "0" : String(item.porcentajeImpuesto),
+    status: String(item.status ?? 1) === "0" ? "0" : "1",
+  };
+}
+
+function openImpuestoLookupModal() {
+  state.impuestos.lookup = {
+    open: true,
+    loading: false,
+    items: Array.isArray(state.impuestos.items) ? state.impuestos.items : [],
+  };
+}
+
+function closeImpuestoLookupModal() {
+  state.impuestos.lookup = {
+    open: false,
+    loading: false,
+    items: [],
+  };
+}
+
+function resetImpuestoDraft() {
+  state.impuestos.selectedCodigo = "";
+  state.impuestos.draft = createEmptyImpuestoDraft(state.impuestos.items);
+}
+
+function createEmptyExchangeRateRegisterDraft() {
+  return {
+    valorCambio: "",
+    confirmarValorCambio: "",
+    valorMayor: "",
+    confirmarValorMayor: "",
+    actualizadoEn: "",
+  };
+}
+
+function captureExchangeRateRegisterDraft() {
+  const form = document.getElementById("exchange-rate-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  state.exchangeRateRegister.draft = readExchangeRateRegisterDraft(form);
+}
+
+function readExchangeRateRegisterDraft(form) {
+  const currentDraft = state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
+  return {
+    valorCambio: readFormFieldValue(form, "valorCambio", currentDraft.valorCambio),
+    confirmarValorCambio: readFormFieldValue(form, "confirmarValorCambio", currentDraft.confirmarValorCambio),
+    valorMayor: readFormFieldValue(form, "valorMayor", currentDraft.valorMayor),
+    confirmarValorMayor: readFormFieldValue(form, "confirmarValorMayor", currentDraft.confirmarValorMayor),
+    actualizadoEn: currentDraft.actualizadoEn || state.exchangeRateRegister.updatedAt || "",
+  };
+}
+
+function validateExchangeRateRegisterDraft(draft) {
+  if (!String(draft.valorCambio || "").trim()) {
+    return "Debes indicar el valor del cambio.";
+  }
+
+  if (!String(draft.confirmarValorCambio || "").trim()) {
+    return "Debes confirmar el valor del cambio.";
+  }
+
+  if (!String(draft.valorMayor || "").trim()) {
+    return "Debes indicar el valor del mayor.";
+  }
+
+  if (!String(draft.confirmarValorMayor || "").trim()) {
+    return "Debes confirmar el valor del mayor.";
+  }
+
+  if (!exchangeRateValuesMatch(draft.valorCambio, draft.confirmarValorCambio)) {
+    return "El valor del cambio y su confirmacion no coinciden.";
+  }
+
+  if (!exchangeRateValuesMatch(draft.valorMayor, draft.confirmarValorMayor)) {
+    return "El valor del mayor y su confirmacion no coinciden.";
+  }
+
+  if (parseExchangeRateNumber(draft.valorCambio) === null) {
+    return "El valor del cambio no es valido.";
+  }
+
+  if (parseExchangeRateNumber(draft.valorMayor) === null) {
+    return "El valor del mayor no es valido.";
+  }
+
+  return "";
+}
+
+function buildExchangeRateRegisterPayload(draft) {
+  return {
+    valorCambio: normalizeExchangeRateInput(draft.valorCambio),
+    valorMayor: normalizeExchangeRateInput(draft.valorMayor),
+  };
+}
+
+function exchangeRateItemToDraft(item) {
+  const updatedAt = String(item?.actualizadoEn || "").trim();
+  return {
+    valorCambio: updatedAt ? formatExchangeRateDraftValue(item?.valorCambio) : "",
+    confirmarValorCambio: "",
+    valorMayor: updatedAt ? formatExchangeRateDraftValue(item?.valorMayor) : "",
+    confirmarValorMayor: "",
+    actualizadoEn: updatedAt,
+  };
+}
+
+function exchangeRateValuesMatch(leftValue, rightValue) {
+  const left = parseExchangeRateNumber(leftValue);
+  const right = parseExchangeRateNumber(rightValue);
+  return left !== null && right !== null && left === right;
+}
+
+function parseExchangeRateNumber(value) {
+  const sanitized = String(value ?? "").trim().replace(/\s+/g, "");
+  if (!sanitized) {
+    return null;
+  }
+
+  const commaIndex = sanitized.lastIndexOf(",");
+  const dotIndex = sanitized.lastIndexOf(".");
+  let normalized = sanitized;
+
+  if (commaIndex >= 0 && dotIndex >= 0) {
+    normalized = commaIndex > dotIndex ? sanitized.replace(/\./g, "").replace(",", ".") : sanitized.replace(/,/g, "");
+  } else if (commaIndex >= 0) {
+    normalized = sanitized.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = sanitized.replace(/,/g, "");
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizeExchangeRateInput(value) {
+  const parsed = parseExchangeRateNumber(value);
+  return parsed === null ? "" : parsed.toFixed(2);
+}
+
+function formatExchangeRateDraftValue(value) {
+  const parsed = parseExchangeRateNumber(value);
+  return parsed === null ? "" : parsed.toFixed(2).replace(".", ",");
+}
+
+function resetExchangeRateRegisterDraft() {
+  const savedDraft = state.exchangeRateRegister.savedDraft || createEmptyExchangeRateRegisterDraft();
+  state.exchangeRateRegister.draft = {
+    ...savedDraft,
+    confirmarValorCambio: "",
+    confirmarValorMayor: "",
+  };
+}
+
+function applyManualRateToFacturacionState(item) {
+  state.facturacion.exchangeRate = {
+    loading: false,
+    loaded: true,
+    rateBsPerUsd: toFacturacionNumber(item?.valorCambio),
+    rateMayor: toFacturacionNumber(item?.valorMayor),
+    effectiveDate: String(item?.actualizadoEn || "").trim().slice(0, 10),
+    fetchedAt: String(item?.actualizadoEn || "").trim(),
+    provider: "Registro manual",
+    providerUrl: "",
+    fallbackUsed: false,
+    error: "",
+  };
+}
+
+function normalizeFacturacionPriceList(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return FACTURACION_PRICE_LIST_ORDER.includes(normalized) ? normalized : "detal";
+}
+
+function getFacturacionPriceListShortLabel(value) {
+  const labels = {
+    detal: "D",
+    mayor: "M",
+    afiliado: "A",
+  };
+
+  return labels[normalizeFacturacionPriceList(value)] || "D";
+}
+
+function getFacturacionPriceListLabel(value) {
+  const labels = {
+    detal: "Detal",
+    mayor: "Mayor",
+    afiliado: "Afiliado",
+  };
+
+  return labels[normalizeFacturacionPriceList(value)] || "Detal";
+}
+
+function getCurrentFacturacionPriceList() {
+  return normalizeFacturacionPriceList(state.facturacion.draft?.priceList);
+}
+
+function getFacturacionSelectedLineIndex() {
+  const selectedIndex = Number.isInteger(state.facturacion?.selectedLineIndex)
+    ? state.facturacion.selectedLineIndex
+    : -1;
+  return selectedIndex >= 0 ? selectedIndex : -1;
+}
+
+function getFacturacionSelectedLine() {
+  const selectedIndex = getFacturacionSelectedLineIndex();
+  const items = Array.isArray(state.facturacion?.draft?.items) ? state.facturacion.draft.items : [];
+  return selectedIndex >= 0 ? items[selectedIndex] || null : null;
+}
+
+function getFacturacionLinePriceList(lineIndex) {
+  const items = Array.isArray(state.facturacion?.draft?.items) ? state.facturacion.draft.items : [];
+  if (Number.isInteger(lineIndex) && lineIndex >= 0 && items[lineIndex]) {
+    return normalizeFacturacionPriceList(items[lineIndex].priceList);
+  }
+
+  return getCurrentFacturacionPriceList();
+}
+
+function getFacturacionSelectedLinePriceList() {
+  const selectedLine = getFacturacionSelectedLine();
+  return selectedLine ? normalizeFacturacionPriceList(selectedLine.priceList) : getCurrentFacturacionPriceList();
+}
+
+function getFacturacionDraftPriceListSummaryLabel(draft) {
+  const items = Array.isArray(draft?.items) ? draft.items : [];
+  const populatedLists = items
+    .filter((item) => String(item?.codigoBarra || "").trim())
+    .map((item) => normalizeFacturacionPriceList(item?.priceList));
+
+  if (!populatedLists.length) {
+    return getFacturacionPriceListLabel(draft?.priceList);
+  }
+
+  const uniqueLists = [...new Set(populatedLists)];
+  if (uniqueLists.length === 1) {
+    return getFacturacionPriceListLabel(uniqueLists[0]);
+  }
+
+  return "Mixta";
+}
+
+function getFacturacionDiscountPercentInputValue(draft, summary) {
+  const normalizedDraft = normalizeFacturacionDraft(draft);
+  if (normalizedDraft.overrideDiscountAuthorized) {
+    return normalizedDraft.overrideDiscountPercent || summary.descuentoPorcentajeDisplay;
+  }
+
+  return summary.descuentoPorcentajeDisplay;
+}
+
+function resolveFacturacionDiscountOverride(draft) {
+  const normalizedDraft = normalizeFacturacionDraft(draft);
+  const rawPercent = String(normalizedDraft.overrideDiscountPercent || "").trim();
+  const percent = toFacturacionNumber(rawPercent);
+
+  return {
+    authorized: Boolean(normalizedDraft.overrideDiscountAuthorized),
+    active: Boolean(normalizedDraft.overrideDiscountActive) && rawPercent !== "",
+    percent: percent >= 0 ? percent : 0,
+  };
+}
+
+function canAuthorizeFacturacionGlobalDiscount(user) {
+  const groupCodes = Array.isArray(user?.grupos)
+    ? user.grupos.map((group) => normalizeGroupCode(group.codigo || group.nombre || ""))
+    : [];
+  const userCode = String(user?.codUsuario || "").trim().toUpperCase();
+
+  return groupCodes.includes("ADMI") || groupCodes.includes("SISTEMA") || userCode === "ADMIN" || userCode === "SISTEMA";
+}
+
+function getNextFacturacionPriceList(currentValue) {
+  const current = normalizeFacturacionPriceList(currentValue);
+  const currentIndex = FACTURACION_PRICE_LIST_ORDER.indexOf(current);
+  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % FACTURACION_PRICE_LIST_ORDER.length : 0;
+  return FACTURACION_PRICE_LIST_ORDER[nextIndex];
+}
+
+function createEmptyFacturacionDraft() {
+  return {
+    frozenId: "",
+    priceList: "detal",
+    overrideDiscountAuthorized: false,
+    overrideDiscountActive: false,
+    overrideDiscountPercent: "",
+    clienteCodigo: "",
+    clienteNombre: "",
+    clienteInfo: "",
+    vendedorCedula: "",
+    vendedorNombre: "",
+    vendedorInfo: "",
+    emisionContingencia: false,
+    items: createEmptyFacturacionItems(),
+  };
+}
+
+function createEmptyFacturacionExchangeRateState() {
+  return {
+    loading: false,
+    loaded: false,
+    rateBsPerUsd: 0,
+    rateMayor: 0,
+    effectiveDate: "",
+    fetchedAt: "",
+    provider: "",
+    providerUrl: "",
+    fallbackUsed: false,
+    error: "",
+  };
+}
+
+function createEmptyFacturacionDiscountAuthState() {
+  return {
+    open: false,
+    submitting: false,
+    usuario: "",
+    password: "",
+  };
+}
+
+function normalizeFacturacionExchangeRateState(source) {
+  const base = createEmptyFacturacionExchangeRateState();
+  return {
+    ...base,
+    ...(source || {}),
+    loading: Boolean(source?.loading),
+    loaded: Boolean(source?.loaded || toFacturacionNumber(source?.rateBsPerUsd) > 0),
+    rateBsPerUsd: toFacturacionNumber(source?.rateBsPerUsd),
+    rateMayor: toFacturacionNumber(source?.rateMayor),
+    effectiveDate: String(source?.effectiveDate || "").trim(),
+    fetchedAt: String(source?.fetchedAt || "").trim(),
+    provider: String(source?.provider || base.provider),
+    providerUrl: String(source?.providerUrl || ""),
+    fallbackUsed: Boolean(source?.fallbackUsed),
+    error: String(source?.error || ""),
+  };
+}
+
+function createEmptyFacturacionFrozenLookupState() {
+  return {
+    open: false,
+    items: [],
+  };
+}
+
+function createEmptyFacturacionItems() {
+  return Array.from({ length: 11 }, () => createEmptyFacturacionLineDraft());
+}
+
+function createEmptyFacturacionLineDraft() {
+  return {
+    priceList: "detal",
+    codigoBarra: "",
+    nombre: "",
+    precio: "",
+    cantidad: "",
+    subtotal: "",
+    descuentoPorcentaje: "",
+    descuentoMonto: "",
+    precioDetal: "",
+    precioMayor: "",
+    precioAfiliado: "",
+    precioPromocion: "",
+    promocionActiva: false,
+  };
+}
+
+function normalizeFacturacionLineDraft(line = {}) {
+  const base = createEmptyFacturacionLineDraft();
+  return {
+    ...base,
+    ...(line || {}),
+    priceList: normalizeFacturacionPriceList(line?.priceList),
+    codigoBarra: toInputValue(line?.codigoBarra),
+    nombre: toInputValue(line?.nombre),
+    precio: toInputValue(line?.precio),
+    cantidad: toInputValue(line?.cantidad),
+    subtotal: toInputValue(line?.subtotal),
+    descuentoPorcentaje: toInputValue(line?.descuentoPorcentaje),
+    descuentoMonto: toInputValue(line?.descuentoMonto),
+    precioDetal: toInputValue(line?.precioDetal),
+    precioMayor: toInputValue(line?.precioMayor),
+    precioAfiliado: toInputValue(line?.precioAfiliado),
+    precioPromocion: toInputValue(line?.precioPromocion),
+    promocionActiva: Boolean(line?.promocionActiva),
+  };
+}
+
+function normalizeFacturacionItems(items) {
+  const normalized = Array.isArray(items) ? items.slice(0, 11).map((item) => normalizeFacturacionLineDraft(item)) : [];
+  while (normalized.length < 11) {
+    normalized.push(createEmptyFacturacionLineDraft());
+  }
+  return normalized;
+}
+
+function normalizeFacturacionDraft(draft = {}) {
+  const base = createEmptyFacturacionDraft();
+  return {
+    ...base,
+    ...(draft || {}),
+    frozenId: String(draft?.frozenId || "").trim(),
+    priceList: normalizeFacturacionPriceList(draft?.priceList),
+    overrideDiscountAuthorized: Boolean(draft?.overrideDiscountAuthorized),
+    overrideDiscountActive: Boolean(draft?.overrideDiscountActive),
+    overrideDiscountPercent: toInputValue(draft?.overrideDiscountPercent),
+    clienteCodigo: toInputValue(draft?.clienteCodigo),
+    clienteNombre: toInputValue(draft?.clienteNombre),
+    clienteInfo: toInputValue(draft?.clienteInfo),
+    vendedorCedula: toInputValue(draft?.vendedorCedula),
+    vendedorNombre: toInputValue(draft?.vendedorNombre),
+    vendedorInfo: toInputValue(draft?.vendedorInfo),
+    emisionContingencia: Boolean(draft?.emisionContingencia),
+    items: normalizeFacturacionItems(draft?.items),
+  };
+}
+
+function captureFacturacionDraft() {
+  state.facturacion.draft = readFacturacionDraft();
+}
+
+function readFacturacionDraft() {
+  const currentDraft = normalizeFacturacionDraft(state.facturacion.draft || createEmptyFacturacionDraft());
+  const clienteCodigo = document.querySelector("[data-facturacion-cliente-codigo]");
+  const clienteNombre = document.querySelector("[data-facturacion-cliente-nombre]");
+  const clienteInfo = document.querySelector("[data-facturacion-cliente-info]");
+  const vendedorCedula = document.querySelector("[data-facturacion-vendedor-cedula]");
+  const vendedorNombre = document.querySelector("[data-facturacion-vendedor-nombre]");
+  const vendedorInfo = document.querySelector("[data-facturacion-vendedor-info]");
+  const contingencia = document.querySelector("[data-facturacion-contingencia]");
+  const lineInputs = Array.from(document.querySelectorAll("[data-facturacion-line-codigo]"));
+  const currentItems = Array.isArray(currentDraft.items) && currentDraft.items.length
+    ? currentDraft.items
+    : createEmptyFacturacionItems();
+  const items = currentItems.map((item, index) => {
+    const input = lineInputs[index];
+    return {
+      ...item,
+      codigoBarra: input instanceof HTMLInputElement ? input.value : item.codigoBarra,
+    };
+  });
+
+  return {
+    frozenId: currentDraft.frozenId,
+    priceList: currentDraft.priceList,
+    overrideDiscountAuthorized: currentDraft.overrideDiscountAuthorized,
+    overrideDiscountActive: currentDraft.overrideDiscountActive,
+    overrideDiscountPercent: currentDraft.overrideDiscountPercent,
+    clienteCodigo: clienteCodigo instanceof HTMLInputElement ? clienteCodigo.value : currentDraft.clienteCodigo,
+    clienteNombre: clienteNombre instanceof HTMLInputElement ? clienteNombre.value : currentDraft.clienteNombre,
+    clienteInfo: clienteInfo instanceof HTMLInputElement ? clienteInfo.value : currentDraft.clienteInfo,
+    vendedorCedula: vendedorCedula instanceof HTMLInputElement ? vendedorCedula.value : currentDraft.vendedorCedula,
+    vendedorNombre: vendedorNombre instanceof HTMLInputElement ? vendedorNombre.value : currentDraft.vendedorNombre,
+    vendedorInfo: vendedorInfo instanceof HTMLInputElement ? vendedorInfo.value : currentDraft.vendedorInfo,
+    emisionContingencia: contingencia instanceof HTMLInputElement ? contingencia.checked : currentDraft.emisionContingencia,
+    items,
+  };
+}
+
+function applyClienteToFacturacionDraft(cliente) {
+  const currentDraft = state.facturacion.draft || createEmptyFacturacionDraft();
+  state.facturacion.draft = {
+    ...currentDraft,
+    clienteCodigo: cliente?.codigo || currentDraft.clienteCodigo,
+    clienteNombre: cliente?.nombre || "",
+    clienteInfo: cliente ? (cliente.tipoNombre || cliente.telefono || "") : "",
+  };
+}
+
+function clearFacturacionCliente() {
+  const currentDraft = state.facturacion.draft || createEmptyFacturacionDraft();
+  state.facturacion.draft = {
+    ...currentDraft,
+    clienteNombre: "",
+    clienteInfo: "",
+  };
+}
+
+function applyTrabajadorToFacturacionDraft(trabajador) {
+  const currentDraft = state.facturacion.draft || createEmptyFacturacionDraft();
+  state.facturacion.draft = {
+    ...currentDraft,
+    vendedorCedula: trabajador?.cedula || "",
+    vendedorNombre: trabajador?.nombre || "",
+    vendedorInfo: trabajador ? (trabajador.cargoNombre || trabajador.cargo || "") : "",
+  };
+}
+
+function clearFacturacionTrabajador() {
+  const currentDraft = state.facturacion.draft || createEmptyFacturacionDraft();
+  state.facturacion.draft = {
+    ...currentDraft,
+    vendedorNombre: "",
+    vendedorInfo: "",
+  };
+}
+
+function fillFacturacionLineFromInventory(index, article) {
+  const currentDraft = normalizeFacturacionDraft(state.facturacion.draft || createEmptyFacturacionDraft());
+  const items = Array.isArray(currentDraft.items) && currentDraft.items.length
+    ? [...currentDraft.items]
+    : createEmptyFacturacionItems();
+  const currentLine = items[index] || createEmptyFacturacionLineDraft();
+  const linePriceList = normalizeFacturacionPriceList(currentLine.priceList || currentDraft.priceList);
+  items[index] = buildFacturacionLineFromInventory(currentLine, article, linePriceList);
+
+  state.facturacion.draft = {
+    ...currentDraft,
+    items,
+  };
+}
+
+function clearFacturacionLine(index, keepCode = "") {
+  const currentDraft = normalizeFacturacionDraft(state.facturacion.draft || createEmptyFacturacionDraft());
+  const items = Array.isArray(currentDraft.items) && currentDraft.items.length
+    ? [...currentDraft.items]
+    : createEmptyFacturacionItems();
+
+  items[index] = {
+    ...createEmptyFacturacionLineDraft(),
+    priceList: normalizeFacturacionPriceList(items[index]?.priceList || currentDraft.priceList),
+    codigoBarra: keepCode,
+  };
+
+  state.facturacion.draft = {
+    ...currentDraft,
+    items,
+  };
+}
+
+function resolveFacturacionPriceForList(source, priceList) {
+  const normalizedPriceList = normalizeFacturacionPriceList(priceList);
+  const prices = source?.precios || {};
+
+  if (normalizedPriceList === "mayor") {
+    return toFacturacionNumber(prices.mayor ?? source?.precioMayor ?? "0");
+  }
+
+  if (normalizedPriceList === "afiliado") {
+    return toFacturacionNumber(prices.afiliado ?? source?.precioAfiliado ?? "0");
+  }
+
+  return toFacturacionNumber(prices.detal ?? source?.precioDetal ?? "0");
+}
+
+function resolveFacturacionPromotionPercentage(source) {
+  return toFacturacionNumber(
+    source?.precios?.promocion?.porcentajeDescuento ?? source?.porcentajeDescuento ?? source?.descuentoPorcentaje ?? "0",
+  );
+}
+
+function buildFacturacionLineFromInventory(currentLine, article, priceList) {
+  const normalizedPriceList = normalizeFacturacionPriceList(priceList);
+  const precioDetal = resolveFacturacionPriceForList(article, "detal");
+  const precioMayor = resolveFacturacionPriceForList(article, "mayor");
+  const precioAfiliado = resolveFacturacionPriceForList(article, "afiliado");
+  const precioBase = resolveFacturacionPriceForList(article, normalizedPriceList);
+  const descuentoPorcentaje = resolveFacturacionPromotionPercentage(article);
+  const descuentoMonto = precioBase * (descuentoPorcentaje / 100);
+
+  return {
+    ...normalizeFacturacionLineDraft(currentLine),
+    priceList: normalizedPriceList,
+    codigoBarra: article.codigoBarra || currentLine.codigoBarra || "",
+    nombre: article.general?.nombre || article.nombre || currentLine.nombre || "",
+    precio: formatTransferAmount(precioBase),
+    cantidad: "1",
+    subtotal: formatTransferAmount(precioBase),
+    descuentoPorcentaje: formatTransferAmount(descuentoPorcentaje),
+    descuentoMonto: formatTransferAmount(descuentoMonto),
+    precioDetal: formatTransferAmount(precioDetal),
+    precioMayor: formatTransferAmount(precioMayor),
+    precioAfiliado: formatTransferAmount(precioAfiliado),
+    precioPromocion: formatTransferAmount(toFacturacionNumber(article?.precios?.promocion?.precio ?? article?.precioPromocion ?? "0")),
+    promocionActiva: Boolean(article?.precios?.promocion?.activa ?? article?.promocionActiva ?? false),
+  };
+}
+
+function recalculateFacturacionLineForPriceList(line, priceList) {
+  const normalizedLine = normalizeFacturacionLineDraft(line);
+  if (!String(normalizedLine.codigoBarra || "").trim()) {
+    return normalizedLine;
+  }
+
+  const hasPriceSource = [normalizedLine.precioDetal, normalizedLine.precioMayor, normalizedLine.precioAfiliado].some(
+    (value) => String(value || "").trim(),
+  );
+
+  if (!hasPriceSource) {
+    return normalizedLine;
+  }
+
+  const precioBase = resolveFacturacionPriceForList(normalizedLine, priceList);
+  const descuentoPorcentaje = resolveFacturacionPromotionPercentage(normalizedLine);
+  const descuentoMonto = precioBase * (descuentoPorcentaje / 100);
+
+  return {
+    ...normalizedLine,
+    precio: formatTransferAmount(precioBase),
+    cantidad: normalizedLine.cantidad || "1",
+    subtotal: formatTransferAmount(precioBase),
+    descuentoMonto: formatTransferAmount(descuentoMonto),
+  };
+}
+
+function recalculateFacturacionDraftForPriceList(draft, priceList) {
+  const normalizedDraft = normalizeFacturacionDraft({
+    ...(draft || {}),
+    priceList,
+  });
+
+  return {
+    ...normalizedDraft,
+    items: normalizedDraft.items.map((line) => recalculateFacturacionLineForPriceList(line, normalizedDraft.priceList)),
+  };
+}
+
+function recalculateFacturacionDraftLinePriceList(draft, lineIndex, priceList) {
+  const normalizedDraft = normalizeFacturacionDraft(draft);
+  const items = normalizedDraft.items.map((line, index) => {
+    if (index !== lineIndex) {
+      return line;
+    }
+
+    return recalculateFacturacionLineForPriceList({
+      ...line,
+      priceList: normalizeFacturacionPriceList(priceList),
+    }, priceList);
+  });
+
+  return {
+    ...normalizedDraft,
+    items,
+  };
+}
+
+function calculateFacturacionSummary(items, activeTax = null, exchangeRate = null, draft = null) {
+  const rows = Array.isArray(items) ? items : [];
+  const valorMercancia = rows.reduce((sum, item) => sum + toFacturacionNumber(item?.subtotal), 0);
+  const lineDiscountMonto = rows.reduce((sum, item) => sum + toFacturacionNumber(item?.descuentoMonto), 0);
+  const discountOverride = resolveFacturacionDiscountOverride(draft);
+  const descuentoMonto = discountOverride.active ? valorMercancia * (discountOverride.percent / 100) : lineDiscountMonto;
+  const subtotal = Math.max(valorMercancia - descuentoMonto, 0);
+  const impuestoPorcentaje = toFacturacionNumber(activeTax?.porcentajeImpuesto);
+  const impuestoMonto = subtotal * (impuestoPorcentaje / 100);
+  const rateBsPerUsd = toFacturacionNumber(exchangeRate?.rateBsPerUsd);
+  const totalUnidades = rows.reduce((sum, item) => {
+    return sum + (String(item?.codigoBarra || "").trim() ? 1 : 0);
+  }, 0);
+  const descuentoPorcentaje = discountOverride.active
+    ? discountOverride.percent
+    : getFacturacionLoadedArticleDiscountPercentage(rows);
+  const totalVenta = subtotal + impuestoMonto;
+  const totalUsd = rateBsPerUsd > 0 ? roundToTwoDecimals(totalVenta * rateBsPerUsd) : 0;
+
+  return {
+    valorMercancia,
+    descuentoMonto,
+    descuentoPorcentaje,
+    subtotal,
+    impuestoPorcentaje,
+    impuestoMonto,
+    rateBsPerUsd,
+    totalUnidades,
+    totalVenta,
+    totalUsd,
+    valorMercanciaDisplay: formatTransferAmount(valorMercancia),
+    descuentoMontoDisplay: formatTransferAmount(descuentoMonto),
+    descuentoPorcentajeDisplay: formatTransferAmount(descuentoPorcentaje),
+    subtotalDisplay: formatTransferAmount(subtotal),
+    impuestoPorcentajeDisplay: formatTransferAmount(impuestoPorcentaje),
+    impuestoMontoDisplay: formatTransferAmount(impuestoMonto),
+    totalUnidadesDisplay: formatTransferAmount(totalUnidades),
+    totalVentaDisplay: formatTransferAmount(totalVenta),
+    totalUsdDisplay: formatFacturacionUsdAmount(totalUsd),
+  };
+}
+
+function getFacturacionLoadedArticleDiscountPercentage(items) {
+  const rows = Array.isArray(items) ? items : [];
+
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const item = rows[index];
+    if (!String(item?.codigoBarra || "").trim()) {
+      continue;
+    }
+
+    return toFacturacionNumber(item?.descuentoPorcentaje);
+  }
+
+  return 0;
+}
+
+function buildFacturacionFrozenStorageKey() {
+  const userCode = String(state.user?.codUsuario || "anon").trim().toUpperCase() || "ANON";
+  return `${FACTURACION_FROZEN_STORAGE_KEY}.${userCode}`;
+}
+
+function generateFacturacionFrozenId() {
+  return `frozen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function facturacionDraftHasContent(draft) {
+  const normalizedDraft = normalizeFacturacionDraft(draft);
+  if (normalizedDraft.clienteCodigo || normalizedDraft.clienteNombre || normalizedDraft.vendedorCedula || normalizedDraft.vendedorNombre) {
+    return true;
+  }
+
+  return normalizedDraft.items.some((item) => {
+    return [item.codigoBarra, item.nombre, item.precio].some((value) => String(value || "").trim());
+  });
+}
+
+function readStoredFacturacionFrozenDrafts() {
+  try {
+    const raw = window.localStorage.getItem(buildFacturacionFrozenStorageKey());
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((item) => ({
+        id: String(item?.id || "").trim() || generateFacturacionFrozenId(),
+        savedAt: String(item?.savedAt || "").trim() || new Date().toISOString(),
+        draft: normalizeFacturacionDraft(item?.draft),
+        exchangeRate: normalizeFacturacionExchangeRateState(item?.exchangeRate),
+      }))
+      .sort((left, right) => new Date(right.savedAt).getTime() - new Date(left.savedAt).getTime());
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
+}
+
+function writeStoredFacturacionFrozenDrafts(records) {
+  try {
+    window.localStorage.setItem(buildFacturacionFrozenStorageKey(), JSON.stringify(Array.isArray(records) ? records : []));
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function openFacturacionDiscountAuthModal() {
+  state.facturacion.discountAuth = {
+    open: true,
+    submitting: false,
+    usuario: "",
+    password: "",
+  };
+}
+
+function closeFacturacionDiscountAuthModal() {
+  state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
+}
+
+function captureFacturacionDiscountAuthDraft() {
+  const form = document.getElementById("facturacion-discount-auth-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  state.facturacion.discountAuth = {
+    ...state.facturacion.discountAuth,
+    usuario: readFormFieldValue(form, "usuario", state.facturacion.discountAuth.usuario),
+    password: readFormFieldValue(form, "password", state.facturacion.discountAuth.password),
+  };
+}
+
+function focusFacturacionGlobalDiscountInput() {
+  render();
+  queueMicrotask(() => {
+    const input = document.querySelector("[data-facturacion-global-discount]");
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    input.focus();
+    input.select?.();
+  });
+}
+
+async function authorizeFacturacionGlobalDiscount() {
+  const authDraft = state.facturacion.discountAuth || createEmptyFacturacionDiscountAuthState();
+  const usuario = String(authDraft.usuario || "").trim();
+  const password = String(authDraft.password || "").trim();
+
+  if (!usuario || !password) {
+    setFlash("Debes indicar usuario y clave de administrador.", "error");
+    render();
+    return;
+  }
+
+  state.facturacion.discountAuth = {
+    ...authDraft,
+    submitting: true,
+  };
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch("/auth/login", {
+      method: "POST",
+      auth: false,
+      body: {
+        usuario,
+        password,
+      },
+    });
+
+    const authorizedUser = response?.usuario || null;
+    if (!canAuthorizeFacturacionGlobalDiscount(authorizedUser)) {
+      throw new Error("Debes usar un usuario administrador para autorizar el descuento global.");
+    }
+
+    const currentDraft = normalizeFacturacionDraft(state.facturacion.draft);
+    const currentSummary = calculateFacturacionSummary(
+      currentDraft.items,
+      getActiveFacturacionTax(),
+      state.facturacion.exchangeRate,
+      currentDraft,
+    );
+
+    state.facturacion.draft = {
+      ...currentDraft,
+      overrideDiscountAuthorized: true,
+      overrideDiscountPercent: currentDraft.overrideDiscountPercent || currentSummary.descuentoPorcentajeDisplay,
+    };
+
+    closeFacturacionDiscountAuthModal();
+    setFlash(`Descuento global autorizado por ${authorizedUser?.codUsuario || usuario}.`, "success");
+    focusFacturacionGlobalDiscountInput();
+  } catch (error) {
+    console.error(error);
+    state.facturacion.discountAuth = {
+      ...authDraft,
+      submitting: false,
+    };
+    setFlash(extractErrorMessage(error), "error");
+    render();
+  }
+}
+
+function applyFacturacionGlobalDiscountFromField(value) {
+  const currentDraft = normalizeFacturacionDraft(state.facturacion.draft);
+  if (!currentDraft.overrideDiscountAuthorized) {
+    return;
+  }
+
+  const rawValue = String(value || "").trim();
+  if (!rawValue) {
+    state.facturacion.draft = {
+      ...currentDraft,
+      overrideDiscountActive: false,
+      overrideDiscountPercent: "",
+    };
+    clearFlash();
+    render();
+    return;
+  }
+
+  const discountPercent = toFacturacionNumber(rawValue);
+  if (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100) {
+    setFlash("El descuento global debe estar entre 0 y 100.", "error");
+    render();
+    return;
+  }
+
+  state.facturacion.draft = {
+    ...currentDraft,
+    overrideDiscountActive: true,
+    overrideDiscountPercent: formatTransferAmount(discountPercent),
+  };
+  clearFlash();
+  render();
+}
+
+function openFacturacionFrozenLookupModal() {
+  state.facturacion.frozenLookup = {
+    open: true,
+    items: readStoredFacturacionFrozenDrafts(),
+  };
+}
+
+function closeFacturacionFrozenLookupModal() {
+  state.facturacion.frozenLookup = createEmptyFacturacionFrozenLookupState();
+}
+
+function freezeCurrentFacturacionDraft() {
+  const currentDraft = normalizeFacturacionDraft(state.facturacion.draft || createEmptyFacturacionDraft());
+  if (!facturacionDraftHasContent(currentDraft)) {
+    setFlash("No hay una factura en curso para congelar.", "error");
+    render();
+    return;
+  }
+
+  const frozenId = currentDraft.frozenId || generateFacturacionFrozenId();
+  const savedAt = new Date().toISOString();
+  const record = {
+    id: frozenId,
+    savedAt,
+    draft: normalizeFacturacionDraft({
+      ...currentDraft,
+      frozenId,
+    }),
+    exchangeRate: normalizeFacturacionExchangeRateState(state.facturacion.exchangeRate),
+  };
+
+  const existing = readStoredFacturacionFrozenDrafts().filter((item) => item.id !== frozenId);
+  writeStoredFacturacionFrozenDrafts([record, ...existing]);
+
+  state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentDraft.priceList });
+  state.facturacion.selectedLineIndex = -1;
+  state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
+  state.facturacion.lookup = {
+    open: false,
+    loading: false,
+    type: "",
+    items: [],
+  };
+  closeFacturacionLineLookupModal();
+  closeFacturacionFrozenLookupModal();
+  closeFacturacionClientEditor();
+  setFlash(`Factura congelada correctamente (${formatDateDisplay(savedAt)}).`, "success");
+  render();
+}
+
+function getFacturacionResumeFocusRow(draft) {
+  const items = Array.isArray(draft?.items) ? draft.items : [];
+  const lastFilledIndex = items.reduce((lastIndex, item, index) => {
+    return String(item?.codigoBarra || "").trim() ? index : lastIndex;
+  }, -1);
+
+  if (lastFilledIndex < 0) {
+    return 1;
+  }
+
+  return Math.min(lastFilledIndex + 2, items.length || 1);
+}
+
+async function restoreFacturacionFrozenDraft(recordId) {
+  const records = readStoredFacturacionFrozenDrafts();
+  const selected = records.find((item) => item.id === recordId);
+  if (!selected) {
+    setFlash("La factura congelada seleccionada ya no existe.", "error");
+    render();
+    return;
+  }
+
+  const storedExchangeRate = normalizeFacturacionExchangeRateState(selected.exchangeRate);
+  writeStoredFacturacionFrozenDrafts(records.filter((item) => item.id !== recordId));
+  state.facturacion.draft = normalizeFacturacionDraft(selected.draft);
+  state.facturacion.exchangeRate = storedExchangeRate;
+  state.facturacion.selectedLineIndex = -1;
+  closeFacturacionFrozenLookupModal();
+
+  try {
+    await loadFacturacionExchangeRate({ renderAfter: false, silent: true });
+  } catch (_error) {
+    state.facturacion.exchangeRate = storedExchangeRate;
+  }
+
+  const currentRate = toFacturacionNumber(state.facturacion.exchangeRate?.rateBsPerUsd);
+  const storedRate = toFacturacionNumber(storedExchangeRate?.rateBsPerUsd);
+  const rateMessage = currentRate > 0 && currentRate !== storedRate
+    ? ` Se aplico la nueva tasa ${formatExchangeRateAmount(currentRate)}.`
+    : currentRate > 0
+      ? ` Se aplico la tasa actual ${formatExchangeRateAmount(currentRate)}.`
+      : "";
+
+  setFlash(`Factura descongelada correctamente.${rateMessage}`, "success");
+  renderFacturacionAndFocusLine(getFacturacionResumeFocusRow(selected.draft));
+}
+
+function formatFacturacionExchangeRateLabel(exchangeRate) {
+  if (exchangeRate?.loading && !exchangeRate?.loaded) {
+    return "Consultando tasa manual de cambio...";
+  }
+
+  const rate = toFacturacionNumber(exchangeRate?.rateBsPerUsd);
+  const rateMayor = toFacturacionNumber(exchangeRate?.rateMayor);
+  if (rate <= 0) {
+    if (exchangeRate?.error) {
+      return `No se pudo actualizar la tasa manual: ${exchangeRate.error}`;
+    }
+
+    return "Tasa manual no disponible.";
+  }
+
+  const effectiveDate = formatSimpleDateDisplay(exchangeRate?.effectiveDate);
+  const manualMayorLabel = rateMayor > 0 ? ` | Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
+  return `Tasa manual: ${formatExchangeRateAmount(rate)} | Vigente ${effectiveDate}${manualMayorLabel}`;
+  const mayorLabel = rateMayor > 0 ? ` · Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
+  return `Tasa manual: ${formatExchangeRateAmount(rate)} · Vigente ${effectiveDate}${mayorLabel}`;
+  const provider = String(exchangeRate?.provider || "API externa").trim();
+  return `Tasa BCV USD: ${formatExchangeRateAmount(rate)} Bs/USD · Vigente ${effectiveDate} · Fuente ${provider}`;
+}
+
+function formatSimpleDateDisplay(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "-";
+  }
+
+  const dateOnlyMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return `${day}/${month}/${year}`;
+  }
+
+  return formatDateOnlyDisplay(raw);
+}
+
+function formatExchangeRateAmount(value) {
+  return new Intl.NumberFormat("es-VE", {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  }).format(toFacturacionNumber(value));
+}
+
+function getActiveFacturacionTax() {
+  const impuestos = Array.isArray(state.metadata?.catalogos?.impuestos) ? state.metadata.catalogos.impuestos : [];
+  const defaultCodigo = String(state.metadata?.defaults?.precios?.impuesto || "");
+  return (
+    impuestos.find((item) => Number(item?.status ?? 0) === 1) ??
+    impuestos.find((item) => String(item?.codigo ?? "") === defaultCodigo) ??
+    impuestos[0] ??
+    null
+  );
+}
+
+function toFacturacionNumber(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const sanitized = String(value ?? "").trim().replace(/\s+/g, "");
+  if (!sanitized) {
+    return 0;
+  }
+
+  const commaIndex = sanitized.lastIndexOf(",");
+  const dotIndex = sanitized.lastIndexOf(".");
+  let normalized = sanitized;
+
+  if (commaIndex >= 0 && dotIndex >= 0) {
+    normalized = commaIndex > dotIndex ? sanitized.replace(/\./g, "").replace(",", ".") : sanitized.replace(/,/g, "");
+  } else if (commaIndex >= 0) {
+    normalized = sanitized.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = sanitized.replace(/,/g, "");
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function selectFacturacionLine(index) {
+  if (!Number.isInteger(index) || index < 0) {
+    state.facturacion.selectedLineIndex = -1;
+    return;
+  }
+
+  state.facturacion.selectedLineIndex = index;
+}
+
+function focusFacturacionLineInput(rowNumber) {
+  if (!Number.isInteger(rowNumber) || rowNumber < 1) {
+    return;
+  }
+
+  selectFacturacionLine(rowNumber - 1);
+  const target = document.querySelector(`[data-facturacion-line-codigo="${rowNumber}"]`);
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+
+  target.focus();
+  target.select?.();
+}
+
+function renderFacturacionAndFocusLine(rowNumber) {
+  render();
+  queueMicrotask(() => {
+    focusFacturacionLineInput(rowNumber);
+  });
+}
+
+function openFacturacionLineLookupModal(lineIndex, searchValue, items) {
+  state.facturacion.lineLookup = {
+    open: true,
+    loading: false,
+    lineIndex,
+    search: searchValue,
+    items: Array.isArray(items) ? items : [],
+    activeIndex: Array.isArray(items) && items.length ? 0 : -1,
+  };
+}
+
+function closeFacturacionLineLookupModal() {
+  state.facturacion.lineLookup = {
+    open: false,
+    loading: false,
+    lineIndex: -1,
+    search: "",
+    items: [],
+    activeIndex: -1,
+  };
+}
+
+function resetFacturacionState() {
+  state.facturacion = {
+    draft: createEmptyFacturacionDraft(),
+    exchangeRate: createEmptyFacturacionExchangeRateState(),
+    selectedLineIndex: -1,
+    discountAuth: createEmptyFacturacionDiscountAuthState(),
+    lookup: {
+      open: false,
+      loading: false,
+      type: "",
+      items: [],
+    },
+    lineLookup: {
+      open: false,
+      loading: false,
+      lineIndex: -1,
+      search: "",
+      items: [],
+      activeIndex: -1,
+    },
+    clientEditor: {
+      open: false,
+      loading: false,
+      saving: false,
+      draft: createEmptyClienteDraft(state.clientes.metadata),
+    },
+    frozenLookup: createEmptyFacturacionFrozenLookupState(),
+  };
+}
+
+function normalizeIdentityComparable(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.replace(/^[VE]/, "").replace(/[^0-9A-Z]/g, "");
+}
+
+function identityValuesMatch(inputValue, recordValue) {
+  const normalizedInput = normalizeIdentityComparable(inputValue);
+  const normalizedRecord = normalizeIdentityComparable(recordValue);
+
+  return Boolean(normalizedInput && normalizedRecord && normalizedInput === normalizedRecord);
+}
+
+function resetFacturacionClientEditorDraft(prefillCode = "") {
+  const baseDraft = createEmptyClienteDraft(state.clientes.metadata);
+  state.facturacion.clientEditor.draft = {
+    ...baseDraft,
+    codigo: String(prefillCode || "").trim().toUpperCase() || baseDraft.codigo,
+  };
+}
+
+function captureFacturacionClientEditorDraft() {
+  const form = document.getElementById("facturacion-client-editor-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  const currentDraft = state.facturacion.clientEditor.draft || createEmptyClienteDraft(state.clientes.metadata);
+  state.facturacion.clientEditor.draft = {
+    originalCodigo: currentDraft.originalCodigo || "",
+    codigo: readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
+    nombre: readFormFieldValue(form, "nombre", currentDraft.nombre || ""),
+    fechaIngreso: readFormFieldValue(form, "fechaIngreso", toDateInputValue(new Date())),
+    telefono: readFormFieldValue(form, "telefono", currentDraft.telefono || ""),
+    direccion: readFormFieldValue(form, "direccion", currentDraft.direccion || ""),
+    status: Number.parseInt(readFormFieldValue(form, "status", String(currentDraft.status ?? 1)), 10) || 1,
+    tipo: readFormFieldValue(form, "tipo", currentDraft.tipo || ""),
+    tipoContribuyente: readFormFieldValue(form, "tipoContribuyente", currentDraft.tipoContribuyente || ""),
+  };
+}
+
 function resetCashRegisterDraft() {
   state.cashRegisters.selectedKey = "";
   state.cashRegisters.draft = createEmptyCashRegisterDraft(state.cashRegisters.metadata);
@@ -8905,7 +13440,6 @@ function buildCashRegisterPayload(draft) {
     ultimaFactura: String(draft.ultimaFactura || "").trim() || undefined,
     horaApertura: String(draft.horaApertura || "").trim() || undefined,
     horaCierre: String(draft.horaCierre || "").trim() || undefined,
-    status: Number.parseInt(String(draft.status ?? "0"), 10),
   };
 }
 
@@ -9020,6 +13554,170 @@ function captureArticleDraft() {
   }
 
   state.formDraft = readArticleDraft(articleForm);
+}
+
+function parseArticlePromotionNumber(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const compact = raw.replace(/\s+/g, "");
+  const lastComma = compact.lastIndexOf(",");
+  const lastDot = compact.lastIndexOf(".");
+
+  let normalized = compact;
+  if (lastComma !== -1 && lastDot !== -1) {
+    normalized =
+      lastComma > lastDot ? compact.replace(/\./g, "").replace(",", ".") : compact.replace(/,/g, "");
+  } else if (lastComma !== -1) {
+    normalized = compact.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = compact.replace(/,/g, "");
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatArticlePromotionNumber(value) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+
+  return value.toFixed(2);
+}
+
+function clampArticlePromotionPercent(value) {
+  return Math.min(100, Math.max(0, value));
+}
+
+function clampArticlePromotionPrice(value, detailPrice) {
+  const safeDetail = Number.isFinite(detailPrice) ? Math.max(0, detailPrice) : 0;
+  return Math.min(safeDetail, Math.max(0, value));
+}
+
+function setArticlePromotionFieldValue(form, fieldName, value) {
+  const field = form?.elements?.namedItem?.(fieldName);
+  if (!field || !("value" in field)) {
+    return;
+  }
+
+  field.value = value;
+}
+
+function syncArticlePromotionFields(form, triggerFieldName = "") {
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  if (triggerFieldName === "descuento" || triggerFieldName === "precioPromocion") {
+    articlePromotionLastEditedField = triggerFieldName;
+  }
+
+  const promotionActive = readFormCheckboxValue(form, "promocionActiva", false);
+  if (!promotionActive) {
+    return;
+  }
+
+  const detailValue = readFormFieldValue(form, "detal", "");
+  const discountValue = readFormFieldValue(form, "descuento", "");
+  const promoPriceValue = readFormFieldValue(form, "precioPromocion", "");
+  const detailPrice = parseArticlePromotionNumber(detailValue);
+  const discountPercent = parseArticlePromotionNumber(discountValue);
+  const promoPrice = parseArticlePromotionNumber(promoPriceValue);
+
+  const syncFromDiscount = () => {
+    if (detailPrice === null || !discountValue.trim()) {
+      if (triggerFieldName === "descuento") {
+        setArticlePromotionFieldValue(form, "precioPromocion", "");
+      }
+      return;
+    }
+
+    const normalizedDiscount = clampArticlePromotionPercent(discountPercent ?? 0);
+    const calculatedPromoPrice = clampArticlePromotionPrice(
+      detailPrice - detailPrice * (normalizedDiscount / 100),
+      detailPrice,
+    );
+
+    if (triggerFieldName === "descuento" && normalizedDiscount !== discountPercent) {
+      setArticlePromotionFieldValue(form, "descuento", formatArticlePromotionNumber(normalizedDiscount));
+    }
+
+    setArticlePromotionFieldValue(form, "precioPromocion", formatArticlePromotionNumber(calculatedPromoPrice));
+  };
+
+  const syncFromPromoPrice = () => {
+    if (detailPrice === null || !promoPriceValue.trim()) {
+      if (triggerFieldName === "precioPromocion") {
+        setArticlePromotionFieldValue(form, "descuento", "");
+      }
+      return;
+    }
+
+    const normalizedPromoPrice = clampArticlePromotionPrice(promoPrice ?? 0, detailPrice);
+    const calculatedDiscount =
+      detailPrice <= 0 ? 0 : clampArticlePromotionPercent(((detailPrice - normalizedPromoPrice) / detailPrice) * 100);
+
+    if (triggerFieldName === "precioPromocion" && normalizedPromoPrice !== promoPrice) {
+      setArticlePromotionFieldValue(form, "precioPromocion", formatArticlePromotionNumber(normalizedPromoPrice));
+    }
+
+    setArticlePromotionFieldValue(form, "descuento", formatArticlePromotionNumber(calculatedDiscount));
+  };
+
+  if (triggerFieldName === "descuento") {
+    syncFromDiscount();
+    return;
+  }
+
+  if (triggerFieldName === "precioPromocion") {
+    syncFromPromoPrice();
+    return;
+  }
+
+  if (triggerFieldName === "detal") {
+    if (articlePromotionLastEditedField === "precioPromocion" && promoPriceValue.trim()) {
+      syncFromPromoPrice();
+      return;
+    }
+
+    if (discountValue.trim()) {
+      syncFromDiscount();
+    }
+    return;
+  }
+
+  if (triggerFieldName === "promocionActiva") {
+    if (articlePromotionLastEditedField === "precioPromocion" && promoPriceValue.trim()) {
+      syncFromPromoPrice();
+      return;
+    }
+
+    if (discountValue.trim()) {
+      syncFromDiscount();
+      return;
+    }
+
+    if (promoPriceValue.trim()) {
+      syncFromPromoPrice();
+    }
+    return;
+  }
+
+  if (articlePromotionLastEditedField === "precioPromocion" && promoPriceValue.trim()) {
+    syncFromPromoPrice();
+    return;
+  }
+
+  if (discountValue.trim()) {
+    syncFromDiscount();
+  }
 }
 
 function syncArticleFormPreview(form) {
@@ -9828,6 +14526,7 @@ function clearSession() {
     items: [],
     mode: "drafts",
   };
+  resetFacturacionState();
   state.articleEditorTab = "general";
   state.articles = [];
   state.metadata = null;
