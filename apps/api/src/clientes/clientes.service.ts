@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
+import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { toClienteView, toTipoClienteView, toTipoContribuyenteView } from "./cliente-view.util";
 import { CreateClienteDto } from "./dto/create-cliente.dto";
@@ -9,7 +10,10 @@ import { UpdateClienteDto } from "./dto/update-cliente.dto";
 
 @Injectable()
 export class ClientesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mirrorSyncService: MirrorSyncService,
+  ) {}
 
   async getMetadata() {
     const [tiposCliente, tiposContribuyente, clientes] = await Promise.all([
@@ -87,23 +91,29 @@ export class ClientesService {
     await this.ensureTipoClienteExists(createClienteDto.tipo);
     await this.ensureTipoContribuyenteExists(createClienteDto.tipoContribuyente);
 
-    const created = await this.prisma.clientes.create({
-      data: {
-        Codigo: codigo,
-        Nombre: this.normalizeRequiredText(createClienteDto.nombre, "Debes indicar el nombre del cliente."),
-        FechaIngreso: this.startOfDay(createClienteDto.fechaIngreso),
-        Telefono: this.normalizeOptionalText(createClienteDto.telefono),
-        Direccion: this.normalizeOptionalText(createClienteDto.direccion),
-        Status: this.resolveStatus(createClienteDto.status),
-        Tipo: createClienteDto.tipo,
-        TipoContribuyente: createClienteDto.tipoContribuyente,
-      },
-      include: {
-        tipoCliente: true,
-        contribuyenteTipo: true,
-      },
+    const created = await this.prisma.$transaction(async (tx) => {
+      const record = await tx.clientes.create({
+        data: {
+          Codigo: codigo,
+          Nombre: this.normalizeRequiredText(createClienteDto.nombre, "Debes indicar el nombre del cliente."),
+          FechaIngreso: this.startOfDay(createClienteDto.fechaIngreso),
+          Telefono: this.normalizeOptionalText(createClienteDto.telefono),
+          Direccion: this.normalizeOptionalText(createClienteDto.direccion),
+          Status: this.resolveStatus(createClienteDto.status),
+          Tipo: createClienteDto.tipo,
+          TipoContribuyente: createClienteDto.tipoContribuyente,
+        },
+        include: {
+          tipoCliente: true,
+          contribuyenteTipo: true,
+        },
+      });
+
+      await this.mirrorSyncService.enqueueClienteUpsertTx(tx, record.Codigo);
+      return record;
     });
 
+    await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
     return toClienteView(created);
   }
 
@@ -120,23 +130,29 @@ export class ClientesService {
     await this.ensureTipoClienteExists(updateClienteDto.tipo);
     await this.ensureTipoContribuyenteExists(updateClienteDto.tipoContribuyente);
 
-    const updated = await this.prisma.clientes.update({
-      where: { Codigo: normalizedCodigo },
-      data: {
-        Nombre: this.normalizeRequiredText(updateClienteDto.nombre, "Debes indicar el nombre del cliente."),
-        FechaIngreso: this.startOfDay(updateClienteDto.fechaIngreso),
-        Telefono: this.normalizeOptionalText(updateClienteDto.telefono),
-        Direccion: this.normalizeOptionalText(updateClienteDto.direccion),
-        Status: this.resolveStatus(updateClienteDto.status),
-        Tipo: updateClienteDto.tipo,
-        TipoContribuyente: updateClienteDto.tipoContribuyente,
-      },
-      include: {
-        tipoCliente: true,
-        contribuyenteTipo: true,
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const record = await tx.clientes.update({
+        where: { Codigo: normalizedCodigo },
+        data: {
+          Nombre: this.normalizeRequiredText(updateClienteDto.nombre, "Debes indicar el nombre del cliente."),
+          FechaIngreso: this.startOfDay(updateClienteDto.fechaIngreso),
+          Telefono: this.normalizeOptionalText(updateClienteDto.telefono),
+          Direccion: this.normalizeOptionalText(updateClienteDto.direccion),
+          Status: this.resolveStatus(updateClienteDto.status),
+          Tipo: updateClienteDto.tipo,
+          TipoContribuyente: updateClienteDto.tipoContribuyente,
+        },
+        include: {
+          tipoCliente: true,
+          contribuyenteTipo: true,
+        },
+      });
+
+      await this.mirrorSyncService.enqueueClienteUpsertTx(tx, record.Codigo);
+      return record;
     });
 
+    await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
     return toClienteView(updated);
   }
 

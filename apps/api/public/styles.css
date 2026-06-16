@@ -1781,6 +1781,17 @@ button {
   gap: 14px;
 }
 
+.article-costs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.article-costs-field-compact {
+  max-width: 220px;
+}
+
 .article-editor-note {
   display: grid;
   gap: 6px;
@@ -1937,6 +1948,14 @@ button {
 
   .field-span-2 {
     grid-column: span 1;
+  }
+
+  .article-costs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .article-costs-field-compact {
+    max-width: none;
   }
 
   .article-editor-tab {
@@ -3458,6 +3477,197 @@ button {
 
 .facturacion-discount-auth-dialog {
   width: min(560px, 100%);
+}
+
+.facturacion-payment-dialog {
+  width: min(1220px, 100%);
+}
+
+.facturacion-payment-shell {
+  display: grid;
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+
+.facturacion-payment-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  color: #203241;
+  font-weight: 800;
+}
+
+.facturacion-payment-rate,
+.facturacion-payment-estimated {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.facturacion-payment-rate strong,
+.facturacion-payment-estimated strong {
+  font-size: 1.05rem;
+}
+
+.facturacion-payment-table-wrap {
+  overflow: auto;
+  border: 1px solid rgba(37, 59, 89, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.facturacion-payment-table {
+  width: 100%;
+  min-width: 1120px;
+  border-collapse: collapse;
+}
+
+.facturacion-payment-table th,
+.facturacion-payment-table td {
+  border: 1px solid rgba(47, 72, 105, 0.16);
+  padding: 0;
+}
+
+.facturacion-payment-table th {
+  height: 26px;
+  padding: 0 6px;
+  background: rgba(228, 238, 248, 0.95);
+  color: #203241;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.facturacion-payment-table td {
+  height: 28px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.facturacion-payment-table input,
+.facturacion-payment-table select {
+  width: 100%;
+  height: 100%;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.facturacion-payment-row-head,
+.facturacion-payment-row-number {
+  width: 34px;
+  text-align: center;
+}
+
+.facturacion-payment-row-number {
+  color: #29466f;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.facturacion-payment-bottom {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1.05fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.facturacion-payment-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.facturacion-payment-summary-row {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 160px);
+  gap: 10px;
+  align-items: center;
+}
+
+.facturacion-payment-summary-row span {
+  color: #23384d;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.facturacion-payment-summary-row input,
+.facturacion-payment-total-row input {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgba(35, 48, 58, 0.24);
+  border-radius: 3px;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.facturacion-payment-summary-accent input {
+  color: #14a140;
+}
+
+.facturacion-payment-summary-total input {
+  color: #4b53cc;
+}
+
+.facturacion-payment-side-actions {
+  display: grid;
+  gap: 14px;
+  justify-items: end;
+}
+
+.facturacion-payment-side-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.facturacion-payment-total-row {
+  display: inline-grid;
+  grid-template-columns: auto 160px;
+  gap: 10px;
+  align-items: center;
+}
+
+.facturacion-payment-total-row span {
+  color: #23384d;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.facturacion-payment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.facturacion-payment-cedula-dialog {
+  width: min(460px, 100%);
+}
+
+.facturacion-payment-cedula-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 0 18px 18px;
+  flex-wrap: wrap;
 }
 
 .facturacion-discount-auth-form {
@@ -5716,6 +5926,27 @@ button {
 
   .facturacion-preview-button {
     width: 100%;
+  }
+
+  .facturacion-payment-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .facturacion-payment-summary-row,
+  .facturacion-payment-total-row {
+    grid-template-columns: 1fr;
+  }
+
+  .facturacion-payment-side-actions {
+    justify-items: stretch;
+  }
+
+  .facturacion-payment-actions {
+    justify-content: flex-start;
+  }
+
+  .facturacion-payment-cedula-actions {
+    justify-content: stretch;
   }
 
   .clients-history-head,

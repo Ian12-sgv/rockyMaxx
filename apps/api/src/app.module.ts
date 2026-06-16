@@ -8,6 +8,7 @@ import { CajasModule } from "./cajas/cajas.module";
 import { ClientesModule } from "./clientes/clientes.module";
 import { DevReturnsModule } from "./dev-returns/dev-returns.module";
 import { ExchangeRatesModule } from "./exchange-rates/exchange-rates.module";
+import { FacturacionModule } from "./facturacion/facturacion.module";
 import { HealthModule } from "./health/health.module";
 import { InventoryModule } from "./inventory/inventory.module";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
@@ -34,6 +35,7 @@ import { UsersModule } from "./users/users.module";
     ClientesModule,
     DevReturnsModule,
     ExchangeRatesModule,
+    FacturacionModule,
     UsersModule,
     RolesModule,
     InventoryModule,

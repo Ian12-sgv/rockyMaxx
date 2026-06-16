@@ -4,10 +4,37 @@ const USER_STORAGE_KEY = "rocky.maxx.user";
 const REMEMBER_SESSION_STORAGE_KEY = "rocky.maxx.remember-session";
 const CATALOG_IMPORT_EXCEL_PERMISSION_CODE = "CATALOG_IMPORT_EXCEL";
 const EXISTENCE_AUTO_REFRESH_MS = 30000;
+const FLASH_AUTO_DISMISS_MS = 2000;
 const FACTURACION_FROZEN_STORAGE_KEY = "rocky.maxx.facturacion.frozen";
 const FACTURACION_PRICE_LIST_ORDER = ["detal", "mayor", "afiliado"];
+const FACTURACION_IGTF_PERCENT = 3;
+const FACTURACION_PAYMENT_METHOD_OPTIONS = [
+  { value: "", label: "" },
+  { value: "EFECTIVO", label: "EFECTIVO" },
+  { value: "CHEQUE", label: "CHEQUE" },
+  { value: "TARJETA DE DEBITO", label: "TARJETA DE DEBITO" },
+  { value: "TARJETA DE CREDITO", label: "TARJETA DE CREDITO" },
+  { value: "EFECTIVO DOLAR", label: "EFECTIVO DOLAR" },
+  { value: "CASHEA", label: "CASHEA" },
+  { value: "BIOPAGOMONEDERO", label: "BIOPAGOMONEDERO" },
+];
+const FACTURACION_PAYMENT_BANK_OPTIONS = [
+  { value: "", label: "" },
+  { value: "BANESCO", label: "BANESCO" },
+  { value: "BNC", label: "BNC" },
+  { value: "MERCANTIL", label: "MERCANTIL" },
+  { value: "VENEZUELA", label: "VENEZUELA" },
+  { value: "BANCAMIGA", label: "BANCAMIGA" },
+];
+const FACTURACION_PAYMENT_POS_OPTIONS = [
+  { value: "", label: "" },
+  { value: "VPOS - VERIFONE", label: "VPOS - VERIFONE" },
+  { value: "PAGO MOVIL", label: "PAGO MOVIL" },
+  { value: "BIOPAGO", label: "BIOPAGO" },
+];
 
 let existenceAutoRefreshHandle = null;
+let flashAutoDismissHandle = null;
 let devReturnRemotePullInFlight = false;
 let devReturnRemotePullLastAt = 0;
 let articlePromotionLastEditedField = "descuento";
@@ -213,6 +240,7 @@ const state = {
     savedDraft: createEmptyExchangeRateRegisterDraft(),
     updatedAt: "",
   },
+  articlePricingRates: createEmptyArticlePricingRateState(),
   cashRegisters: {
     loading: false,
     loadingMetadata: false,
@@ -227,6 +255,7 @@ const state = {
   facturacion: {
     draft: createEmptyFacturacionDraft(),
     exchangeRate: createEmptyFacturacionExchangeRateState(),
+    savingSale: false,
     selectedLineIndex: -1,
     discountAuth: createEmptyFacturacionDiscountAuthState(),
     lookup: {
@@ -250,6 +279,8 @@ const state = {
       draft: createEmptyClienteDraft(),
     },
     frozenLookup: createEmptyFacturacionFrozenLookupState(),
+    paymentModal: createEmptyFacturacionPaymentModalState(),
+    paymentCedulaPrompt: createEmptyFacturacionPaymentCedulaPromptState(),
   },
   loadingForm: false,
   submittingForm: false,
@@ -766,6 +797,8 @@ function renderShellView() {
       ${renderFacturacionLineLookupModal()}
       ${renderFacturacionFrozenLookupModal()}
       ${renderFacturacionDiscountAuthModal()}
+      ${renderFacturacionPaymentModal()}
+      ${renderFacturacionPaymentCedulaPromptModal()}
     </main>
   `;
 }
@@ -3697,8 +3730,8 @@ function renderFacturacionWorkspace() {
               <button type="button" class="button button-ghost" data-facturacion-action="salir-vista">Salir</button>
               <button type="button" class="button button-danger" data-facturacion-action="cancelar-documento">Cancelar</button>
             </div>
-            <button type="button" class="button button-primary facturacion-preview-button" data-facturacion-action="previsualizar">
-              Previsualizar
+            <button type="button" class="button button-primary facturacion-preview-button" data-facturacion-action="forma-pago">
+              Forma de pago
             </button>
           </div>
         </div>
@@ -4165,6 +4198,253 @@ function renderFacturacionDiscountAuthModal() {
       </section>
     </div>
   `;
+}
+
+function renderFacturacionPaymentModal() {
+  const paymentModal = state.facturacion.paymentModal;
+  if (!paymentModal?.open) {
+    return "";
+  }
+
+  const draft = normalizeFacturacionDraft(state.facturacion.draft);
+  const summary = calculateFacturacionSummary(draft.items, getActiveFacturacionTax(), state.facturacion.exchangeRate, draft);
+  const paymentSummary = calculateFacturacionPaymentSummary(summary, paymentModal.rows);
+  const latestRateLabel = summary.rateBsPerUsd > 0 ? formatExchangeRateAmount(summary.rateBsPerUsd) : "0,0000";
+  const estimatedUsdLabel = `${summary.totalUsdDisplay} $`;
+  const savingSale = Boolean(state.facturacion.savingSale);
+
+  return `
+    <div class="article-lookup-overlay facturacion-payment-overlay">
+      <button class="article-lookup-backdrop" type="button" data-facturacion-payment-close aria-label="Cerrar forma de pago"></button>
+      <section class="article-lookup-dialog facturacion-payment-dialog" role="dialog" aria-modal="true" aria-labelledby="facturacion-payment-title">
+        <div class="article-lookup-header facturacion-payment-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Facturacion</p>
+            <h3 id="facturacion-payment-title">Forma de pago</h3>
+            <p>Ingresa la forma de pago para esta factura manteniendo el control operativo del sistema.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <button class="article-command-button" type="button" data-facturacion-payment-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        <div class="facturacion-payment-shell">
+          <div class="facturacion-payment-topline">
+            <div class="facturacion-payment-rate">
+              <span>Ultimo Cambio:</span>
+              <strong>${escapeHtml(latestRateLabel)}</strong>
+            </div>
+            <div class="facturacion-payment-estimated">
+              <span>Pago Estimado:</span>
+              <strong>${escapeHtml(estimatedUsdLabel)}</strong>
+            </div>
+          </div>
+
+          <div class="facturacion-payment-table-wrap">
+            <table class="facturacion-payment-table">
+              <thead>
+                <tr>
+                  <th class="facturacion-payment-row-head"></th>
+                  <th>Forma de Pago</th>
+                  <th>Monto</th>
+                  <th>Cedula</th>
+                  <th>Nro Documento</th>
+                  <th>Nro Lote</th>
+                  <th>Banco</th>
+                  <th>Punto de Venta</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${paymentModal.rows.map((row, index) => renderFacturacionPaymentRow(row, index)).join("")}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="facturacion-payment-bottom">
+            <div class="facturacion-payment-summary">
+              ${renderFacturacionPaymentSummaryRow("Facturado", paymentSummary.facturadoDisplay)}
+              ${renderFacturacionPaymentSummaryRow("Abonado", paymentSummary.abonadoDisplay)}
+              ${renderFacturacionPaymentSummaryRow("Porcentaje IGTF", paymentSummary.igtfPercentDisplay)}
+              ${renderFacturacionPaymentSummaryRow("Base Imponible IGTF", paymentSummary.baseIgtfDisplay, "facturacion-payment-summary-accent")}
+              ${renderFacturacionPaymentSummaryRow("Monto IGTF", paymentSummary.montoIgtfDisplay, "facturacion-payment-summary-accent")}
+              ${renderFacturacionPaymentSummaryRow("Saldo", paymentSummary.saldoDisplay, "facturacion-payment-summary-total")}
+            </div>
+
+            <div class="facturacion-payment-side-actions">
+              <div class="facturacion-payment-total-row">
+                <span>TOTAL</span>
+                <input
+                  type="text"
+                  value="${escapeHtml(paymentSummary.totalDisplay)}"
+                  class="facturacion-cell-right"
+                  readonly
+                />
+              </div>
+
+              <div class="facturacion-payment-actions">
+                <button type="button" class="button button-primary" data-facturacion-payment-accept ${savingSale ? "disabled" : ""}>
+                  ${savingSale ? "Guardando..." : "Aceptar"}
+                </button>
+                <button type="button" class="button button-danger" data-facturacion-payment-cancel ${savingSale ? "disabled" : ""}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderFacturacionPaymentRow(row, index) {
+  const normalizedRow = normalizeFacturacionPaymentRow(row, index);
+  const method = normalizeFacturacionPaymentMethod(normalizedRow.formaPago);
+  const isCashMethod = facturacionPaymentMethodIsCash(method);
+  const isCardMethod = facturacionPaymentMethodIsCard(method);
+  const usesPointOfSale = facturacionPaymentMethodUsesPointOfSale(method);
+  const requiresBank = facturacionPaymentMethodRequiresBank(method);
+  const lotePlaceholder = usesPointOfSale ? "Lo asigna el punto de venta" : "";
+
+  return `
+    <tr>
+      <td class="facturacion-payment-row-number">${index + 1}</td>
+      <td>
+        <select data-facturacion-payment-field="formaPago" data-facturacion-payment-row="${index}">
+          ${renderSelectOptions(FACTURACION_PAYMENT_METHOD_OPTIONS, normalizedRow.formaPago)}
+        </select>
+      </td>
+      <td>
+        <input
+          type="text"
+          value="${escapeHtml(toInputValue(normalizedRow.monto))}"
+          class="facturacion-cell-right"
+          data-facturacion-payment-field="monto"
+          data-facturacion-payment-row="${index}"
+        />
+      </td>
+      <td>
+        <input
+          type="text"
+          value="${escapeHtml(toInputValue(normalizedRow.cedula))}"
+          placeholder="${isCashMethod ? "No aplica" : "Cedula"}"
+          data-facturacion-payment-field="cedula"
+          data-facturacion-payment-row="${index}"
+          data-facturacion-payment-cedula="${index}"
+          ${isCashMethod ? "disabled" : ""}
+        />
+      </td>
+      <td>
+        <input
+          type="text"
+          value="${escapeHtml(toInputValue(normalizedRow.documento))}"
+          placeholder="${isCashMethod ? "No aplica" : "Documento"}"
+          data-facturacion-payment-field="documento"
+          data-facturacion-payment-row="${index}"
+          ${isCashMethod ? "disabled" : ""}
+        />
+      </td>
+      <td>
+        <input
+          type="text"
+          value="${escapeHtml(toInputValue(normalizedRow.lote))}"
+          placeholder="${escapeHtml(lotePlaceholder)}"
+          data-facturacion-payment-field="lote"
+          data-facturacion-payment-row="${index}"
+          ${usesPointOfSale ? "readonly" : ""}
+          ${isCashMethod ? "disabled" : ""}
+        />
+      </td>
+      <td>
+        <select data-facturacion-payment-field="banco" data-facturacion-payment-row="${index}" ${requiresBank ? "" : "disabled"}>
+          ${renderSelectOptions(FACTURACION_PAYMENT_BANK_OPTIONS, normalizedRow.banco)}
+        </select>
+      </td>
+      <td>
+        <select data-facturacion-payment-field="puntoVenta" data-facturacion-payment-row="${index}" ${usesPointOfSale ? "" : "disabled"}>
+          ${renderSelectOptions(FACTURACION_PAYMENT_POS_OPTIONS, normalizedRow.puntoVenta)}
+        </select>
+      </td>
+    </tr>
+  `;
+}
+
+function renderFacturacionPaymentCedulaPromptModal() {
+  const promptState = state.facturacion.paymentCedulaPrompt;
+  if (!promptState?.open) {
+    return "";
+  }
+
+  return `
+    <div class="article-lookup-overlay facturacion-payment-cedula-overlay">
+      <button class="article-lookup-backdrop" type="button" data-facturacion-payment-cedula-close aria-label="Cerrar confirmacion"></button>
+      <section class="article-lookup-dialog facturacion-payment-cedula-dialog" role="dialog" aria-modal="true" aria-labelledby="facturacion-payment-cedula-title">
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Forma de pago</p>
+            <h3 id="facturacion-payment-cedula-title">Usar misma cedula</h3>
+            <p>¿Quieres usar la misma cedula del cliente para este pago con tarjeta?</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <button class="article-command-button" type="button" data-facturacion-payment-cedula-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        <div class="facturacion-payment-cedula-actions">
+          <button type="button" class="button button-primary" data-facturacion-payment-cedula-yes>
+            Si
+          </button>
+          <button type="button" class="button button-ghost" data-facturacion-payment-cedula-no>
+            No
+          </button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderFacturacionPaymentSummaryRow(label, value, extraClass = "") {
+  return `
+    <div class="facturacion-payment-summary-row ${extraClass}">
+      <span>${escapeHtml(label)}</span>
+      <input type="text" value="${escapeHtml(value)}" class="facturacion-cell-right" readonly />
+    </div>
+  `;
+}
+
+function calculateFacturacionPaymentSummary(summary, rows) {
+  const paymentRows = Array.isArray(rows) ? rows : [];
+  const facturado = toFacturacionNumber(summary?.totalVenta);
+  const rateBsPerUsd = toFacturacionNumber(summary?.rateBsPerUsd);
+  const abonado = paymentRows.reduce((sum, row) => {
+    return sum + resolveFacturacionPaymentAmountInBs(row, rateBsPerUsd);
+  }, 0);
+  const baseIgtf = 0;
+  const igtfPercent = FACTURACION_IGTF_PERCENT;
+  const montoIgtf = 0;
+  const total = roundToTwoDecimals(facturado);
+  const saldo = roundToTwoDecimals(Math.max(total - abonado, 0));
+
+  return {
+    facturado,
+    abonado,
+    igtfPercent,
+    baseIgtf,
+    montoIgtf,
+    saldo,
+    total,
+    facturadoDisplay: `${formatTransferAmount(facturado)} BsS`,
+    abonadoDisplay: `${formatTransferAmount(abonado)} BsS`,
+    igtfPercentDisplay: `${formatTransferAmount(igtfPercent)} %`,
+    baseIgtfDisplay: `${formatTransferAmount(baseIgtf)} BsS`,
+    montoIgtfDisplay: `${formatTransferAmount(montoIgtf)} BsS`,
+    saldoDisplay: `${formatTransferAmount(saldo)} BsS`,
+    totalDisplay: `${formatTransferAmount(total)} BsS`,
+  };
 }
 
 function renderCashRegistersWorkspace() {
@@ -6073,6 +6353,7 @@ function renderArticleEditor() {
           ${renderArticleEditorTab("general", "General", activeTab)}
           ${renderArticleEditorTab("variantes", "Tallas - Colores", activeTab)}
           ${renderArticleEditorTab("precios", "Precios", activeTab)}
+          ${renderArticleEditorTab("costos", "Costos", activeTab)}
         </div>
 
         <section class="article-editor-panel">
@@ -6081,7 +6362,9 @@ function renderArticleEditor() {
               ? renderArticleGeneralPanel(draft)
               : activeTab === "variantes"
                 ? renderArticleVariantsPanel(draft)
-                : renderArticlePricesPanel(draft, promotionActive, taxOptions)
+                : activeTab === "precios"
+                  ? renderArticlePricesPanel(draft, promotionActive, taxOptions)
+                  : renderArticleCostsPanel(draft)
           }
         </section>
       </div>
@@ -6677,6 +6960,56 @@ function renderArticlePricesPanel(draft, promotionActive, taxOptions) {
   `;
 }
 
+function renderArticleCostsPanel(draft) {
+  return `
+    <div class="section-title">
+      <strong>Costos</strong>
+      <small>Valores en dolares usados para recalcular detal, mayor y afiliado con la tasa vigente.</small>
+    </div>
+    <div class="subtle-box">
+      Dol Detal alimenta el precio detal. Dol Mayor alimenta el precio mayor. Dol Terc. alimenta el precio afiliado.
+    </div>
+    <div class="article-costs-grid">
+      <label class="field">
+        <span>Dol Detal</span>
+        <input
+          type="text"
+          name="costoInicial"
+          value="${escapeHtml(draft.costos.costoInicial)}"
+          placeholder="0.00"
+        />
+      </label>
+      <label class="field">
+        <span>Dol Mayor</span>
+        <input
+          type="text"
+          name="costoPromedio"
+          value="${escapeHtml(draft.costos.costoPromedio)}"
+          placeholder="0.00"
+        />
+      </label>
+      <label class="field">
+        <span>Dol Terc.</span>
+        <input
+          type="text"
+          name="ultimoCosto"
+          value="${escapeHtml(draft.costos.ultimoCosto)}"
+          placeholder="0.00"
+        />
+      </label>
+      <label class="field article-costs-field-compact">
+        <span>Costo</span>
+        <input
+          type="text"
+          name="costoDolar"
+          value="${escapeHtml(draft.costos.costoDolar)}"
+          placeholder="0.00"
+        />
+      </label>
+    </div>
+  `;
+}
+
 function bindLoginEvents() {
   const form = document.getElementById("login-form");
   if (!form) {
@@ -6811,7 +7144,11 @@ function bindShellEvents() {
       }
 
       if (nextView === "articulos" && userCanAccessFullInventory()) {
-        await loadCreationMetadata();
+        await Promise.all([
+          loadCreationMetadata({ renderAfter: false }),
+          loadArticlePricingRates({ renderAfter: false, silent: true }),
+        ]);
+        render();
         return;
       }
 
@@ -7111,6 +7448,7 @@ function bindArticleEvents() {
       await saveArticle();
     });
 
+    syncArticlePromotionFields(articleForm, "detal");
     syncArticleFormPreview(articleForm);
   }
 
@@ -8339,6 +8677,8 @@ function bindFacturacionEvents() {
         state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentPriceList });
         state.facturacion.selectedLineIndex = -1;
         state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
+        state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
+        state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
         clearFlash();
         render();
         return;
@@ -8363,6 +8703,12 @@ function bindFacturacionEvents() {
 
       if (action === "descongelar") {
         openFacturacionFrozenLookupModal();
+        render();
+        return;
+      }
+
+      if (action === "forma-pago") {
+        openFacturacionPaymentModal();
         render();
         return;
       }
@@ -8397,7 +8743,7 @@ function bindFacturacionEvents() {
         guardar: "Guardar factura",
         cancelar: "Cancelar factura",
         descuento: "Descuento global",
-        previsualizar: "Previsualizar factura",
+        "forma-pago": "Forma de pago",
         "cancelar-documento": "Cancelar documento",
       };
 
@@ -8411,6 +8757,150 @@ function bindFacturacionEvents() {
       closeFacturacionDiscountAuthModal();
       render();
     });
+  });
+
+  document.querySelectorAll("[data-facturacion-payment-close], [data-facturacion-payment-cancel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (state.facturacion.savingSale) {
+        return;
+      }
+      closeFacturacionPaymentModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-payment-accept]")?.addEventListener("click", async () => {
+    if (state.facturacion.savingSale) {
+      return;
+    }
+
+    const draft = normalizeFacturacionDraft(state.facturacion.draft);
+    const summary = calculateFacturacionSummary(
+      draft.items,
+      getActiveFacturacionTax(),
+      state.facturacion.exchangeRate,
+      draft,
+    );
+    const validationMessage = validateFacturacionPaymentRows(summary, state.facturacion.paymentModal?.rows);
+    if (validationMessage) {
+      setFlash(validationMessage, "error");
+      render();
+      return;
+    }
+
+    state.facturacion.savingSale = true;
+    clearFlash();
+    render();
+
+    try {
+      const payload = buildFacturacionSalePayload(draft, state.facturacion.paymentModal?.rows, state.facturacion.exchangeRate);
+      const response = await apiFetch("/facturacion/sales", {
+        method: "POST",
+        body: payload,
+      });
+      const venta = response?.venta || {};
+      const currentPriceList = getCurrentFacturacionPriceList();
+      const preservedRate = normalizeFacturacionExchangeRateState(state.facturacion.exchangeRate);
+
+      state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentPriceList });
+      state.facturacion.exchangeRate = preservedRate;
+      state.facturacion.savingSale = false;
+      state.facturacion.selectedLineIndex = -1;
+      state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
+      state.facturacion.lookup = {
+        open: false,
+        loading: false,
+        type: "",
+        items: [],
+      };
+      state.facturacion.lineLookup = {
+        open: false,
+        loading: false,
+        lineIndex: -1,
+        search: "",
+        items: [],
+        activeIndex: -1,
+      };
+      state.facturacion.frozenLookup = createEmptyFacturacionFrozenLookupState();
+      state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
+      state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+      setFlash(`Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""}.`, "success");
+    } catch (error) {
+      console.error(error);
+      state.facturacion.savingSale = false;
+      setFlash(extractErrorMessage(error), "error");
+    }
+
+    render();
+  });
+
+  document.querySelectorAll("[data-facturacion-payment-field]").forEach((field) => {
+    const syncField = () => {
+      const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-row") || "", 10);
+      const fieldName = field.getAttribute("data-facturacion-payment-field") || "";
+      if (!Number.isInteger(rowIndex) || rowIndex < 0 || !fieldName || !("value" in field)) {
+        return;
+      }
+
+      updateFacturacionPaymentField(rowIndex, fieldName, field.value);
+    };
+
+    field.addEventListener("change", () => {
+      syncField();
+      render();
+    });
+
+    if (field instanceof HTMLInputElement) {
+      field.addEventListener("input", () => {
+        syncField();
+        const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-row") || "", 10);
+        const fieldName = field.getAttribute("data-facturacion-payment-field") || "";
+        if (fieldName === "monto" && Number.isInteger(rowIndex) && rowIndex >= 0) {
+          rerenderFacturacionPaymentField(rowIndex, fieldName);
+        }
+      });
+    }
+  });
+
+  document.querySelectorAll("[data-facturacion-payment-cedula]").forEach((field) => {
+    field.addEventListener("click", () => {
+      const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-cedula") || "", 10);
+      if (!Number.isInteger(rowIndex) || rowIndex < 0) {
+        return;
+      }
+
+      const currentRow = normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows)[rowIndex];
+      if (!facturacionPaymentMethodIsCard(currentRow?.formaPago) || String(currentRow?.cedula || "").trim()) {
+        return;
+      }
+
+      openFacturacionPaymentCedulaPrompt(rowIndex);
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-facturacion-payment-cedula-close], [data-facturacion-payment-cedula-no]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const rowIndex = Number.isInteger(state.facturacion.paymentCedulaPrompt?.rowIndex)
+        ? state.facturacion.paymentCedulaPrompt.rowIndex
+        : -1;
+      closeFacturacionPaymentCedulaPrompt({ focusRowIndex: rowIndex });
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-payment-cedula-yes]")?.addEventListener("click", () => {
+    const rowIndex = Number.isInteger(state.facturacion.paymentCedulaPrompt?.rowIndex)
+      ? state.facturacion.paymentCedulaPrompt.rowIndex
+      : -1;
+    if (rowIndex < 0) {
+      closeFacturacionPaymentCedulaPrompt();
+      render();
+      return;
+    }
+
+    applyFacturacionPaymentClientCedula(rowIndex);
+    render();
   });
 
   const facturacionDiscountAuthForm = document.getElementById("facturacion-discount-auth-form");
@@ -9529,6 +10019,42 @@ async function loadFacturacionExchangeRate(options = {}) {
   }
 }
 
+async function loadArticlePricingRates(options = {}) {
+  const { renderAfter = true, silent = false } = options;
+  const previous = state.articlePricingRates || createEmptyArticlePricingRateState();
+
+  state.articlePricingRates = {
+    ...previous,
+    loading: true,
+    error: "",
+  };
+
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/exchange-rates/manual");
+    applyManualRateToArticleState(response?.item || {});
+    state.formDraft = applyArticleDollarRatesToDraft(state.formDraft || createEmptyDraft());
+  } catch (error) {
+    console.error(error);
+    state.articlePricingRates = {
+      ...previous,
+      loading: false,
+      error: extractErrorMessage(error),
+    };
+
+    if (!silent) {
+      setFlash(`No se pudo consultar la tasa manual para articulos: ${extractErrorMessage(error)}`, "error");
+    }
+  } finally {
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
 async function loadDevReturnsMetadata(options = {}) {
   const { renderAfter = true } = options;
   state.devReturns.loadingMetadata = true;
@@ -10437,6 +10963,8 @@ async function loadExchangeRateRegister(options = {}) {
     state.exchangeRateRegister.savedDraft = nextDraft;
     state.exchangeRateRegister.updatedAt = String(item.actualizadoEn || "").trim();
     applyManualRateToFacturacionState(item);
+    applyManualRateToArticleState(item);
+    state.formDraft = applyArticleDollarRatesToDraft(state.formDraft || createEmptyDraft());
   } catch (error) {
     console.error(error);
     if (!silent) {
@@ -10475,6 +11003,8 @@ async function saveExchangeRateRegister() {
     state.exchangeRateRegister.savedDraft = nextDraft;
     state.exchangeRateRegister.updatedAt = String(item.actualizadoEn || "").trim();
     applyManualRateToFacturacionState(item);
+    applyManualRateToArticleState(item);
+    state.formDraft = applyArticleDollarRatesToDraft(state.formDraft || createEmptyDraft());
     setFlash("Tasa de cambio actualizada correctamente.", "success");
   } catch (error) {
     console.error(error);
@@ -12332,6 +12862,36 @@ function applyManualRateToFacturacionState(item) {
   };
 }
 
+function createEmptyArticlePricingRateState() {
+  return {
+    loading: false,
+    loaded: false,
+    rateBsPerUsd: 0,
+    rateMayor: 0,
+    effectiveDate: "",
+    fetchedAt: "",
+    provider: "Registro manual",
+    providerUrl: "",
+    fallbackUsed: false,
+    error: "",
+  };
+}
+
+function applyManualRateToArticleState(item) {
+  state.articlePricingRates = {
+    loading: false,
+    loaded: true,
+    rateBsPerUsd: toFacturacionNumber(item?.valorCambio),
+    rateMayor: toFacturacionNumber(item?.valorMayor),
+    effectiveDate: String(item?.actualizadoEn || "").trim().slice(0, 10),
+    fetchedAt: String(item?.actualizadoEn || "").trim(),
+    provider: "Registro manual",
+    providerUrl: "",
+    fallbackUsed: false,
+    error: "",
+  };
+}
+
 function normalizeFacturacionPriceList(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return FACTURACION_PRICE_LIST_ORDER.includes(normalized) ? normalized : "detal";
@@ -12508,6 +13068,149 @@ function createEmptyFacturacionFrozenLookupState() {
     open: false,
     items: [],
   };
+}
+
+function createEmptyFacturacionPaymentRow(index = 0) {
+  return {
+    formaPago: index === 0 ? "EFECTIVO" : "",
+    monto: "",
+    cedula: "",
+    documento: "",
+    lote: "",
+    banco: "",
+    puntoVenta: index === 0 ? "VPOS - VERIFONE" : "",
+  };
+}
+
+function createEmptyFacturacionPaymentCedulaPromptState() {
+  return {
+    open: false,
+    rowIndex: -1,
+  };
+}
+
+function buildFacturacionSalePayload(draft, paymentRows, exchangeRate) {
+  const normalizedDraft = normalizeFacturacionDraft(draft);
+  const rows = normalizeFacturacionItems(normalizedDraft.items)
+    .filter((item) => String(item.codigoBarra || "").trim())
+    .map((item) => ({
+      codigoBarra: String(item.codigoBarra || "").trim(),
+      priceList: normalizeFacturacionPriceList(item.priceList),
+      precio: toInputValue(item.precio),
+      cantidad: toInputValue(item.cantidad || "1"),
+      subtotal: toInputValue(item.subtotal || item.precio),
+      descuentoPorcentaje: toInputValue(item.descuentoPorcentaje || "0"),
+    }));
+  const payments = normalizeFacturacionPaymentRows(paymentRows)
+    .filter((row) => parseFacturacionPaymentAmount(row?.monto) > 0)
+    .map((row) => ({
+      formaPago: String(row.formaPago || "").trim(),
+      monto: toInputValue(row.monto),
+      cedula: toInputValue(row.cedula),
+      documento: toInputValue(row.documento),
+      lote: toInputValue(row.lote),
+      banco: String(row.banco || "").trim(),
+      puntoVenta: String(row.puntoVenta || "").trim(),
+    }));
+
+  return {
+    clienteCodigo: String(normalizedDraft.clienteCodigo || "").trim(),
+    vendedorCedula: String(normalizedDraft.vendedorCedula || "").trim(),
+    emisionContingencia: Boolean(normalizedDraft.emisionContingencia),
+    overrideDiscountAuthorized: Boolean(normalizedDraft.overrideDiscountAuthorized),
+    overrideDiscountActive: Boolean(normalizedDraft.overrideDiscountActive),
+    overrideDiscountPercent: toInputValue(normalizedDraft.overrideDiscountPercent),
+    tasaCambio: exchangeRate?.rateBsPerUsd > 0 ? String(exchangeRate.rateBsPerUsd) : "",
+    tasaCambioMayor: exchangeRate?.rateMayor > 0 ? String(exchangeRate.rateMayor) : "",
+    items: rows,
+    pagos: payments,
+  };
+}
+
+function normalizeFacturacionPaymentMethod(method) {
+  return String(method || "").trim().toUpperCase();
+}
+
+function facturacionPaymentMethodIsCash(method) {
+  const normalized = normalizeFacturacionPaymentMethod(method);
+  return normalized === "EFECTIVO" || normalized === "EFECTIVO DOLAR";
+}
+
+function facturacionPaymentMethodIsCard(method) {
+  const normalized = normalizeFacturacionPaymentMethod(method);
+  return normalized === "TARJETA DE DEBITO" || normalized === "TARJETA DE CREDITO";
+}
+
+function facturacionPaymentMethodUsesPointOfSale(method) {
+  const normalized = normalizeFacturacionPaymentMethod(method);
+  return facturacionPaymentMethodIsCard(normalized) || normalized === "BIOPAGOMONEDERO";
+}
+
+function facturacionPaymentMethodRequiresBank(method) {
+  const normalized = normalizeFacturacionPaymentMethod(method);
+  return facturacionPaymentMethodIsCard(normalized) || normalized === "CHEQUE" || normalized === "BIOPAGOMONEDERO";
+}
+
+function applyFacturacionPaymentMethodRules(row = {}) {
+  const nextRow = {
+    ...row,
+  };
+  const method = normalizeFacturacionPaymentMethod(nextRow.formaPago);
+  nextRow.formaPago = method;
+
+  if (facturacionPaymentMethodIsCash(method)) {
+    nextRow.cedula = "";
+    nextRow.documento = "";
+    nextRow.lote = "";
+    nextRow.banco = "";
+    nextRow.puntoVenta = "";
+    return nextRow;
+  }
+
+  if (facturacionPaymentMethodUsesPointOfSale(method)) {
+    nextRow.lote = "";
+    if (!String(nextRow.puntoVenta || "").trim()) {
+      nextRow.puntoVenta = "VPOS - VERIFONE";
+    }
+  } else {
+    nextRow.puntoVenta = "";
+  }
+
+  if (!facturacionPaymentMethodRequiresBank(method)) {
+    nextRow.banco = "";
+  }
+
+  return nextRow;
+}
+
+function createEmptyFacturacionPaymentModalState() {
+  return {
+    open: false,
+    rows: Array.from({ length: 7 }, (_value, index) => createEmptyFacturacionPaymentRow(index)),
+  };
+}
+
+function normalizeFacturacionPaymentRow(row = {}, index = 0) {
+  const base = createEmptyFacturacionPaymentRow(index);
+  return applyFacturacionPaymentMethodRules({
+    ...base,
+    ...(row || {}),
+    formaPago: String(row?.formaPago ?? base.formaPago).trim(),
+    monto: toInputValue(row?.monto),
+    cedula: toInputValue(row?.cedula),
+    documento: toInputValue(row?.documento),
+    lote: toInputValue(row?.lote),
+    banco: String(row?.banco ?? "").trim(),
+    puntoVenta: String(row?.puntoVenta ?? base.puntoVenta).trim(),
+  });
+}
+
+function normalizeFacturacionPaymentRows(rows) {
+  const normalized = Array.isArray(rows) ? rows.slice(0, 7).map((row, index) => normalizeFacturacionPaymentRow(row, index)) : [];
+  while (normalized.length < 7) {
+    normalized.push(createEmptyFacturacionPaymentRow(normalized.length));
+  }
+  return normalized;
 }
 
 function createEmptyFacturacionItems() {
@@ -12716,13 +13419,29 @@ function resolveFacturacionPromotionPercentage(source) {
   );
 }
 
+function resolveFacturacionPromotionActive(source) {
+  return Boolean(source?.precios?.promocion?.activa ?? source?.promocionActiva ?? false);
+}
+
+function resolveFacturacionPromotionPercentageForPriceList(source, priceList) {
+  if (normalizeFacturacionPriceList(priceList) !== "detal") {
+    return 0;
+  }
+
+  if (!resolveFacturacionPromotionActive(source)) {
+    return 0;
+  }
+
+  return resolveFacturacionPromotionPercentage(source);
+}
+
 function buildFacturacionLineFromInventory(currentLine, article, priceList) {
   const normalizedPriceList = normalizeFacturacionPriceList(priceList);
   const precioDetal = resolveFacturacionPriceForList(article, "detal");
   const precioMayor = resolveFacturacionPriceForList(article, "mayor");
   const precioAfiliado = resolveFacturacionPriceForList(article, "afiliado");
   const precioBase = resolveFacturacionPriceForList(article, normalizedPriceList);
-  const descuentoPorcentaje = resolveFacturacionPromotionPercentage(article);
+  const descuentoPorcentaje = resolveFacturacionPromotionPercentageForPriceList(article, normalizedPriceList);
   const descuentoMonto = precioBase * (descuentoPorcentaje / 100);
 
   return {
@@ -12739,7 +13458,7 @@ function buildFacturacionLineFromInventory(currentLine, article, priceList) {
     precioMayor: formatTransferAmount(precioMayor),
     precioAfiliado: formatTransferAmount(precioAfiliado),
     precioPromocion: formatTransferAmount(toFacturacionNumber(article?.precios?.promocion?.precio ?? article?.precioPromocion ?? "0")),
-    promocionActiva: Boolean(article?.precios?.promocion?.activa ?? article?.promocionActiva ?? false),
+    promocionActiva: resolveFacturacionPromotionActive(article),
   };
 }
 
@@ -12758,7 +13477,7 @@ function recalculateFacturacionLineForPriceList(line, priceList) {
   }
 
   const precioBase = resolveFacturacionPriceForList(normalizedLine, priceList);
-  const descuentoPorcentaje = resolveFacturacionPromotionPercentage(normalizedLine);
+  const descuentoPorcentaje = resolveFacturacionPromotionPercentageForPriceList(normalizedLine, priceList);
   const descuentoMonto = precioBase * (descuentoPorcentaje / 100);
 
   return {
@@ -12766,6 +13485,7 @@ function recalculateFacturacionLineForPriceList(line, priceList) {
     precio: formatTransferAmount(precioBase),
     cantidad: normalizedLine.cantidad || "1",
     subtotal: formatTransferAmount(precioBase),
+    descuentoPorcentaje: formatTransferAmount(descuentoPorcentaje),
     descuentoMonto: formatTransferAmount(descuentoMonto),
   };
 }
@@ -12801,6 +13521,23 @@ function recalculateFacturacionDraftLinePriceList(draft, lineIndex, priceList) {
   };
 }
 
+function resolveFacturacionUsdRate(rows, exchangeRate) {
+  const populatedRows = (Array.isArray(rows) ? rows : []).filter((item) => String(item?.codigoBarra || "").trim());
+  const detailRate = toFacturacionNumber(exchangeRate?.rateBsPerUsd);
+  const mayorRate = toFacturacionNumber(exchangeRate?.rateMayor);
+
+  if (!populatedRows.length) {
+    return detailRate;
+  }
+
+  const allMayor = populatedRows.every((item) => normalizeFacturacionPriceList(item?.priceList) === "mayor");
+  if (allMayor && mayorRate > 0) {
+    return mayorRate;
+  }
+
+  return detailRate;
+}
+
 function calculateFacturacionSummary(items, activeTax = null, exchangeRate = null, draft = null) {
   const rows = Array.isArray(items) ? items : [];
   const valorMercancia = rows.reduce((sum, item) => sum + toFacturacionNumber(item?.subtotal), 0);
@@ -12810,7 +13547,7 @@ function calculateFacturacionSummary(items, activeTax = null, exchangeRate = nul
   const subtotal = Math.max(valorMercancia - descuentoMonto, 0);
   const impuestoPorcentaje = toFacturacionNumber(activeTax?.porcentajeImpuesto);
   const impuestoMonto = subtotal * (impuestoPorcentaje / 100);
-  const rateBsPerUsd = toFacturacionNumber(exchangeRate?.rateBsPerUsd);
+  const rateBsPerUsd = resolveFacturacionUsdRate(rows, exchangeRate);
   const totalUnidades = rows.reduce((sum, item) => {
     return sum + (String(item?.codigoBarra || "").trim() ? 1 : 0);
   }, 0);
@@ -12818,7 +13555,7 @@ function calculateFacturacionSummary(items, activeTax = null, exchangeRate = nul
     ? discountOverride.percent
     : getFacturacionLoadedArticleDiscountPercentage(rows);
   const totalVenta = subtotal + impuestoMonto;
-  const totalUsd = rateBsPerUsd > 0 ? roundToTwoDecimals(totalVenta * rateBsPerUsd) : 0;
+  const totalUsd = rateBsPerUsd > 0 ? roundToTwoDecimals(totalVenta / rateBsPerUsd) : 0;
 
   return {
     valorMercancia,
@@ -13057,6 +13794,158 @@ function closeFacturacionFrozenLookupModal() {
   state.facturacion.frozenLookup = createEmptyFacturacionFrozenLookupState();
 }
 
+function openFacturacionPaymentModal() {
+  state.facturacion.paymentModal = {
+    ...createEmptyFacturacionPaymentModalState(),
+    ...state.facturacion.paymentModal,
+    open: true,
+    rows: normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows),
+  };
+  state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+}
+
+function closeFacturacionPaymentModal() {
+  state.facturacion.paymentModal = {
+    ...createEmptyFacturacionPaymentModalState(),
+    rows: normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows),
+    open: false,
+  };
+  state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+}
+
+function updateFacturacionPaymentField(rowIndex, fieldName, value) {
+  const current = state.facturacion.paymentModal || createEmptyFacturacionPaymentModalState();
+  const rows = normalizeFacturacionPaymentRows(current.rows).map((row, index) => {
+    if (index !== rowIndex) {
+      return row;
+    }
+
+    return normalizeFacturacionPaymentRow({
+      ...row,
+      [fieldName]: value,
+    }, index);
+  });
+
+  state.facturacion.paymentModal = {
+    ...current,
+    rows,
+  };
+}
+
+function rerenderFacturacionPaymentField(rowIndex, fieldName) {
+  render();
+  window.setTimeout(() => {
+    const selector = `[data-facturacion-payment-field="${fieldName}"][data-facturacion-payment-row="${rowIndex}"]`;
+    const field = document.querySelector(selector);
+    if (field instanceof HTMLInputElement) {
+      field.focus();
+      const cursorAt = field.value.length;
+      field.setSelectionRange(cursorAt, cursorAt);
+      return;
+    }
+
+    if (field instanceof HTMLSelectElement) {
+      field.focus();
+    }
+  }, 0);
+}
+
+function openFacturacionPaymentCedulaPrompt(rowIndex) {
+  state.facturacion.paymentCedulaPrompt = {
+    open: true,
+    rowIndex,
+  };
+}
+
+function closeFacturacionPaymentCedulaPrompt(options = {}) {
+  const { focusRowIndex = null } = options;
+  state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+
+  if (Number.isInteger(focusRowIndex) && focusRowIndex >= 0) {
+    window.setTimeout(() => {
+      const field = document.querySelector(`[data-facturacion-payment-cedula="${focusRowIndex}"]`);
+      if (field instanceof HTMLInputElement) {
+        field.focus();
+        field.select();
+      }
+    }, 0);
+  }
+}
+
+function applyFacturacionPaymentClientCedula(rowIndex) {
+  const clientCedula = String(state.facturacion.draft?.clienteCodigo || "").trim();
+  if (!clientCedula) {
+    closeFacturacionPaymentCedulaPrompt({ focusRowIndex: rowIndex });
+    setFlash("Primero debes cargar la cedula del cliente en la factura.", "error");
+    render();
+    return;
+  }
+
+  updateFacturacionPaymentField(rowIndex, "cedula", clientCedula);
+  closeFacturacionPaymentCedulaPrompt({ focusRowIndex: rowIndex });
+}
+
+function parseFacturacionPaymentAmount(value) {
+  const parsed = parseExchangeRateNumber(value);
+  return parsed === null ? 0 : parsed;
+}
+
+function facturacionPaymentMethodUsesUsdAmount(method) {
+  const normalized = normalizeFacturacionPaymentMethod(method);
+  return normalized === "EFECTIVO DOLAR";
+}
+
+function resolveFacturacionPaymentAmountInBs(row, rateBsPerUsd = 0) {
+  const amount = parseFacturacionPaymentAmount(row?.monto);
+  if (amount <= 0) {
+    return 0;
+  }
+
+  if (facturacionPaymentMethodUsesUsdAmount(row?.formaPago)) {
+    const rate = toFacturacionNumber(rateBsPerUsd);
+    if (rate <= 0) {
+      return 0;
+    }
+
+    return roundToTwoDecimals(amount * rate);
+  }
+
+  return amount;
+}
+
+function facturacionPaymentMethodAppliesIgtf(method) {
+  return false;
+}
+
+function validateFacturacionPaymentRows(summary, rows) {
+  const paymentRows = normalizeFacturacionPaymentRows(rows);
+  const hasAnyAmount = paymentRows.some((row) => parseFacturacionPaymentAmount(row?.monto) > 0);
+  if (!hasAnyAmount) {
+    return "Debes indicar al menos un monto en la forma de pago.";
+  }
+
+  const hasUsdPayment = paymentRows.some((row) => {
+    return facturacionPaymentMethodUsesUsdAmount(row?.formaPago) && parseFacturacionPaymentAmount(row?.monto) > 0;
+  });
+  if (hasUsdPayment && toFacturacionNumber(summary?.rateBsPerUsd) <= 0) {
+    return "No hay una tasa de cambio vigente para convertir el efectivo en dolares.";
+  }
+
+  const amountWithoutMethod = paymentRows.find((row) => {
+    return parseFacturacionPaymentAmount(row?.monto) > 0 && !normalizeFacturacionPaymentMethod(row?.formaPago);
+  });
+  if (amountWithoutMethod) {
+    return "Cada monto cargado debe tener una forma de pago seleccionada.";
+  }
+
+  const paymentSummary = calculateFacturacionPaymentSummary(summary, paymentRows);
+  if (paymentSummary.saldo > 0.009) {
+    return "Los pagos cargados aun no cubren el total de la venta.";
+  }
+
+  return "";
+}
+
 function freezeCurrentFacturacionDraft() {
   const currentDraft = normalizeFacturacionDraft(state.facturacion.draft || createEmptyFacturacionDraft());
   if (!facturacionDraftHasContent(currentDraft)) {
@@ -13089,6 +13978,8 @@ function freezeCurrentFacturacionDraft() {
     type: "",
     items: [],
   };
+  state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
+  state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
   closeFacturacionLineLookupModal();
   closeFacturacionFrozenLookupModal();
   closeFacturacionClientEditor();
@@ -13283,6 +14174,7 @@ function resetFacturacionState() {
   state.facturacion = {
     draft: createEmptyFacturacionDraft(),
     exchangeRate: createEmptyFacturacionExchangeRateState(),
+    savingSale: false,
     selectedLineIndex: -1,
     discountAuth: createEmptyFacturacionDiscountAuthState(),
     lookup: {
@@ -13306,6 +14198,8 @@ function resetFacturacionState() {
       draft: createEmptyClienteDraft(state.clientes.metadata),
     },
     frozenLookup: createEmptyFacturacionFrozenLookupState(),
+    paymentModal: createEmptyFacturacionPaymentModalState(),
+    paymentCedulaPrompt: createEmptyFacturacionPaymentCedulaPromptState(),
   };
 }
 
@@ -13501,7 +14395,57 @@ function createEmptyDraft() {
       desde: "",
       hasta: "",
     },
+    costos: {
+      costoInicial: "",
+      costoPromedio: "",
+      ultimoCosto: "",
+      costoDolar: "",
+    },
   });
+}
+
+function resolveArticlePriceFromDollarCost(costValue, rateValue) {
+  const raw = String(costValue ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const cost = parseArticlePromotionNumber(raw);
+  const rate = toFacturacionNumber(rateValue);
+  if (cost === null || rate <= 0) {
+    return null;
+  }
+
+  return formatArticlePromotionNumber(roundToTwoDecimals(cost * rate));
+}
+
+function applyArticleDollarRatesToDraft(draft) {
+  const currentDraft = withDraftDefaults(draft || createEmptyDraft());
+  const nextDraft = {
+    ...currentDraft,
+    general: { ...currentDraft.general },
+    tallasColores: { ...currentDraft.tallasColores },
+    precios: { ...currentDraft.precios },
+    costos: { ...currentDraft.costos },
+  };
+
+  const detailPrice = resolveArticlePriceFromDollarCost(nextDraft.costos.costoInicial, state.articlePricingRates?.rateBsPerUsd);
+  const mayorPrice = resolveArticlePriceFromDollarCost(nextDraft.costos.costoPromedio, state.articlePricingRates?.rateMayor);
+  const afiliadoPrice = resolveArticlePriceFromDollarCost(nextDraft.costos.ultimoCosto, state.articlePricingRates?.rateBsPerUsd);
+
+  if (detailPrice !== null) {
+    nextDraft.precios.detal = detailPrice;
+  }
+
+  if (mayorPrice !== null) {
+    nextDraft.precios.mayor = mayorPrice;
+  }
+
+  if (afiliadoPrice !== null) {
+    nextDraft.precios.afiliado = afiliadoPrice;
+  }
+
+  return nextDraft;
 }
 
 function withDraftDefaults(draft) {
@@ -13535,6 +14479,12 @@ function withDraftDefaults(draft) {
       precio: draft?.precios?.precio || "",
       desde: draft?.precios?.desde || "",
       hasta: draft?.precios?.hasta || "",
+    },
+    costos: {
+      costoInicial: draft?.costos?.costoInicial || "",
+      costoPromedio: draft?.costos?.costoPromedio || "",
+      ultimoCosto: draft?.costos?.ultimoCosto || "",
+      costoDolar: draft?.costos?.costoDolar || "",
     },
   };
 }
@@ -13737,7 +14687,7 @@ function formatArticleCurrentView(draft) {
 }
 
 function articleToDraft(article) {
-  return withDraftDefaults({
+  return applyArticleDollarRatesToDraft({
     codigoBarra: article?.codigoBarra || "",
     referencia: article?.referencia || article?.codigoBarraAnt || "",
     serializado: Boolean(article?.inventario?.serializado),
@@ -13777,6 +14727,12 @@ function articleToDraft(article) {
       hasta: article?.precios?.promocion?.activa
         ? toDateInputValue(article?.precios?.promocion?.hasta)
         : "",
+    },
+    costos: {
+      costoInicial: toInputValue(article?.inventario?.costos?.inicial),
+      costoPromedio: toInputValue(article?.inventario?.costos?.promedio),
+      ultimoCosto: toInputValue(article?.inventario?.costos?.ultimo),
+      costoDolar: toInputValue(article?.inventario?.costos?.dolar),
     },
   });
 }
@@ -13820,6 +14776,10 @@ function buildArticlePayload(draft, includeCode) {
             activa: false,
           },
     },
+    costoInicial: draft.costos.costoInicial.trim(),
+    costoPromedio: draft.costos.costoPromedio.trim(),
+    ultimoCosto: draft.costos.ultimoCosto.trim(),
+    costoDolar: draft.costos.costoDolar.trim(),
   };
 
   if (!includeCode) {
@@ -13958,7 +14918,7 @@ function toApiDateTime(value, boundary = "start") {
 function readArticleDraft(form) {
   const currentDraft = withDraftDefaults(state.formDraft || createEmptyDraft());
 
-  return withDraftDefaults({
+  return applyArticleDollarRatesToDraft({
     codigoBarra: readFormFieldValue(form, "codigoBarra", currentDraft.codigoBarra),
     referencia: readFormFieldValue(form, "referencia", currentDraft.referencia),
     serializado: readFormCheckboxValue(form, "serializado", currentDraft.serializado),
@@ -13987,6 +14947,12 @@ function readArticleDraft(form) {
       precio: readFormFieldValue(form, "precioPromocion", currentDraft.precios.precio),
       desde: readFormFieldValue(form, "promocionDesde", currentDraft.precios.desde),
       hasta: readFormFieldValue(form, "promocionHasta", currentDraft.precios.hasta),
+    },
+    costos: {
+      costoInicial: readFormFieldValue(form, "costoInicial", currentDraft.costos.costoInicial),
+      costoPromedio: readFormFieldValue(form, "costoPromedio", currentDraft.costos.costoPromedio),
+      ultimoCosto: readFormFieldValue(form, "ultimoCosto", currentDraft.costos.ultimoCosto),
+      costoDolar: readFormFieldValue(form, "costoDolar", currentDraft.costos.costoDolar),
     },
   });
 }
@@ -14387,10 +15353,35 @@ function extractArticleConflictMessage(error) {
 
 function setFlash(message, type = "info") {
   state.flash = { message, type };
+  scheduleFlashAutoDismiss();
 }
 
 function clearFlash() {
+  if (flashAutoDismissHandle) {
+    window.clearTimeout(flashAutoDismissHandle);
+    flashAutoDismissHandle = null;
+  }
   state.flash = null;
+}
+
+function scheduleFlashAutoDismiss() {
+  if (flashAutoDismissHandle) {
+    window.clearTimeout(flashAutoDismissHandle);
+    flashAutoDismissHandle = null;
+  }
+
+  if (!state.flash?.message) {
+    return;
+  }
+
+  flashAutoDismissHandle = window.setTimeout(() => {
+    flashAutoDismissHandle = null;
+    if (!state.flash?.message) {
+      return;
+    }
+    clearFlash();
+    render();
+  }, FLASH_AUTO_DISMISS_MS);
 }
 
 function persistSession() {

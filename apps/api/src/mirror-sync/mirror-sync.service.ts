@@ -15,12 +15,33 @@ const MIRROR_SYNC_EVENT_INVENTORY_UPSERT = "INVENTORY_UPSERT";
 const MIRROR_SYNC_EVENT_INVENTORY_DELETE = "INVENTORY_DELETE";
 const MIRROR_SYNC_EVENT_CATALOG_UPSERT = "CATALOG_UPSERT";
 const MIRROR_SYNC_EVENT_CATALOG_DELETE = "CATALOG_DELETE";
+const MIRROR_SYNC_EVENT_CLIENT_UPSERT = "CLIENT_UPSERT";
+const MIRROR_SYNC_EVENT_WORKER_UPSERT = "WORKER_UPSERT";
+const MIRROR_SYNC_EVENT_RATE_UPSERT = "RATE_UPSERT";
+const MIRROR_SYNC_EVENT_SALE_UPSERT = "SALE_UPSERT";
 const DEFAULT_MIRROR_SYNC_RETRY_INTERVAL_MS = 30_000;
 const DEFAULT_MIRROR_SYNC_RETRY_STARTUP_DELAY_MS = 5_000;
 const DEFAULT_MIRROR_SYNC_RETRY_LIMIT = 25;
 
 type MirrorSyncTransactionClient = Prisma.TransactionClient;
 type MirrorCatalogType = "categorias" | "marcas" | "tallas" | "colores" | "fabricantes" | "impuestos";
+type MirrorRateTable = "TASA_CAMBIO" | "TASA_CAMBIO_M";
+type ClienteWithRelations = Prisma.ClientesGetPayload<{
+  include: {
+    tipoCliente: true;
+    contribuyenteTipo: true;
+  };
+}>;
+type TrabajadorWithRelations = Prisma.TrabajadoresGetPayload<{
+  include: {
+    cargoRef: true;
+  };
+}>;
+type VentaWithRelations = Prisma.VentasGetPayload<{
+  include: {
+    movVentas: true;
+  };
+}>;
 
 type MirrorSyncOutboxRow = {
   GlobalId: string;
@@ -88,6 +109,97 @@ type MirrorSyncInventoryPayload = {
   serializado: number;
 };
 
+type MirrorSyncClientTypePayload = {
+  codigo: number;
+  descripcion?: string | null;
+  status?: number | null;
+};
+
+type MirrorSyncClientePayload = {
+  codigo: string;
+  nombre: string;
+  fechaIngreso: string;
+  telefono: string;
+  direccion: string;
+  status: number;
+  tipo: number;
+  tipoContribuyente: number;
+};
+
+type MirrorSyncCargoPayload = {
+  codigo: string;
+  nombre?: string | null;
+  status?: number | null;
+};
+
+type MirrorSyncTrabajadorPayload = {
+  cedula: string;
+  codigo: number;
+  nombre: string;
+  cargo: string;
+  fechaIngreso: string;
+  fechaNacimiento: string | null;
+  direccion: string | null;
+  telefono: string | null;
+  celular: string | null;
+  status: number;
+  marcajeInterDiario: boolean;
+  indUsarCarnet: number;
+};
+
+type MirrorSyncRatePayload = {
+  id: string;
+  fecha: string;
+  valor: string;
+};
+
+type MirrorSyncSalePayload = {
+  numeroFactura: string;
+  serie: string;
+  fecha: string;
+  vendedor: string;
+  cliente: string;
+  tipoVenta: number;
+  formaPago: number;
+  diasCredito: number;
+  totalMercancia: string;
+  totalDescuento: string;
+  totalImpuesto: string;
+  totalCosto: string;
+  interContable: number;
+  usuario: string;
+  status: number;
+  numeroOrden: string;
+  totalPago: string;
+  totalDolares: string | null;
+  tasaCambio: string | null;
+  estacion: string | null;
+  totalDolaresE: string | null;
+  tasaIGTF: string | null;
+  montoIGTF: string | null;
+  baseImponibleIGTF: string | null;
+};
+
+type MirrorSyncSaleLinePayload = {
+  numeroFactura: string;
+  serie: string;
+  hora: string;
+  tipoLista: string;
+  codigoBarra: string;
+  precio: string;
+  precioLista: string;
+  costo: string;
+  impuesto: string;
+  porcentajeImpuesto: string;
+  cantidad: string;
+  cantidadDevuelta: string;
+  item: number;
+  porcentajeDescuento: string;
+  precioDetal: string;
+  regla: string;
+  idRegla: number;
+};
+
 type MirrorEnvelopeBase = {
   schemaVersion: number;
   globalId: string;
@@ -130,17 +242,52 @@ type CatalogDeleteEnvelope = MirrorEnvelopeBase & {
   };
 };
 
+type ClientUpsertEnvelope = MirrorEnvelopeBase & {
+  eventType: typeof MIRROR_SYNC_EVENT_CLIENT_UPSERT;
+  cliente: MirrorSyncClientePayload;
+  tipoCliente: MirrorSyncClientTypePayload;
+  tipoContribuyente: MirrorSyncClientTypePayload;
+};
+
+type WorkerUpsertEnvelope = MirrorEnvelopeBase & {
+  eventType: typeof MIRROR_SYNC_EVENT_WORKER_UPSERT;
+  trabajador: MirrorSyncTrabajadorPayload;
+  cargo: MirrorSyncCargoPayload;
+};
+
+type RateUpsertEnvelope = MirrorEnvelopeBase & {
+  eventType: typeof MIRROR_SYNC_EVENT_RATE_UPSERT;
+  rateTable: MirrorRateTable;
+  rate: MirrorSyncRatePayload;
+};
+
+type SaleUpsertEnvelope = MirrorEnvelopeBase & {
+  eventType: typeof MIRROR_SYNC_EVENT_SALE_UPSERT;
+  sale: MirrorSyncSalePayload;
+  movVentas: MirrorSyncSaleLinePayload[];
+};
+
 type MirrorSyncEnvelope =
   | InventoryUpsertEnvelope
   | InventoryDeleteEnvelope
   | CatalogUpsertEnvelope
-  | CatalogDeleteEnvelope;
+  | CatalogDeleteEnvelope
+  | ClientUpsertEnvelope
+  | WorkerUpsertEnvelope
+  | RateUpsertEnvelope
+  | SaleUpsertEnvelope;
 
 type CatalogSnapshotRow = {
   Codigo: string | number;
   Nombre?: string | null;
   Status?: number | null;
   PorcentajeImpuesto?: Prisma.Decimal | null;
+};
+
+type RateSnapshotRow = {
+  ID: bigint | number | string;
+  Fecha: Date | string;
+  Valor: unknown;
 };
 
 @Injectable()
@@ -280,6 +427,131 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     await this.recordPendingEnvelope(tx, this.buildCatalogDeleteEnvelope(resolvedType, normalizedCode));
   }
 
+  async enqueueClienteUpsert(codigo: string) {
+    if (!this.isMirrorSyncEnabled()) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.enqueueClienteUpsertTx(tx, codigo);
+    });
+  }
+
+  async enqueueClienteUpsertTx(
+    tx: MirrorSyncTransactionClient,
+    codigo: string,
+  ) {
+    if (!this.isMirrorSyncEnabled()) {
+      return;
+    }
+
+    const normalizedCodigo = this.normalizeCode(codigo);
+    if (!normalizedCodigo) {
+      return;
+    }
+
+    const cliente = await tx.clientes.findUnique({
+      where: { Codigo: normalizedCodigo },
+      include: {
+        tipoCliente: true,
+        contribuyenteTipo: true,
+      },
+    });
+
+    if (!cliente) {
+      return;
+    }
+
+    await this.recordPendingEnvelope(tx, this.buildClienteUpsertEnvelope(cliente));
+  }
+
+  async enqueueTrabajadorUpsert(cedula: string) {
+    if (!this.isMirrorSyncEnabled()) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.enqueueTrabajadorUpsertTx(tx, cedula);
+    });
+  }
+
+  async enqueueTrabajadorUpsertTx(
+    tx: MirrorSyncTransactionClient,
+    cedula: string,
+  ) {
+    if (!this.isMirrorSyncEnabled()) {
+      return;
+    }
+
+    const normalizedCedula = this.normalizeCode(cedula);
+    if (!normalizedCedula) {
+      return;
+    }
+
+    const trabajador = await tx.trabajadores.findUnique({
+      where: { Cedula: normalizedCedula },
+      include: {
+        cargoRef: true,
+      },
+    });
+
+    if (!trabajador) {
+      return;
+    }
+
+    await this.recordPendingEnvelope(tx, this.buildTrabajadorUpsertEnvelope(trabajador));
+  }
+
+  async enqueueRateUpsertTx(
+    tx: MirrorSyncTransactionClient,
+    rateTable: MirrorRateTable,
+    row: RateSnapshotRow | null | undefined,
+  ) {
+    if (!this.isMirrorSyncEnabled() || !row) {
+      return;
+    }
+
+    await this.recordPendingEnvelope(tx, this.buildRateUpsertEnvelope(rateTable, row));
+  }
+
+  async enqueueVentaUpsertTx(
+    tx: MirrorSyncTransactionClient,
+    numeroFactura: bigint | number | string,
+    serie: string,
+  ) {
+    if (!this.isMirrorSyncEnabled()) {
+      return;
+    }
+
+    const normalizedSerie = this.normalizeCode(serie);
+    const normalizedNumero = this.normalizeBigIntString(
+      numeroFactura,
+      "Numero de factura espejo invalido.",
+    );
+
+    const venta = await tx.ventas.findUnique({
+      where: {
+        NumeroFactura_Serie: {
+          NumeroFactura: BigInt(normalizedNumero),
+          Serie: normalizedSerie,
+        },
+      },
+      include: {
+        movVentas: {
+          orderBy: {
+            Item: "asc",
+          },
+        },
+      },
+    });
+
+    if (!venta) {
+      return;
+    }
+
+    await this.recordPendingEnvelope(tx, this.buildSaleUpsertEnvelope(venta));
+  }
+
   async pushPendingMirrorSync(options: { limit?: number } = {}) {
     await this.ensureMirrorSyncSchema();
 
@@ -353,6 +625,14 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
             await this.applyCatalogUpsertEnvelope(tx, payload);
           } else if (payload.eventType === MIRROR_SYNC_EVENT_CATALOG_DELETE) {
             await this.applyCatalogDeleteEnvelope(tx, payload);
+          } else if (payload.eventType === MIRROR_SYNC_EVENT_CLIENT_UPSERT) {
+            await this.applyClienteUpsertEnvelope(tx, payload);
+          } else if (payload.eventType === MIRROR_SYNC_EVENT_WORKER_UPSERT) {
+            await this.applyTrabajadorUpsertEnvelope(tx, payload);
+          } else if (payload.eventType === MIRROR_SYNC_EVENT_RATE_UPSERT) {
+            await this.applyRateUpsertEnvelope(tx, payload);
+          } else if (payload.eventType === MIRROR_SYNC_EVENT_SALE_UPSERT) {
+            await this.applySaleUpsertEnvelope(tx, payload);
           } else {
             throw new BadRequestException("Tipo de evento espejo no soportado.");
           }
@@ -602,6 +882,150 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       catalog: {
         codigo,
       },
+    };
+  }
+
+  private buildClienteUpsertEnvelope(cliente: ClienteWithRelations): ClientUpsertEnvelope {
+    const entityKey = this.normalizeCode(cliente.Codigo);
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.buildGlobalId("CLIENTES", entityKey),
+      sourceDatabase: this.getCurrentDatabaseName(),
+      entityType: "CLIENTES",
+      entityKey,
+      eventType: MIRROR_SYNC_EVENT_CLIENT_UPSERT,
+      cliente: {
+        codigo: entityKey,
+        nombre: cliente.Nombre,
+        fechaIngreso: cliente.FechaIngreso.toISOString(),
+        telefono: cliente.Telefono ?? "",
+        direccion: cliente.Direccion ?? "",
+        status: cliente.Status,
+        tipo: cliente.Tipo,
+        tipoContribuyente: cliente.TipoContribuyente,
+      },
+      tipoCliente: {
+        codigo: cliente.tipoCliente.Codigo,
+        descripcion: cliente.tipoCliente.Descripcion ?? null,
+        status: cliente.tipoCliente.Status ?? null,
+      },
+      tipoContribuyente: {
+        codigo: cliente.contribuyenteTipo.Codigo,
+        descripcion: cliente.contribuyenteTipo.Descripcion ?? null,
+        status: cliente.contribuyenteTipo.Status ?? null,
+      },
+    };
+  }
+
+  private buildTrabajadorUpsertEnvelope(trabajador: TrabajadorWithRelations): WorkerUpsertEnvelope {
+    const entityKey = this.normalizeCode(trabajador.Cedula);
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.buildGlobalId("TRABAJADORES", entityKey),
+      sourceDatabase: this.getCurrentDatabaseName(),
+      entityType: "TRABAJADORES",
+      entityKey,
+      eventType: MIRROR_SYNC_EVENT_WORKER_UPSERT,
+      trabajador: {
+        cedula: entityKey,
+        codigo: trabajador.Codigo,
+        nombre: trabajador.Nombre,
+        cargo: trabajador.Cargo,
+        fechaIngreso: trabajador.FechaIngreso.toISOString(),
+        fechaNacimiento: trabajador.FechaNacimiento?.toISOString() ?? null,
+        direccion: trabajador.Direccion ?? null,
+        telefono: trabajador.Telefono ?? null,
+        celular: trabajador.Celular ?? null,
+        status: trabajador.Status,
+        marcajeInterDiario: Boolean(trabajador.MarcajeInterDiario),
+        indUsarCarnet: Number(trabajador.IndUsarCarnet ?? 0),
+      },
+      cargo: {
+        codigo: trabajador.cargoRef.Codigo,
+        nombre: trabajador.cargoRef.Nombre ?? null,
+        status: trabajador.cargoRef.Status ?? null,
+      },
+    };
+  }
+
+  private buildRateUpsertEnvelope(
+    rateTable: MirrorRateTable,
+    row: RateSnapshotRow,
+  ): RateUpsertEnvelope {
+    const entityKey = this.normalizeBigIntString(row.ID, "ID de tasa espejo invalido.");
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.buildGlobalId(rateTable, entityKey),
+      sourceDatabase: this.getCurrentDatabaseName(),
+      entityType: rateTable,
+      entityKey,
+      eventType: MIRROR_SYNC_EVENT_RATE_UPSERT,
+      rateTable,
+      rate: {
+        id: entityKey,
+        fecha: this.toIsoString(row.Fecha),
+        valor: this.toDecimalString(row.Valor),
+      },
+    };
+  }
+
+  private buildSaleUpsertEnvelope(venta: VentaWithRelations): SaleUpsertEnvelope {
+    const entityKey = this.buildSaleEntityKey(venta.NumeroFactura, venta.Serie);
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.buildGlobalId("VENTAS", entityKey),
+      sourceDatabase: this.getCurrentDatabaseName(),
+      entityType: "VENTAS",
+      entityKey,
+      eventType: MIRROR_SYNC_EVENT_SALE_UPSERT,
+      sale: {
+        numeroFactura: venta.NumeroFactura.toString(),
+        serie: venta.Serie,
+        fecha: venta.Fecha.toISOString(),
+        vendedor: venta.Vendedor,
+        cliente: venta.Cliente,
+        tipoVenta: venta.TipoVenta,
+        formaPago: venta.FormaPago,
+        diasCredito: venta.DiasCredito,
+        totalMercancia: this.toDecimalString(venta.TotalMercancia),
+        totalDescuento: this.toDecimalString(venta.TotalDescuento),
+        totalImpuesto: this.toDecimalString(venta.TotalImpuesto),
+        totalCosto: this.toDecimalString(venta.TotalCosto),
+        interContable: venta.InterContable,
+        usuario: venta.Usuario,
+        status: venta.Status,
+        numeroOrden: venta.NumeroOrden.toString(),
+        totalPago: this.toDecimalString(venta.TotalPago),
+        totalDolares: this.toOptionalDecimalString(venta.TotalDolares),
+        tasaCambio: this.toOptionalDecimalString(venta.TasaCambio),
+        estacion: venta.Estacion ?? null,
+        totalDolaresE: this.toOptionalDecimalString(venta.TotalDolaresE),
+        tasaIGTF: this.toOptionalDecimalString(venta.TasaIGTF),
+        montoIGTF: this.toOptionalDecimalString(venta.MontoIGTF),
+        baseImponibleIGTF: this.toOptionalDecimalString(venta.BaseImponibleIGTF),
+      },
+      movVentas: venta.movVentas
+        .slice()
+        .sort((left, right) => left.Item - right.Item)
+        .map((item) => ({
+          numeroFactura: item.NumeroFactura.toString(),
+          serie: item.Serie,
+          hora: item.Hora.toISOString(),
+          tipoLista: item.TipoLista,
+          codigoBarra: item.CodigoBarra,
+          precio: this.toDecimalString(item.Precio),
+          precioLista: this.toDecimalString(item.PrecioLista),
+          costo: this.toDecimalString(item.Costo),
+          impuesto: this.toDecimalString(item.Impuesto),
+          porcentajeImpuesto: this.toDecimalString(item.PorcentajeImpuesto),
+          cantidad: this.toDecimalString(item.Cantidad),
+          cantidadDevuelta: this.toDecimalString(item.CantidadDevuelta),
+          item: item.Item,
+          porcentajeDescuento: this.toDecimalString(item.PorcentajeDescuento),
+          precioDetal: this.toDecimalString(item.PrecioDetal),
+          regla: item.Regla,
+          idRegla: item.IDRegla,
+        })),
     };
   }
 
@@ -965,6 +1389,273 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async applyClienteUpsertEnvelope(
+    tx: MirrorSyncTransactionClient,
+    payload: ClientUpsertEnvelope,
+  ) {
+    await tx.tiposCliente.upsert({
+      where: { Codigo: payload.tipoCliente.codigo },
+      create: {
+        Codigo: payload.tipoCliente.codigo,
+        Descripcion: payload.tipoCliente.descripcion ?? null,
+        Status: payload.tipoCliente.status ?? 1,
+      },
+      update: {
+        Descripcion: payload.tipoCliente.descripcion ?? null,
+        Status: payload.tipoCliente.status ?? 1,
+      },
+    });
+
+    await tx.tiposContribuyente.upsert({
+      where: { Codigo: payload.tipoContribuyente.codigo },
+      create: {
+        Codigo: payload.tipoContribuyente.codigo,
+        Descripcion: payload.tipoContribuyente.descripcion ?? null,
+        Status: payload.tipoContribuyente.status ?? 1,
+      },
+      update: {
+        Descripcion: payload.tipoContribuyente.descripcion ?? null,
+        Status: payload.tipoContribuyente.status ?? 1,
+      },
+    });
+
+    const cliente = payload.cliente;
+    await tx.clientes.upsert({
+      where: { Codigo: cliente.codigo },
+      create: {
+        Codigo: cliente.codigo,
+        Nombre: cliente.nombre,
+        FechaIngreso: new Date(cliente.fechaIngreso),
+        Telefono: cliente.telefono,
+        Direccion: cliente.direccion,
+        Status: cliente.status,
+        Tipo: cliente.tipo,
+        TipoContribuyente: cliente.tipoContribuyente,
+      },
+      update: {
+        Nombre: cliente.nombre,
+        FechaIngreso: new Date(cliente.fechaIngreso),
+        Telefono: cliente.telefono,
+        Direccion: cliente.direccion,
+        Status: cliente.status,
+        Tipo: cliente.tipo,
+        TipoContribuyente: cliente.tipoContribuyente,
+      },
+    });
+  }
+
+  private async applyTrabajadorUpsertEnvelope(
+    tx: MirrorSyncTransactionClient,
+    payload: WorkerUpsertEnvelope,
+  ) {
+    await tx.cargos.upsert({
+      where: { Codigo: payload.cargo.codigo },
+      create: {
+        Codigo: payload.cargo.codigo,
+        Nombre: payload.cargo.nombre ?? payload.cargo.codigo,
+        Status: payload.cargo.status ?? 1,
+      },
+      update: {
+        Nombre: payload.cargo.nombre ?? payload.cargo.codigo,
+        Status: payload.cargo.status ?? 1,
+      },
+    });
+
+    const trabajador = payload.trabajador;
+    await tx.trabajadores.upsert({
+      where: { Cedula: trabajador.cedula },
+      create: {
+        Cedula: trabajador.cedula,
+        Codigo: trabajador.codigo,
+        Nombre: trabajador.nombre,
+        Cargo: trabajador.cargo,
+        FechaIngreso: new Date(trabajador.fechaIngreso),
+        FechaNacimiento: trabajador.fechaNacimiento ? new Date(trabajador.fechaNacimiento) : null,
+        Direccion: trabajador.direccion,
+        Telefono: trabajador.telefono,
+        Celular: trabajador.celular,
+        Status: trabajador.status,
+        MarcajeInterDiario: trabajador.marcajeInterDiario,
+        IndUsarCarnet: trabajador.indUsarCarnet,
+      },
+      update: {
+        Codigo: trabajador.codigo,
+        Nombre: trabajador.nombre,
+        Cargo: trabajador.cargo,
+        FechaIngreso: new Date(trabajador.fechaIngreso),
+        FechaNacimiento: trabajador.fechaNacimiento ? new Date(trabajador.fechaNacimiento) : null,
+        Direccion: trabajador.direccion,
+        Telefono: trabajador.telefono,
+        Celular: trabajador.celular,
+        Status: trabajador.status,
+        MarcajeInterDiario: trabajador.marcajeInterDiario,
+        IndUsarCarnet: trabajador.indUsarCarnet,
+      },
+    });
+  }
+
+  private async applyRateUpsertEnvelope(
+    tx: MirrorSyncTransactionClient,
+    payload: RateUpsertEnvelope,
+  ) {
+    const id = BigInt(payload.rate.id);
+    const data = {
+      ID: id,
+      Fecha: new Date(payload.rate.fecha),
+      Valor: payload.rate.valor,
+    };
+
+    if (payload.rateTable === "TASA_CAMBIO") {
+      await tx.tasaCambio.upsert({
+        where: { ID: id },
+        create: data,
+        update: {
+          Fecha: data.Fecha,
+          Valor: data.Valor,
+        },
+      });
+    } else {
+      await tx.tasaCambioM.upsert({
+        where: { ID: id },
+        create: data,
+        update: {
+          Fecha: data.Fecha,
+          Valor: data.Valor,
+        },
+      });
+    }
+
+    await this.recalculateInventoryPricesFromRatesTx(tx);
+  }
+
+  private async applySaleUpsertEnvelope(
+    tx: MirrorSyncTransactionClient,
+    payload: SaleUpsertEnvelope,
+  ) {
+    const sale = payload.sale;
+    const numeroFactura = BigInt(sale.numeroFactura);
+    const numeroOrden = BigInt(sale.numeroOrden);
+
+    await tx.ventas.upsert({
+      where: {
+        NumeroFactura_Serie: {
+          NumeroFactura: numeroFactura,
+          Serie: sale.serie,
+        },
+      },
+      create: {
+        NumeroFactura: numeroFactura,
+        Serie: sale.serie,
+        Fecha: new Date(sale.fecha),
+        Vendedor: sale.vendedor,
+        Cliente: sale.cliente,
+        TipoVenta: sale.tipoVenta,
+        FormaPago: sale.formaPago,
+        DiasCredito: sale.diasCredito,
+        TotalMercancia: sale.totalMercancia,
+        TotalDescuento: sale.totalDescuento,
+        TotalImpuesto: sale.totalImpuesto,
+        TotalCosto: sale.totalCosto,
+        InterContable: sale.interContable,
+        Usuario: sale.usuario,
+        Status: sale.status,
+        NumeroOrden: numeroOrden,
+        TotalPago: sale.totalPago,
+        TotalDolares: sale.totalDolares,
+        TasaCambio: sale.tasaCambio,
+        Estacion: sale.estacion,
+        TotalDolaresE: sale.totalDolaresE,
+        TasaIGTF: sale.tasaIGTF,
+        MontoIGTF: sale.montoIGTF,
+        BaseImponibleIGTF: sale.baseImponibleIGTF,
+      },
+      update: {
+        Fecha: new Date(sale.fecha),
+        Vendedor: sale.vendedor,
+        Cliente: sale.cliente,
+        TipoVenta: sale.tipoVenta,
+        FormaPago: sale.formaPago,
+        DiasCredito: sale.diasCredito,
+        TotalMercancia: sale.totalMercancia,
+        TotalDescuento: sale.totalDescuento,
+        TotalImpuesto: sale.totalImpuesto,
+        TotalCosto: sale.totalCosto,
+        InterContable: sale.interContable,
+        Usuario: sale.usuario,
+        Status: sale.status,
+        NumeroOrden: numeroOrden,
+        TotalPago: sale.totalPago,
+        TotalDolares: sale.totalDolares,
+        TasaCambio: sale.tasaCambio,
+        Estacion: sale.estacion,
+        TotalDolaresE: sale.totalDolaresE,
+        TasaIGTF: sale.tasaIGTF,
+        MontoIGTF: sale.montoIGTF,
+        BaseImponibleIGTF: sale.baseImponibleIGTF,
+      },
+    });
+
+    const items = payload.movVentas.slice().sort((left, right) => left.item - right.item);
+    if (items.length > 0) {
+      await tx.movVentas.deleteMany({
+        where: {
+          NumeroFactura: numeroFactura,
+          Serie: sale.serie,
+          Item: {
+            notIn: items.map((item) => item.item),
+          },
+        },
+      });
+    }
+
+    for (const item of items) {
+      await tx.movVentas.upsert({
+        where: {
+          NumeroFactura_Serie_Item: {
+            NumeroFactura: numeroFactura,
+            Serie: sale.serie,
+            Item: item.item,
+          },
+        },
+        create: {
+          NumeroFactura: numeroFactura,
+          Serie: sale.serie,
+          Hora: new Date(item.hora),
+          TipoLista: item.tipoLista,
+          CodigoBarra: item.codigoBarra,
+          Precio: item.precio,
+          PrecioLista: item.precioLista,
+          Costo: item.costo,
+          Impuesto: item.impuesto,
+          PorcentajeImpuesto: item.porcentajeImpuesto,
+          Cantidad: item.cantidad,
+          CantidadDevuelta: item.cantidadDevuelta,
+          Item: item.item,
+          PorcentajeDescuento: item.porcentajeDescuento,
+          PrecioDetal: item.precioDetal,
+          Regla: item.regla,
+          IDRegla: item.idRegla,
+        },
+        update: {
+          Hora: new Date(item.hora),
+          TipoLista: item.tipoLista,
+          CodigoBarra: item.codigoBarra,
+          Precio: item.precio,
+          PrecioLista: item.precioLista,
+          Costo: item.costo,
+          Impuesto: item.impuesto,
+          PorcentajeImpuesto: item.porcentajeImpuesto,
+          Cantidad: item.cantidad,
+          CantidadDevuelta: item.cantidadDevuelta,
+          PorcentajeDescuento: item.porcentajeDescuento,
+          PrecioDetal: item.precioDetal,
+          Regla: item.regla,
+          IDRegla: item.idRegla,
+        },
+      });
+    }
+  }
+
   private async upsertCatalogFromPayload(
     tx: MirrorSyncTransactionClient,
     catalogType: MirrorCatalogType,
@@ -1089,6 +1780,39 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  private async recalculateInventoryPricesFromRatesTx(tx: MirrorSyncTransactionClient) {
+    const [detalle, mayor] = await Promise.all([
+      tx.tasaCambio.findFirst({
+        orderBy: {
+          ID: "desc",
+        },
+      }),
+      tx.tasaCambioM.findFirst({
+        orderBy: {
+          ID: "desc",
+        },
+      }),
+    ]);
+
+    if (!detalle || !mayor) {
+      return;
+    }
+
+    await tx.$executeRawUnsafe(
+      `
+        UPDATE dbo."INVENTARIO"
+        SET
+          "PrecioDetal" = ROUND(COALESCE("CostoInicial", 0)::numeric * $1::numeric, 2),
+          "PrecioMayor" = ROUND(COALESCE("CostoPromedio", 0)::numeric * $2::numeric, 2),
+          "PrecioAfiliado" = ROUND(COALESCE("UltimoCosto", 0)::numeric * $1::numeric, 2),
+          "UltimaActualizacion" = $3::timestamp
+      `,
+      this.toDecimalString(detalle.Valor),
+      this.toDecimalString(mayor.Valor),
+      this.getMostRecentDateValue([detalle.Fecha, mayor.Fecha]),
+    );
+  }
+
   private async postMirrorSyncPackage(baseUrl: string, payload: MirrorSyncEnvelope) {
     const token = await this.loginRemoteMirrorNode(baseUrl);
     const response = await fetch(`${baseUrl}/api/mirror-sync/import`, {
@@ -1182,6 +1906,22 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
 
     if (eventType === MIRROR_SYNC_EVENT_CATALOG_DELETE) {
       return this.normalizeCatalogDeleteEnvelope(raw);
+    }
+
+    if (eventType === MIRROR_SYNC_EVENT_CLIENT_UPSERT) {
+      return this.normalizeClienteUpsertEnvelope(raw);
+    }
+
+    if (eventType === MIRROR_SYNC_EVENT_WORKER_UPSERT) {
+      return this.normalizeTrabajadorUpsertEnvelope(raw);
+    }
+
+    if (eventType === MIRROR_SYNC_EVENT_RATE_UPSERT) {
+      return this.normalizeRateUpsertEnvelope(raw);
+    }
+
+    if (eventType === MIRROR_SYNC_EVENT_SALE_UPSERT) {
+      return this.normalizeSaleUpsertEnvelope(raw);
     }
 
     throw new BadRequestException("Tipo de evento espejo no soportado.");
@@ -1291,6 +2031,187 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  private normalizeClienteUpsertEnvelope(raw: Record<string, unknown>): ClientUpsertEnvelope {
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.normalizeRequiredCode(raw.globalId, "GlobalId espejo invalido."),
+      sourceDatabase: String(raw.sourceDatabase || "").trim(),
+      entityType: this.normalizeRequiredCode(raw.entityType, "EntityType espejo invalido."),
+      entityKey: this.normalizeRequiredCode(raw.entityKey, "EntityKey espejo invalido."),
+      eventType: MIRROR_SYNC_EVENT_CLIENT_UPSERT,
+      cliente: this.normalizeClientePayload(raw.cliente),
+      tipoCliente: this.normalizeClientTypePayload(raw.tipoCliente, "Tipo de cliente espejo invalido."),
+      tipoContribuyente: this.normalizeClientTypePayload(
+        raw.tipoContribuyente,
+        "Tipo de contribuyente espejo invalido.",
+      ),
+    };
+  }
+
+  private normalizeTrabajadorUpsertEnvelope(raw: Record<string, unknown>): WorkerUpsertEnvelope {
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.normalizeRequiredCode(raw.globalId, "GlobalId espejo invalido."),
+      sourceDatabase: String(raw.sourceDatabase || "").trim(),
+      entityType: this.normalizeRequiredCode(raw.entityType, "EntityType espejo invalido."),
+      entityKey: this.normalizeRequiredCode(raw.entityKey, "EntityKey espejo invalido."),
+      eventType: MIRROR_SYNC_EVENT_WORKER_UPSERT,
+      trabajador: this.normalizeTrabajadorPayload(raw.trabajador),
+      cargo: this.normalizeCargoPayload(raw.cargo),
+    };
+  }
+
+  private normalizeRateUpsertEnvelope(raw: Record<string, unknown>): RateUpsertEnvelope {
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.normalizeRequiredCode(raw.globalId, "GlobalId espejo invalido."),
+      sourceDatabase: String(raw.sourceDatabase || "").trim(),
+      entityType: this.normalizeRequiredCode(raw.entityType, "EntityType espejo invalido."),
+      entityKey: this.normalizeRequiredCode(raw.entityKey, "EntityKey espejo invalido."),
+      eventType: MIRROR_SYNC_EVENT_RATE_UPSERT,
+      rateTable: this.normalizeRateTable(raw.rateTable),
+      rate: this.normalizeRatePayload(raw.rate),
+    };
+  }
+
+  private normalizeSaleUpsertEnvelope(raw: Record<string, unknown>): SaleUpsertEnvelope {
+    const rawLines = Array.isArray(raw.movVentas) ? raw.movVentas : [];
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.normalizeRequiredCode(raw.globalId, "GlobalId espejo invalido."),
+      sourceDatabase: String(raw.sourceDatabase || "").trim(),
+      entityType: this.normalizeRequiredCode(raw.entityType, "EntityType espejo invalido."),
+      entityKey: this.normalizeRequiredCode(raw.entityKey, "EntityKey espejo invalido."),
+      eventType: MIRROR_SYNC_EVENT_SALE_UPSERT,
+      sale: this.normalizeSalePayload(raw.sale),
+      movVentas: rawLines.map((item, index) => this.normalizeSaleLinePayload(item, index)),
+    };
+  }
+
+  private normalizeClientePayload(raw: unknown): MirrorSyncClientePayload {
+    const value = this.asRecord(raw);
+    return {
+      codigo: this.normalizeRequiredCode(value.codigo, "Codigo de cliente invalido."),
+      nombre: this.normalizeRequiredString(value.nombre, "Nombre de cliente invalido."),
+      fechaIngreso: this.normalizeIsoDateString(value.fechaIngreso, "Fecha de ingreso del cliente invalida."),
+      telefono: this.normalizeOptionalString(value.telefono),
+      direccion: this.normalizeOptionalString(value.direccion),
+      status: this.normalizeSignedInteger(value.status, "Status de cliente invalido."),
+      tipo: this.toNonNegativeInteger(value.tipo, "Tipo de cliente invalido."),
+      tipoContribuyente: this.toNonNegativeInteger(value.tipoContribuyente, "Tipo de contribuyente invalido."),
+    };
+  }
+
+  private normalizeClientTypePayload(raw: unknown, message: string): MirrorSyncClientTypePayload {
+    const value = this.asRecord(raw);
+    return {
+      codigo: this.toNonNegativeInteger(value.codigo, message),
+      descripcion: value.descripcion == null ? null : String(value.descripcion),
+      status: value.status == null ? null : this.normalizeSignedInteger(value.status, message),
+    };
+  }
+
+  private normalizeTrabajadorPayload(raw: unknown): MirrorSyncTrabajadorPayload {
+    const value = this.asRecord(raw);
+    return {
+      cedula: this.normalizeRequiredCode(value.cedula, "Cedula de trabajador invalida."),
+      codigo: this.toNonNegativeInteger(value.codigo, "Codigo de trabajador invalido."),
+      nombre: this.normalizeRequiredString(value.nombre, "Nombre de trabajador invalido."),
+      cargo: this.normalizeRequiredCode(value.cargo, "Cargo de trabajador invalido."),
+      fechaIngreso: this.normalizeIsoDateString(value.fechaIngreso, "Fecha de ingreso del trabajador invalida."),
+      fechaNacimiento:
+        value.fechaNacimiento == null || String(value.fechaNacimiento).trim() === ""
+          ? null
+          : this.normalizeIsoDateString(value.fechaNacimiento, "Fecha de nacimiento del trabajador invalida."),
+      direccion: value.direccion == null ? null : String(value.direccion),
+      telefono: value.telefono == null ? null : String(value.telefono),
+      celular: value.celular == null ? null : String(value.celular),
+      status: this.normalizeSignedInteger(value.status, "Status de trabajador invalido."),
+      marcajeInterDiario: this.toBoolean(value.marcajeInterDiario),
+      indUsarCarnet: this.toNonNegativeInteger(value.indUsarCarnet ?? 0, "Carnet de trabajador invalido."),
+    };
+  }
+
+  private normalizeCargoPayload(raw: unknown): MirrorSyncCargoPayload {
+    const value = this.asRecord(raw);
+    return {
+      codigo: this.normalizeRequiredCode(value.codigo, "Cargo espejo invalido."),
+      nombre: value.nombre == null ? null : String(value.nombre),
+      status: value.status == null ? null : this.normalizeSignedInteger(value.status, "Status de cargo invalido."),
+    };
+  }
+
+  private normalizeRatePayload(raw: unknown): MirrorSyncRatePayload {
+    const value = this.asRecord(raw);
+    return {
+      id: this.normalizeBigIntString(value.id, "ID de tasa invalido."),
+      fecha: this.normalizeIsoDateString(value.fecha, "Fecha de tasa invalida."),
+      valor: this.normalizeDecimalString(value.valor, "Valor de tasa invalido."),
+    };
+  }
+
+  private normalizeSalePayload(raw: unknown): MirrorSyncSalePayload {
+    const value = this.asRecord(raw);
+    return {
+      numeroFactura: this.normalizeBigIntString(value.numeroFactura, "Numero de factura invalido."),
+      serie: this.normalizeRequiredCode(value.serie, "Serie de venta invalida."),
+      fecha: this.normalizeIsoDateString(value.fecha, "Fecha de venta invalida."),
+      vendedor: this.normalizeRequiredCode(value.vendedor, "Vendedor de venta invalido."),
+      cliente: this.normalizeRequiredCode(value.cliente, "Cliente de venta invalido."),
+      tipoVenta: this.normalizeSignedInteger(value.tipoVenta, "Tipo de venta invalido."),
+      formaPago: this.normalizeSignedInteger(value.formaPago, "Forma de pago invalida."),
+      diasCredito: this.normalizeSignedInteger(value.diasCredito, "Dias de credito invalidos."),
+      totalMercancia: this.normalizeDecimalString(value.totalMercancia, "Total mercancia invalido."),
+      totalDescuento: this.normalizeDecimalString(value.totalDescuento, "Total descuento invalido."),
+      totalImpuesto: this.normalizeDecimalString(value.totalImpuesto, "Total impuesto invalido."),
+      totalCosto: this.normalizeDecimalString(value.totalCosto, "Total costo invalido."),
+      interContable: this.normalizeSignedInteger(value.interContable, "Intercontable invalido."),
+      usuario: this.normalizeRequiredString(value.usuario, "Usuario de venta invalido."),
+      status: this.normalizeSignedInteger(value.status, "Status de venta invalido."),
+      numeroOrden: this.normalizeBigIntString(value.numeroOrden, "Numero de orden invalido."),
+      totalPago: this.normalizeDecimalString(value.totalPago, "Total pago invalido."),
+      totalDolares: this.normalizeOptionalDecimalString(value.totalDolares),
+      tasaCambio: this.normalizeOptionalDecimalString(value.tasaCambio),
+      estacion: value.estacion == null ? null : String(value.estacion).trim(),
+      totalDolaresE: this.normalizeOptionalDecimalString(value.totalDolaresE),
+      tasaIGTF: this.normalizeOptionalDecimalString(value.tasaIGTF),
+      montoIGTF: this.normalizeOptionalDecimalString(value.montoIGTF),
+      baseImponibleIGTF: this.normalizeOptionalDecimalString(value.baseImponibleIGTF),
+    };
+  }
+
+  private normalizeSaleLinePayload(raw: unknown, index: number): MirrorSyncSaleLinePayload {
+    const value = this.asRecord(raw);
+    return {
+      numeroFactura: this.normalizeBigIntString(value.numeroFactura, `Numero de factura invalido en item ${index + 1}.`),
+      serie: this.normalizeRequiredCode(value.serie, `Serie invalida en item ${index + 1}.`),
+      hora: this.normalizeIsoDateString(value.hora, `Hora invalida en item ${index + 1}.`),
+      tipoLista: this.normalizeRequiredString(value.tipoLista, `Tipo de lista invalido en item ${index + 1}.`),
+      codigoBarra: this.normalizeRequiredCode(value.codigoBarra, `Codigo de barra invalido en item ${index + 1}.`),
+      precio: this.normalizeDecimalString(value.precio, `Precio invalido en item ${index + 1}.`),
+      precioLista: this.normalizeDecimalString(value.precioLista, `Precio lista invalido en item ${index + 1}.`),
+      costo: this.normalizeDecimalString(value.costo, `Costo invalido en item ${index + 1}.`),
+      impuesto: this.normalizeDecimalString(value.impuesto, `Impuesto invalido en item ${index + 1}.`),
+      porcentajeImpuesto: this.normalizeDecimalString(
+        value.porcentajeImpuesto,
+        `Porcentaje de impuesto invalido en item ${index + 1}.`,
+      ),
+      cantidad: this.normalizeDecimalString(value.cantidad, `Cantidad invalida en item ${index + 1}.`),
+      cantidadDevuelta: this.normalizeDecimalString(
+        value.cantidadDevuelta,
+        `Cantidad devuelta invalida en item ${index + 1}.`,
+      ),
+      item: this.toNonNegativeInteger(value.item, `Item invalido en linea ${index + 1}.`),
+      porcentajeDescuento: this.normalizeDecimalString(
+        value.porcentajeDescuento,
+        `Porcentaje descuento invalido en item ${index + 1}.`,
+      ),
+      precioDetal: this.normalizeDecimalString(value.precioDetal, `Precio detal invalido en item ${index + 1}.`),
+      regla: value.regla == null ? "" : String(value.regla),
+      idRegla: this.normalizeSignedInteger(value.idRegla, `ID de regla invalido en item ${index + 1}.`),
+    };
+  }
+
   private normalizeCatalogPayload(raw: unknown): MirrorSyncCatalogPayload {
     const value = this.asRecord(raw);
     return {
@@ -1339,6 +2260,15 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     throw new BadRequestException("Tipo de catalogo invalido.");
   }
 
+  private normalizeRateTable(value: unknown): MirrorRateTable {
+    const normalized = String(value || "").trim().toUpperCase();
+    if (normalized === "TASA_CAMBIO" || normalized === "TASA_CAMBIO_M") {
+      return normalized;
+    }
+
+    throw new BadRequestException("Tabla de tasa invalida.");
+  }
+
   private normalizeCode(value: unknown) {
     return String(value || "").trim().toUpperCase();
   }
@@ -1369,6 +2299,14 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     return normalized;
   }
 
+  private normalizeOptionalDecimalString(value: unknown) {
+    if (value == null || String(value).trim() === "") {
+      return null;
+    }
+
+    return this.normalizeDecimalString(value, "Decimal espejo invalido.");
+  }
+
   private normalizeDecimalString(value: unknown, message: string) {
     try {
       return new Prisma.Decimal(String(value ?? "0")).toString();
@@ -1386,6 +2324,19 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     return date.toISOString();
   }
 
+  private normalizeBigIntString(value: unknown, message: string) {
+    const normalized = String(value ?? "").trim();
+    if (!normalized) {
+      throw new BadRequestException(message);
+    }
+
+    try {
+      return BigInt(normalized).toString();
+    } catch {
+      throw new BadRequestException(message);
+    }
+  }
+
   private toNonNegativeInteger(value: unknown, message: string) {
     const number = Number(value);
     if (!Number.isInteger(number) || number < 0) {
@@ -1393,6 +2344,24 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     }
 
     return number;
+  }
+
+  private normalizeSignedInteger(value: unknown, message: string) {
+    const number = Number(value);
+    if (!Number.isInteger(number)) {
+      throw new BadRequestException(message);
+    }
+
+    return number;
+  }
+
+  private toBoolean(value: unknown) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    const normalized = String(value ?? "").trim().toLowerCase();
+    return ["1", "true", "yes", "si", "on"].includes(normalized);
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {
@@ -1405,6 +2374,47 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     }
 
     return value;
+  }
+
+  private toIsoString(value: Date | string) {
+    const date = value instanceof Date ? value : new Date(String(value || ""));
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException("Fecha espejo invalida.");
+    }
+
+    return date.toISOString();
+  }
+
+  private toDecimalString(value: unknown) {
+    return new Prisma.Decimal(String(value ?? "0")).toString();
+  }
+
+  private toOptionalDecimalString(value: unknown) {
+    if (value == null) {
+      return null;
+    }
+
+    return this.toDecimalString(value);
+  }
+
+  private getMostRecentDateValue(values: Array<Date | string | null | undefined>) {
+    const timestamps = values
+      .map((value) => {
+        const date = value instanceof Date ? value : value ? new Date(value) : null;
+        if (!date || Number.isNaN(date.getTime())) {
+          return null;
+        }
+
+        return date;
+      })
+      .filter((value): value is Date => value !== null)
+      .sort((left, right) => right.getTime() - left.getTime());
+
+    return timestamps[0] ?? new Date();
+  }
+
+  private buildSaleEntityKey(numeroFactura: bigint | number | string, serie: string) {
+    return `${this.normalizeCode(serie)}:${this.normalizeBigIntString(numeroFactura, "Numero de factura espejo invalido.")}`;
   }
 
   private isMirrorSyncEnabled() {

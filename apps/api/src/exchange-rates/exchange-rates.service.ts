@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 
+import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { UpdateManualExchangeRateDto } from "./dto/update-manual-exchange-rate.dto";
 
@@ -17,7 +18,10 @@ type ManualRateSnapshot = {
 
 @Injectable()
 export class ExchangeRatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mirrorSyncService: MirrorSyncService,
+  ) {}
 
   async getBcvUsdRate() {
     const snapshot = await this.getManualRateSnapshot();
@@ -51,8 +55,8 @@ export class ExchangeRatesService {
     const valorMayorStorage = this.toStorageRateValue(valorMayor);
     const now = new Date();
 
-    const [detalleRow, mayorRow] = await this.prisma.$transaction([
-      this.prisma.$queryRawUnsafe<ManualRateRow[]>(
+    const { detalle, mayor, updatedArticles } = await this.prisma.$transaction(async (tx) => {
+      const detalleRow = await tx.$queryRawUnsafe<ManualRateRow[]>(
         `
           INSERT INTO dbo."TASA_CAMBIO" ("Valor", "Fecha")
           VALUES ($1::numeric, $2::timestamp)
@@ -60,8 +64,9 @@ export class ExchangeRatesService {
         `,
         valorCambioStorage,
         now,
-      ),
-      this.prisma.$queryRawUnsafe<ManualRateRow[]>(
+      );
+
+      const mayorRow = await tx.$queryRawUnsafe<ManualRateRow[]>(
         `
           INSERT INTO dbo."TASA_CAMBIO_M" ("Valor", "Fecha")
           VALUES ($1::numeric, $2::timestamp)
@@ -69,11 +74,33 @@ export class ExchangeRatesService {
         `,
         valorMayorStorage,
         now,
-      ),
-    ]);
+      );
 
-    const detalle = detalleRow[0];
-    const mayor = mayorRow[0];
+      const updatedCount = await tx.$executeRawUnsafe(
+        `
+          UPDATE dbo."INVENTARIO"
+          SET
+            "PrecioDetal" = ROUND(COALESCE("CostoInicial", 0)::numeric * $1::numeric, 2),
+            "PrecioMayor" = ROUND(COALESCE("CostoPromedio", 0)::numeric * $2::numeric, 2),
+            "PrecioAfiliado" = ROUND(COALESCE("UltimoCosto", 0)::numeric * $1::numeric, 2),
+            "UltimaActualizacion" = $3::timestamp
+        `,
+        valorCambioStorage,
+        valorMayorStorage,
+        now,
+      );
+
+      await this.mirrorSyncService.enqueueRateUpsertTx(tx, "TASA_CAMBIO", detalleRow[0] ?? null);
+      await this.mirrorSyncService.enqueueRateUpsertTx(tx, "TASA_CAMBIO_M", mayorRow[0] ?? null);
+
+      return {
+        detalle: detalleRow[0],
+        mayor: mayorRow[0],
+        updatedArticles: Number(updatedCount || 0),
+      };
+    });
+
+    await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
     const updatedAt = this.getMostRecentDate([detalle?.Fecha, mayor?.Fecha]);
 
     return {
@@ -81,6 +108,9 @@ export class ExchangeRatesService {
         valorCambio: this.toDecimalInputValue(this.toDisplayRateValue(detalle?.Valor ?? valorCambioStorage)),
         valorMayor: this.toDecimalInputValue(this.toDisplayRateValue(mayor?.Valor ?? valorMayorStorage)),
         actualizadoEn: updatedAt,
+      },
+      inventory: {
+        updatedArticles,
       },
     };
   }

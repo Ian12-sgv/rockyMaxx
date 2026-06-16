@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
+import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateTrabajadorDto } from "./dto/create-trabajador.dto";
 import { FindTrabajadoresDto } from "./dto/find-trabajadores.dto";
@@ -9,7 +10,10 @@ import { toCargoView, toTrabajadorView } from "./trabajador-view.util";
 
 @Injectable()
 export class TrabajadoresService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mirrorSyncService: MirrorSyncService,
+  ) {}
 
   async getMetadata() {
     const [cargos, trabajadores] = await Promise.all([
@@ -74,27 +78,33 @@ export class TrabajadoresService {
     await this.ensureCodigoAvailable(codigo);
     await this.ensureCargoExists(createTrabajadorDto.cargo);
 
-    const created = await this.prisma.trabajadores.create({
-      data: {
-        Cedula: cedula,
-        Codigo: codigo,
-        Nombre: this.normalizeRequiredText(createTrabajadorDto.nombre, "Debes indicar el nombre del trabajador."),
-        Cargo: this.normalizeCargo(createTrabajadorDto.cargo),
-        FechaIngreso: this.startOfDay(createTrabajadorDto.fechaIngreso),
-        FechaNacimiento: this.resolveFechaNacimiento(
-          createTrabajadorDto.fechaNacimiento,
-          createTrabajadorDto.fechaIngreso,
-        ),
-        Direccion: this.normalizeOptionalText(createTrabajadorDto.direccion),
-        Telefono: this.normalizeOptionalText(createTrabajadorDto.telefono),
-        Celular: this.normalizeOptionalText(createTrabajadorDto.celular),
-        Status: this.resolveStatus(createTrabajadorDto.status),
-        MarcajeInterDiario: false,
-        IndUsarCarnet: 0,
-      },
-      include: { cargoRef: true },
+    const created = await this.prisma.$transaction(async (tx) => {
+      const record = await tx.trabajadores.create({
+        data: {
+          Cedula: cedula,
+          Codigo: codigo,
+          Nombre: this.normalizeRequiredText(createTrabajadorDto.nombre, "Debes indicar el nombre del trabajador."),
+          Cargo: this.normalizeCargo(createTrabajadorDto.cargo),
+          FechaIngreso: this.startOfDay(createTrabajadorDto.fechaIngreso),
+          FechaNacimiento: this.resolveFechaNacimiento(
+            createTrabajadorDto.fechaNacimiento,
+            createTrabajadorDto.fechaIngreso,
+          ),
+          Direccion: this.normalizeOptionalText(createTrabajadorDto.direccion),
+          Telefono: this.normalizeOptionalText(createTrabajadorDto.telefono),
+          Celular: this.normalizeOptionalText(createTrabajadorDto.celular),
+          Status: this.resolveStatus(createTrabajadorDto.status),
+          MarcajeInterDiario: false,
+          IndUsarCarnet: 0,
+        },
+        include: { cargoRef: true },
+      });
+
+      await this.mirrorSyncService.enqueueTrabajadorUpsertTx(tx, record.Cedula);
+      return record;
     });
 
+    await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
     return toTrabajadorView(created);
   }
 
@@ -112,25 +122,31 @@ export class TrabajadoresService {
     await this.ensureCodigoAvailable(nextCodigo, normalizedCedula);
     await this.ensureCargoExists(updateTrabajadorDto.cargo);
 
-    const updated = await this.prisma.trabajadores.update({
-      where: { Cedula: normalizedCedula },
-      data: {
-        Codigo: nextCodigo,
-        Nombre: this.normalizeRequiredText(updateTrabajadorDto.nombre, "Debes indicar el nombre del trabajador."),
-        Cargo: this.normalizeCargo(updateTrabajadorDto.cargo),
-        FechaIngreso: this.startOfDay(updateTrabajadorDto.fechaIngreso),
-        FechaNacimiento: this.resolveFechaNacimiento(
-          updateTrabajadorDto.fechaNacimiento,
-          updateTrabajadorDto.fechaIngreso,
-        ),
-        Direccion: this.normalizeOptionalText(updateTrabajadorDto.direccion),
-        Telefono: this.normalizeOptionalText(updateTrabajadorDto.telefono),
-        Celular: this.normalizeOptionalText(updateTrabajadorDto.celular),
-        Status: this.resolveStatus(updateTrabajadorDto.status),
-      },
-      include: { cargoRef: true },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const record = await tx.trabajadores.update({
+        where: { Cedula: normalizedCedula },
+        data: {
+          Codigo: nextCodigo,
+          Nombre: this.normalizeRequiredText(updateTrabajadorDto.nombre, "Debes indicar el nombre del trabajador."),
+          Cargo: this.normalizeCargo(updateTrabajadorDto.cargo),
+          FechaIngreso: this.startOfDay(updateTrabajadorDto.fechaIngreso),
+          FechaNacimiento: this.resolveFechaNacimiento(
+            updateTrabajadorDto.fechaNacimiento,
+            updateTrabajadorDto.fechaIngreso,
+          ),
+          Direccion: this.normalizeOptionalText(updateTrabajadorDto.direccion),
+          Telefono: this.normalizeOptionalText(updateTrabajadorDto.telefono),
+          Celular: this.normalizeOptionalText(updateTrabajadorDto.celular),
+          Status: this.resolveStatus(updateTrabajadorDto.status),
+        },
+        include: { cargoRef: true },
+      });
+
+      await this.mirrorSyncService.enqueueTrabajadorUpsertTx(tx, record.Cedula);
+      return record;
     });
 
+    await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
     return toTrabajadorView(updated);
   }
 
