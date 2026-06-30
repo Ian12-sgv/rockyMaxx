@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+﻿import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type DiarioCaja, type Inventario } from "@prisma/client";
 
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
@@ -18,6 +18,8 @@ type ActiveCajaSession = DiarioCaja & {
     Numero: number;
     TipoVenta: number;
     UltimaFactura: bigint;
+    NombreImpresora: string | null;
+    NumeroCopias: number | null;
   } | null;
 };
 
@@ -97,6 +99,7 @@ export class FacturacionService {
         const impuestoPorcentaje = activeTax?.PorcentajeImpuesto ?? ZERO;
         const totalImpuesto = subtotal.mul(impuestoPorcentaje).div(HUNDRED).toDecimalPlaces(2);
         const totalVenta = subtotal.plus(totalImpuesto).toDecimalPlaces(2);
+        const contingenciaActiva = Boolean(payload.emisionContingencia);
         const tasaCambioDetal = this.parseDecimalInput(payload.tasaCambio, "La tasa de cambio detal no es valida.", {
           allowEmpty: true,
           defaultValue: ZERO,
@@ -136,6 +139,11 @@ export class FacturacionService {
           return sum.plus(unitCost.mul(item.cantidad));
         }, ZERO).toDecimalPlaces(2);
         const headerPaymentCode = this.resolveHeaderPaymentCode(paymentSummary.paymentCodes, paymentCatalog);
+        const printerName = await this.resolvePrinterNameForSale(
+          tx,
+          contingenciaActiva,
+          cajaActiva.caja?.NombreImpresora ?? "",
+        );
 
         await tx.ventas.create({
           data: {
@@ -244,6 +252,9 @@ export class FacturacionService {
           tasaCambio: tasaCambioVenta.toString(),
           cliente: cliente.Codigo,
           vendedor: vendedor.Cedula,
+          nombreImpresora: printerName,
+          numeroCopias: cajaActiva.caja?.NumeroCopias ?? 1,
+          emisionContingencia: Boolean(payload.emisionContingencia),
           items: normalizedItems.length,
         };
       },
@@ -308,6 +319,27 @@ export class FacturacionService {
     return matched;
   }
 
+  private async resolvePrinterNameForSale(
+    tx: FacturacionTransactionClient,
+    contingenciaActiva: boolean,
+    fallbackPrinterName: string,
+  ) {
+    const targetStatus = contingenciaActiva ? 1 : 0;
+    const rows = await tx.$queryRaw<Array<{ NombreImpresora: string | null }>>`
+      SELECT "NombreImpresora"
+      FROM "dbo"."IMPRESORAFISCAL"
+      WHERE "Status" = ${targetStatus}
+      ORDER BY "ID" ASC
+      LIMIT 1
+    `;
+
+    const configuredPrinterName = String(rows[0]?.NombreImpresora || "").trim();
+    if (configuredPrinterName) {
+      return configuredPrinterName;
+    }
+
+    return String(fallbackPrinterName || "").trim();
+  }
   private async resolveTrabajador(tx: FacturacionTransactionClient, cedula: string) {
     const normalizedCedula = String(cedula || "").trim();
     if (!normalizedCedula) {
@@ -770,3 +802,9 @@ export class FacturacionService {
     return { start, end };
   }
 }
+
+
+
+
+
+

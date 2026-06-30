@@ -31,7 +31,7 @@ export class InventoryController {
   }
 
   @Get("catalogs/:catalogType")
-  @RequireGroups()
+  @RequireGroups("admin", "caja")
   async getCatalogImportEntries(@Param("catalogType") catalogType: string) {
     return {
       items: await this.inventoryService.getCatalogImportEntries(catalogType),
@@ -75,11 +75,13 @@ export class InventoryController {
   }
 
   @Get()
+  @RequireGroups("admin", "caja")
   async findAll(@Query() findMerchandiseDto: FindMerchandiseDto) {
     return this.inventoryService.searchMerchandise(findMerchandiseDto);
   }
 
   @Get(":codigoBarra")
+  @RequireGroups("admin", "caja")
   async findOne(@Param("codigoBarra") codigoBarra: string) {
     return {
       mercancia: await this.inventoryService.findOne(codigoBarra),

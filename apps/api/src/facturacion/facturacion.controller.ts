@@ -9,7 +9,7 @@ import { CreateFacturacionSaleDto } from "./dto/create-facturacion-sale.dto";
 import { FacturacionService } from "./facturacion.service";
 
 @UseGuards(JwtAuthGuard, GroupsGuard)
-@RequireGroups("admin")
+@RequireGroups("admin", "caja")
 @Controller("facturacion")
 export class FacturacionController {
   constructor(private readonly facturacionService: FacturacionService) {}

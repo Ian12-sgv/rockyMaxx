@@ -14,6 +14,7 @@ export class UsersBootstrapService implements OnModuleInit {
 
   async onModuleInit() {
     const adminEnabled = this.configService.get<string>("AUTH_BOOTSTRAP_ADMIN_ENABLED", "true");
+    const cashierEnabled = this.configService.get<string>("AUTH_BOOTSTRAP_CASHIER_ENABLED", "true");
     const systemEnabled = this.configService.get<string>("AUTH_BOOTSTRAP_SYSTEM_ENABLED", "true");
 
     await this.usersService.ensureCatalogImportPermissionSetup();
@@ -21,6 +22,11 @@ export class UsersBootstrapService implements OnModuleInit {
     if (adminEnabled.toLowerCase() === "true") {
       await this.usersService.ensureDefaultAdmin();
       this.logger.log("Usuario administrador inicial verificado");
+    }
+
+    if (cashierEnabled.toLowerCase() === "true") {
+      await this.usersService.ensureCashierOperator();
+      this.logger.log("Usuario caja inicial verificado");
     }
 
     if (systemEnabled.toLowerCase() === "true") {

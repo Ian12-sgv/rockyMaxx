@@ -15,11 +15,13 @@ export class ClientesController {
   constructor(private readonly clientesService: ClientesService) {}
 
   @Get("metadata")
+  @RequireGroups("admin", "caja")
   async getMetadata() {
     return this.clientesService.getMetadata();
   }
 
   @Get()
+  @RequireGroups("admin", "caja")
   async findAll(@Query() findClientesDto: FindClientesDto) {
     return {
       clientes: await this.clientesService.findAll(findClientesDto),
@@ -27,6 +29,7 @@ export class ClientesController {
   }
 
   @Get(":codigo")
+  @RequireGroups("admin", "caja")
   async findOne(@Param("codigo") codigo: string) {
     return {
       cliente: await this.clientesService.findOne(codigo),
@@ -34,6 +37,7 @@ export class ClientesController {
   }
 
   @Post()
+  @RequireGroups("admin", "caja")
   async create(@Body() createClienteDto: CreateClienteDto) {
     return {
       cliente: await this.clientesService.create(createClienteDto),

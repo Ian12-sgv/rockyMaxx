@@ -1,4 +1,4 @@
-import { Transform, Type } from "class-transformer";
+﻿import { Transform, Type } from "class-transformer";
 import { IsDate, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from "class-validator";
 
 import { toOptionalInteger, toOptionalTrimmedString, toUpperTrimmedString } from "./caja-dto.helpers";
@@ -46,6 +46,12 @@ export class CreateCajaDto {
   @Type(() => String)
   @Transform(({ value }) => toOptionalTrimmedString(value))
   declare horaCierre?: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  @Type(() => String)
+  @Transform(({ value }) => toOptionalTrimmedString(value))
+  declare nombreImpresora?: string;
 
   @IsOptional()
   @IsInt()
@@ -54,3 +60,4 @@ export class CreateCajaDto {
   @Transform(({ value }) => toOptionalInteger(value))
   declare status?: number;
 }
+

@@ -210,6 +210,17 @@ const state = {
     selectedCodigo: "",
     draft: createEmptyClienteDraft(),
   },
+  proveedores: {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedCodigo: "",
+    draft: createEmptyProveedorDraft(),
+  },
   trabajadores: {
     loading: false,
     loadingMetadata: false,
@@ -233,6 +244,39 @@ const state = {
       items: [],
     },
   },
+  bancos: {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedCodigo: "",
+    draft: createEmptyBancoDraft(),
+  },
+  tiposPago: {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedCodigo: "",
+    draft: createEmptyTipoPagoDraft(),
+  },
+  impresoras: {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedId: "",
+    draft: createEmptyImpresoraDraft(),
+  },
   exchangeRateRegister: {
     loading: false,
     saving: false,
@@ -241,16 +285,31 @@ const state = {
     updatedAt: "",
   },
   articlePricingRates: createEmptyArticlePricingRateState(),
+  desktopPrinting: createEmptyDesktopPrintingState(),
   cashRegisters: {
     loading: false,
     loadingMetadata: false,
     saving: false,
+    closing: false,
     deleting: false,
     items: [],
     metadata: null,
     search: "",
     selectedKey: "",
     draft: createEmptyCashRegisterDraft(),
+  },
+  compras: {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    approving: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedKey: "",
+    draft: createEmptyCompraDraft(),
+    articleLookup: createEmptyCompraArticleLookupState(),
   },
   facturacion: {
     draft: createEmptyFacturacionDraft(),
@@ -315,6 +374,94 @@ async function bootstrap() {
   render();
 }
 
+function createEmptyDesktopPrintingState() {
+  return {
+    loading: false,
+    loaded: false,
+    error: "",
+    items: [],
+  };
+}
+
+function getRockyClientBridge() {
+  if (typeof window === "undefined" || !window.rockyClient || typeof window.rockyClient !== "object") {
+    return null;
+  }
+
+  return window.rockyClient;
+}
+
+function desktopClientSupportsPrinting() {
+  const bridge = getRockyClientBridge();
+  return Boolean(bridge && typeof bridge.listPrinters === "function" && typeof bridge.printHtml === "function");
+}
+
+function getDetectedDesktopPrinters() {
+  return Array.isArray(state.desktopPrinting?.items) ? state.desktopPrinting.items : [];
+}
+
+function getDefaultDesktopPrinterName() {
+  const printers = getDetectedDesktopPrinters();
+  const printer = printers.find((item) => item.isDefault) || printers[0] || null;
+  return String(printer?.name || "").trim();
+}
+
+async function loadDesktopPrinters(options = {}) {
+  const { renderAfter = true, silent = false } = options;
+  const bridge = getRockyClientBridge();
+  if (!bridge || typeof bridge.listPrinters !== "function") {
+    state.desktopPrinting = {
+      ...createEmptyDesktopPrintingState(),
+      loaded: true,
+    };
+    if (renderAfter) {
+      render();
+    }
+    return [];
+  }
+
+  state.desktopPrinting = {
+    ...state.desktopPrinting,
+    loading: true,
+    error: "",
+  };
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const result = await bridge.listPrinters();
+    const printers = Array.isArray(result?.printers)
+      ? result.printers.filter((item) => String(item?.name || "").trim())
+      : [];
+
+    state.desktopPrinting = {
+      loading: false,
+      loaded: true,
+      error: "",
+      items: printers,
+    };
+
+    return printers;
+  } catch (error) {
+    state.desktopPrinting = {
+      loading: false,
+      loaded: false,
+      error: extractErrorMessage(error),
+      items: [],
+    };
+
+    if (!silent) {
+      setFlash(`No se pudieron detectar las impresoras de esta PC: ${extractErrorMessage(error)}`, "error");
+    }
+
+    return [];
+  } finally {
+    if (renderAfter) {
+      render();
+    }
+  }
+}
 async function hydrateAuthenticatedState() {
   const session = await apiFetch("/auth/me");
   state.user = session.usuario;
@@ -460,6 +607,17 @@ async function hydrateAuthenticatedState() {
     selectedCodigo: "",
     draft: createEmptyClienteDraft(),
   };
+  state.proveedores = {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedCodigo: "",
+    draft: createEmptyProveedorDraft(),
+  };
   state.trabajadores = {
     loading: false,
     loadingMetadata: false,
@@ -483,6 +641,39 @@ async function hydrateAuthenticatedState() {
       items: [],
     },
   };
+  state.bancos = {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedCodigo: "",
+    draft: createEmptyBancoDraft(),
+  };
+  state.tiposPago = {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedCodigo: "",
+    draft: createEmptyTipoPagoDraft(),
+  };
+  state.impresoras = {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedId: "",
+    draft: createEmptyImpresoraDraft(),
+  };
   state.exchangeRateRegister = {
     loading: false,
     saving: false,
@@ -494,12 +685,26 @@ async function hydrateAuthenticatedState() {
     loading: false,
     loadingMetadata: false,
     saving: false,
+    closing: false,
     deleting: false,
     items: [],
     metadata: null,
     search: "",
     selectedKey: "",
     draft: createEmptyCashRegisterDraft(),
+  };
+  state.compras = {
+    loading: false,
+    loadingMetadata: false,
+    saving: false,
+    deleting: false,
+    approving: false,
+    items: [],
+    metadata: null,
+    search: "",
+    selectedKey: "",
+    draft: createEmptyCompraDraft(),
+    articleLookup: createEmptyCompraArticleLookupState(),
   };
   state.articleEditorTab = "general";
   state.formMode = "create";
@@ -662,7 +867,6 @@ function renderLoginView() {
                 />
               </span>
             </label>
-
             <label class="field login-field">
               <span>Clave</span>
               <span class="login-input-wrap">
@@ -731,7 +935,8 @@ function renderLoginView() {
 function renderShellView() {
   const primaryGroup = state.user?.grupos?.[0]?.nombre || "Administrador";
   const userCode = (state.user?.codUsuario || "admin").toUpperCase();
-  const showUtilitiesMenu = userIsSystemOperator();
+  const canManageAllModules = userCanManageAllModules();
+  const isCashier = userIsCashierOperator();
 
   return `
       <main class="desktop-shell">
@@ -750,13 +955,13 @@ function renderShellView() {
                 ${renderDesktopMenuLink("desktop", "Panel principal")}
                 <button class="modern-dropdown-link" type="button" data-menu-action="logout">Cerrar sesion</button>
               `)}
-              ${renderDesktopMenu("archivos", "Archivos", renderDesktopArchivoMenuV2())}
+              ${isCashier ? "" : renderDesktopMenu("archivos", "Archivos", renderDesktopArchivoMenuV2())}
               ${renderDesktopMenu("procesos", "Procesos", renderDesktopProcesosMenu())}
-                ${renderDesktopMenu("reportes", "Reportes", `
+                ${canManageAllModules ? renderDesktopMenu("reportes", "Reportes", `
                   ${renderDesktopMenuLink("reportes", "General")}
-                `)}
+                `) : ""}
                 ${
-                  showUtilitiesMenu
+                  canManageAllModules
                     ? renderDesktopMenu("utilidades", "Utilidades", `
                         ${renderDesktopMenuLink("usuarios", "Usuarios")}
                         ${renderDesktopMenuLink("roles", "Roles")}
@@ -799,6 +1004,7 @@ function renderShellView() {
       ${renderFacturacionDiscountAuthModal()}
       ${renderFacturacionPaymentModal()}
       ${renderFacturacionPaymentCedulaPromptModal()}
+      ${renderComprasArticleLookupModal()}
     </main>
   `;
 }
@@ -827,33 +1033,34 @@ function renderDesktopArchivoMenu() {
       <div class="modern-mega-column">
         <button class="modern-mega-head" type="button" data-menu-view="desktop">
           <span>Inventario</span>
-          <span>›</span>
+          <span>â€º</span>
         </button>
         <button class="modern-dropdown-link" type="button" data-menu-view="clientes">Clientes</button>
+        <button class="modern-dropdown-link" type="button" data-menu-view="proveedores">Proveedores</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="sucursales">Sucursales</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="trabajadores">Trabajadores</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="impuestos">Impuesto</button>
       </div>
       <div class="modern-mega-column">
         <button class="modern-mega-head" type="button" data-menu-view="articulos">
-          <span>Artículos</span>
-          <span>›</span>
+          <span>ArtÃ­culos</span>
+          <span>â€º</span>
         </button>
         <button class="modern-dropdown-link" type="button" data-menu-view="tallas">Tallas</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="colores">Colores</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="fabricantes">Fabricantes</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="marcas">Marcas</button>
-        <button class="modern-dropdown-link" type="button" data-menu-view="categorias">Categorías</button>
+        <button class="modern-dropdown-link" type="button" data-menu-view="categorias">CategorÃ­as</button>
       </div>
     </div>
   `;
 }
 
 function renderDesktopWorkspace() {
-  if (["usuarios", "roles"].includes(state.currentView) && !userIsSystemOperator()) {
+  if (!userCanAccessView(state.currentView)) {
     return renderDesktopPlaceholderWindowV2(
       "Acceso restringido",
-      "Este modulo solo esta disponible para el usuario sistema.",
+      "Este modulo no esta disponible para el rol con el que iniciaste sesion.",
     );
   }
 
@@ -889,12 +1096,20 @@ function renderDesktopWorkspace() {
     return renderFacturacionWorkspace();
   }
 
+  if (state.currentView === "compras") {
+    return renderComprasWorkspace();
+  }
+
   if (state.currentView === "registrar-tasa-cambio") {
     return renderExchangeRateRegisterWorkspace();
   }
 
   if (state.currentView === "cajas") {
     return renderCashRegistersWorkspace();
+  }
+
+  if (state.currentView === "cierre-caja") {
+    return renderCashRegisterCloseWorkspace();
   }
 
   if (state.currentView === "cargar-devoluciones") {
@@ -917,12 +1132,28 @@ function renderDesktopWorkspace() {
     return renderClientesWorkspace();
   }
 
+  if (state.currentView === "proveedores") {
+    return renderProveedoresWorkspace();
+  }
+
   if (state.currentView === "trabajadores" || state.currentView === "personal") {
     return renderTrabajadoresWorkspace();
   }
 
   if (state.currentView === "impuestos") {
     return renderImpuestosWorkspace();
+  }
+
+  if (state.currentView === "bancos") {
+    return renderBancosWorkspace();
+  }
+
+  if (state.currentView === "tipos-pago") {
+    return renderTiposPagoWorkspace();
+  }
+
+  if (state.currentView === "impresoras") {
+    return renderImpresorasWorkspace();
   }
 
   if (["categorias", "marcas", "tallas", "colores", "fabricantes"].includes(state.currentView)) {
@@ -943,17 +1174,19 @@ function renderDesktopArticlesWorkspace() {
     <div class="modern-page">
       <div class="modern-breadcrumb">
         <span>Archivos</span>
-        <span>›</span>
+        <span>â€º</span>
         <span>Inventario</span>
-        <span>›</span>
-        <strong>Artículos</strong>
+        <span>â€º</span>
+        <strong>ArtÃ­culos</strong>
       </div>
 
       <div class="modern-page-header">
         <div>
-          <h1>Artículos</h1>
-          <p>Catálogo completo de productos y configuración del módulo.</p>
+          <h1>ArtÃ­culos</h1>
+          <p>CatÃ¡logo completo de productos y configuraciÃ³n del mÃ³dulo.</p>
         </div>
+
+
         <div class="modern-page-actions">
           <button class="button button-ghost" type="button" data-refresh>
             ${state.loadingMetadata || state.loadingArticles ? "Actualizando..." : "Actualizar"}
@@ -968,11 +1201,11 @@ function renderDesktopArticlesWorkspace() {
         <section class="modern-card modern-card-list">
           <div class="modern-card-head">
             <div>
-              <h2>Artículos</h2>
+              <h2>ArtÃ­culos</h2>
               <p>Total registrados: ${escapeHtml(String(state.pagination.total || 0))}</p>
             </div>
             <div class="modern-chip">
-              ${state.loadingMetadata ? "Catálogos cargando" : "Catálogos listos"}
+              ${state.loadingMetadata ? "CatÃ¡logos cargando" : "CatÃ¡logos listos"}
             </div>
           </div>
           <div class="modern-search-wrap">
@@ -995,7 +1228,7 @@ function renderDesktopPlaceholderWindow(title, description) {
     <div class="modern-page">
       <div class="modern-breadcrumb">
         <span>Sistema</span>
-        <span>›</span>
+        <span>â€º</span>
         <strong>${escapeHtml(title)}</strong>
       </div>
       <div class="modern-card modern-card-placeholder">
@@ -1009,17 +1242,22 @@ function renderDesktopPlaceholderWindow(title, description) {
 function getDesktopViewLabel(view) {
   const labels = {
     desktop: "Panel principal",
-    articulos: "Artículos",
+    articulos: "ArtÃ­culos",
     tallas: "Tallas",
     colores: "Colores",
     fabricantes: "Fabricantes",
     marcas: "Marcas",
-    categorias: "Categorías",
+    categorias: "CategorÃ­as",
     clientes: "Clientes",
+    proveedores: "Proveedores",
     sucursales: "Sucursales",
     personal: "Trabajadores",
     trabajadores: "Trabajadores",
     impuestos: "Impuesto",
+    bancos: "Bancos",
+    "tipos-pago": "Tipo de pagos",
+    impresoras: "Impresoras",
+    compras: "Compras",
     "registrar-tasa-cambio": "Registrar tasa cambio",
     reportes: "Reportes",
     usuarios: "Usuarios",
@@ -1031,6 +1269,10 @@ function getDesktopViewLabel(view) {
 }
 
 function renderDesktopArchivoMenuV2() {
+  if (userIsCashierOperator() && !userCanManageAllModules()) {
+    return "";
+  }
+
   const inventoryOpen = state.navigation.openSubmenu === "inventario";
 
   return `
@@ -1046,9 +1288,12 @@ function renderDesktopArchivoMenuV2() {
           <span class="modern-dropdown-link-arrow">&rsaquo;</span>
         </button>
         ${renderDesktopMenuLink("clientes", "Clientes")}
+        ${renderDesktopMenuLink("proveedores", "Proveedores")}
         ${renderDesktopMenuLink("sucursales", "Sucursales")}
         ${renderDesktopMenuLink("trabajadores", "Trabajadores")}
         ${renderDesktopMenuLink("impuestos", "Impuesto")}
+        ${renderDesktopMenuLink("bancos", "Bancos")}
+        ${renderDesktopMenuLink("tipos-pago", "Tipo de pagos")}
       </div>
       ${
         inventoryOpen
@@ -1070,16 +1315,31 @@ function renderDesktopArchivoMenuV2() {
 }
 
 function renderDesktopProcesosMenu() {
+  if (userIsCashierOperator() && !userCanManageAllModules()) {
+    return `
+      <div class="modern-mega-menu">
+        <div class="modern-mega-column modern-mega-column-root">
+          ${renderDesktopMenuLink("facturacion", "Facturacion")}
+          ${renderDesktopMenuLink("cajas", "Apertura de caja")}
+          ${renderDesktopMenuLink("cierre-caja", "Cierre de caja")}
+        </div>
+      </div>
+    `;
+  }
+
   const transfersOpen = state.navigation.openSubmenu === "transferencias-procesos";
 
   return `
     <div class="modern-mega-menu">
       <div class="modern-mega-column modern-mega-column-root">
         ${renderDesktopMenuLink("facturacion", "Facturacion")}
+        ${renderDesktopMenuLink("compras", "Compras")}
+        ${renderDesktopMenuLink("impresoras", "Impresoras")}
         ${renderDesktopMenuLink("registrar-tasa-cambio", "Registrar tasa cambio")}
         ${renderDesktopMenuLink("borrador-devoluciones", "Borrador devoluciones")}
         ${renderDesktopMenuLink("ajuste-inventario", "Ajuste de inventario")}
         ${renderDesktopMenuLink("cajas", "Apertura de caja")}
+        ${renderDesktopMenuLink("cierre-caja", "Cierre de caja")}
         <button
           class="modern-dropdown-link modern-dropdown-link-with-arrow ${transfersOpen ? "modern-dropdown-link-open" : ""}"
           type="button"
@@ -1834,8 +2094,8 @@ function renderDevReturnsWorkspace() {
             <section class="modern-card dev-return-inbound-detail-card">
               <div class="panel-heading">
                 <div>
-                  <h2>Revisión de borrador recibido</h2>
-                  <p>Valida el borrador recibido desde la sucursal y apruébalo para disparar el registro en origen.</p>
+                  <h2>RevisiÃ³n de borrador recibido</h2>
+                  <p>Valida el borrador recibido desde la sucursal y apruÃ©balo para disparar el registro en origen.</p>
                 </div>
                 <div class="dev-return-inline-actions">
                   <button class="button button-ghost" type="button" data-dev-return-close-inbound-detail ${isBusy ? "disabled" : ""}>
@@ -1861,7 +2121,7 @@ function renderDevReturnsWorkspace() {
         <div class="panel-heading">
           <div>
             <h2>Bandejas</h2>
-            <p>Consulta lo que ya salió hacia la bodega y lo que llegó pendiente por revisar.</p>
+            <p>Consulta lo que ya saliÃ³ hacia la bodega y lo que llegÃ³ pendiente por revisar.</p>
           </div>
         </div>
         <div class="dev-return-board-grid">
@@ -2287,7 +2547,7 @@ function renderDevReturnSentDraftsTable(items) {
     return `
       <div class="empty-state dev-return-mini-empty">
         <h3>Sin enviados</h3>
-        <p>Todavía no has exportado borradores desde esta instancia.</p>
+        <p>TodavÃ­a no has exportado borradores desde esta instancia.</p>
       </div>
     `;
   }
@@ -2303,7 +2563,7 @@ function renderDevReturnSentDraftsTable(items) {
             <th>Destino</th>
             <th>Status</th>
             <th>Total</th>
-            <th>Acción</th>
+            <th>AcciÃ³n</th>
           </tr>
         </thead>
         <tbody>
@@ -2348,7 +2608,7 @@ function renderDevReturnReceivedDraftsTable(items) {
             <th>Fecha</th>
             <th>Status</th>
             <th>Total</th>
-            <th>Acción</th>
+            <th>AcciÃ³n</th>
           </tr>
         </thead>
         <tbody>
@@ -2432,7 +2692,7 @@ function renderDevReturnLookupModal() {
     : `Catalogo (${escapeHtml(String(items.length))} Registros)`;
   const titleEyebrow = isRecordLookup ? "Registro de devoluciones" : "Borradores";
   const description = isRecordLookup
-    ? "Haz clic sobre una devolución ya registrada para cargar su detalle."
+    ? "Haz clic sobre una devoluciÃ³n ya registrada para cargar su detalle."
     : "Haz clic sobre un borrador guardado o exportado para cargarlo en el formulario.";
   const loadingTitle = isRecordLookup ? "Cargando devoluciones" : "Cargando borradores";
   const loadingCopy = isRecordLookup
@@ -2590,7 +2850,7 @@ function renderDevReturnRecordsTable(items) {
     return `
       <div class="empty-state dev-return-mini-empty">
         <h3>Sin registros</h3>
-        <p>Las devoluciones aprobadas en origen aparecerán aquí.</p>
+        <p>Las devoluciones aprobadas en origen aparecerÃ¡n aquÃ­.</p>
       </div>
     `;
   }
@@ -2606,7 +2866,7 @@ function renderDevReturnRecordsTable(items) {
             <th>Recibe</th>
             <th>Status</th>
             <th>Total</th>
-            <th>Acción</th>
+            <th>AcciÃ³n</th>
           </tr>
         </thead>
         <tbody>
@@ -2809,7 +3069,7 @@ function renderLoadDevReturnsWorkspace() {
         <div class="modern-page-header">
           <div>
             <h1>Carga de devoluciones</h1>
-            <p>Aprueba la devolución recibida para sumar inventario en el destino.</p>
+            <p>Aprueba la devoluciÃ³n recibida para sumar inventario en el destino.</p>
           </div>
           <div class="dev-return-inline-actions">
             <button class="button button-ghost" type="button" data-dev-return-inbound-back ${state.devReturnInbound.approving ? "disabled" : ""}>
@@ -2821,7 +3081,7 @@ function renderLoadDevReturnsWorkspace() {
               data-dev-return-inbound-approve
               ${Number(detail.status || 0) === 0 && !state.devReturnInbound.approving ? "" : "disabled"}
             >
-              ${state.devReturnInbound.approving ? "Aprobando..." : "Aprobar devolución"}
+              ${state.devReturnInbound.approving ? "Aprobando..." : "Aprobar devoluciÃ³n"}
             </button>
           </div>
         </div>
@@ -2846,14 +3106,14 @@ function renderLoadDevReturnsWorkspace() {
       <div class="modern-page-header">
         <div>
           <h1>Carga de devoluciones</h1>
-          <p>Estas devoluciones ya fueron registradas en origen y esperan aprobación del destino.</p>
+          <p>Estas devoluciones ya fueron registradas en origen y esperan aprobaciÃ³n del destino.</p>
         </div>
       </div>
       <section class="modern-card dev-return-board-card">
         <div class="panel-heading">
           <div>
             <h2>Pendientes del destino</h2>
-            <p>${escapeHtml(String((state.devReturnInbound.items || []).length))} devolución(es) visibles.</p>
+            <p>${escapeHtml(String((state.devReturnInbound.items || []).length))} devoluciÃ³n(es) visibles.</p>
           </div>
           <button class="button button-ghost" type="button" data-dev-return-inbound-refresh ${state.devReturnInbound.loading ? "disabled" : ""}>
             ${state.devReturnInbound.loading ? "Actualizando..." : "Actualizar"}
@@ -2870,7 +3130,7 @@ function renderInboundDevReturnTable(items) {
     return `
       <div class="empty-state dev-return-mini-empty">
         <h3>Sin devoluciones por cargar</h3>
-        <p>Cuando el origen registre una devolución aprobada, aparecerá aquí.</p>
+        <p>Cuando el origen registre una devoluciÃ³n aprobada, aparecerÃ¡ aquÃ­.</p>
       </div>
     `;
   }
@@ -2885,7 +3145,7 @@ function renderInboundDevReturnTable(items) {
             <th>Envia</th>
             <th>Status</th>
             <th>Total</th>
-            <th>Acción</th>
+            <th>AcciÃ³n</th>
           </tr>
         </thead>
         <tbody>
@@ -3558,6 +3818,7 @@ function renderFacturacionWorkspace() {
   const exchangeRate = state.facturacion.exchangeRate || createEmptyFacturacionExchangeRateState();
   const summary = calculateFacturacionSummary(items, activeTax, exchangeRate, draft);
   const exchangeRateLabel = formatFacturacionExchangeRateLabel(exchangeRate);
+  const contingenciaActiva = Boolean(draft.emisionContingencia);
   const selectedLineIndex = getFacturacionSelectedLineIndex();
   const currentPriceListLabel = getFacturacionPriceListLabel(getFacturacionSelectedLinePriceList());
   const discountPercentInputValue = getFacturacionDiscountPercentInputValue(draft, summary);
@@ -3618,6 +3879,7 @@ function renderFacturacionWorkspace() {
             </label>
           </div>
 
+            ${contingenciaActiva ? `<div class="muted">La factura se emitira en contingencia.</div>` : ""}
           <div class="facturacion-lines-panel">
             <div class="facturacion-grid-shell">
               <table class="facturacion-grid-table">
@@ -4212,6 +4474,7 @@ function renderFacturacionPaymentModal() {
   const latestRateLabel = summary.rateBsPerUsd > 0 ? formatExchangeRateAmount(summary.rateBsPerUsd) : "0,0000";
   const estimatedUsdLabel = `${summary.totalUsdDisplay} $`;
   const savingSale = Boolean(state.facturacion.savingSale);
+  const contingenciaActiva = Boolean(draft.emisionContingencia);
 
   return `
     <div class="article-lookup-overlay facturacion-payment-overlay">
@@ -4229,6 +4492,9 @@ function renderFacturacionPaymentModal() {
             </button>
           </div>
         </div>
+
+
+        ${contingenciaActiva ? `<div class="muted">Modo contingencia activo.</div>` : ""}
 
         <div class="facturacion-payment-shell">
           <div class="facturacion-payment-topline">
@@ -4385,7 +4651,7 @@ function renderFacturacionPaymentCedulaPromptModal() {
           <div class="article-lookup-header-copy">
             <p class="eyebrow">Forma de pago</p>
             <h3 id="facturacion-payment-cedula-title">Usar misma cedula</h3>
-            <p>¿Quieres usar la misma cedula del cliente para este pago con tarjeta?</p>
+            <p>Â¿Quieres usar la misma cedula del cliente para este pago con tarjeta?</p>
           </div>
           <div class="article-lookup-header-actions">
             <button class="article-command-button" type="button" data-facturacion-payment-cedula-close>
@@ -4447,6 +4713,181 @@ function calculateFacturacionPaymentSummary(summary, rows) {
   };
 }
 
+function buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary) {
+  const normalizedDraft = normalizeFacturacionDraft(draft);
+  const items = normalizeFacturacionItems(normalizedDraft.items).filter((item) => String(item.codigoBarra || "").trim());
+  const rows = Array.isArray(paymentRows) ? paymentRows.filter((row) => parseFacturacionPaymentAmount(row?.monto) > 0) : [];
+  const saleDateLabel = formatDateDisplay(venta?.fecha || new Date().toISOString());
+  const contingenciaLabel = venta?.emisionContingencia ? '<div class="ticket-tag">EMISION DE CONTINGENCIA</div>' : '';
+  const itemsMarkup = items.length
+    ? items
+      .map((item, index) => {
+        const quantity = toFacturacionNumber(item?.cantidad || 0);
+        const price = toFacturacionNumber(item?.precio || 0);
+        const subtotal = toFacturacionNumber(item?.subtotal || price);
+        const listLabel = getFacturacionPriceListShortLabel(item?.priceList);
+        return `
+          <div class="ticket-item">
+            <div class="ticket-item-title">${index + 1}. ${escapeHtml(String(item?.nombre || ''))}</div>
+            <div class="ticket-item-meta">${escapeHtml(String(item?.codigoBarra || ''))} | ${escapeHtml(listLabel)}</div>
+            <div class="ticket-item-values">
+              <span>${escapeHtml(formatTransferAmount(quantity))} x ${escapeHtml(formatTransferAmount(price))}</span>
+              <strong>${escapeHtml(formatTransferAmount(subtotal))}</strong>
+            </div>
+          </div>
+        `;
+      })
+      .join("")
+    : '<div class="ticket-empty">Sin articulos cargados.</div>';
+  const paymentMarkup = rows.length
+    ? rows
+      .map((row) => {
+        const originalAmount = parseFacturacionPaymentAmount(row?.monto);
+        const amountBs = resolveFacturacionPaymentAmountInBs(row, summary?.rateBsPerUsd || 0);
+        const amountLabel = facturacionPaymentMethodUsesUsdAmount(row?.formaPago)
+          ? `${formatTransferAmount(originalAmount)} $`
+          : `${formatTransferAmount(originalAmount)} BsS`;
+        return `
+          <div class="ticket-payment-row">
+            <span>${escapeHtml(String(row?.formaPago || ''))}</span>
+            <span>${escapeHtml(amountLabel)}</span>
+            <strong>${escapeHtml(formatTransferAmount(amountBs))} BsS</strong>
+          </div>
+        `;
+      })
+      .join("")
+    : '<div class="ticket-empty">Sin formas de pago registradas.</div>';
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Factura ${escapeHtml(String(venta?.numeroFactura || ''))}</title>
+  <style>
+    @page { size: 80mm auto; margin: 3mm; }
+    html, body { width: 74mm; margin: 0 auto; padding: 0; background: #ffffff; }
+    body { font-family: "Courier New", monospace; color: #000000; font-size: 11px; line-height: 1.35; padding: 2mm 0; }
+    * { box-sizing: border-box; }
+    h1, h2, h3, p { margin: 0; }
+    .ticket { width: 100%; }
+    .center { text-align: center; }
+    .header { padding-bottom: 6px; border-bottom: 1px dashed #000; }
+    .brand { font-size: 18px; font-weight: 700; letter-spacing: 0.04em; }
+    .subtitle { font-size: 11px; margin-top: 2px; }
+    .ticket-tag { margin-top: 6px; font-size: 10px; font-weight: 700; }
+    .meta, .section { padding: 6px 0; border-bottom: 1px dashed #000; }
+    .meta-row, .summary-row, .ticket-payment-row, .ticket-item-values { display: flex; justify-content: space-between; gap: 8px; }
+    .meta-row span:first-child, .summary-row span:first-child, .ticket-payment-row span:first-child { flex: 1; }
+    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
+    .ticket-item { padding: 4px 0; border-bottom: 1px dotted #999; }
+    .ticket-item:last-child { border-bottom: none; }
+    .ticket-item-title { font-weight: 700; word-break: break-word; }
+    .ticket-item-meta { font-size: 10px; color: #333; word-break: break-word; margin: 2px 0; }
+    .ticket-empty { padding: 6px 0; }
+    .summary-row { padding: 1px 0; }
+    .summary-row.total { margin-top: 4px; padding-top: 4px; border-top: 1px solid #000; font-size: 13px; font-weight: 700; }
+    .footer { padding-top: 8px; text-align: center; }
+    .footer small { display: block; font-size: 10px; }
+  </style>
+</head>
+<body>
+  <div class="ticket">
+    <section class="header center">
+      <div class="brand">Rocky Maxx</div>
+      <div class="subtitle">FACTURA DE VENTA</div>
+      ${contingenciaLabel}
+    </section>
+
+    <section class="meta">
+      <div class="meta-row"><span>Factura</span><strong>${escapeHtml(String(venta?.numeroFactura || ''))}</strong></div>
+      <div class="meta-row"><span>Serie</span><strong>${escapeHtml(String(venta?.serie || ''))}</strong></div>
+      <div class="meta-row"><span>Fecha</span><strong>${escapeHtml(saleDateLabel)}</strong></div>
+      <div class="meta-row"><span>Tasa</span><strong>${escapeHtml(formatExchangeRateAmount(summary?.rateBsPerUsd || 0))}</strong></div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">Cliente</div>
+      <div>${escapeHtml(String(normalizedDraft.clienteCodigo || '-'))}</div>
+      <div>${escapeHtml(String(normalizedDraft.clienteNombre || '-'))}</div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">Vendedor</div>
+      <div>${escapeHtml(String(normalizedDraft.vendedorCedula || '-'))}</div>
+      <div>${escapeHtml(String(normalizedDraft.vendedorNombre || '-'))}</div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">Articulos</div>
+      ${itemsMarkup}
+    </section>
+
+    <section class="section">
+      <div class="section-title">Pagos</div>
+      ${paymentMarkup}
+    </section>
+
+    <section class="section">
+      <div class="section-title">Resumen</div>
+      <div class="summary-row"><span>Valor mercancia</span><strong>${escapeHtml(summary?.valorMercanciaDisplay || '0,00')} BsS</strong></div>
+      <div class="summary-row"><span>Descuento</span><strong>${escapeHtml(summary?.descuentoMontoDisplay || '0,00')} BsS</strong></div>
+      <div class="summary-row"><span>Subtotal</span><strong>${escapeHtml(summary?.subtotalDisplay || '0,00')} BsS</strong></div>
+      <div class="summary-row"><span>Impuesto</span><strong>${escapeHtml(summary?.impuestoMontoDisplay || '0,00')} BsS</strong></div>
+      <div class="summary-row"><span>Total unidades</span><strong>${escapeHtml(summary?.totalUnidadesDisplay || '0,00')}</strong></div>
+      <div class="summary-row"><span>Total USD</span><strong>${escapeHtml(summary?.totalUsdDisplay || '0,00')} $</strong></div>
+      <div class="summary-row total"><span>TOTAL</span><strong>${escapeHtml(summary?.totalVentaDisplay || '0,00')} BsS</strong></div>
+    </section>
+
+    <section class="footer">
+      <small>Impresion directa en impresora termica</small>
+      <small>Gracias por su compra</small>
+    </section>
+  </div>
+</body>
+</html>`;
+}
+
+function openBrowserPrintPreview(html) {
+  const previewWindow = window.open("", "_blank", "noopener,noreferrer,width=980,height=760");
+  if (!previewWindow) {
+    throw new Error("El navegador bloqueo la ventana de impresion.");
+  }
+
+  previewWindow.document.open();
+  previewWindow.document.write(html);
+  previewWindow.document.close();
+  previewWindow.focus();
+  window.setTimeout(() => {
+    previewWindow.print();
+  }, 150);
+}
+
+async function printFacturacionInvoice(venta, draft, paymentRows, summary) {
+  const html = buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary);
+  const bridge = getRockyClientBridge();
+  if (!bridge || typeof bridge.printHtml !== "function") {
+    openBrowserPrintPreview(html);
+    return {
+      ok: true,
+      printerName: "",
+      preview: true,
+    };
+  }
+
+  if (!state.desktopPrinting.loaded && !state.desktopPrinting.loading) {
+    await loadDesktopPrinters({ renderAfter: false, silent: true });
+  }
+
+  const configuredPrinterName = normalizeCashRegisterPrinterDraftValue(venta?.nombreImpresora || "");
+  const fallbackPrinterName = getDefaultDesktopPrinterName();
+  return bridge.printHtml({
+    html,
+    printerName: configuredPrinterName || fallbackPrinterName,
+    copies: Number(venta?.numeroCopias || 1) || 1,
+    jobTitle: `Factura ${String(venta?.numeroFactura || '').trim() || 'Rocky Maxx'}`,
+  });
+}
+
 function renderCashRegistersWorkspace() {
   const draft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
   const metadata = state.cashRegisters.metadata || {};
@@ -4455,6 +4896,21 @@ function renderCashRegistersWorkspace() {
   const isDeleting = state.cashRegisters.deleting;
   const isBusy = isSaving || isDeleting;
   const openingStatusLabel = renderCashRegisterConditionText(draft.status);
+  const desktopPrinterState = state.desktopPrinting || createEmptyDesktopPrintingState();
+  const detectedPrinters = Array.isArray(desktopPrinterState.items) ? desktopPrinterState.items : [];
+  const printerOptions = detectedPrinters.map((item) => ({
+    value: String(item.name || ""),
+    label: item.isDefault ? `${item.displayName || item.name} (Predeterminada)` : item.displayName || item.name || "",
+  }));
+  const printerStatusLabel = !desktopClientSupportsPrinting()
+    ? "La deteccion directa de impresoras esta disponible en Rocky Maxx Cliente."
+    : desktopPrinterState.loading
+      ? "Buscando impresoras en Windows..."
+      : desktopPrinterState.error
+        ? `No se pudieron leer las impresoras: ${desktopPrinterState.error}`
+        : detectedPrinters.length
+          ? `${detectedPrinters.length} impresora(s) detectadas en esta PC.`
+          : "No se detectaron impresoras en Windows.";
 
   return `
     <div class="modern-page transfer-register-page cash-register-page">
@@ -4572,6 +5028,24 @@ function renderCashRegistersWorkspace() {
                 value="${escapeHtml(toInputValue(draft.horaCierre))}"
               />
             </label>
+
+            <label class="cash-register-field">
+              <span>Impresora factura</span>
+              <select name="nombreImpresora" ${desktopClientSupportsPrinting() ? "" : "disabled"}>
+                <option value="">Predeterminada del sistema</option>
+                ${renderSelectOptions(printerOptions, String(draft.nombreImpresora || ""))}
+              </select>
+            </label>
+
+            <div class="cash-register-field">
+              <span>Deteccion</span>
+              <div class="field-help-stack">
+                <button class="button button-ghost" type="button" data-refresh-desktop-printers ${desktopPrinterState.loading || !desktopClientSupportsPrinting() ? "disabled" : ""}>
+                  ${desktopPrinterState.loading ? "Detectando..." : "Actualizar impresoras"}
+                </button>
+                <small>${escapeHtml(printerStatusLabel)}</small>
+              </div>
+            </div>
           </div>
 
           <div class="cash-register-history-panel">
@@ -4707,6 +5181,687 @@ function renderCashRegisterConditionText(status) {
   }
 
   return "Abierta";
+}
+
+function getCloseableCashRegisters() {
+  const items = Array.isArray(state.cashRegisters.items) ? state.cashRegisters.items : [];
+  return items.filter((item) => Number(item?.status ?? 0) !== 2);
+}
+
+function getCurrentTimeInputValue() {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function buildCashRegisterCloseDraft(item, previousDraft = null) {
+  const nextDraft = cashRegisterToDraft(item);
+  const itemKey = buildCashRegisterKey(item?.serie, item?.fecha);
+  const previousKey = buildCashRegisterKey(
+    previousDraft?.originalSerie || previousDraft?.serie,
+    previousDraft?.originalFecha || previousDraft?.fecha,
+  );
+  const preservedCloseHour = itemKey === previousKey ? String(previousDraft?.horaCierre || "").trim() : "";
+
+  return {
+    ...nextDraft,
+    horaCierre: toInputValue(preservedCloseHour || nextDraft.horaCierre || getCurrentTimeInputValue()),
+  };
+}
+
+function renderCashRegisterCloseWorkspace() {
+  const closeableItems = getCloseableCashRegisters();
+  const currentDraft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  const selectedDraft =
+    currentDraft.originalSerie && Number(currentDraft.status ?? 0) !== 2
+      ? currentDraft
+      : closeableItems.length
+        ? buildCashRegisterCloseDraft(closeableItems[0], currentDraft)
+        : createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  const isBusy = state.cashRegisters.loading || state.cashRegisters.loadingMetadata || state.cashRegisters.closing;
+  const hasSelection = Boolean(String(selectedDraft.originalSerie || selectedDraft.serie || "").trim());
+  const closeStatusLabel = renderCashRegisterConditionText(selectedDraft.status);
+
+  return `
+    <div class="modern-page transfer-register-page cash-register-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Facturacion", "Cierre de caja"])}
+
+      <section class="transfer-register-shell adjustment-window cash-register-window">
+        <div class="adjustment-titlebar">Cierre de caja</div>
+        <form id="caja-close-form" class="transfer-register-form adjustment-form cash-register-form">
+          <div class="transfer-command-bar adjustment-command-bar cash-register-command-bar" role="toolbar" aria-label="Acciones de cierre de caja">
+            <button class="transfer-command-button" type="button" data-open-caja-close-lookup ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">B</span>
+              Buscar
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" data-close-caja ${isBusy || !hasSelection ? "disabled" : ""}>
+              <span class="transfer-command-icon">C</span>
+              ${state.cashRegisters.closing ? "Cerrando..." : "Cerrar caja"}
+            </button>
+            <button class="transfer-command-button" type="button" data-caja-close-exit ${state.cashRegisters.closing ? "disabled" : ""}>
+              <span class="transfer-command-icon">S</span>
+              Salir
+            </button>
+          </div>
+
+          <div class="cash-register-header-panel">
+            <label class="cash-register-field cash-register-field-serie">
+              <span>Serie</span>
+              <input type="text" name="serie" value="${escapeHtml(toInputValue(selectedDraft.serie))}" readonly />
+            </label>
+            <label class="cash-register-field">
+              <span>Fecha</span>
+              <input type="date" name="fecha" value="${escapeHtml(toDateInputValue(selectedDraft.fecha))}" readonly />
+            </label>
+            <label class="cash-register-field cash-register-field-number">
+              <span>Caja #</span>
+              <input type="number" name="numeroCaja" value="${escapeHtml(toInputValue(selectedDraft.numeroCaja))}" readonly />
+            </label>
+          </div>
+
+          <div class="cash-register-detail-panel">
+            <div class="cash-register-condition-row" style="grid-column: 1 / -1;">
+              <span>Condicion actual de la caja:</span>
+              <strong>${escapeHtml(closeStatusLabel)}</strong>
+            </div>
+            <label class="cash-register-field">
+              <span>Factura inicial</span>
+              <input type="text" name="facturaInicial" value="${escapeHtml(toInputValue(selectedDraft.facturaInicial))}" readonly />
+            </label>
+            <label class="cash-register-field">
+              <span>Ultima factura</span>
+              <input type="text" name="ultimaFactura" value="${escapeHtml(toInputValue(selectedDraft.ultimaFactura))}" readonly />
+            </label>
+            <label class="cash-register-field">
+              <span>Hora apertura</span>
+              <input type="time" name="horaApertura" value="${escapeHtml(toInputValue(selectedDraft.horaApertura))}" readonly />
+            </label>
+            <label class="cash-register-field">
+              <span>Hora cierre</span>
+              <input type="time" name="horaCierre" value="${escapeHtml(toInputValue(selectedDraft.horaCierre || getCurrentTimeInputValue()))}" ${!hasSelection || state.cashRegisters.closing ? "disabled" : ""} />
+            </label>
+          </div>
+
+          <div class="cash-register-history-panel">
+            <div class="cash-register-history-head">
+              <div>
+                <h2>Cajas abiertas</h2>
+                <p>${escapeHtml(String(closeableItems.length || 0))} caja(s) disponible(s) para cierre.</p>
+              </div>
+              <div class="cash-register-history-actions">
+                <label class="field">
+                  <span>Buscar</span>
+                  <input
+                    type="search"
+                    name="cajaCloseBuscar"
+                    data-caja-close-search
+                    value="${escapeHtml(toInputValue(state.cashRegisters.search))}"
+                    placeholder="Serie, numero de caja o factura"
+                  />
+                </label>
+                <button class="button button-ghost" type="button" data-refresh-cajas-close ${isBusy ? "disabled" : ""}>
+                  ${state.cashRegisters.loading ? "Actualizando..." : "Actualizar"}
+                </button>
+                <button class="button button-ghost" type="button" data-caja-close-reset ${state.cashRegisters.closing ? "disabled" : ""}>
+                  Seleccionar primera
+                </button>
+              </div>
+            </div>
+            ${state.cashRegisters.loading ? renderLoadingState("Cargando cajas abiertas...") : renderCashRegisterCloseTable(closeableItems)}
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderCashRegisterCloseTable(items = getCloseableCashRegisters()) {
+  const search = normalizeSearchText(state.cashRegisters.search);
+  const visibleItems = search
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.serie || ""} ${item.numeroCaja || ""} ${item.facturaInicial || ""} ${item.ultimaFactura || ""} ${item.statusNombre || ""}`,
+        ).includes(search),
+      )
+    : items;
+
+  if (!visibleItems.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin cajas abiertas</h3>
+        <p>${search ? "No hay resultados para la busqueda actual." : "No hay cajas abiertas pendientes por cerrar."}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap cash-register-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Serie</th>
+            <th>Fecha</th>
+            <th>Caja</th>
+            <th>Factura inicial</th>
+            <th>Ultima factura</th>
+            <th>Status</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleItems
+            .map((item) => {
+              const selected = buildCashRegisterKey(item.serie, item.fecha) === state.cashRegisters.selectedKey;
+              return `
+                <tr${selected ? ' class="is-selected"' : ""}>
+                  <td>${escapeHtml(item.serie || "")}</td>
+                  <td>${escapeHtml(formatDateOnlyDisplay(item.fecha))}</td>
+                  <td>${escapeHtml(String(item.numeroCaja ?? ""))}</td>
+                  <td>${escapeHtml(item.facturaInicial || "")}</td>
+                  <td>${escapeHtml(item.ultimaFactura || "")}</td>
+                  <td>${renderCashRegisterStatusBadge(item.status)}</td>
+                  <td class="sucursal-row-actions">
+                    <button
+                      class="button button-ghost"
+                      type="button"
+                      data-caja-close-select="${escapeHtml(item.serie || "")}"
+                      data-caja-close-fecha="${escapeHtml(toDateInputValue(item.fecha))}"
+                      ${state.cashRegisters.closing ? "disabled" : ""}
+                    >
+                      Abrir
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+function renderComprasWorkspace() {
+  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const metadata = state.compras.metadata || {};
+  const proveedores = Array.isArray(metadata.proveedores) ? metadata.proveedores : [];
+  const tiposPago = Array.isArray(metadata.tiposPago) ? metadata.tiposPago : [];
+  const destinos = Array.isArray(metadata.destinos) ? metadata.destinos : [];
+  const isSaving = state.compras.saving;
+  const isDeleting = state.compras.deleting;
+  const isApproving = state.compras.approving;
+  const isBusy = isSaving || isDeleting || isApproving;
+
+  return `
+    <div class="modern-page compras-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Compras"])}
+
+      <section class="transfer-register-shell adjustment-window compras-window">
+        <div class="adjustment-titlebar">Compras</div>
+        <form id="compras-form" class="transfer-register-form adjustment-form compras-form">
+          <div class="transfer-command-bar adjustment-command-bar compras-command-bar" role="toolbar" aria-label="Acciones de compras">
+            <button class="transfer-command-button" type="button" data-new-compra ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="compras-form" ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : "Guardar"}
+            </button>
+            <button
+              class="transfer-command-button"
+              type="button"
+              data-delete-compra-current
+              ${isBusy || !draft.originalDocumento || Number(draft.status || 0) === 1 ? "disabled" : ""}
+            >
+              <span class="transfer-command-icon">X</span>
+              ${isDeleting ? "Eliminando" : "Eliminar"}
+            </button>
+            <button
+              class="transfer-command-button"
+              type="button"
+              data-approve-compra-current
+              ${isBusy || !draft.originalDocumento || Number(draft.status || 0) === 1 ? "disabled" : ""}
+            >
+              <span class="transfer-command-icon">A</span>
+              ${isApproving ? "Aprobando" : "Aprobar"}
+            </button>
+          </div>
+
+          <div class="compras-panel">
+            <div class="compras-grid">
+              <label class="compras-field compras-field-code">
+                <span>Documento</span>
+                <input
+                  type="text"
+                  name="documento"
+                  value="${escapeHtml(toInputValue(draft.documento))}"
+                  readonly
+                />
+              </label>
+
+              <label class="compras-field">
+                <span>Proveedor</span>
+                <select name="proveedor">
+                  <option value="">Selecciona un proveedor</option>
+                  ${renderSelectOptions(
+                    proveedores.map((item) => ({
+                      value: String(item.codigo || ""),
+                      label: `${item.codigo || ""} - ${item.nombre || ""}`,
+                    })),
+                    String(draft.proveedor || ""),
+                  )}
+                </select>
+              </label>
+
+              <label class="compras-field">
+                <span>Fecha</span>
+                <input
+                  type="date"
+                  name="fecha"
+                  value="${escapeHtml(toDateInputValue(draft.fecha))}"
+                  readonly
+                />
+              </label>
+
+              <label class="compras-field">
+                <span>Fecha factura</span>
+                <input
+                  type="date"
+                  name="fechaFactura"
+                  value="${escapeHtml(toDateInputValue(draft.fechaFactura))}"
+                  placeholder="Pendiente"
+                  readonly
+                />
+              </label>
+
+              <label class="compras-field">
+                <span>Tipo de pago</span>
+                <select name="tipoPago">
+                  <option value="">Selecciona</option>
+                  ${renderSelectOptions(
+                    tiposPago.map((item) => ({
+                      value: String(item.codigo || ""),
+                      label: `${item.codigo || ""} - ${item.nombre || ""}`,
+                    })),
+                    String(draft.tipoPago || ""),
+                  )}
+                </select>
+              </label>
+
+              <label class="compras-field">
+                <span>Destino</span>
+                <select name="destino">
+                  <option value="">Selecciona</option>
+                  ${renderSelectOptions(
+                    destinos.map((item) => ({
+                      value: String(item.codigo || ""),
+                      label: `${item.codigo || ""} - ${item.nombre || ""}`,
+                    })),
+                    String(draft.destino || ""),
+                  )}
+                </select>
+              </label>
+
+              <label class="compras-field">
+                <span>Tasa del dia</span>
+                <input
+                  type="number"
+                  name="tasaCambio"
+                  min="0"
+                  step="0.01"
+                  value="${escapeHtml(toInputValue(draft.tasaCambio))}"
+                />
+              </label>
+
+              <label class="compras-field">
+                <span>ID Lote</span>
+                <input
+                  type="number"
+                  name="idLote"
+                  min="1"
+                  step="1"
+                  value="${escapeHtml(toInputValue(draft.idLote))}"
+                />
+              </label>
+
+              <label class="compras-field">
+                <span>Total mercancia</span>
+                <input
+                  type="number"
+                  name="totalMercancia"
+                  min="0"
+                  step="0.01"
+                  value="${escapeHtml(toInputValue(draft.totalMercancia))}"
+                  data-compra-total-mercancia
+                  readonly
+                />
+              </label>
+
+              <label class="compras-field">
+                <span>Usuario</span>
+                <input
+                  type="text"
+                  name="usuario"
+                  value="${escapeHtml(toInputValue(draft.usuario))}"
+                  readonly
+                />
+              </label>
+
+              <div class="compras-field compras-field-status">
+                <span>Status</span>
+                <div class="compras-status-slot">${renderCompraStatusBadge(draft.status)}</div>
+              </div>
+
+              <label class="compras-field compras-field-wide compras-field-observacion">
+                <span>Observacion</span>
+                <textarea name="observacion" rows="3" maxlength="250" placeholder="Observacion de la compra">${escapeHtml(toInputValue(draft.observacion))}</textarea>
+              </label>
+            </div>
+          </div>
+
+          <div class="compras-lines-panel">
+            <div class="compras-lines-head">
+              <div>
+                <h2>Articulos de la compra</h2>
+                <p>${escapeHtml(String((draft.items || []).length))} articulo(s) seleccionados.</p>
+              </div>
+              <div class="compras-lines-actions">
+                <button class="button button-primary" type="button" data-open-compra-lookup ${isBusy ? "disabled" : ""}>
+                  Agregar articulo
+                </button>
+              </div>
+            </div>
+            ${renderComprasItemsTable()}
+          </div>
+
+          <div class="compras-history-panel">
+            <div class="compras-history-head">
+              <div>
+                <h2>Compras registradas</h2>
+                <p>${escapeHtml(String(state.compras.items.length || 0))} registro(s) visibles.</p>
+              </div>
+              <div class="compras-history-actions">
+                <label class="field">
+                  <span>Buscar</span>
+                  <input
+                    type="search"
+                    name="compraBuscar"
+                    data-compra-search
+                    value="${escapeHtml(toInputValue(state.compras.search))}"
+                    placeholder="Documento, proveedor, destino u observacion"
+                  />
+                </label>
+                <button class="button button-ghost" type="button" data-refresh-compras ${state.compras.loading || isBusy ? "disabled" : ""}>
+                  ${state.compras.loading ? "Actualizando..." : "Actualizar"}
+                </button>
+              </div>
+            </div>
+            ${state.compras.loading ? renderLoadingState("Cargando compras...") : renderComprasTable()}
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderCompraStatusBadge(status) {
+  const numericStatus = Number(status ?? 0);
+  return `<span class="modern-chip">${escapeHtml(numericStatus === 1 ? "Aprobada" : "No aprobada")}</span>`;
+}
+
+function renderComprasItemsTable() {
+  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const items = Array.isArray(draft.items) ? draft.items : [];
+
+  if (!items.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin articulos</h3>
+        <p>Usa el buscador para agregar articulos por codigo de barra, referencia o marca.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap compras-items-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Codigo barra</th>
+            <th>Referencia</th>
+            <th>Marca</th>
+            <th>Nombre</th>
+            <th>Cantidad</th>
+            <th>SubTotal</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map(
+              (item, index) => `
+                <tr data-compra-item-row>
+                  <td>${escapeHtml(String(index + 1))}</td>
+                  <td><strong>${escapeHtml(item.codigoBarra || "-")}</strong></td>
+                  <td>${escapeHtml(item.referencia || "-")}</td>
+                  <td>${escapeHtml(item.marca || "-")}</td>
+                  <td>${escapeHtml(item.nombre || "-")}</td>
+                  <td>
+                    <input
+                      class="compras-item-quantity-input"
+                      type="number"
+                      name="cantidad"
+                      min="0.01"
+                      step="0.01"
+                      value="${escapeHtml(toInputValue(item.cantidad || "1"))}"
+                      data-compra-item-cantidad="${escapeHtml(String(index))}"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      class="compras-item-subtotal-input"
+                      type="text"
+                      name="subtotal"
+                      value="${escapeHtml(toInputValue(item.subtotal || formatCompraAmountInput(0)))}"
+                      readonly
+                    />
+                  </td>
+                  <td class="sucursal-row-actions">
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-compra-remove-item="${escapeHtml(String(index))}"
+                      ${state.compras.saving || state.compras.approving ? "disabled" : ""}
+                    >
+                      Quitar
+                    </button>
+                  </td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderComprasTable() {
+  const items = Array.isArray(state.compras.items) ? state.compras.items : [];
+  const search = normalizeSearchText(state.compras.search);
+  const visibleItems = search
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.documento || ""} ${item.proveedor || ""} ${item.proveedorNombre || ""} ${item.destino || ""} ${item.destinoNombre || ""} ${item.observacion || ""}`,
+        ).includes(search),
+      )
+    : items;
+
+  if (!visibleItems.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin compras</h3>
+        <p>${search ? "No hay resultados para la busqueda actual." : "Todavia no hay compras registradas."}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap compras-history-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Documento</th>
+            <th>Proveedor</th>
+            <th>Fecha</th>
+            <th>Fecha factura</th>
+            <th>Destino</th>
+            <th>Total mercancia</th>
+            <th>Status</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleItems
+            .map((item) => {
+              const key = buildCompraKey(item.documento, item.proveedor);
+              const isSelected = String(state.compras.selectedKey || "") === key;
+
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(item.documento || "-")}</strong></td>
+                  <td>${escapeHtml(item.proveedorNombre || item.proveedor || "-")}</td>
+                  <td>${escapeHtml(formatDateOnlyDisplay(item.fecha))}</td>
+                  <td>${escapeHtml(item.fechaFactura ? formatDateOnlyDisplay(item.fechaFactura) : "Pendiente")}</td>
+                  <td>${escapeHtml(item.destinoNombre || item.destino || "-")}</td>
+                  <td class="facturacion-cell-right">${escapeHtml(formatTransferAmount(item.totalMercancia || 0))}</td>
+                  <td>${renderCompraStatusBadge(item.status)}</td>
+                  <td class="sucursal-row-actions">
+                    <button
+                      class="button button-ghost"
+                      type="button"
+                      data-compra-select="${escapeHtml(item.documento || "")}"
+                      data-compra-proveedor="${escapeHtml(item.proveedor || "")}"
+                    >
+                      Abrir
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderComprasArticleLookupModal() {
+  const lookup = state.compras.articleLookup;
+  if (!lookup?.open) {
+    return "";
+  }
+
+  const items = Array.isArray(lookup.items) ? lookup.items : [];
+  const activeIndex = Number.isInteger(lookup.activeIndex) ? lookup.activeIndex : -1;
+
+  return `
+    <div class="article-lookup-overlay compras-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-compra-lookup-close aria-label="Cerrar buscador"></button>
+      <section class="article-lookup-dialog compras-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="compras-lookup-title" tabindex="-1" data-compra-lookup-dialog>
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Compras</p>
+            <h3 id="compras-lookup-title">
+              ${lookup.loading ? "Buscando articulos..." : `Articulos (${escapeHtml(String(items.length))} Registros)`}
+            </h3>
+            <p>Filtra por codigo de barra, referencia o marca y selecciona el articulo que quieres agregar.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">
+              ${lookup.loading ? "Cargando..." : `${escapeHtml(String(items.length))} registros`}
+            </span>
+            <button class="article-command-button" type="button" data-compra-lookup-refresh ${lookup.loading ? "disabled" : ""}>
+              Actualizar
+            </button>
+            <button class="article-command-button" type="button" data-compra-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        <form class="article-lookup-search compras-lookup-search" data-compra-lookup-form>
+          <label class="field">
+            <span>Buscar articulo</span>
+            <input
+              type="search"
+              name="buscar"
+              data-compra-lookup-search
+              value="${escapeHtml(toInputValue(lookup.search))}"
+              placeholder="Codigo de barra, referencia o marca"
+            />
+          </label>
+          <button class="button button-primary" type="submit" ${lookup.loading ? "disabled" : ""}>
+            Buscar
+          </button>
+        </form>
+
+        ${
+          lookup.loading
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Buscando articulos</h3>
+                <p>Estamos consultando el inventario actual.</p>
+              </div>
+            `
+            : items.length === 0
+              ? `
+                <div class="empty-state article-lookup-empty">
+                  <h3>Sin coincidencias</h3>
+                  <p>No se encontraron articulos para la busqueda actual.</p>
+                </div>
+              `
+              : `
+                <div class="table-wrap article-lookup-table-wrap compras-lookup-table-wrap">
+                  <table class="data-table article-lookup-table compras-lookup-table">
+                    <thead>
+                      <tr>
+                        <th>Codigo Barra</th>
+                        <th>Referencia</th>
+                        <th>Marca</th>
+                        <th>Nombre</th>
+                        <th>Detal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${items.map((item, index) => renderComprasArticleLookupRow(item, index, index === activeIndex)).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderComprasArticleLookupRow(item, index, isActive) {
+  return `
+    <tr
+      class="article-lookup-row ${isActive ? "article-lookup-row-active" : ""}"
+      data-compra-lookup-select="${escapeHtml(String(index))}"
+      tabindex="0"
+      aria-selected="${isActive ? "true" : "false"}"
+    >
+      <td><strong>${escapeHtml(item.codigoBarra || "-")}</strong></td>
+      <td>${escapeHtml(item.referencia || "-")}</td>
+      <td>${escapeHtml(item.general?.marca?.nombre || item.general?.marca?.codigo || "-")}</td>
+      <td>${escapeHtml(item.general?.nombre || item.nombre || "-")}</td>
+      <td class="facturacion-cell-right">${escapeHtml(formatTransferAmount(item.precios?.detal || 0))}</td>
+    </tr>
+  `;
 }
 
 function renderSucursalesWorkspace() {
@@ -5165,6 +6320,289 @@ function renderClienteStatusBadge(status) {
   return `<span class="modern-chip">${numericStatus === 0 ? "Inactivo" : "Activo"}</span>`;
 }
 
+function renderProveedoresWorkspace() {
+  const draft = state.proveedores.draft || createEmptyProveedorDraft(state.proveedores.metadata);
+  const metadata = state.proveedores.metadata || {};
+  const tiposProveedor = Array.isArray(metadata.tiposProveedor) ? metadata.tiposProveedor : [];
+  const isSaving = state.proveedores.saving;
+  const isDeleting = state.proveedores.deleting;
+  const isBusy = isSaving || isDeleting;
+
+  return `
+    <div class="modern-page clients-page">
+      ${renderDesktopBreadcrumb(["Archivos", "Proveedores"])}
+
+      <section class="transfer-register-shell adjustment-window clients-window">
+        <div class="adjustment-titlebar">Proveedores</div>
+        <form id="proveedor-form" class="adjustment-form clients-form">
+          <div class="transfer-command-bar adjustment-command-bar clients-command-bar" role="toolbar" aria-label="Acciones de proveedores">
+            <button class="transfer-command-button" type="button" data-new-proveedor ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button" type="button" data-open-proveedor-lookup ${state.proveedores.loading || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">B</span>
+              Buscar
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="proveedor-form" ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : "Guardar"}
+            </button>
+          </div>
+
+          <div class="clients-panel">
+            <div class="clients-grid">
+              <label class="clients-field clients-field-code">
+                <span>ID Primario</span>
+                <input
+                  type="text"
+                  name="codigo"
+                  value="${escapeHtml(toInputValue(draft.codigo))}"
+                  maxlength="20"
+                  placeholder="001"
+                  ${draft.originalCodigo ? "disabled" : ""}
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>Tipo</span>
+                <select name="tipo">
+                  ${renderSelectOptions(
+                    [
+                      { value: "", label: "Selecciona un tipo" },
+                      ...tiposProveedor.map((item) => ({
+                        value: String(item.codigo ?? ""),
+                        label: `${item.codigo ?? ""} - ${item.nombre ?? item.codigo ?? ""}`,
+                      })),
+                    ],
+                    draft.tipo || "",
+                  )}
+                </select>
+              </label>
+
+              <label class="clients-field clients-field-wide">
+                <span>Nombre</span>
+                <input
+                  type="text"
+                  name="nombre"
+                  value="${escapeHtml(toInputValue(draft.nombre))}"
+                  maxlength="120"
+                  placeholder="Nombre del proveedor"
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>Contacto</span>
+                <input
+                  type="text"
+                  name="contacto"
+                  value="${escapeHtml(toInputValue(draft.contacto))}"
+                  maxlength="80"
+                  placeholder="Contacto"
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>F. Ingreso</span>
+                <input
+                  type="date"
+                  name="fechaIngreso"
+                  value="${escapeHtml(toInputValue(draft.fechaIngreso))}"
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>Telefono</span>
+                <input
+                  type="text"
+                  name="telefono"
+                  value="${escapeHtml(toInputValue(draft.telefono))}"
+                  maxlength="30"
+                  placeholder="Telefono"
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>Codigo Postal</span>
+                <input
+                  type="text"
+                  name="codigoPostal"
+                  value="${escapeHtml(toInputValue(draft.codigoPostal))}"
+                  maxlength="30"
+                  placeholder="Codigo postal"
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>Fax</span>
+                <input
+                  type="text"
+                  name="fax"
+                  value="${escapeHtml(toInputValue(draft.fax))}"
+                  maxlength="30"
+                  placeholder="Fax"
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>Pais</span>
+                <input
+                  type="text"
+                  name="pais"
+                  value="${escapeHtml(toInputValue(draft.pais))}"
+                  maxlength="80"
+                  placeholder="Pais"
+                />
+              </label>
+
+              <label class="clients-field clients-field-wide clients-field-address">
+                <span>Direccion</span>
+                <textarea name="direccion" rows="2" maxlength="300" placeholder="Direccion">${escapeHtml(toInputValue(draft.direccion))}</textarea>
+              </label>
+
+              <label class="clients-field">
+                <span>Estado / Dpto.</span>
+                <input
+                  type="text"
+                  name="estado"
+                  value="${escapeHtml(toInputValue(draft.estado))}"
+                  maxlength="80"
+                  placeholder="Estado o departamento"
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>Ciudad</span>
+                <input
+                  type="text"
+                  name="ciudad"
+                  value="${escapeHtml(toInputValue(draft.ciudad))}"
+                  maxlength="80"
+                  placeholder="Ciudad"
+                />
+              </label>
+
+              <fieldset class="clients-status-row">
+                <legend>Status</legend>
+                <label>
+                  <input type="radio" name="status" value="1" ${String(draft.status ?? "1") === "1" ? "checked" : ""} />
+                  Activo
+                </label>
+                <label>
+                  <input type="radio" name="status" value="0" ${String(draft.status ?? "1") === "0" ? "checked" : ""} />
+                  Inactivo
+                </label>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="clients-history-panel">
+            <div class="clients-history-head">
+              <div>
+                <h2>Proveedores registrados</h2>
+                <p>${escapeHtml(String(state.proveedores.items.length || 0))} registro(s) visibles.</p>
+              </div>
+              <div class="clients-history-actions">
+                <label class="field">
+                  <span>Buscar</span>
+                  <input
+                    type="search"
+                    name="proveedorBuscar"
+                    data-proveedor-search
+                    value="${escapeHtml(toInputValue(state.proveedores.search))}"
+                    placeholder="Codigo, nombre, contacto, telefono, ciudad o pais"
+                  />
+                </label>
+                <button class="button button-ghost" type="button" data-refresh-proveedores ${state.proveedores.loading || isBusy ? "disabled" : ""}>
+                  ${state.proveedores.loading ? "Actualizando..." : "Actualizar"}
+                </button>
+                <button class="button button-ghost" type="button" data-proveedor-reset ${isBusy ? "disabled" : ""}>
+                  Limpiar
+                </button>
+              </div>
+            </div>
+            ${state.proveedores.loading ? renderLoadingState("Cargando proveedores...") : renderProveedoresTable()}
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderProveedoresTable() {
+  const items = Array.isArray(state.proveedores.items) ? state.proveedores.items : [];
+  const search = normalizeSearchText(state.proveedores.search);
+  const visibleItems = search
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.codigo || ""} ${item.nombre || ""} ${item.tipoNombre || ""} ${item.contacto || ""} ${item.telefono || ""} ${item.ciudad || ""} ${item.pais || ""}`,
+        ).includes(search),
+      )
+    : items;
+
+  if (!visibleItems.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin proveedores</h3>
+        <p>${search ? "No hay resultados para la busqueda actual." : "No hay proveedores registrados todavia."}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap clients-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>Contacto</th>
+            <th>Ciudad</th>
+            <th>Status</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleItems
+            .map((item) => {
+              const isSelected = String(state.proveedores.selectedCodigo || "") === String(item.codigo || "");
+
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(item.codigo || "-")}</strong></td>
+                  <td>${escapeHtml(item.nombre || "-")}</td>
+                  <td>${escapeHtml(item.tipoNombre || "-")}</td>
+                  <td>${escapeHtml(item.contacto || item.telefono || "-")}</td>
+                  <td>${escapeHtml(item.ciudad || item.pais || "-")}</td>
+                  <td>${renderProveedorStatusBadge(item.status)}</td>
+                  <td class="sucursal-row-actions">
+                    <button class="button button-ghost" type="button" data-proveedor-select="${escapeHtml(item.codigo || "")}">
+                      Abrir
+                    </button>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-delete-proveedor="${escapeHtml(item.codigo || "")}"
+                      ${state.proveedores.deleting ? "disabled" : ""}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderProveedorStatusBadge(status) {
+  const numericStatus = Number(status ?? 1);
+  return `<span class="modern-chip">${numericStatus === 0 ? "Inactivo" : "Activo"}</span>`;
+}
 function renderTrabajadoresWorkspace() {
   const draft = state.trabajadores.draft || createEmptyTrabajadorDraft(state.trabajadores.metadata);
   const metadata = state.trabajadores.metadata || {};
@@ -5373,7 +6811,7 @@ function renderImpuestosWorkspace() {
 
           <div class="taxes-panel">
             <label class="taxes-field taxes-field-code">
-              <span>Código</span>
+              <span>CÃ³digo</span>
               <input
                 type="number"
                 name="codigo"
@@ -5437,6 +6875,561 @@ function renderImpuestosWorkspace() {
   `;
 }
 
+function renderBancosWorkspace() {
+  const draft = state.bancos.draft || createEmptyBancoDraft(state.bancos.metadata);
+  const items = Array.isArray(state.bancos.items) ? state.bancos.items : [];
+  const isSaving = state.bancos.saving;
+  const isDeleting = state.bancos.deleting;
+  const isBusy = isSaving || isDeleting;
+
+  return `
+    <div class="modern-page clients-page">
+      ${renderDesktopBreadcrumb(["Archivos", "Bancos"])}
+
+      <section class="transfer-register-shell adjustment-window clients-window">
+        <div class="adjustment-titlebar">Bancos</div>
+        <form id="banco-form" class="adjustment-form clients-form">
+          <div class="transfer-command-bar adjustment-command-bar clients-command-bar" role="toolbar" aria-label="Acciones de bancos">
+            <button class="transfer-command-button" type="button" data-new-banco ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="banco-form" ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : "Guardar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-delete-current-banco ${!draft.originalCodigo || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">X</span>
+              ${isDeleting ? "Eliminando" : "Eliminar"}
+            </button>
+          </div>
+
+          <div class="clients-panel">
+            <div class="clients-grid">
+              <label class="clients-field clients-field-code">
+                <span>Codigo</span>
+                <input
+                  type="text"
+                  name="codigo"
+                  value="${escapeHtml(toInputValue(draft.codigo))}"
+                  maxlength="20"
+                  placeholder="001"
+                  ${draft.originalCodigo ? "readonly" : ""}
+                />
+              </label>
+
+              <label class="clients-field clients-field-wide">
+                <span>Nombre</span>
+                <input
+                  type="text"
+                  name="nombre"
+                  value="${escapeHtml(toInputValue(draft.nombre))}"
+                  maxlength="120"
+                  placeholder="Nombre del banco"
+                />
+              </label>
+
+              <fieldset class="clients-field taxes-field-status">
+                <span>Status</span>
+                <div class="taxes-status-group" role="radiogroup" aria-label="Estado del banco">
+                  <label class="taxes-status-option">
+                    <input type="radio" name="status" value="1" ${String(draft.status ?? "1") === "1" ? "checked" : ""} />
+                    <span>Activo</span>
+                  </label>
+                  <label class="taxes-status-option">
+                    <input type="radio" name="status" value="0" ${String(draft.status ?? "1") === "0" ? "checked" : ""} />
+                    <span>Inactivo</span>
+                  </label>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="clients-history-panel">
+            <div class="clients-history-head">
+              <div>
+                <h2>Bancos registrados</h2>
+                <p>${escapeHtml(String(items.length))} registro(s) visibles.</p>
+              </div>
+              <div class="clients-history-actions">
+                <label class="field">
+                  <span>Buscar</span>
+                  <input
+                    type="search"
+                    name="bancoBuscar"
+                    data-banco-search
+                    value="${escapeHtml(toInputValue(state.bancos.search))}"
+                    placeholder="Codigo o nombre"
+                  />
+                </label>
+                <button class="button button-ghost" type="button" data-refresh-bancos ${state.bancos.loading || isBusy ? "disabled" : ""}>
+                  ${state.bancos.loading ? "Actualizando..." : "Actualizar"}
+                </button>
+                <button class="button button-ghost" type="button" data-banco-reset ${isBusy ? "disabled" : ""}>
+                  Limpiar
+                </button>
+              </div>
+            </div>
+            ${state.bancos.loading ? renderLoadingState("Cargando bancos...") : renderBancosTable()}
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderBancosTable() {
+  const items = Array.isArray(state.bancos.items) ? state.bancos.items : [];
+  const search = normalizeSearchText(state.bancos.search);
+  const visibleItems = search
+    ? items.filter((item) => normalizeSearchText(`${item.codigo || ""} ${item.nombre || ""}`).includes(search))
+    : items;
+
+  if (!visibleItems.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin bancos</h3>
+        <p>${search ? "No hay resultados para la busqueda actual." : "No hay bancos registrados todavia."}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-shell clients-table-shell">
+      <table class="modern-table clients-table">
+        <thead>
+          <tr>
+            <th>Codigo</th>
+            <th>Nombre</th>
+            <th>Status</th>
+            <th class="sucursal-row-actions">Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleItems
+            .map((item) => {
+              const isSelected = String(state.bancos.selectedCodigo || "") === String(item.codigo || "");
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(item.codigo || "-")}</strong></td>
+                  <td>${escapeHtml(item.nombre || "-")}</td>
+                  <td>${renderBancoStatusBadge(item.status)}</td>
+                  <td class="sucursal-row-actions">
+                    <button class="button button-ghost" type="button" data-banco-select="${escapeHtml(String(item.codigo || ""))}">
+                      Abrir
+                    </button>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-delete-banco="${escapeHtml(String(item.codigo || ""))}"
+                      ${state.bancos.deleting ? "disabled" : ""}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderBancoStatusBadge(status) {
+  const numericStatus = Number(status ?? 1);
+  return `<span class="modern-chip">${numericStatus === 0 ? "Inactivo" : "Activo"}</span>`;
+}
+
+function renderTiposPagoWorkspace() {
+  const draft = state.tiposPago.draft || createEmptyTipoPagoDraft(state.tiposPago.metadata);
+  const items = Array.isArray(state.tiposPago.items) ? state.tiposPago.items : [];
+  const isSaving = state.tiposPago.saving;
+  const isDeleting = state.tiposPago.deleting;
+  const isBusy = isSaving || isDeleting;
+
+  return `
+    <div class="modern-page clients-page">
+      ${renderDesktopBreadcrumb(["Archivos", "Tipo de pagos"])}
+
+      <section class="transfer-register-shell adjustment-window clients-window">
+        <div class="adjustment-titlebar">Tipo de pagos</div>
+        <form id="tipo-pago-form" class="adjustment-form clients-form">
+          <div class="transfer-command-bar adjustment-command-bar clients-command-bar" role="toolbar" aria-label="Acciones de tipos de pago">
+            <button class="transfer-command-button" type="button" data-new-tipo-pago ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="tipo-pago-form" ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : "Guardar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-delete-current-tipo-pago ${!draft.originalCodigo || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">X</span>
+              ${isDeleting ? "Eliminando" : "Eliminar"}
+            </button>
+          </div>
+
+          <div class="clients-panel">
+            <div class="clients-grid">
+              <label class="clients-field clients-field-code">
+                <span>Codigo</span>
+                <input
+                  type="number"
+                  name="codigo"
+                  min="1"
+                  step="1"
+                  value="${escapeHtml(toInputValue(draft.codigo))}"
+                  placeholder="1"
+                  ${draft.originalCodigo ? "readonly" : ""}
+                />
+              </label>
+
+              <label class="clients-field clients-field-wide">
+                <span>Nombre</span>
+                <input
+                  type="text"
+                  name="nombre"
+                  value="${escapeHtml(toInputValue(draft.nombre))}"
+                  maxlength="120"
+                  placeholder="Nombre del tipo de pago"
+                />
+              </label>
+
+              <fieldset class="clients-field taxes-field-status">
+                <span>Status</span>
+                <div class="taxes-status-group" role="radiogroup" aria-label="Estado del tipo de pago">
+                  <label class="taxes-status-option">
+                    <input type="radio" name="status" value="1" ${String(draft.status ?? "1") === "1" ? "checked" : ""} />
+                    <span>Activo</span>
+                  </label>
+                  <label class="taxes-status-option">
+                    <input type="radio" name="status" value="0" ${String(draft.status ?? "1") === "0" ? "checked" : ""} />
+                    <span>Inactivo</span>
+                  </label>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="clients-history-panel">
+            <div class="clients-history-head">
+              <div>
+                <h2>Tipos de pago registrados</h2>
+                <p>${escapeHtml(String(items.length))} registro(s) visibles.</p>
+              </div>
+              <div class="clients-history-actions">
+                <label class="field">
+                  <span>Buscar</span>
+                  <input
+                    type="search"
+                    name="tipoPagoBuscar"
+                    data-tipo-pago-search
+                    value="${escapeHtml(toInputValue(state.tiposPago.search))}"
+                    placeholder="Codigo o nombre"
+                  />
+                </label>
+                <button class="button button-ghost" type="button" data-refresh-tipos-pago ${state.tiposPago.loading || isBusy ? "disabled" : ""}>
+                  ${state.tiposPago.loading ? "Actualizando..." : "Actualizar"}
+                </button>
+                <button class="button button-ghost" type="button" data-tipo-pago-reset ${isBusy ? "disabled" : ""}>
+                  Limpiar
+                </button>
+              </div>
+            </div>
+            ${state.tiposPago.loading ? renderLoadingState("Cargando tipos de pago...") : renderTiposPagoTable()}
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderTiposPagoTable() {
+  const items = Array.isArray(state.tiposPago.items) ? state.tiposPago.items : [];
+  const search = normalizeSearchText(state.tiposPago.search);
+  const visibleItems = search
+    ? items.filter((item) => normalizeSearchText(`${item.codigo || ""} ${item.nombre || ""}`).includes(search))
+    : items;
+
+  if (!visibleItems.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin tipos de pago</h3>
+        <p>${search ? "No hay resultados para la busqueda actual." : "No hay tipos de pago registrados todavia."}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-shell clients-table-shell">
+      <table class="modern-table clients-table">
+        <thead>
+          <tr>
+            <th>Codigo</th>
+            <th>Nombre</th>
+            <th>Status</th>
+            <th class="sucursal-row-actions">Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleItems
+            .map((item) => {
+              const isSelected = String(state.tiposPago.selectedCodigo || "") === String(item.codigo || "");
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(String(item.codigo || "-"))}</strong></td>
+                  <td>${escapeHtml(item.nombre || "-")}</td>
+                  <td>${renderTipoPagoStatusBadge(item.status)}</td>
+                  <td class="sucursal-row-actions">
+                    <button class="button button-ghost" type="button" data-tipo-pago-select="${escapeHtml(String(item.codigo || ""))}">
+                      Abrir
+                    </button>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-delete-tipo-pago="${escapeHtml(String(item.codigo || ""))}"
+                      ${state.tiposPago.deleting ? "disabled" : ""}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderTipoPagoStatusBadge(status) {
+  const numericStatus = Number(status ?? 1);
+  return `<span class="modern-chip">${numericStatus === 0 ? "Inactivo" : "Activo"}</span>`;
+}
+function renderImpresorasWorkspace() {
+  const draft = state.impresoras.draft || createEmptyImpresoraDraft(state.impresoras.metadata);
+  const items = Array.isArray(state.impresoras.items) ? state.impresoras.items : [];
+  const detectedPrinters = getDetectedDesktopPrinters();
+  const detectedCount = detectedPrinters.length;
+  const isSaving = state.impresoras.saving;
+  const isDeleting = state.impresoras.deleting;
+  const isBusy = isSaving || isDeleting;
+  const detectionMessage = desktopClientSupportsPrinting()
+    ? (detectedCount
+        ? `Se detectaron ${detectedCount} impresora(s) en este computador.`
+        : "No se detectaron impresoras en este computador.")
+    : "La deteccion de impresoras solo esta disponible desde el ejecutable de Rocky Maxx.";
+
+  return `
+    <div class="modern-page clients-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Impresoras"])}
+
+      <section class="transfer-register-shell adjustment-window clients-window">
+        <div class="adjustment-titlebar">Impresoras</div>
+        <form id="impresora-form" class="adjustment-form clients-form">
+          <div class="transfer-command-bar adjustment-command-bar clients-command-bar" role="toolbar" aria-label="Acciones de impresoras">
+            <button class="transfer-command-button" type="button" data-new-impresora ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="impresora-form" ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : "Guardar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-delete-current-impresora ${!draft.originalId || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">X</span>
+              ${isDeleting ? "Eliminando" : "Eliminar"}
+            </button>
+          </div>
+
+          <div class="clients-panel">
+            <div class="clients-grid">
+              <label class="clients-field clients-field-code">
+                <span>ID</span>
+                <input
+                  type="number"
+                  name="id"
+                  min="0"
+                  step="1"
+                  value="${escapeHtml(toInputValue(draft.id))}"
+                  readonly
+                />
+              </label>
+
+              <label class="clients-field clients-field-wide">
+                <span>Impresora detectada</span>
+                <select name="nombreImpresora" ${desktopClientSupportsPrinting() ? "" : "disabled"}>
+                  ${renderImpresoraDetectedOptions(draft.nombreImpresora)}
+                </select>
+              </label>
+
+              <fieldset class="clients-field taxes-field-status">
+                <span>Status</span>
+                <div class="taxes-status-group" role="radiogroup" aria-label="Modo de impresion">
+                  <label class="taxes-status-option">
+                    <input type="radio" name="status" value="0" ${String(draft.status ?? "0") === "0" ? "checked" : ""} />
+                    <span>No contingencia</span>
+                  </label>
+                  <label class="taxes-status-option">
+                    <input type="radio" name="status" value="1" ${String(draft.status ?? "0") === "1" ? "checked" : ""} />
+                    <span>Contingencia</span>
+                  </label>
+                </div>
+              </fieldset>
+            </div>
+            <div class="muted">${escapeHtml(detectionMessage)}</div>
+          </div>
+
+          <div class="clients-history-panel">
+            <div class="clients-history-head">
+              <div>
+                <h2>Impresoras registradas</h2>
+                <p>${escapeHtml(String(items.length))} registro(s) visibles.</p>
+              </div>
+              <div class="clients-history-actions">
+                <label class="field">
+                  <span>Buscar</span>
+                  <input
+                    type="search"
+                    name="impresoraBuscar"
+                    data-impresora-search
+                    value="${escapeHtml(toInputValue(state.impresoras.search))}"
+                    placeholder="ID o nombre"
+                  />
+                </label>
+                <button class="button button-ghost" type="button" data-refresh-impresoras ${state.impresoras.loading || isBusy ? "disabled" : ""}>
+                  ${state.impresoras.loading ? "Actualizando..." : "Actualizar"}
+                </button>
+                <button class="button button-ghost" type="button" data-impresora-reset ${isBusy ? "disabled" : ""}>
+                  Limpiar
+                </button>
+              </div>
+            </div>
+            ${state.impresoras.loading ? renderLoadingState("Cargando impresoras...") : renderImpresorasTable()}
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderImpresorasTable() {
+  const items = Array.isArray(state.impresoras.items) ? state.impresoras.items : [];
+  const search = normalizeSearchText(state.impresoras.search);
+  const visibleItems = search
+    ? items.filter((item) => normalizeSearchText(`${item.id || ""} ${item.nombreImpresora || ""}`).includes(search))
+    : items;
+
+  if (!visibleItems.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin impresoras</h3>
+        <p>${search ? "No hay resultados para la busqueda actual." : "No hay impresoras registradas todavia."}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-shell clients-table-shell">
+      <table class="modern-table clients-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Impresora</th>
+            <th>Status</th>
+            <th>Detectada</th>
+            <th class="sucursal-row-actions">Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleItems
+            .map((item) => {
+              const isSelected = String(state.impresoras.selectedId || "") === String(item.id || "");
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(String(item.id || "-"))}</strong></td>
+                  <td>${escapeHtml(item.nombreImpresora || "-")}</td>
+                  <td>${renderImpresoraStatusBadge(item.status)}</td>
+                  <td>${renderImpresoraDetectedBadge(item.nombreImpresora)}</td>
+                  <td class="sucursal-row-actions">
+                    <button class="button button-ghost" type="button" data-impresora-select="${escapeHtml(String(item.id || ""))}">
+                      Abrir
+                    </button>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-delete-impresora="${escapeHtml(String(item.id || ""))}"
+                      ${state.impresoras.deleting ? "disabled" : ""}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderImpresoraStatusBadge(status) {
+  const numericStatus = Number(status ?? 0);
+  return `<span class="modern-chip">${numericStatus === 1 ? "Contingencia" : "No contingencia"}</span>`;
+}
+
+function renderImpresoraDetectedBadge(nombreImpresora) {
+  return `<span class="modern-chip">${isDetectedDesktopPrinter(nombreImpresora) ? "Detectada" : "No detectada"}</span>`;
+}
+
+function renderImpresoraDetectedOptions(selectedValue) {
+  const printers = getDetectedDesktopPrinters();
+  const options = printers.map((item) => {
+    const name = String(item?.name || item?.displayName || "").trim();
+    if (!name) {
+      return null;
+    }
+
+    return {
+      value: name,
+      label: item?.isDefault ? `${name} (Predeterminada)` : name,
+    };
+  }).filter(Boolean);
+
+  const normalizedSelected = String(selectedValue || "").trim();
+  if (!options.length) {
+    return normalizedSelected
+      ? `<option value="${escapeHtml(normalizedSelected)}" selected>${escapeHtml(normalizedSelected)}</option>`
+      : `<option value="" selected>Sin impresoras detectadas</option>`;
+  }
+
+  if (normalizedSelected && !options.some((item) => String(item.value || "").trim().toLowerCase() === normalizedSelected.toLowerCase())) {
+    options.unshift({
+      value: normalizedSelected,
+      label: `${normalizedSelected} (Guardada)`,
+    });
+  }
+
+  return renderSelectOptions(options, normalizedSelected);
+}
+
+function isDetectedDesktopPrinter(nombreImpresora) {
+  const normalized = String(nombreImpresora || "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return getDetectedDesktopPrinters().some((item) => {
+    const values = [item?.name, item?.displayName, item?.description]
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter(Boolean);
+    return values.includes(normalized);
+  });
+}
 function renderExchangeRateRegisterWorkspace() {
   const draft = state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
   const updatedAt = String(state.exchangeRateRegister.updatedAt || draft.actualizadoEn || "").trim();
@@ -5586,7 +7579,7 @@ function renderImpuestosLookupModal() {
                   <table class="data-table article-lookup-table taxes-lookup-table">
                     <thead>
                       <tr>
-                        <th>Código</th>
+                        <th>CÃ³digo</th>
                         <th>Nombre</th>
                         <th>Porcentaje</th>
                       </tr>
@@ -5838,6 +7831,10 @@ function getDesktopBreadcrumb(view) {
     return ["Archivos", "Inventario", getDesktopViewLabelV2(view)];
   }
 
+  if (["impuestos", "bancos", "tipos-pago"].includes(view)) {
+    return ["Archivos", getDesktopViewLabelV2(view)];
+  }
+
   if (view === "reportes") {
     return ["Reportes", "General"];
   }
@@ -5856,6 +7853,14 @@ function getDesktopBreadcrumb(view) {
 
   if (view === "cajas") {
     return ["Procesos", "Facturacion", "Apertura de caja"];
+  }
+
+  if (view === "cierre-caja") {
+    return ["Procesos", "Facturacion", "Cierre de caja"];
+  }
+
+  if (view === "compras") {
+    return ["Procesos", "Compras"];
   }
 
   if (view === "facturacion") {
@@ -5896,16 +7901,22 @@ function getDesktopViewLabelV2(view) {
     marcas: "Marcas",
     categorias: "Categorias",
     clientes: "Clientes",
+    proveedores: "Proveedores",
     sucursales: "Sucursales",
     personal: "Trabajadores",
     trabajadores: "Trabajadores",
     impuestos: "Impuesto",
+    bancos: "Bancos",
+    "tipos-pago": "Tipo de pagos",
+    impresoras: "Impresoras",
+    compras: "Compras",
     transferencias: "Transferencias",
     "registro-transferencia": "Registro de transferencias",
     "cargar-transferencia": "Carga de transferencias",
     "ajuste-inventario": "Ajuste de inventario",
     facturacion: "Facturacion",
     cajas: "Apertura de caja",
+    "cierre-caja": "Cierre de caja",
     "borrador-devoluciones": "Borrador devoluciones",
     "registro-devoluciones": "Registro de devoluciones",
     "cargar-devoluciones": "Carga de devoluciones",
@@ -6791,6 +8802,7 @@ function renderArticleGeneralPanel(draft) {
         <select name="tipo">
           ${renderSelectOptions(
             [
+              { value: "", label: "Selecciona un tipo" },
               { value: "articulo", label: "Articulo" },
               { value: "servicio", label: "Servicio" },
             ],
@@ -6803,6 +8815,7 @@ function renderArticleGeneralPanel(draft) {
         <select name="status">
           ${renderSelectOptions(
             [
+              { value: "", label: "Selecciona un status" },
               { value: "activo", label: "Activo" },
               { value: "inactivo", label: "Inactivo" },
             ],
@@ -7124,6 +9137,14 @@ function bindShellEvents() {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
       const nextView = button.getAttribute("data-menu-view") || "articulos";
+      if (!userCanAccessView(nextView)) {
+        state.navigation.openMenu = "";
+        state.navigation.openSubmenu = "";
+        state.navigation.menuPinned = false;
+        setFlash("Tu usuario no tiene acceso a este modulo.", "error");
+        render();
+        return;
+      }
       if (state.currentView === "facturacion" && nextView !== "facturacion") {
         resetFacturacionState();
       }
@@ -7197,12 +9218,27 @@ function bindShellEvents() {
         return;
       }
 
+      if (nextView === "cierre-caja") {
+        await loadCashRegisters();
+        return;
+      }
+
+      if (nextView === "compras") {
+        await loadCompras();
+        return;
+      }
+
       if (nextView === "facturacion") {
         if (userCanAccessFullInventory()) {
           await loadCreationMetadata({ renderAfter: false });
         }
         await loadFacturacionExchangeRate({ renderAfter: false, silent: true });
         render();
+        return;
+      }
+
+      if (nextView === "impresoras") {
+        await loadImpresoras();
         return;
       }
 
@@ -7221,8 +9257,29 @@ function bindShellEvents() {
         return;
       }
 
+      if (nextView === "proveedores") {
+        await loadProveedores();
+        return;
+      }
+
       if (nextView === "trabajadores" || nextView === "personal") {
         await loadTrabajadores();
+        return;
+      }
+
+      if (nextView === "impuestos") {
+        await loadImpuestos();
+        return;
+      }
+
+      if (nextView === "bancos") {
+        await loadBancos();
+        return;
+      }
+
+      if (nextView === "tipos-pago") {
+        await loadTiposPago();
+        return;
       }
     });
   });
@@ -7274,11 +9331,17 @@ function bindShellEvents() {
   bindAdjustmentEvents();
   bindSucursalEvents();
   bindClienteEvents();
+  bindProveedoresEvents();
   bindTrabajadorEvents();
+  bindBancoEvents();
+  bindTiposPagoEvents();
+  bindImpresorasEvents();
   bindImpuestoEvents();
   bindExchangeRateRegisterEvents();
   bindFacturacionEvents();
   bindCashRegisterEvents();
+  bindCashRegisterCloseEvents();
+  bindComprasEvents();
 
   document.querySelectorAll("[data-role-import-toggle]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -8490,6 +10553,107 @@ function bindClienteEvents() {
   };
 }
 
+function bindProveedoresEvents() {
+  document.querySelector("[data-refresh-proveedores]")?.addEventListener("click", async () => {
+    await loadProveedores();
+  });
+
+  document.querySelector("[data-new-proveedor]")?.addEventListener("click", () => {
+    resetProveedorDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-open-proveedor-lookup]")?.addEventListener("click", () => {
+    const searchField = document.querySelector("[data-proveedor-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  });
+
+  document.querySelector("[data-proveedor-reset]")?.addEventListener("click", () => {
+    resetProveedorDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-proveedor-search]")?.addEventListener("input", (event) => {
+    state.proveedores.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelectorAll("[data-proveedor-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codigo = button.getAttribute("data-proveedor-select") || "";
+      if (!codigo) {
+        return;
+      }
+
+      await loadProveedorForEdit(codigo);
+    });
+  });
+
+  document.querySelectorAll("[data-delete-proveedor]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codigo = button.getAttribute("data-delete-proveedor") || "";
+      if (!codigo) {
+        return;
+      }
+
+      await deleteProveedor(codigo);
+    });
+  });
+
+  const proveedorForm = document.getElementById("proveedor-form");
+  if (proveedorForm) {
+    proveedorForm.addEventListener("input", () => {
+      captureProveedorDraft();
+    });
+
+    proveedorForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureProveedorDraft();
+      await saveProveedor();
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "proveedores" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "b"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.proveedores.saving || state.proveedores.deleting) {
+      return;
+    }
+
+    if (key === "c") {
+      resetProveedorDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      captureProveedorDraft();
+      await saveProveedor();
+      return;
+    }
+
+    const searchField = document.querySelector("[data-proveedor-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  };
+}
 function bindImpuestoEvents() {
   document.querySelector("[data-new-impuesto]")?.addEventListener("click", () => {
     resetImpuestoDraft();
@@ -8607,6 +10771,320 @@ function bindImpuestoEvents() {
   };
 }
 
+function bindBancoEvents() {
+  document.querySelector("[data-refresh-bancos]")?.addEventListener("click", async () => {
+    await loadBancos();
+  });
+
+  document.querySelector("[data-new-banco]")?.addEventListener("click", () => {
+    resetBancoDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-delete-current-banco]")?.addEventListener("click", async () => {
+    const codigo = state.bancos.draft?.originalCodigo || state.bancos.selectedCodigo;
+    if (!codigo) {
+      return;
+    }
+
+    await deleteBanco(codigo);
+  });
+
+  document.querySelector("[data-banco-search]")?.addEventListener("input", (event) => {
+    state.bancos.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelector("[data-banco-reset]")?.addEventListener("click", () => {
+    state.bancos.search = "";
+    resetBancoDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelectorAll("[data-banco-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codigo = button.getAttribute("data-banco-select") || "";
+      if (!codigo) {
+        return;
+      }
+
+      await loadBancoForEdit(codigo);
+    });
+  });
+
+  document.querySelectorAll("[data-delete-banco]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codigo = button.getAttribute("data-delete-banco") || "";
+      if (!codigo) {
+        return;
+      }
+
+      await deleteBanco(codigo);
+    });
+  });
+
+  const bancoForm = document.getElementById("banco-form");
+  if (bancoForm instanceof HTMLFormElement) {
+    bancoForm.addEventListener("input", () => {
+      captureBancoDraft();
+    });
+
+    bancoForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureBancoDraft();
+      await saveBanco();
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "bancos" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "b"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.bancos.saving || state.bancos.deleting) {
+      return;
+    }
+
+    if (key === "c") {
+      resetBancoDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      captureBancoDraft();
+      await saveBanco();
+      return;
+    }
+
+    const searchField = document.querySelector("[data-banco-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  };
+}
+
+function bindTiposPagoEvents() {
+  document.querySelector("[data-refresh-tipos-pago]")?.addEventListener("click", async () => {
+    await loadTiposPago();
+  });
+
+  document.querySelector("[data-new-tipo-pago]")?.addEventListener("click", () => {
+    resetTipoPagoDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-delete-current-tipo-pago]")?.addEventListener("click", async () => {
+    const codigo = state.tiposPago.draft?.originalCodigo || state.tiposPago.selectedCodigo;
+    if (!codigo) {
+      return;
+    }
+
+    await deleteTipoPago(codigo);
+  });
+
+  document.querySelector("[data-tipo-pago-search]")?.addEventListener("input", (event) => {
+    state.tiposPago.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelector("[data-tipo-pago-reset]")?.addEventListener("click", () => {
+    state.tiposPago.search = "";
+    resetTipoPagoDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelectorAll("[data-tipo-pago-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codigo = button.getAttribute("data-tipo-pago-select") || "";
+      if (!codigo) {
+        return;
+      }
+
+      await loadTipoPagoForEdit(codigo);
+    });
+  });
+
+  document.querySelectorAll("[data-delete-tipo-pago]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codigo = button.getAttribute("data-delete-tipo-pago") || "";
+      if (!codigo) {
+        return;
+      }
+
+      await deleteTipoPago(codigo);
+    });
+  });
+
+  const tipoPagoForm = document.getElementById("tipo-pago-form");
+  if (tipoPagoForm instanceof HTMLFormElement) {
+    tipoPagoForm.addEventListener("input", () => {
+      captureTipoPagoDraft();
+    });
+
+    tipoPagoForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureTipoPagoDraft();
+      await saveTipoPago();
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "tipos-pago" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "b"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.tiposPago.saving || state.tiposPago.deleting) {
+      return;
+    }
+
+    if (key === "c") {
+      resetTipoPagoDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      captureTipoPagoDraft();
+      await saveTipoPago();
+      return;
+    }
+
+    const searchField = document.querySelector("[data-tipo-pago-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  };
+}
+function bindImpresorasEvents() {
+  document.querySelector("[data-refresh-impresoras]")?.addEventListener("click", async () => {
+    await loadImpresoras();
+  });
+
+  document.querySelector("[data-new-impresora]")?.addEventListener("click", () => {
+    resetImpresoraDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-delete-current-impresora]")?.addEventListener("click", async () => {
+    const id = state.impresoras.draft?.originalId || state.impresoras.selectedId;
+    if (!id) {
+      return;
+    }
+
+    await deleteImpresora(id);
+  });
+
+  document.querySelector("[data-impresora-search]")?.addEventListener("input", (event) => {
+    state.impresoras.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelector("[data-impresora-reset]")?.addEventListener("click", () => {
+    state.impresoras.search = "";
+    resetImpresoraDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelectorAll("[data-impresora-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const id = button.getAttribute("data-impresora-select") || "";
+      if (!id) {
+        return;
+      }
+
+      await loadImpresoraForEdit(id);
+    });
+  });
+
+  document.querySelectorAll("[data-delete-impresora]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const id = button.getAttribute("data-delete-impresora") || "";
+      if (!id) {
+        return;
+      }
+
+      await deleteImpresora(id);
+    });
+  });
+
+  const impresoraForm = document.getElementById("impresora-form");
+  if (impresoraForm instanceof HTMLFormElement) {
+    impresoraForm.addEventListener("input", () => {
+      captureImpresoraDraft();
+    });
+
+    impresoraForm.addEventListener("change", () => {
+      captureImpresoraDraft();
+    });
+
+    impresoraForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureImpresoraDraft();
+      await saveImpresora();
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "impresoras" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "b"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.impresoras.saving || state.impresoras.deleting) {
+      return;
+    }
+
+    if (key === "c") {
+      resetImpresoraDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      captureImpresoraDraft();
+      await saveImpresora();
+      return;
+    }
+
+    const searchField = document.querySelector("[data-impresora-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  };
+}
 function bindExchangeRateRegisterEvents() {
   document.querySelector("[data-exchange-rate-cancel]")?.addEventListener("click", () => {
     resetExchangeRateRegisterDraft();
@@ -8793,7 +11271,8 @@ function bindFacturacionEvents() {
     render();
 
     try {
-      const payload = buildFacturacionSalePayload(draft, state.facturacion.paymentModal?.rows, state.facturacion.exchangeRate);
+      const paymentRowsSnapshot = normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows);
+      const payload = buildFacturacionSalePayload(draft, paymentRowsSnapshot, state.facturacion.exchangeRate);
       const response = await apiFetch("/facturacion/sales", {
         method: "POST",
         body: payload,
@@ -8824,7 +11303,35 @@ function bindFacturacionEvents() {
       state.facturacion.frozenLookup = createEmptyFacturacionFrozenLookupState();
       state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
       state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
-      setFlash(`Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""}.`, "success");
+
+      let flashType = "success";
+      let successMessage = venta.emisionContingencia
+        ? `Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""} como emision de contingencia.`
+        : `Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""}.`;
+
+      try {
+        const printDraft = normalizeFacturacionDraft({
+          ...draft,
+          emisionContingencia: Boolean(venta.emisionContingencia),
+        });
+        const printSummary = calculateFacturacionSummary(
+          printDraft.items,
+          getActiveFacturacionTax(),
+          state.facturacion.exchangeRate,
+          printDraft,
+        );
+        const printResult = await printFacturacionInvoice(venta, printDraft, paymentRowsSnapshot, printSummary);
+        const printedOn = String(printResult?.printerName || "").trim();
+        if (printedOn) {
+          successMessage += ` Impresa en ${printedOn}.`;
+        }
+      } catch (printError) {
+        console.error(printError);
+        flashType = "error";
+        successMessage += ` La venta se guardo, pero no se pudo imprimir: ${extractErrorMessage(printError)}.`;
+      }
+
+      setFlash(successMessage, flashType);
     } catch (error) {
       console.error(error);
       state.facturacion.savingSale = false;
@@ -8965,6 +11472,11 @@ function bindFacturacionEvents() {
     await resolveFacturacionTrabajadorFromField();
   });
 
+  document.querySelector("[data-facturacion-contingencia]")?.addEventListener("change", () => {
+    captureFacturacionDraft();
+    clearFlash();
+    render();
+  });
   document.querySelector("[data-facturacion-open-vendedor-lookup]")?.addEventListener("click", async () => {
     captureFacturacionDraft();
     await openFacturacionLookupModal("trabajadores");
@@ -9191,6 +11703,300 @@ function bindFacturacionEvents() {
   }
 }
 
+function bindComprasEvents() {
+  document.querySelector("[data-refresh-compras]")?.addEventListener("click", async () => {
+    await loadCompras();
+  });
+
+  document.querySelector("[data-new-compra]")?.addEventListener("click", async () => {
+    resetCompraDraft();
+    clearFlash();
+    render();
+    await openCompraArticleLookupModal("");
+  });
+
+  document.querySelector("[data-open-compra-lookup]")?.addEventListener("click", async () => {
+    await openCompraArticleLookupModal(state.compras.articleLookup?.search || "");
+  });
+
+  document.querySelector("[data-delete-compra-current]")?.addEventListener("click", async () => {
+    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+    if (!draft.originalDocumento || !draft.originalProveedor) {
+      return;
+    }
+
+    await deleteCompra(draft.originalDocumento, draft.originalProveedor);
+  });
+
+  document.querySelector("[data-approve-compra-current]")?.addEventListener("click", async () => {
+    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+    if (!draft.originalDocumento || !draft.originalProveedor) {
+      return;
+    }
+
+    await approveCompra(draft.originalDocumento, draft.originalProveedor);
+  });
+
+  document.querySelector("[data-compra-search]")?.addEventListener("input", (event) => {
+    state.compras.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelectorAll("[data-compra-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const documento = button.getAttribute("data-compra-select") || "";
+      const proveedor = button.getAttribute("data-compra-proveedor") || "";
+      if (!documento || !proveedor) {
+        return;
+      }
+
+      await loadCompraForEdit(documento, proveedor);
+    });
+  });
+
+  document.querySelectorAll("[data-compra-remove-item]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number.parseInt(button.getAttribute("data-compra-remove-item") || "", 10);
+      if (!Number.isInteger(index) || index < 0) {
+        return;
+      }
+
+      removeCompraDraftItem(index);
+      clearFlash();
+      render();
+    });
+  });
+
+  const comprasForm = document.getElementById("compras-form");
+  if (comprasForm) {
+    comprasForm.addEventListener("input", () => {
+      captureCompraDraft();
+      syncCompraComputedFields(comprasForm);
+    });
+
+    comprasForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureCompraDraft();
+      await saveCompra();
+    });
+  }
+
+  document.querySelectorAll("[data-compra-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeCompraArticleLookupModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-compra-lookup-refresh]")?.addEventListener("click", async () => {
+    await loadCompraArticleLookup(state.compras.articleLookup?.search || "");
+  });
+
+  document.querySelector("[data-compra-lookup-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    const search = readFormFieldValue(form, "buscar", state.compras.articleLookup?.search || "");
+    await loadCompraArticleLookup(search);
+  });
+
+  document.querySelectorAll("[data-compra-lookup-select]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const index = Number.parseInt(row.getAttribute("data-compra-lookup-select") || "", 10);
+      if (!Number.isInteger(index) || index < 0) {
+        return;
+      }
+
+      const lookup = state.compras.articleLookup || createEmptyCompraArticleLookupState();
+      const selected = (lookup.items || [])[index];
+      if (!selected) {
+        return;
+      }
+
+      addArticleToCompraDraft(selected);
+      render();
+    });
+  });
+
+  const compraLookupDialog = document.querySelector("[data-compra-lookup-dialog]");
+  if (compraLookupDialog instanceof HTMLElement) {
+    queueMicrotask(() => {
+      compraLookupDialog.focus();
+    });
+
+    compraLookupDialog.addEventListener("keydown", (event) => {
+      const lookup = state.compras.articleLookup || createEmptyCompraArticleLookupState();
+      const items = Array.isArray(lookup.items) ? lookup.items : [];
+      const target = event.target;
+      const typingTarget =
+        target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+
+      if (typingTarget && event.key !== "Escape") {
+        return;
+      }
+
+      if (!lookup.open || !items.length) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeCompraArticleLookupModal();
+          render();
+        }
+        return;
+      }
+
+      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0 ? lookup.activeIndex : 0;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.compras.articleLookup = {
+          ...lookup,
+          activeIndex: (currentIndex + 1) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.compras.articleLookup = {
+          ...lookup,
+          activeIndex: (currentIndex - 1 + items.length) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const selected = items[currentIndex];
+        if (!selected) {
+          return;
+        }
+
+        addArticleToCompraDraft(selected);
+        render();
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCompraArticleLookupModal();
+        render();
+      }
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "compras" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "a"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.compras.saving || state.compras.deleting || state.compras.approving) {
+      return;
+    }
+
+    if (key === "c") {
+      resetCompraDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      captureCompraDraft();
+      await saveCompra();
+      return;
+    }
+
+    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+    if (!draft.originalDocumento || !draft.originalProveedor) {
+      return;
+    }
+
+    await approveCompra(draft.originalDocumento, draft.originalProveedor);
+  };
+}
+
+function bindCashRegisterCloseEvents() {
+  document.querySelector("[data-refresh-cajas-close]")?.addEventListener("click", async () => {
+    await loadCashRegisters();
+  });
+
+  document.querySelector("[data-open-caja-close-lookup]")?.addEventListener("click", () => {
+    const searchField = document.querySelector("[data-caja-close-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  });
+
+  document.querySelector("[data-caja-close-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-caja-close-reset]")?.addEventListener("click", () => {
+    const firstOpenItem = getCloseableCashRegisters()[0] || null;
+    state.cashRegisters.selectedKey = firstOpenItem ? buildCashRegisterKey(firstOpenItem.serie, firstOpenItem.fecha) : "";
+    state.cashRegisters.draft = firstOpenItem
+      ? buildCashRegisterCloseDraft(firstOpenItem, state.cashRegisters.draft)
+      : createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-caja-close-search]")?.addEventListener("input", (event) => {
+    state.cashRegisters.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelectorAll("[data-caja-close-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const serie = button.getAttribute("data-caja-close-select") || "";
+      const fecha = button.getAttribute("data-caja-close-fecha") || "";
+      const item = getCloseableCashRegisters().find(
+        (entry) => buildCashRegisterKey(entry.serie, entry.fecha) === buildCashRegisterKey(serie, fecha),
+      );
+      if (!item) {
+        return;
+      }
+
+      state.cashRegisters.selectedKey = buildCashRegisterKey(item.serie, item.fecha);
+      state.cashRegisters.draft = buildCashRegisterCloseDraft(item, state.cashRegisters.draft);
+      clearFlash();
+      render();
+    });
+  });
+
+  const submitClose = async (event) => {
+    event?.preventDefault?.();
+    const form = document.getElementById("caja-close-form");
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    const draft = readCashRegisterDraft(form);
+    state.cashRegisters.draft = draft;
+    await closeCashRegister(draft.originalSerie || draft.serie, draft.originalFecha || draft.fecha, draft.horaCierre);
+  };
+
+  document.querySelector("[data-close-caja]")?.addEventListener("click", submitClose);
+  document.getElementById("caja-close-form")?.addEventListener("submit", submitClose);
+}
 function bindCashRegisterEvents() {
   document.querySelector("[data-refresh-cajas]")?.addEventListener("click", async () => {
     await loadCashRegisters();
@@ -9231,10 +12037,23 @@ function bindCashRegisterEvents() {
     render();
   });
 
-  document.querySelector("[data-caja-reset]")?.addEventListener("click", () => {
+    document.querySelector("[data-caja-reset]")?.addEventListener("click", () => {
     resetCashRegisterDraft();
     clearFlash();
     render();
+  });
+
+  document.querySelector("[data-refresh-desktop-printers]")?.addEventListener("click", async () => {
+    await loadDesktopPrinters();
+
+    const currentDraft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+    if (!String(currentDraft.nombreImpresora || "").trim()) {
+      state.cashRegisters.draft = {
+        ...currentDraft,
+        nombreImpresora: getDefaultDesktopPrinterName(),
+      };
+      render();
+    }
   });
 
   document.querySelector("[data-caja-search]")?.addEventListener("input", (event) => {
@@ -9504,7 +12323,7 @@ async function deleteCatalogEntry(kind, code) {
 
   const catalogLabel = getCatalogSingularLabel(config.singular);
   const confirmed = window.confirm(
-    `Vas a eliminar ${catalogLabel} con codigo ${normalizedCode}. Esta accion no se puede deshacer. ¿Deseas continuar?`,
+    `Vas a eliminar ${catalogLabel} con codigo ${normalizedCode}. Esta accion no se puede deshacer. Â¿Deseas continuar?`,
   );
 
   if (!confirmed) {
@@ -10232,7 +13051,7 @@ async function approveInboundDevReturnDraft(globalId) {
     const returnNumero = Number.parseInt(String(response.returnNumero || ""), 10);
     setFlash(
       Number.isInteger(returnNumero)
-        ? `Borrador aprobado correctamente. La devolución ${returnNumero} ya quedó registrada.`
+        ? `Borrador aprobado correctamente. La devoluciÃ³n ${returnNumero} ya quedÃ³ registrada.`
         : "Borrador aprobado correctamente.",
       "success",
     );
@@ -10343,7 +13162,7 @@ async function loadDevReturnRecordDetail(numero) {
     state.devReturnRecords.detail = response.devolucion || null;
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar la devolución ${numero}: ${extractErrorMessage(error)}`, "error");
+    setFlash(`No se pudo cargar la devoluciÃ³n ${numero}: ${extractErrorMessage(error)}`, "error");
   } finally {
     state.devReturnRecords.loadingDetail = false;
     render();
@@ -10362,7 +13181,7 @@ async function exportDevReturnRecord(numero) {
     state.devReturnRecords.selectedNumero = numero;
     state.devReturnRecords.detail = response.devolucion || state.devReturnRecords.detail;
     await loadDevReturnRecords({ renderAfter: false });
-    setFlash(`Registro de devolución ${numero} exportado correctamente.`, "success");
+    setFlash(`Registro de devoluciÃ³n ${numero} exportado correctamente.`, "success");
   } catch (error) {
     console.error(error);
     setFlash(extractErrorMessage(error), "error");
@@ -10411,7 +13230,7 @@ async function loadInboundDevReturnDetail(numero, codigoEnvia) {
     state.devReturnInbound.detail = response.devolucion || null;
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar la devolución recibida ${numero}: ${extractErrorMessage(error)}`, "error");
+    setFlash(`No se pudo cargar la devoluciÃ³n recibida ${numero}: ${extractErrorMessage(error)}`, "error");
   } finally {
     state.devReturnInbound.loadingDetail = false;
     render();
@@ -10430,7 +13249,7 @@ async function approveInboundDevReturn(numero, codigoEnvia) {
     });
     state.devReturnInbound.detail = response.devolucion || state.devReturnInbound.detail;
     await loadInboundDevReturns({ renderAfter: false });
-    setFlash("Devolución aprobada correctamente. El inventario ya fue cargado en destino.", "success");
+    setFlash("DevoluciÃ³n aprobada correctamente. El inventario ya fue cargado en destino.", "success");
   } catch (error) {
     console.error(error);
     setFlash(extractErrorMessage(error), "error");
@@ -10759,6 +13578,142 @@ async function deleteCliente(codigo) {
   }
 }
 
+async function loadProveedores(options = {}) {
+  const renderAfter = options.renderAfter !== false;
+  state.proveedores.loading = true;
+  state.proveedores.loadingMetadata = true;
+
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const [metadata, response] = await Promise.all([
+      apiFetch("/proveedores/metadata"),
+      apiFetch("/proveedores"),
+    ]);
+
+    state.proveedores.metadata = metadata;
+    state.proveedores.items = Array.isArray(response.proveedores) ? response.proveedores : [];
+
+    if (!state.proveedores.draft?.originalCodigo) {
+      state.proveedores.draft = createEmptyProveedorDraft(metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar los proveedores: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.proveedores.loading = false;
+    state.proveedores.loadingMetadata = false;
+
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadProveedorForEdit(codigo) {
+  if (!codigo) {
+    return;
+  }
+
+  state.proveedores.loading = true;
+  render();
+
+  try {
+    const response = await apiFetch(`/proveedores/${encodeURIComponent(codigo)}`);
+    state.proveedores.selectedCodigo = response.proveedor?.codigo || codigo;
+    state.proveedores.draft = proveedorToDraft(response.proveedor, state.proveedores.metadata);
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el proveedor: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.proveedores.loading = false;
+    render();
+  }
+}
+
+async function saveProveedor() {
+  const draft = state.proveedores.draft || createEmptyProveedorDraft(state.proveedores.metadata);
+  const validationError = validateProveedorDraft(draft);
+  const isEditing = Boolean(draft.originalCodigo);
+  if (validationError) {
+    setFlash(validationError, "error");
+    render();
+    return;
+  }
+
+  state.proveedores.saving = true;
+  render();
+
+  try {
+    const payload = buildProveedorPayload(draft);
+    const response = draft.originalCodigo
+      ? await apiFetch(`/proveedores/${encodeURIComponent(draft.originalCodigo)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/proveedores", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.proveedores.selectedCodigo = response.proveedor?.codigo || draft.originalCodigo || draft.codigo;
+    await loadProveedores({ renderAfter: false });
+
+    if (isEditing) {
+      state.proveedores.draft = proveedorToDraft(response.proveedor, state.proveedores.metadata);
+      setFlash("Proveedor actualizado correctamente.", "success");
+    } else {
+      resetProveedorDraft({ blank: true });
+      setFlash("Proveedor guardado correctamente.", "success");
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.proveedores.saving = false;
+    render();
+  }
+}
+
+async function deleteProveedor(codigo) {
+  const normalizedCodigo = String(codigo || "").trim().toUpperCase();
+  if (!normalizedCodigo) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Vas a eliminar el proveedor ${normalizedCodigo}. Esta accion no se puede deshacer. Deseas continuar?`,
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  state.proveedores.deleting = true;
+  render();
+
+  try {
+    await apiFetch(`/proveedores/${encodeURIComponent(normalizedCodigo)}`, {
+      method: "DELETE",
+    });
+
+    if (String(state.proveedores.selectedCodigo || "") === normalizedCodigo) {
+      resetProveedorDraft();
+    }
+
+    await loadProveedores({ renderAfter: false });
+    setFlash("Proveedor eliminado correctamente.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.proveedores.deleting = false;
+    render();
+  }
+}
 async function loadTrabajadores(options = {}) {
   const { renderAfter = true } = options;
   state.trabajadores.loading = true;
@@ -10859,7 +13814,7 @@ async function deleteTrabajador(cedula) {
   }
 
   const confirmed = window.confirm(
-    `Vas a eliminar al trabajador ${normalizedCedula}. Esta accion no se puede deshacer. ¿Deseas continuar?`,
+    `Vas a eliminar al trabajador ${normalizedCedula}. Esta accion no se puede deshacer. Â¿Deseas continuar?`,
   );
 
   if (!confirmed) {
@@ -10947,6 +13902,417 @@ async function saveImpuesto() {
   }
 }
 
+async function loadBancos(options = {}) {
+  const { renderAfter = true } = options;
+  state.bancos.loading = true;
+  state.bancos.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const [metadata, response] = await Promise.all([
+      apiFetch("/bancos/metadata"),
+      apiFetch("/bancos"),
+    ]);
+
+    state.bancos.metadata = metadata;
+    state.bancos.items = Array.isArray(response.bancos) ? response.bancos : [];
+
+    if (!state.bancos.draft?.originalCodigo) {
+      state.bancos.draft = createEmptyBancoDraft(metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar los bancos: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.bancos.loading = false;
+    state.bancos.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadBancoForEdit(codigo) {
+  if (!codigo) {
+    return;
+  }
+
+  state.bancos.loading = true;
+  render();
+
+  try {
+    const response = await apiFetch(`/bancos/${encodeURIComponent(codigo)}`);
+    state.bancos.selectedCodigo = response.banco?.codigo || codigo;
+    state.bancos.draft = bancoToDraft(response.banco, state.bancos.metadata);
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el banco: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.bancos.loading = false;
+    render();
+  }
+}
+
+async function saveBanco() {
+  const draft = state.bancos.draft || createEmptyBancoDraft(state.bancos.metadata);
+  const validationMessage = validateBancoDraft(draft);
+  const isEditing = Boolean(draft.originalCodigo);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.bancos.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildBancoPayload(draft);
+    const response = draft.originalCodigo
+      ? await apiFetch(`/bancos/${encodeURIComponent(draft.originalCodigo)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/bancos", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.bancos.selectedCodigo = response.banco?.codigo || draft.originalCodigo || draft.codigo;
+    await loadBancos({ renderAfter: false });
+
+    if (isEditing) {
+      state.bancos.draft = bancoToDraft(response.banco, state.bancos.metadata);
+      setFlash("Banco actualizado correctamente.", "success");
+    } else {
+      resetBancoDraft();
+      setFlash("Banco guardado correctamente.", "success");
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.bancos.saving = false;
+    render();
+  }
+}
+
+async function deleteBanco(codigo) {
+  const normalizedCodigo = String(codigo || "").trim().toUpperCase();
+  if (!normalizedCodigo) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Vas a eliminar el banco ${normalizedCodigo}. Esta accion no se puede deshacer. Deseas continuar?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  state.bancos.deleting = true;
+  render();
+
+  try {
+    await apiFetch(`/bancos/${encodeURIComponent(normalizedCodigo)}`, {
+      method: "DELETE",
+    });
+
+    if (String(state.bancos.selectedCodigo || "") === normalizedCodigo) {
+      resetBancoDraft();
+    }
+
+    await loadBancos({ renderAfter: false });
+    setFlash("Banco eliminado correctamente.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.bancos.deleting = false;
+    render();
+  }
+}
+
+async function loadTiposPago(options = {}) {
+  const { renderAfter = true } = options;
+  state.tiposPago.loading = true;
+  state.tiposPago.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const [metadata, response] = await Promise.all([
+      apiFetch("/tipos-pago/metadata"),
+      apiFetch("/tipos-pago"),
+    ]);
+
+    state.tiposPago.metadata = metadata;
+    state.tiposPago.items = Array.isArray(response.tiposPago) ? response.tiposPago : [];
+
+    if (!state.tiposPago.draft?.originalCodigo) {
+      state.tiposPago.draft = createEmptyTipoPagoDraft(metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar los tipos de pago: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.tiposPago.loading = false;
+    state.tiposPago.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadTipoPagoForEdit(codigo) {
+  if (!codigo) {
+    return;
+  }
+
+  state.tiposPago.loading = true;
+  render();
+
+  try {
+    const response = await apiFetch(`/tipos-pago/${encodeURIComponent(codigo)}`);
+    state.tiposPago.selectedCodigo = String(response.tipoPago?.codigo || codigo);
+    state.tiposPago.draft = tipoPagoToDraft(response.tipoPago, state.tiposPago.metadata);
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar el tipo de pago: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.tiposPago.loading = false;
+    render();
+  }
+}
+
+async function saveTipoPago() {
+  const draft = state.tiposPago.draft || createEmptyTipoPagoDraft(state.tiposPago.metadata);
+  const validationMessage = validateTipoPagoDraft(draft);
+  const isEditing = Boolean(draft.originalCodigo);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.tiposPago.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildTipoPagoPayload(draft);
+    const response = draft.originalCodigo
+      ? await apiFetch(`/tipos-pago/${encodeURIComponent(draft.originalCodigo)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/tipos-pago", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.tiposPago.selectedCodigo = String(response.tipoPago?.codigo || draft.originalCodigo || draft.codigo);
+    await loadTiposPago({ renderAfter: false });
+
+    if (isEditing) {
+      state.tiposPago.draft = tipoPagoToDraft(response.tipoPago, state.tiposPago.metadata);
+      setFlash("Tipo de pago actualizado correctamente.", "success");
+    } else {
+      resetTipoPagoDraft();
+      setFlash("Tipo de pago guardado correctamente.", "success");
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.tiposPago.saving = false;
+    render();
+  }
+}
+
+async function deleteTipoPago(codigo) {
+  const normalizedCodigo = Number.parseInt(String(codigo || "").trim(), 10);
+  if (!Number.isInteger(normalizedCodigo) || normalizedCodigo <= 0) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Vas a eliminar el tipo de pago ${normalizedCodigo}. Esta accion no se puede deshacer. Deseas continuar?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  state.tiposPago.deleting = true;
+  render();
+
+  try {
+    await apiFetch(`/tipos-pago/${encodeURIComponent(String(normalizedCodigo))}`, {
+      method: "DELETE",
+    });
+
+    if (String(state.tiposPago.selectedCodigo || "") === String(normalizedCodigo)) {
+      resetTipoPagoDraft();
+    }
+
+    await loadTiposPago({ renderAfter: false });
+    setFlash("Tipo de pago eliminado correctamente.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.tiposPago.deleting = false;
+    render();
+  }
+}
+async function loadImpresoras(options = {}) {
+  const { renderAfter = true } = options;
+  state.impresoras.loading = true;
+  state.impresoras.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const loaders = [
+      apiFetch("/impresoras/metadata"),
+      apiFetch("/impresoras"),
+    ];
+
+    if (desktopClientSupportsPrinting()) {
+      loaders.push(loadDesktopPrinters({ renderAfter: false, silent: true }));
+    }
+
+    const [metadata, response] = await Promise.all(loaders);
+
+    state.impresoras.metadata = metadata;
+    state.impresoras.items = Array.isArray(response.impresoras) ? response.impresoras : [];
+    if (!state.impresoras.draft?.originalId) {
+      state.impresoras.draft = createEmptyImpresoraDraft(metadata);
+      if (!String(state.impresoras.draft?.nombreImpresora || "").trim()) {
+        state.impresoras.draft.nombreImpresora = getDefaultDesktopPrinterName();
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar las impresoras: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.impresoras.loading = false;
+    state.impresoras.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadImpresoraForEdit(id) {
+  if (!id && id !== 0) {
+    return;
+  }
+
+  state.impresoras.loading = true;
+  render();
+
+  try {
+    const response = await apiFetch(`/impresoras/${encodeURIComponent(String(id))}`);
+    state.impresoras.selectedId = String(response.impresora?.id ?? id);
+    state.impresoras.draft = impresoraToDraft(response.impresora, state.impresoras.metadata);
+    clearFlash();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la impresora: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.impresoras.loading = false;
+    render();
+  }
+}
+
+async function saveImpresora() {
+  const draft = state.impresoras.draft || createEmptyImpresoraDraft(state.impresoras.metadata);
+  const validationMessage = validateImpresoraDraft(draft);
+  const isEditing = Boolean(draft.originalId || draft.originalId === 0 || draft.originalId === "0");
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.impresoras.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildImpresoraPayload(draft);
+    const response = draft.originalId || draft.originalId === 0 || draft.originalId === "0"
+      ? await apiFetch(`/impresoras/${encodeURIComponent(String(draft.originalId))}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/impresoras", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.impresoras.selectedId = String(response.impresora?.id ?? draft.originalId ?? draft.id ?? "");
+    await loadImpresoras({ renderAfter: false });
+
+    if (isEditing) {
+      state.impresoras.draft = impresoraToDraft(response.impresora, state.impresoras.metadata);
+      setFlash("Impresora actualizada correctamente.", "success");
+    } else {
+      resetImpresoraDraft();
+      setFlash("Impresora guardada correctamente.", "success");
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.impresoras.saving = false;
+    render();
+  }
+}
+
+async function deleteImpresora(id) {
+  const normalizedId = Number.parseInt(String(id ?? "").trim(), 10);
+  if (!Number.isInteger(normalizedId) || normalizedId < 0) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Vas a eliminar la impresora ${normalizedId}. Esta accion no se puede deshacer. Deseas continuar?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  state.impresoras.deleting = true;
+  render();
+
+  try {
+    await apiFetch(`/impresoras/${encodeURIComponent(String(normalizedId))}`, {
+      method: "DELETE",
+    });
+
+    if (String(state.impresoras.selectedId || "") === String(normalizedId)) {
+      resetImpresoraDraft();
+    }
+
+    await loadImpresoras({ renderAfter: false });
+    setFlash("Impresora eliminada correctamente.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.impresoras.deleting = false;
+    render();
+  }
+}
 async function loadExchangeRateRegister(options = {}) {
   const { renderAfter = true, silent = false } = options;
   state.exchangeRateRegister.loading = true;
@@ -11093,7 +14459,26 @@ async function loadCashRegisters(options = {}) {
     state.cashRegisters.metadata = metadata;
     state.cashRegisters.items = Array.isArray(response.cajas) ? response.cajas : [];
 
-    if (!state.cashRegisters.draft?.originalSerie) {
+    if (desktopClientSupportsPrinting() && !state.desktopPrinting.loading) {
+      await loadDesktopPrinters({ renderAfter: false, silent: true });
+    }
+
+    if (state.currentView === "cierre-caja") {
+      const closeableItems = getCloseableCashRegisters();
+      const currentDraft = state.cashRegisters.draft || createEmptyCashRegisterDraft(metadata);
+      const selectedKey = state.cashRegisters.selectedKey
+        || buildCashRegisterKey(currentDraft.originalSerie || currentDraft.serie, currentDraft.originalFecha || currentDraft.fecha);
+      const selectedItem = closeableItems.find((item) => buildCashRegisterKey(item.serie, item.fecha) === selectedKey);
+      const nextItem = selectedItem || closeableItems[0] || null;
+
+      if (nextItem) {
+        state.cashRegisters.selectedKey = buildCashRegisterKey(nextItem.serie, nextItem.fecha);
+        state.cashRegisters.draft = buildCashRegisterCloseDraft(nextItem, currentDraft);
+      } else {
+        state.cashRegisters.selectedKey = "";
+        state.cashRegisters.draft = createEmptyCashRegisterDraft(metadata);
+      }
+    } else if (!state.cashRegisters.draft?.originalSerie) {
       state.cashRegisters.draft = createEmptyCashRegisterDraft(metadata);
     }
   } catch (error) {
@@ -11173,6 +14558,46 @@ async function saveCashRegister() {
   }
 }
 
+async function closeCashRegister(serie, fecha, horaCierre) {
+  const normalizedSerie = String(serie || "").trim().toUpperCase();
+  const normalizedFecha = toDateInputValue(fecha);
+  const normalizedHoraCierre = String(horaCierre || "").trim() || getCurrentTimeInputValue();
+
+  if (!normalizedSerie || !normalizedFecha) {
+    setFlash("Debes seleccionar una caja abierta para poder cerrarla.", "error");
+    render();
+    return;
+  }
+
+  const confirmed = window.confirm(`Se cerrara la caja ${normalizedSerie} del ${formatDateOnlyDisplay(normalizedFecha)}. Deseas continuar?`);
+  if (!confirmed) {
+    return;
+  }
+
+  state.cashRegisters.closing = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/cajas/${encodeURIComponent(normalizedSerie)}/${encodeURIComponent(normalizedFecha)}/close`, {
+      method: "PATCH",
+      body: {
+        horaCierre: normalizedHoraCierre,
+      },
+    });
+
+    state.cashRegisters.selectedKey = buildCashRegisterKey(response.caja?.serie, response.caja?.fecha);
+    state.cashRegisters.draft = cashRegisterToDraft(response.caja);
+    await loadCashRegisters({ renderAfter: false });
+    setFlash(`Caja ${response.caja?.serie || normalizedSerie} cerrada correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.cashRegisters.closing = false;
+    render();
+  }
+}
 async function deleteCashRegister(serie, fecha) {
   if (!serie || !fecha) {
     return;
@@ -11202,6 +14627,284 @@ async function deleteCashRegister(serie, fecha) {
     state.cashRegisters.deleting = false;
     render();
   }
+}
+
+async function loadCompras(options = {}) {
+  const { renderAfter = true } = options;
+  state.compras.loading = true;
+  state.compras.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const params = new URLSearchParams();
+    params.set("limit", "100");
+
+    const [metadata, response] = await Promise.all([
+      apiFetch("/compras/metadata"),
+      apiFetch(`/compras?${params.toString()}`),
+    ]);
+
+    state.compras.metadata = metadata;
+    state.compras.items = Array.isArray(response.compras) ? response.compras : [];
+
+    if (!state.compras.draft?.originalDocumento) {
+      state.compras.draft = createEmptyCompraDraft(metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la informacion de compras: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.compras.loading = false;
+    state.compras.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadCompraForEdit(documento, proveedor) {
+  if (!documento || !proveedor) {
+    return;
+  }
+
+  state.compras.loading = true;
+  clearFlash();
+  render();
+
+  try {
+    if (!state.compras.metadata) {
+      await loadCompras({ renderAfter: false });
+    }
+
+    const response = await apiFetch(`/compras/${encodeURIComponent(documento)}/${encodeURIComponent(proveedor)}`);
+    state.compras.selectedKey = buildCompraKey(documento, proveedor);
+    state.compras.draft = compraToDraft(response.compra, state.compras.metadata);
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la compra ${documento}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.compras.loading = false;
+    render();
+  }
+}
+
+async function saveCompra() {
+  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const isEditing = Boolean(draft.originalDocumento && draft.originalProveedor);
+  const validationMessage = validateCompraDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.compras.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildCompraPayload(draft);
+    const response = isEditing
+      ? await apiFetch(`/compras/${encodeURIComponent(draft.originalDocumento)}/${encodeURIComponent(draft.originalProveedor)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/compras", {
+          method: "POST",
+          body: payload,
+        });
+
+    await loadCompras({ renderAfter: false });
+
+    if (isEditing) {
+      state.compras.selectedKey = buildCompraKey(response.compra?.documento, response.compra?.proveedor);
+      state.compras.draft = compraToDraft(response.compra, state.compras.metadata);
+    } else {
+      resetCompraDraft();
+    }
+
+    setFlash(
+      isEditing
+        ? `Compra ${response.compra?.documento || draft.originalDocumento} actualizada correctamente.`
+        : `Compra ${response.compra?.documento || ""} guardada correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.compras.saving = false;
+    render();
+  }
+}
+
+async function approveCompra(documento, proveedor) {
+  if (!documento || !proveedor) {
+    return;
+  }
+
+  state.compras.approving = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/compras/${encodeURIComponent(documento)}/${encodeURIComponent(proveedor)}/approve`, {
+      method: "PATCH",
+      body: {},
+    });
+
+    state.compras.selectedKey = buildCompraKey(response.compra?.documento, response.compra?.proveedor);
+    state.compras.draft = compraToDraft(response.compra, state.compras.metadata);
+    await loadCompras({ renderAfter: false });
+    setFlash(`Compra ${response.compra?.documento || documento} aprobada correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.compras.approving = false;
+    render();
+  }
+}
+
+async function deleteCompra(documento, proveedor) {
+  if (!documento || !proveedor) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Se eliminara la compra ${documento} del proveedor ${proveedor}. Deseas continuar?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  state.compras.deleting = true;
+  clearFlash();
+  render();
+
+  try {
+    await apiFetch(`/compras/${encodeURIComponent(documento)}/${encodeURIComponent(proveedor)}`, {
+      method: "DELETE",
+    });
+
+    resetCompraDraft();
+    await loadCompras({ renderAfter: false });
+    setFlash(`Compra ${documento} eliminada correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.compras.deleting = false;
+    render();
+  }
+}
+
+async function openCompraArticleLookupModal(search = "") {
+  await loadCompraArticleLookup(search);
+}
+
+async function loadCompraArticleLookup(search = "") {
+  const nextSearch = String(search || "").trim();
+  state.compras.articleLookup = {
+    ...(state.compras.articleLookup || createEmptyCompraArticleLookupState()),
+    open: true,
+    loading: true,
+    search: nextSearch,
+    items: [],
+    activeIndex: -1,
+  };
+  render();
+
+  try {
+    const params = new URLSearchParams();
+    params.set("limit", "50");
+    params.set("status", "activo");
+    if (nextSearch) {
+      params.set("buscar", nextSearch);
+    }
+
+    const response = await apiFetch(`/inventory?${params.toString()}`);
+    const items = Array.isArray(response.data) ? response.data : [];
+
+    state.compras.articleLookup = {
+      open: true,
+      loading: false,
+      search: nextSearch,
+      items,
+      activeIndex: items.length ? 0 : -1,
+    };
+  } catch (error) {
+    console.error(error);
+    state.compras.articleLookup = {
+      open: true,
+      loading: false,
+      search: nextSearch,
+      items: [],
+      activeIndex: -1,
+    };
+    setFlash(`No se pudo consultar el inventario: ${extractErrorMessage(error)}`, "error");
+  }
+
+  render();
+}
+
+function closeCompraArticleLookupModal() {
+  state.compras.articleLookup = createEmptyCompraArticleLookupState();
+}
+
+function addArticleToCompraDraft(article) {
+  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const codigoBarra = String(article?.codigoBarra || "").trim().toUpperCase();
+  if (!codigoBarra) {
+    return;
+  }
+
+  const existingItems = Array.isArray(draft.items) ? [...draft.items] : [];
+  const alreadyAdded = existingItems.some(
+    (item) => String(item?.codigoBarra || "").trim().toUpperCase() === codigoBarra,
+  );
+
+  if (alreadyAdded) {
+    closeCompraArticleLookupModal();
+    setFlash(`El articulo ${codigoBarra} ya esta agregado en la compra actual.`, "info");
+    return;
+  }
+
+  existingItems.push({
+    ...createEmptyCompraDraftItem({
+      codigoBarra: article.codigoBarra || codigoBarra,
+      referencia: article.referencia || "",
+      marca: article.general?.marca?.nombre || article.general?.marca?.codigo || "",
+      nombre: article.general?.nombre || article.nombre || "",
+      costoUnitario: article.inventario?.costos?.dolar || "0.00",
+    }),
+  });
+
+  state.compras.draft = {
+    ...draft,
+    items: existingItems,
+    totalMercancia: formatCompraAmountInput(computeCompraDraftTotal(existingItems)),
+  };
+
+  closeCompraArticleLookupModal();
+  clearFlash();
+}
+
+function removeCompraDraftItem(index) {
+  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const items = Array.isArray(draft.items) ? [...draft.items] : [];
+  if (!Number.isInteger(index) || index < 0 || index >= items.length) {
+    return;
+  }
+
+  items.splice(index, 1);
+  state.compras.draft = {
+    ...draft,
+    items,
+    totalMercancia: formatCompraAmountInput(computeCompraDraftTotal(items)),
+  };
 }
 
 async function openFacturacionLookupModal(type) {
@@ -11682,7 +15385,8 @@ async function saveArticle() {
     if (isEditing) {
       setFlash(`Articulo ${savedCode} actualizado correctamente.`, "success");
     } else {
-      resetArticleForm();
+      await loadCreationMetadata({ renderAfter: false });
+      resetArticleForm({ blank: true });
       setFlash(`Articulo ${savedCode} creado correctamente.`, "success");
     }
   } catch (error) {
@@ -12522,6 +16226,142 @@ function clienteToDraft(item, metadata = state.clientes?.metadata) {
   };
 }
 
+function resetProveedorDraft(options = {}) {
+  const { blank = false } = options;
+  state.proveedores.selectedCodigo = "";
+  state.proveedores.draft = blank
+    ? createBlankProveedorDraft()
+    : createEmptyProveedorDraft(state.proveedores.metadata);
+}
+
+function createBlankProveedorDraft() {
+  return {
+    originalCodigo: "",
+    codigo: "",
+    tipo: "",
+    nombre: "",
+    contacto: "",
+    fechaIngreso: "",
+    codigoPostal: "",
+    telefono: "",
+    fax: "",
+    direccion: "",
+    pais: "",
+    estado: "",
+    ciudad: "",
+    status: "",
+  };
+}
+
+function createEmptyProveedorDraft(metadata) {
+  const defaults = metadata?.defaults || {};
+  return {
+    originalCodigo: "",
+    codigo: defaults.codigo || "",
+    tipo: defaults.tipo ? String(defaults.tipo) : "",
+    nombre: "",
+    contacto: "",
+    fechaIngreso: defaults.fechaIngreso ? toDateInputValue(defaults.fechaIngreso) : toDateInputValue(new Date()),
+    codigoPostal: "",
+    telefono: "",
+    fax: "",
+    direccion: "",
+    pais: defaults.pais || "",
+    estado: "",
+    ciudad: "",
+    status: String(defaults.status ?? 1),
+  };
+}
+
+function captureProveedorDraft() {
+  const form = document.getElementById("proveedor-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  state.proveedores.draft = readProveedorDraft(form);
+}
+
+function readProveedorDraft(form) {
+  const currentDraft = state.proveedores.draft || createEmptyProveedorDraft(state.proveedores.metadata);
+  return {
+    originalCodigo: currentDraft.originalCodigo || "",
+    codigo: currentDraft.originalCodigo || readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
+    tipo: readFormFieldValue(form, "tipo", currentDraft.tipo || ""),
+    nombre: readFormFieldValue(form, "nombre", currentDraft.nombre || ""),
+    contacto: readFormFieldValue(form, "contacto", currentDraft.contacto || ""),
+    fechaIngreso: readFormFieldValue(form, "fechaIngreso", currentDraft.fechaIngreso || toDateInputValue(new Date())),
+    codigoPostal: readFormFieldValue(form, "codigoPostal", currentDraft.codigoPostal || ""),
+    telefono: readFormFieldValue(form, "telefono", currentDraft.telefono || ""),
+    fax: readFormFieldValue(form, "fax", currentDraft.fax || ""),
+    direccion: readFormFieldValue(form, "direccion", currentDraft.direccion || ""),
+    pais: readFormFieldValue(form, "pais", currentDraft.pais || ""),
+    estado: readFormFieldValue(form, "estado", currentDraft.estado || ""),
+    ciudad: readFormFieldValue(form, "ciudad", currentDraft.ciudad || ""),
+    status: readFormFieldValue(form, "status", currentDraft.status || "1"),
+  };
+}
+
+function validateProveedorDraft(draft) {
+  if (!String(draft.codigo || "").trim()) {
+    return "Debes indicar el codigo del proveedor.";
+  }
+
+  if (!String(draft.tipo || "").trim()) {
+    return "Debes indicar el tipo del proveedor.";
+  }
+
+  if (!String(draft.nombre || "").trim()) {
+    return "Debes indicar el nombre del proveedor.";
+  }
+
+  if (!String(draft.fechaIngreso || "").trim()) {
+    return "Debes indicar la fecha de ingreso del proveedor.";
+  }
+
+  return "";
+}
+
+function buildProveedorPayload(draft) {
+  return {
+    codigo: String(draft.codigo || "").trim().toUpperCase(),
+    tipo: Number.parseInt(String(draft.tipo || ""), 10),
+    nombre: String(draft.nombre || "").trim(),
+    contacto: String(draft.contacto || "").trim(),
+    fechaIngreso: new Date(`${draft.fechaIngreso}T00:00:00`).toISOString(),
+    codigoPostal: String(draft.codigoPostal || "").trim(),
+    telefono: String(draft.telefono || "").trim(),
+    fax: String(draft.fax || "").trim(),
+    direccion: String(draft.direccion || "").trim(),
+    pais: String(draft.pais || "").trim(),
+    estado: String(draft.estado || "").trim(),
+    ciudad: String(draft.ciudad || "").trim(),
+    status: Number.parseInt(String(draft.status || "1"), 10) === 0 ? 0 : 1,
+  };
+}
+
+function proveedorToDraft(item, metadata = state.proveedores?.metadata) {
+  if (!item) {
+    return createEmptyProveedorDraft(metadata);
+  }
+
+  return {
+    originalCodigo: item.codigo || "",
+    codigo: item.codigo || "",
+    tipo: item.tipo !== null && item.tipo !== undefined ? String(item.tipo) : "",
+    nombre: item.nombre || "",
+    contacto: item.contacto || "",
+    fechaIngreso: toDateInputValue(item.fechaIngreso || metadata?.defaults?.fechaIngreso || new Date()),
+    codigoPostal: item.codigoPostal || "",
+    telefono: item.telefono || "",
+    fax: item.fax || "",
+    direccion: item.direccion || "",
+    pais: item.pais || metadata?.defaults?.pais || "",
+    estado: item.estado || "",
+    ciudad: item.ciudad || "",
+    status: String(item.status ?? 1),
+  };
+}
 function createEmptyTrabajadorDraft(metadata) {
   const defaults = metadata?.defaults || {};
   return {
@@ -12658,7 +16498,7 @@ function readImpuestoDraft(form) {
 function validateImpuestoDraft(draft) {
   const codigo = Number.parseInt(String(draft.codigo || "0"), 10);
   if (!Number.isInteger(codigo) || codigo <= 0) {
-    return "Debes indicar un código numérico válido para el impuesto.";
+    return "Debes indicar un cÃ³digo numÃ©rico vÃ¡lido para el impuesto.";
   }
 
   if (!String(draft.nombre || "").trim()) {
@@ -12667,7 +16507,7 @@ function validateImpuestoDraft(draft) {
 
   const porcentaje = Number(String(draft.porcentajeImpuesto || "").trim().replace(",", "."));
   if (!Number.isFinite(porcentaje) || porcentaje < 0) {
-    return "Debes indicar un porcentaje válido para el impuesto.";
+    return "Debes indicar un porcentaje vÃ¡lido para el impuesto.";
   }
 
   return "";
@@ -12716,6 +16556,213 @@ function resetImpuestoDraft() {
   state.impuestos.draft = createEmptyImpuestoDraft(state.impuestos.items);
 }
 
+function resetBancoDraft() {
+  state.bancos.selectedCodigo = "";
+  state.bancos.draft = createEmptyBancoDraft(state.bancos.metadata);
+}
+
+function createEmptyBancoDraft(metadata) {
+  const defaults = metadata?.defaults || {};
+  return {
+    originalCodigo: "",
+    codigo: defaults.codigo || "",
+    nombre: "",
+    status: String(defaults.status ?? 1),
+  };
+}
+
+function captureBancoDraft() {
+  const form = document.getElementById("banco-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  state.bancos.draft = readBancoDraft(form);
+}
+
+function readBancoDraft(form) {
+  const currentDraft = state.bancos.draft || createEmptyBancoDraft(state.bancos.metadata);
+  return {
+    originalCodigo: currentDraft.originalCodigo || "",
+    codigo: currentDraft.originalCodigo || readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
+    nombre: readFormFieldValue(form, "nombre", currentDraft.nombre || ""),
+    status: readRadioValue(form, "status", String(currentDraft.status ?? 1)),
+  };
+}
+
+function validateBancoDraft(draft) {
+  if (!String(draft.codigo || "").trim()) {
+    return "Debes indicar el codigo del banco.";
+  }
+
+  if (!String(draft.nombre || "").trim()) {
+    return "Debes indicar el nombre del banco.";
+  }
+
+  return "";
+}
+
+function buildBancoPayload(draft) {
+  return {
+    codigo: String(draft.codigo || "").trim().toUpperCase(),
+    nombre: String(draft.nombre || "").trim(),
+    status: Number.parseInt(String(draft.status || "1"), 10) === 0 ? 0 : 1,
+  };
+}
+
+function bancoToDraft(item, metadata = state.bancos?.metadata) {
+  if (!item) {
+    return createEmptyBancoDraft(metadata);
+  }
+
+  return {
+    originalCodigo: item.codigo || "",
+    codigo: item.codigo || "",
+    nombre: item.nombre || "",
+    status: String(item.status ?? 1),
+  };
+}
+
+function resetTipoPagoDraft() {
+  state.tiposPago.selectedCodigo = "";
+  state.tiposPago.draft = createEmptyTipoPagoDraft(state.tiposPago.metadata);
+}
+
+function createEmptyTipoPagoDraft(metadata) {
+  const defaults = metadata?.defaults || {};
+  return {
+    originalCodigo: "",
+    codigo: toInputValue(defaults.codigo ?? ""),
+    nombre: "",
+    status: String(defaults.status ?? 1),
+  };
+}
+
+function captureTipoPagoDraft() {
+  const form = document.getElementById("tipo-pago-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  state.tiposPago.draft = readTipoPagoDraft(form);
+}
+
+function readTipoPagoDraft(form) {
+  const currentDraft = state.tiposPago.draft || createEmptyTipoPagoDraft(state.tiposPago.metadata);
+  return {
+    originalCodigo: String(currentDraft.originalCodigo || ""),
+    codigo: currentDraft.originalCodigo
+      ? String(currentDraft.originalCodigo)
+      : readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
+    nombre: readFormFieldValue(form, "nombre", currentDraft.nombre || ""),
+    status: readRadioValue(form, "status", String(currentDraft.status ?? 1)),
+  };
+}
+
+function validateTipoPagoDraft(draft) {
+  const codigo = Number.parseInt(String(draft.codigo || "0").trim(), 10);
+  if (!Number.isInteger(codigo) || codigo <= 0) {
+    return "Debes indicar un codigo numerico valido para el tipo de pago.";
+  }
+
+  if (!String(draft.nombre || "").trim()) {
+    return "Debes indicar el nombre del tipo de pago.";
+  }
+
+  return "";
+}
+
+function buildTipoPagoPayload(draft) {
+  return {
+    codigo: Number.parseInt(String(draft.codigo || "0").trim(), 10),
+    nombre: String(draft.nombre || "").trim(),
+    status: Number.parseInt(String(draft.status || "1"), 10) === 0 ? 0 : 1,
+  };
+}
+
+function tipoPagoToDraft(item, metadata = state.tiposPago?.metadata) {
+  if (!item) {
+    return createEmptyTipoPagoDraft(metadata);
+  }
+
+  return {
+    originalCodigo: toInputValue(item.codigo ?? ""),
+    codigo: toInputValue(item.codigo ?? ""),
+    nombre: item.nombre || "",
+    status: String(item.status ?? 1),
+  };
+}
+function resetImpresoraDraft() {
+  state.impresoras.selectedId = "";
+  state.impresoras.draft = createEmptyImpresoraDraft(state.impresoras.metadata);
+  if (!String(state.impresoras.draft?.nombreImpresora || "").trim()) {
+    state.impresoras.draft.nombreImpresora = getDefaultDesktopPrinterName();
+  }
+}
+function createEmptyImpresoraDraft(metadata) {
+  const defaults = metadata?.defaults || {};
+  return {
+    originalId: "",
+    id: toInputValue(defaults.id ?? ""),
+    nombreImpresora: "",
+    status: String(defaults.status ?? 0),
+  };
+}
+
+function captureImpresoraDraft() {
+  const form = document.getElementById("impresora-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  state.impresoras.draft = readImpresoraDraft(form);
+}
+
+function readImpresoraDraft(form) {
+  const currentDraft = state.impresoras.draft || createEmptyImpresoraDraft(state.impresoras.metadata);
+  return {
+    originalId: String(currentDraft.originalId || ""),
+    id: currentDraft.originalId || currentDraft.originalId === 0
+      ? String(currentDraft.originalId)
+      : readFormFieldValue(form, "id", currentDraft.id || ""),
+    nombreImpresora: readFormFieldValue(form, "nombreImpresora", currentDraft.nombreImpresora || ""),
+    status: readRadioValue(form, "status", String(currentDraft.status ?? 0)),
+  };
+}
+
+function validateImpresoraDraft(draft) {
+  const id = Number.parseInt(String(draft.id || "").trim(), 10);
+  if (!Number.isInteger(id) || id < 0) {
+    return "Debes indicar un identificador valido para la impresora.";
+  }
+
+  if (!String(draft.nombreImpresora || "").trim()) {
+    return "Debes seleccionar una impresora detectada.";
+  }
+
+  return "";
+}
+
+function buildImpresoraPayload(draft) {
+  return {
+    id: Number.parseInt(String(draft.id || "0").trim(), 10),
+    nombreImpresora: String(draft.nombreImpresora || "").trim(),
+    status: Number.parseInt(String(draft.status || "0"), 10) === 1 ? 1 : 0,
+  };
+}
+
+function impresoraToDraft(item, metadata = state.impresoras?.metadata) {
+  if (!item) {
+    return createEmptyImpresoraDraft(metadata);
+  }
+
+  return {
+    originalId: toInputValue(item.id ?? ""),
+    id: toInputValue(item.id ?? ""),
+    nombreImpresora: item.nombreImpresora || "",
+    status: String(item.status ?? 0),
+  };
+}
 function createEmptyExchangeRateRegisterDraft() {
   return {
     valorCambio: "",
@@ -14052,10 +18099,10 @@ function formatFacturacionExchangeRateLabel(exchangeRate) {
   const effectiveDate = formatSimpleDateDisplay(exchangeRate?.effectiveDate);
   const manualMayorLabel = rateMayor > 0 ? ` | Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
   return `Tasa manual: ${formatExchangeRateAmount(rate)} | Vigente ${effectiveDate}${manualMayorLabel}`;
-  const mayorLabel = rateMayor > 0 ? ` · Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
-  return `Tasa manual: ${formatExchangeRateAmount(rate)} · Vigente ${effectiveDate}${mayorLabel}`;
+  const mayorLabel = rateMayor > 0 ? ` Â· Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
+  return `Tasa manual: ${formatExchangeRateAmount(rate)} Â· Vigente ${effectiveDate}${mayorLabel}`;
   const provider = String(exchangeRate?.provider || "API externa").trim();
-  return `Tasa BCV USD: ${formatExchangeRateAmount(rate)} Bs/USD · Vigente ${effectiveDate} · Fuente ${provider}`;
+  return `Tasa BCV USD: ${formatExchangeRateAmount(rate)} Bs/USD Â· Vigente ${effectiveDate} Â· Fuente ${provider}`;
 }
 
 function formatSimpleDateDisplay(value) {
@@ -14252,6 +18299,11 @@ function resetCashRegisterDraft() {
   state.cashRegisters.draft = createEmptyCashRegisterDraft(state.cashRegisters.metadata);
 }
 
+function normalizeCashRegisterPrinterDraftValue(value) {
+  const normalized = String(value || "").trim();
+  return normalized.toUpperCase() === "NO APLICA" ? "" : normalized;
+}
+
 function createEmptyCashRegisterDraft(metadata) {
   const defaults = metadata?.defaults || {};
   return {
@@ -14264,6 +18316,7 @@ function createEmptyCashRegisterDraft(metadata) {
     ultimaFactura: toInputValue(defaults.ultimaFactura ?? "0"),
     horaApertura: toInputValue(defaults.horaApertura || ""),
     horaCierre: toInputValue(defaults.horaCierre || ""),
+    nombreImpresora: normalizeCashRegisterPrinterDraftValue(defaults.nombreImpresora || ""),
     status: String(defaults.status ?? 0),
   };
 }
@@ -14290,6 +18343,7 @@ function readCashRegisterDraft(form) {
     ultimaFactura: readFormFieldValue(form, "ultimaFactura", currentDraft.ultimaFactura || "0"),
     horaApertura: readFormFieldValue(form, "horaApertura", currentDraft.horaApertura),
     horaCierre: readFormFieldValue(form, "horaCierre", currentDraft.horaCierre),
+    nombreImpresora: readFormFieldValue(form, "nombreImpresora", currentDraft.nombreImpresora || ""),
     status: readFormFieldValue(form, "status", currentDraft.status || "0"),
   };
 }
@@ -14334,6 +18388,7 @@ function buildCashRegisterPayload(draft) {
     ultimaFactura: String(draft.ultimaFactura || "").trim() || undefined,
     horaApertura: String(draft.horaApertura || "").trim() || undefined,
     horaCierre: String(draft.horaCierre || "").trim() || undefined,
+    nombreImpresora: normalizeCashRegisterPrinterDraftValue(draft.nombreImpresora) || "NO APLICA",
   };
 }
 
@@ -14348,6 +18403,7 @@ function cashRegisterToDraft(item) {
     ultimaFactura: toInputValue(item?.ultimaFactura ?? "0"),
     horaApertura: toInputValue(item?.horaApertura || ""),
     horaCierre: toInputValue(item?.horaCierre || ""),
+    nombreImpresora: normalizeCashRegisterPrinterDraftValue(item?.nombreImpresora || ""),
     status: String(item?.status ?? 0),
   };
 }
@@ -14356,12 +18412,290 @@ function buildCashRegisterKey(serie, fecha) {
   return `${String(serie || "").trim().toUpperCase()}::${toDateInputValue(fecha)}`;
 }
 
-function resetArticleForm() {
+function createEmptyCompraArticleLookupState() {
+  return {
+    open: false,
+    loading: false,
+    items: [],
+    search: "",
+    activeIndex: -1,
+  };
+}
+
+function createEmptyCompraDraftItem(source = {}) {
+  const item = {
+    codigoBarra: source.codigoBarra || "",
+    referencia: source.referencia || "",
+    marca: source.marca || "",
+    nombre: source.nombre || "",
+    cantidad: toInputValue(source.cantidad || "1"),
+    costoUnitario: toInputValue(source.costoUnitario || source.costoDolar || "0.00"),
+    subtotal: "",
+  };
+
+  return {
+    ...item,
+    subtotal: formatCompraAmountInput(computeCompraItemSubtotal(item)),
+  };
+}
+
+function createEmptyCompraDraft(metadata) {
+  const defaults = metadata?.defaults || {};
+  return {
+    originalDocumento: "",
+    originalProveedor: "",
+    documento: toInputValue(defaults.documento || ""),
+    proveedor: toInputValue(defaults.proveedor || ""),
+    fecha: toDateInputValue(defaults.fecha || new Date()),
+    fechaFactura: toDateInputValue(defaults.fechaFactura || ""),
+    tipoPago: toInputValue(defaults.tipoPago || ""),
+    observacion: toInputValue(defaults.observacion || ""),
+    totalMercancia: toInputValue(defaults.totalMercancia ?? "0.00"),
+    tasaCambio: toInputValue(defaults.tasaCambio ?? ""),
+    usuario: toInputValue(defaults.usuario || ""),
+    status: String(defaults.status ?? 0),
+    destino: toInputValue(defaults.destino || ""),
+    idLote: toInputValue(defaults.idLote ?? ""),
+    items: [],
+  };
+}
+
+function resetCompraDraft() {
+  state.compras.selectedKey = "";
+  state.compras.draft = createEmptyCompraDraft(state.compras.metadata);
+  closeCompraArticleLookupModal();
+}
+
+function captureCompraDraft() {
+  const form = document.getElementById("compras-form");
+  if (!form) {
+    return;
+  }
+
+  state.compras.draft = readCompraDraft(form);
+}
+
+function readCompraDraft(form) {
+  const currentDraft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const rows = Array.from(form.querySelectorAll("[data-compra-item-row]"));
+  const items = rows
+    .map((row, index) => {
+      const currentItem = currentDraft.items?.[index] || createEmptyCompraDraftItem();
+      const nextItem = {
+        ...currentItem,
+        cantidad: readRowFieldValue(row, "cantidad", currentItem.cantidad || "1"),
+      };
+
+      return {
+        ...nextItem,
+        subtotal: formatCompraAmountInput(computeCompraItemSubtotal(nextItem)),
+      };
+    })
+    .filter((item) => String(item.codigoBarra || "").trim());
+  const totalMercancia = formatCompraAmountInput(computeCompraDraftTotal(items));
+
+  return {
+    ...currentDraft,
+    documento: readFormFieldValue(form, "documento", currentDraft.documento),
+    proveedor: readFormFieldValue(form, "proveedor", currentDraft.proveedor),
+    fecha: readFormFieldValue(form, "fecha", currentDraft.fecha),
+    fechaFactura: readFormFieldValue(form, "fechaFactura", currentDraft.fechaFactura),
+    tipoPago: readFormFieldValue(form, "tipoPago", currentDraft.tipoPago),
+    observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
+    totalMercancia,
+    tasaCambio: readFormFieldValue(form, "tasaCambio", currentDraft.tasaCambio),
+    usuario: readFormFieldValue(form, "usuario", currentDraft.usuario),
+    destino: readFormFieldValue(form, "destino", currentDraft.destino),
+    idLote: readFormFieldValue(form, "idLote", currentDraft.idLote),
+    items,
+  };
+}
+
+function validateCompraDraft(draft) {
+  const proveedor = String(draft.proveedor || "").trim();
+  if (!proveedor) {
+    return "Debes indicar el proveedor de la compra.";
+  }
+
+  const tipoPago = Number.parseInt(String(draft.tipoPago || ""), 10);
+  if (!Number.isInteger(tipoPago) || tipoPago < 1) {
+    return "Debes indicar el tipo de pago.";
+  }
+
+  const destino = String(draft.destino || "").trim().toUpperCase();
+  if (!destino) {
+    return "Debes indicar el destino de la compra.";
+  }
+
+  const totalMercancia = toFacturacionNumber(draft.totalMercancia);
+  if (!Number.isFinite(totalMercancia) || totalMercancia < 0) {
+    return "El total de mercancia no es valido.";
+  }
+
+  const tasaCambio = toFacturacionNumber(draft.tasaCambio);
+  if (!Number.isFinite(tasaCambio) || tasaCambio < 0) {
+    return "La tasa de cambio indicada no es valida.";
+  }
+
+  const validItems = (draft.items || []).filter((item) => String(item?.codigoBarra || "").trim());
+  if (!validItems.length) {
+    return "Debes seleccionar al menos un articulo para la compra.";
+  }
+
+  for (const item of validItems) {
+    const quantity = toFacturacionNumber(item.cantidad);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return `La cantidad del articulo ${item.codigoBarra || ""} debe ser mayor a cero.`;
+    }
+  }
+
+  return "";
+}
+
+function buildCompraPayload(draft) {
+  const tipoPago = Number.parseInt(String(draft.tipoPago || ""), 10);
+  const idLote = Number.parseInt(String(draft.idLote || ""), 10);
+
+  return {
+    documento: String(draft.documento || "").trim().toUpperCase() || undefined,
+    proveedor: String(draft.proveedor || "").trim() || undefined,
+    tipoPago: Number.isInteger(tipoPago) ? tipoPago : undefined,
+    observacion: String(draft.observacion || "").trim() || undefined,
+    totalMercancia: String(draft.totalMercancia || "").trim() || undefined,
+    tasaCambio: String(draft.tasaCambio || "").trim() || undefined,
+    destino: String(draft.destino || "").trim().toUpperCase() || undefined,
+    idLote: Number.isInteger(idLote) ? idLote : undefined,
+    items: (draft.items || [])
+      .filter((item) => String(item?.codigoBarra || "").trim())
+      .map((item) => ({
+        codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
+        cantidad: String(item.cantidad || "").trim() || undefined,
+        costoUnitario: String(item.costoUnitario || "").trim() || undefined,
+      })),
+  };
+}
+
+function compraToDraft(compra, metadata = state.compras.metadata) {
+  const defaults = metadata?.defaults || {};
+
+  return {
+    originalDocumento: compra?.documento || "",
+    originalProveedor: compra?.proveedor || "",
+    documento: toInputValue(compra?.documento || defaults.documento || ""),
+    proveedor: toInputValue(compra?.proveedor || defaults.proveedor || ""),
+    fecha: toDateInputValue(compra?.fecha || defaults.fecha || new Date()),
+    fechaFactura: toDateInputValue(compra?.fechaFactura || ""),
+    tipoPago: toInputValue(compra?.tipoPago ?? defaults.tipoPago ?? ""),
+    observacion: toInputValue(compra?.observacion || defaults.observacion || ""),
+    totalMercancia: toInputValue(compra?.totalMercancia ?? defaults.totalMercancia ?? "0.00"),
+    tasaCambio: toInputValue(compra?.tasaCambio ?? defaults.tasaCambio ?? ""),
+    usuario: toInputValue(compra?.usuario || defaults.usuario || state.user?.codUsuario || ""),
+    status: String(compra?.status ?? defaults.status ?? 0),
+    destino: toInputValue(compra?.destino || defaults.destino || ""),
+    idLote: toInputValue(compra?.idLote ?? defaults.idLote ?? ""),
+    items: Array.isArray(compra?.items)
+      ? compra.items.map((item) =>
+          createEmptyCompraDraftItem({
+            codigoBarra: item.codigoBarra || "",
+            referencia: item.referencia || "",
+            marca: item.marca || "",
+            nombre: item.nombre || "",
+            cantidad: item.cantidad || "1",
+            costoUnitario: item.costoUnitario || "0.00",
+          }))
+      : [],
+  };
+}
+
+function buildCompraKey(documento, proveedor) {
+  return `${String(documento || "").trim().toUpperCase()}::${String(proveedor || "").trim().toUpperCase()}`;
+}
+
+function computeCompraItemSubtotal(item) {
+  const quantity = Math.max(toFacturacionNumber(item?.cantidad), 0);
+  const cost = Math.max(toFacturacionNumber(item?.costoUnitario), 0);
+  return roundToTwoDecimals(quantity * cost);
+}
+
+function computeCompraDraftTotal(items) {
+  return (Array.isArray(items) ? items : []).reduce((total, item) => {
+    return total + computeCompraItemSubtotal(item);
+  }, 0);
+}
+
+function formatCompraAmountInput(value) {
+  return roundToTwoDecimals(value).toFixed(2);
+}
+
+function syncCompraComputedFields(form) {
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const items = Array.isArray(draft.items) ? draft.items : [];
+  const rows = Array.from(form.querySelectorAll("[data-compra-item-row]"));
+
+  rows.forEach((row, index) => {
+    const subtotalField = row.querySelector('[name="subtotal"]');
+    if (subtotalField && "value" in subtotalField) {
+      subtotalField.value = formatCompraAmountInput(computeCompraItemSubtotal(items[index]));
+    }
+  });
+
+  const totalField = form.elements.namedItem("totalMercancia");
+  if (totalField && "value" in totalField) {
+    totalField.value = formatCompraAmountInput(computeCompraDraftTotal(items));
+  }
+}
+
+function resetArticleForm(options = {}) {
+  const { blank = false } = options;
   state.formMode = "create";
   state.articleEditorTab = "general";
   state.activeArticleCode = "";
   state.selectedArticle = null;
-  state.formDraft = createEmptyDraft();
+  state.formDraft = blank ? createBlankArticleDraft() : createEmptyDraft();
+}
+
+function createBlankArticleDraft() {
+  return {
+    codigoBarra: "",
+    referencia: "",
+    serializado: false,
+    general: {
+      categoria: "",
+      fabricante: "",
+      marca: "",
+      nombre: "",
+      puntoRecorte: "",
+      familia: "",
+      nota: "",
+      tipo: "",
+      status: "",
+    },
+    tallasColores: {
+      talla: "",
+      colores: "",
+    },
+    precios: {
+      impuestoCodigo: "",
+      detal: "",
+      mayor: "",
+      afiliado: "",
+      promocionActiva: false,
+      descuento: "",
+      precio: "",
+      desde: "",
+      hasta: "",
+    },
+    costos: {
+      costoInicial: "",
+      costoPromedio: "",
+      ultimoCosto: "",
+      costoDolar: "",
+    },
+  };
 }
 
 function createEmptyDraft() {
@@ -14966,6 +19300,19 @@ function readFormFieldValue(form, fieldName, fallback = "") {
   return field.value;
 }
 
+function readRadioValue(form, fieldName, fallback = "") {
+  const checkedField = form?.querySelector?.(`input[name="${fieldName}"]:checked`);
+  if (checkedField && "value" in checkedField) {
+    return checkedField.value;
+  }
+
+  const firstField = form?.querySelector?.(`input[name="${fieldName}"]`);
+  if (firstField && "value" in firstField) {
+    return firstField.value || fallback;
+  }
+
+  return fallback;
+}
 function readFormCheckboxValue(form, fieldName, fallback = false) {
   const field = form?.elements?.namedItem?.(fieldName);
   if (!field || !("checked" in field)) {
@@ -15147,6 +19494,8 @@ function normalizeGroupCode(value) {
     ADMIN: "ADMI",
     ADMINISTRADOR: "ADMI",
     ADMI: "ADMI",
+    CAJE: "CAJA",
+    CAJA: "CAJA",
   };
   const normalized = String(value || "").trim().toUpperCase();
   return aliases[normalized] || normalized;
@@ -15171,7 +19520,17 @@ function getCurrentUserPermissionCodes() {
 }
 
 function userCanAccessFullInventory() {
-  return getCurrentUserGroupCodes().includes("ADMI");
+  const groups = getCurrentUserGroupCodes();
+  return groups.includes("ADMI") || groups.includes("SISTEMA");
+}
+
+function userCanManageAllModules() {
+  const groups = getCurrentUserGroupCodes();
+  return groups.includes("ADMI") || groups.includes("SISTEMA");
+}
+
+function userIsCashierOperator() {
+  return getCurrentUserGroupCodes().includes("CAJA");
 }
 
 function userCanCreateArticlesInCurrentInstance() {
@@ -15180,6 +19539,20 @@ function userCanCreateArticlesInCurrentInstance() {
 
 function userIsSystemOperator() {
   return getCurrentUserGroupCodes().includes("SISTEMA");
+}
+
+function userCanAccessView(view) {
+  const normalizedView = String(view || "desktop").trim().toLowerCase();
+
+  if (userCanManageAllModules()) {
+    return true;
+  }
+
+  if (userIsCashierOperator()) {
+    return ["desktop", "facturacion", "cajas", "cierre-caja", "ayuda"].includes(normalizedView);
+  }
+
+  return true;
 }
 
 function userCanImportCatalogsFromExcel() {
@@ -15229,11 +19602,14 @@ function renderSelectOptions(options, selectedValue) {
 }
 
 function renderTaxOptions(options, selectedValue) {
+  const normalizedSelectedValue = String(selectedValue || "");
   if (!options.length) {
-    return `<option value="${escapeHtml(selectedValue || "1")}" selected>${escapeHtml(selectedValue || "1")}</option>`;
+    return normalizedSelectedValue
+      ? `<option value="${escapeHtml(normalizedSelectedValue)}" selected>${escapeHtml(normalizedSelectedValue)}</option>`
+      : `<option value="" selected>Selecciona un impuesto</option>`;
   }
 
-  return options
+  const renderedOptions = options
     .map((option) => {
       const optionValue = String(option.codigo);
       const labelParts = [option.codigo, option.nombre].filter(Boolean);
@@ -15242,12 +19618,18 @@ function renderTaxOptions(options, selectedValue) {
       }
 
       return `
-        <option value="${escapeHtml(optionValue)}" ${optionValue === selectedValue ? "selected" : ""}>
+        <option value="${escapeHtml(optionValue)}" ${optionValue === normalizedSelectedValue ? "selected" : ""}>
           ${escapeHtml(labelParts.join(" - "))}
         </option>
       `;
     })
     .join("");
+
+  if (!normalizedSelectedValue) {
+    return `<option value="" selected>Selecciona un impuesto</option>${renderedOptions}`;
+  }
+
+  return renderedOptions;
 }
 
 async function apiFetch(path, options = {}) {
@@ -15579,3 +19961,28 @@ function hasPersistentSession() {
 function getSessionStorage() {
   return shouldPersistSession() || hasPersistentSession() ? window.localStorage : window.sessionStorage;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

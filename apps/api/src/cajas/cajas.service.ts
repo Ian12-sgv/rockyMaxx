@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+﻿import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type Cajas } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
@@ -6,6 +6,7 @@ import { toCajaConfigView, toCajaView } from "./caja-view.util";
 import { CreateCajaDto } from "./dto/create-caja.dto";
 import { FindCajasDto } from "./dto/find-cajas.dto";
 import { UpdateCajaDto } from "./dto/update-caja.dto";
+import { CloseCajaDto } from "./dto/close-caja.dto";
 
 const ZERO = new Prisma.Decimal(0);
 
@@ -19,6 +20,7 @@ type NormalizedCajaInput = {
   ultimaFactura: bigint;
   horaApertura: string;
   horaCierre?: string;
+  nombreImpresora?: string;
 };
 
 @Injectable()
@@ -181,7 +183,59 @@ export class CajasService {
 
     return toCajaView(updated);
   }
+  async close(serie: string, fecha: string, closeCajaDto: CloseCajaDto) {
+    const normalizedSerie = this.normalizeSerie(serie);
+    const normalizedFecha = this.parseDateKey(fecha);
+    const horaCierre = this.normalizeTime(closeCajaDto?.horaCierre) ?? this.formatTime(new Date());
 
+    const closed = await this.prisma.$transaction(
+      async (tx) => {
+        const existing = await tx.diarioCaja.findUnique({
+          where: {
+            Serie_Fecha: {
+              Serie: normalizedSerie,
+              Fecha: normalizedFecha,
+            },
+          },
+          include: { caja: true },
+        });
+
+        if (!existing) {
+          throw new NotFoundException("La caja no existe.");
+        }
+
+        if (existing.Status === 2) {
+          throw new ConflictException("La caja ya esta cerrada.");
+        }
+
+        const derivedState = await this.resolveDerivedCajaState(
+          tx,
+          existing.Serie,
+          existing.Fecha,
+          existing.Status,
+          BigInt(existing.FacturaFinal?.toString() ?? "0"),
+        );
+
+        return tx.diarioCaja.update({
+          where: {
+            Serie_Fecha: {
+              Serie: normalizedSerie,
+              Fecha: normalizedFecha,
+            },
+          },
+          data: {
+            FacturaFinal: derivedState.ultimaFactura,
+            HoraCierre: this.combineDateAndTime(normalizedFecha, horaCierre),
+            Status: 2,
+          },
+          include: { caja: true },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    return toCajaView(closed);
+  }
   async remove(serie: string, fecha: string) {
     const normalizedSerie = this.normalizeSerie(serie);
     const normalizedFecha = this.parseDateKey(fecha);
@@ -282,6 +336,7 @@ export class CajasService {
       ultimaFactura,
       horaApertura,
       horaCierre,
+      nombreImpresora: this.normalizePrinterName(payload.nombreImpresora),
     };
   }
 
@@ -304,6 +359,10 @@ export class CajasService {
         data: {
           Numero: normalized.numeroCaja,
           UltimaFactura: nextUltimaFactura,
+          NombreImpresora:
+            normalized.nombreImpresora
+            ?? existing.NombreImpresora
+            ?? "NO APLICA",
         },
       });
       return;
@@ -329,7 +388,7 @@ export class CajasService {
         CambiarPrecios: template?.CambiarPrecios ?? 0,
         RequerirAutorizacion: template?.RequerirAutorizacion ?? 0,
         IdImpresoraFiscal: template?.IdImpresoraFiscal ?? 0,
-        NombreImpresora: template?.NombreImpresora ?? "NO APLICA",
+        NombreImpresora: normalized.nombreImpresora ?? template?.NombreImpresora ?? "NO APLICA",
         NumeroCopias: template?.NumeroCopias ?? 1,
         IncluirIGTF: template?.IncluirIGTF ?? false,
       },
@@ -372,6 +431,10 @@ export class CajasService {
     }
   }
 
+  private normalizePrinterName(value: string | undefined) {
+    const normalized = String(value || "").trim();
+    return normalized || undefined;
+  }
   private parseDateKey(value: string) {
     const normalized = String(value || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
@@ -506,3 +569,6 @@ export class CajasService {
     return { start, end };
   }
 }
+
+
+

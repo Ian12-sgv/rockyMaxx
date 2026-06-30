@@ -1,4 +1,4 @@
-const electronModule = require("electron");
+﻿const electronModule = require("electron");
 const { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
@@ -346,7 +346,7 @@ async function probeServer(serverUrl) {
   }
 
   if (response.statusCode < 200 || response.statusCode >= 500) {
-    throw new Error(`El servidor respondió con estado ${response.statusCode}.`);
+    throw new Error(`El servidor respondiÃ³ con estado ${response.statusCode}.`);
   }
 
   return {
@@ -369,6 +369,7 @@ function createMainWindow(serverUrl) {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: join(__dirname, "preload.js"),
     },
   });
 
@@ -394,10 +395,10 @@ function createMainWindow(serverUrl) {
   });
 
   mainWindow.webContents.on("did-fail-load", (_event, code, description, validatedUrl) => {
-    writeRuntimeLog(`Falló la carga del cliente. url=${validatedUrl} code=${code} description=${description}`);
+    writeRuntimeLog(`FallÃ³ la carga del cliente. url=${validatedUrl} code=${code} description=${description}`);
     dialog.showErrorBox(
       "Rocky Maxx Cliente",
-      `No se pudo abrir el servidor configurado.\n\n${description}\n\nSe abrirá la configuración del cliente.`,
+      `No se pudo abrir el servidor configurado.\n\n${description}\n\nSe abrirÃ¡ la configuraciÃ³n del cliente.`,
     );
     if (mainWindow) {
       mainWindow.close();
@@ -470,11 +471,150 @@ async function openConfigWindow(options = {}) {
   await configWindow.loadURL(configUrl);
 }
 
+function normalizePrinterResult(printer = {}) {
+  return {
+    name: String(printer.name || "").trim(),
+    displayName: String(printer.displayName || printer.name || "").trim(),
+    description: String(printer.description || "").trim(),
+    status: printer.status ?? 0,
+    isDefault: Boolean(printer.isDefault),
+    isAvailable: printer.status === undefined || printer.status === 0,
+    options: typeof printer.options === "object" && printer.options ? printer.options : {},
+  };
+}
+
+async function getAvailablePrinters() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    throw new Error("La ventana principal no esta disponible para consultar impresoras.");
+  }
+
+  const contents = mainWindow.webContents;
+  const printers = typeof contents.getPrintersAsync === "function"
+    ? await contents.getPrintersAsync()
+    : typeof contents.getPrinters === "function"
+      ? contents.getPrinters()
+      : [];
+
+  return printers
+    .map((printer) => normalizePrinterResult(printer))
+    .filter((printer) => printer.name);
+}
+
+function normalizePrinterLookupValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function resolvePrinterDeviceName(printers, requestedPrinterName) {
+  const normalizedRequested = normalizePrinterLookupValue(requestedPrinterName);
+  if (normalizedRequested) {
+    const exactMatch = printers.find((printer) => {
+      const values = [printer?.name, printer?.displayName, printer?.description].map((value) => normalizePrinterLookupValue(value));
+      return values.includes(normalizedRequested);
+    });
+    if (exactMatch?.name) {
+      return exactMatch.name;
+    }
+
+    const partialMatch = printers.find((printer) => {
+      const haystack = [printer?.name, printer?.displayName, printer?.description]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedRequested);
+    });
+    if (partialMatch?.name) {
+      return partialMatch.name;
+    }
+  }
+
+  const defaultPrinter = printers.find((printer) => printer.isDefault) || printers[0];
+  return defaultPrinter?.name || "";
+}
+
+function buildPrintableHtmlUrl(html) {
+  return `data:text/html;charset=utf-8,${encodeURIComponent(String(html || ""))}`;
+}
+
+async function printHtmlDocument(payload = {}) {
+  const html = String(payload?.html || "").trim();
+  if (!html) {
+    throw new Error("No se recibio el contenido HTML para imprimir.");
+  }
+
+  const requestedPrinterName = String(payload?.printerName || "").trim();
+  const requestedCopies = Number.parseInt(String(payload?.copies ?? 1), 10);
+  const copies = Number.isInteger(requestedCopies) && requestedCopies > 0 ? requestedCopies : 1;
+  const silent = payload?.silent !== false;
+  const jobTitle = String(payload?.jobTitle || "Factura Rocky Maxx").trim() || "Factura Rocky Maxx";
+  const printers = await getAvailablePrinters();
+  const deviceName = resolvePrinterDeviceName(printers, requestedPrinterName);
+
+  if (!deviceName && silent) {
+    throw new Error("No se encontro ninguna impresora disponible en Windows.");
+  }
+
+  const printWindow = new BrowserWindow({
+    show: false,
+    width: 820,
+    height: 1180,
+    autoHideMenuBar: true,
+    backgroundColor: "#ffffff",
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: false,
+    },
+  });
+
+  try {
+    await printWindow.loadURL(buildPrintableHtmlUrl(html));
+
+    await new Promise((resolve, reject) => {
+      printWindow.webContents.print(
+        {
+          silent,
+          printBackground: true,
+          deviceName: deviceName || undefined,
+          copies,
+        },
+        (success, failureReason) => {
+          if (!success) {
+            reject(new Error(failureReason || "No se pudo completar la impresion."));
+            return;
+          }
+
+          resolve();
+        },
+      );
+    });
+
+    return {
+      ok: true,
+      printerName: deviceName,
+      jobTitle,
+      copies,
+    };
+  } finally {
+    if (!printWindow.isDestroyed()) {
+      printWindow.close();
+    }
+  }
+}
 ipcMain.handle("client-config:get", async () => {
   const config = loadClientConfig();
   return {
     serverUrl: config.serverUrl,
   };
+});
+
+ipcMain.handle("client-printers:list", async () => {
+  return {
+    ok: true,
+    printers: await getAvailablePrinters(),
+  };
+});
+
+ipcMain.handle("client-printers:print-html", async (_event, payload) => {
+  return printHtmlDocument(payload);
 });
 
 ipcMain.handle("client-server:check", async (_event, serverUrl) => {
@@ -559,7 +699,7 @@ app.whenReady().then(async () => {
     await openConfigWindow({
       serverUrl: "",
       errorMessage:
-        "Configura la URL de la PC principal para abrir Rocky Maxx en esta estación de trabajo.",
+        "Configura la URL de la PC principal para abrir Rocky Maxx en esta estaciÃ³n de trabajo.",
     });
     return;
   }
@@ -580,3 +720,6 @@ app.whenReady().then(async () => {
   dialog.showErrorBox("Rocky Maxx Cliente", `No se pudo iniciar el cliente.\n\n${error.message}`);
   app.quit();
 });
+
+
+

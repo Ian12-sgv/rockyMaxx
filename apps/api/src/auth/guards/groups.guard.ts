@@ -5,6 +5,8 @@ import { normalizeLegacyGroupCode } from "../../users/user-groups.util";
 import { REQUIRED_GROUPS_KEY } from "../decorators/require-groups.decorator";
 import { AuthenticatedRequest } from "../interfaces/authenticated-request.interface";
 
+const SYSTEM_GROUP_CODE = normalizeLegacyGroupCode("sistema");
+
 @Injectable()
 export class GroupsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
@@ -28,6 +30,9 @@ export class GroupsGuard implements CanActivate {
 
     const normalizedRequired = requiredGroups.map((group) => normalizeLegacyGroupCode(group));
     const userGroups = user.grupos.map((group) => normalizeLegacyGroupCode(group.codigo));
+    if (userGroups.includes(SYSTEM_GROUP_CODE)) {
+      return true;
+    }
     const hasAccess = normalizedRequired.some((group) => userGroups.includes(group));
 
     if (!hasAccess) {

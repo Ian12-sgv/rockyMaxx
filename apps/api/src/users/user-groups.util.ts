@@ -2,6 +2,8 @@ const LEGACY_GROUP_ALIASES: Record<string, string> = {
   ADMIN: "ADMI",
   ADMINISTRADOR: "ADMI",
   ADMI: "ADMI",
+  CAJE: "CAJA",
+  CAJA: "CAJA",
 };
 
 export function normalizeLegacyGroupCode(value: string) {

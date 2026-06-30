@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+﻿const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("rockyClient", {
   getConfig() {
@@ -13,6 +13,12 @@ contextBridge.exposeInMainWorld("rockyClient", {
   openServer(serverUrl) {
     return ipcRenderer.invoke("client-server:open", serverUrl);
   },
+  listPrinters() {
+    return ipcRenderer.invoke("client-printers:list");
+  },
+  printHtml(payload) {
+    return ipcRenderer.invoke("client-printers:print-html", payload);
+  },
   onState(handler) {
     const listener = (_event, payload) => {
       handler(payload);
@@ -24,3 +30,4 @@ contextBridge.exposeInMainWorld("rockyClient", {
     };
   },
 });
+

@@ -366,6 +366,74 @@ export class UsersService {
     }
   }
 
+  async ensureCashierOperator() {
+    const username = this.configService.get<string>("AUTH_BOOTSTRAP_CASHIER_USERNAME", "caja")?.trim() || "caja";
+    const password = this.configService.get<string>("AUTH_BOOTSTRAP_CASHIER_PASSWORD", "789456")?.trim() || "789456";
+    const name = this.configService.get<string>("AUTH_BOOTSTRAP_CASHIER_NAME", "caja")?.trim() || "caja";
+    const requestedGroup = this.configService.get<string>("AUTH_BOOTSTRAP_CASHIER_GROUP", "caja")?.trim() || "caja";
+    const requestedGroupName = this.configService.get<string>("AUTH_BOOTSTRAP_CASHIER_GROUP_NAME", "Caja")?.trim() || "Caja";
+
+    const group = await this.ensureBasicGroup(requestedGroup, requestedGroupName);
+    const existingUser = await this.prisma.usuarios.findFirst({
+      where: {
+        CodUsuario: {
+          equals: username,
+          mode: "insensitive",
+        },
+      },
+      include: userWithGroupsInclude,
+    });
+
+    if (!existingUser) {
+      await this.prisma.usuarios.create({
+        data: {
+          CodUsuario: username,
+          NombreUsuario: name || username,
+          Pasword: password,
+          Status: 1,
+          usuarioGrupos: {
+            create: [
+              {
+                grupo: {
+                  connect: { CodGrupo: group.CodGrupo },
+                },
+              },
+            ],
+          },
+        },
+      });
+      return;
+    }
+
+    const alreadyLinked = existingUser.usuarioGrupos.some((item) => item.CodGrupo === group.CodGrupo);
+    const cashierUpdateData: { NombreUsuario?: string; Pasword?: string; Status?: number } = {};
+    if ((existingUser.NombreUsuario || "") !== (name || username)) {
+      cashierUpdateData.NombreUsuario = name || username;
+    }
+    if ((existingUser.Pasword || "") !== password) {
+      cashierUpdateData.Pasword = password;
+    }
+    if (existingUser.Status === 0) {
+      cashierUpdateData.Status = 1;
+    }
+
+    if (Object.keys(cashierUpdateData).length > 0) {
+      await this.prisma.usuarios.update({
+        where: { CodUsuario: existingUser.CodUsuario },
+        data: cashierUpdateData,
+      });
+    }
+
+    if (!alreadyLinked) {
+      await this.prisma.usuarioGrupo.create({
+        data: {
+          CodUsuario: existingUser.CodUsuario,
+          CodGrupo: group.CodGrupo,
+        },
+      });
+    }
+  }
+
   async ensureCatalogImportPermissionSetup() {
     const ensuredPermission = await this.ensureCatalogImportPermissionRecord();
 
@@ -549,5 +617,37 @@ export class UsersService {
     }
 
     return group;
+  }
+
+  private async ensureBasicGroup(requestedGroup: string, groupName: string) {
+    const normalizedGroupCode = normalizeLegacyGroupCode(requestedGroup);
+    const existingGroup = await this.prisma.grupos.findFirst({
+      where: {
+        CodGrupo: {
+          equals: normalizedGroupCode,
+          mode: "insensitive",
+        },
+      },
+    });
+
+    if (existingGroup) {
+      if ((existingGroup.NombreGrupo || "").trim() === groupName) {
+        return existingGroup;
+      }
+
+      return this.prisma.grupos.update({
+        where: { CodGrupo: existingGroup.CodGrupo },
+        data: {
+          NombreGrupo: groupName,
+        },
+      });
+    }
+
+    return this.prisma.grupos.create({
+      data: {
+        CodGrupo: normalizedGroupCode,
+        NombreGrupo: groupName,
+      },
+    });
   }
 }

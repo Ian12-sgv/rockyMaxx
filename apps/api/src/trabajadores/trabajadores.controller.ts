@@ -15,11 +15,13 @@ export class TrabajadoresController {
   constructor(private readonly trabajadoresService: TrabajadoresService) {}
 
   @Get("metadata")
+  @RequireGroups("admin", "caja")
   async getMetadata() {
     return this.trabajadoresService.getMetadata();
   }
 
   @Get()
+  @RequireGroups("admin", "caja")
   async findAll(@Query() findTrabajadoresDto: FindTrabajadoresDto) {
     return {
       trabajadores: await this.trabajadoresService.findAll(findTrabajadoresDto),
@@ -27,6 +29,7 @@ export class TrabajadoresController {
   }
 
   @Get(":cedula")
+  @RequireGroups("admin", "caja")
   async findOne(@Param("cedula") cedula: string) {
     return {
       trabajador: await this.trabajadoresService.findOne(cedula),
