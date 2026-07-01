@@ -400,9 +400,75 @@ function getDetectedDesktopPrinters() {
   return Array.isArray(state.desktopPrinting?.items) ? state.desktopPrinting.items : [];
 }
 
+function normalizeDesktopPrinterLookupValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function buildDesktopPrinterLookupText(printer = {}) {
+  return [printer?.name, printer?.displayName, printer?.description]
+    .map((value) => normalizeDesktopPrinterLookupValue(value))
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isVirtualDesktopPrinter(printer = {}) {
+  const haystack = buildDesktopPrinterLookupText(printer);
+  if (!haystack) {
+    return false;
+  }
+
+  return [
+    "microsoft print to pdf",
+    "print to pdf",
+    "pdf",
+    "microsoft xps",
+    "xps",
+    "fax",
+    "onenote",
+    "adobe pdf",
+    "virtual",
+    "anydesk printer",
+  ].some((pattern) => haystack.includes(pattern));
+}
+
+function scorePreferredDesktopPrinter(printer = {}) {
+  const haystack = buildDesktopPrinterLookupText(printer);
+  let score = 0;
+
+  if (printer?.isAvailable !== false) {
+    score += 50;
+  }
+  if (!isVirtualDesktopPrinter(printer)) {
+    score += 200;
+  }
+  if (printer?.isDefault) {
+    score += 20;
+  }
+
+  [
+    ["dp8", 240],
+    ["bixolon", 220],
+    ["thermal", 180],
+    ["termica", 180],
+    ["receipt", 150],
+    ["ticket", 150],
+    ["pos", 120],
+    ["epson tm", 110],
+    ["generic / text only", 90],
+  ].forEach(([pattern, value]) => {
+    if (haystack.includes(pattern)) {
+      score += value;
+    }
+  });
+
+  return score;
+}
+
 function getDefaultDesktopPrinterName() {
   const printers = getDetectedDesktopPrinters();
-  const printer = printers.find((item) => item.isDefault) || printers[0] || null;
+  const physicalPrinters = printers.filter((item) => !isVirtualDesktopPrinter(item));
+  const candidates = physicalPrinters.length ? physicalPrinters : printers;
+  const printer = [...candidates].sort((left, right) => scorePreferredDesktopPrinter(right) - scorePreferredDesktopPrinter(left))[0] || null;
   return String(printer?.name || "").trim();
 }
 
@@ -4713,153 +4779,298 @@ function calculateFacturacionPaymentSummary(summary, rows) {
   };
 }
 
+function resolveFacturacionInvoiceTemplateVariant(venta) {
+  if (!venta?.emisionContingencia) {
+    return "default";
+  }
+  const normalized = String(venta?.formatoContingenciaArchivo || venta?.formatoContingenciaNombre || "").trim().toLowerCase();
+  if (!normalized) {
+    return "default";
+  }
+  if (normalized.includes("grd")) return "grd";
+  if (normalized.includes("peq (1)")) return "peq-1";
+  if (normalized.includes("peq (2)")) return "peq-2";
+  if (normalized.includes("peq")) return "peq";
+  return "default";
+}
+
+const FACTURACION_TICKET_WIDTH = 42;
+
+function normalizeTicketReceiptText(value) {
+  return String(value ?? "")
+    .replace(/\r?\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function padTicketReceiptRight(value, width) {
+  const text = String(value ?? "");
+  if (text.length >= width) {
+    return text;
+  }
+  return `${text}${" ".repeat(width - text.length)}`;
+}
+
+function centerTicketReceiptText(value, width = FACTURACION_TICKET_WIDTH) {
+  const text = normalizeTicketReceiptText(value);
+  if (!text) {
+    return "";
+  }
+  if (text.length >= width) {
+    return text;
+  }
+  const leftPadding = Math.max(Math.floor((width - text.length) / 2), 0);
+  return `${" ".repeat(leftPadding)}${text}`;
+}
+
+function wrapTicketReceiptText(value, width = FACTURACION_TICKET_WIDTH) {
+  const normalized = normalizeTicketReceiptText(value);
+  if (!normalized) {
+    return [""];
+  }
+
+  const words = normalized.split(" ");
+  const lines = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    if (!word) {
+      continue;
+    }
+    if (word.length > width) {
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = "";
+      }
+      for (let index = 0; index < word.length; index += width) {
+        lines.push(word.slice(index, index + width));
+      }
+      continue;
+    }
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (candidate.length <= width) {
+      currentLine = candidate;
+      continue;
+    }
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    currentLine = word;
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines.length ? lines : [""];
+}
+
+function formatTicketReceiptTwoColumnLines(leftText, rightText, width = FACTURACION_TICKET_WIDTH) {
+  const safeLeft = normalizeTicketReceiptText(leftText) || "-";
+  const safeRight = normalizeTicketReceiptText(rightText);
+  if (!safeRight) {
+    return wrapTicketReceiptText(safeLeft, width);
+  }
+  const leftWidth = Math.max(width - safeRight.length - 1, 8);
+  const leftLines = wrapTicketReceiptText(safeLeft, leftWidth);
+  const lines = [];
+  lines.push(`${padTicketReceiptRight(leftLines[0], leftWidth)} ${safeRight}`);
+  for (let index = 1; index < leftLines.length; index += 1) {
+    lines.push(leftLines[index]);
+  }
+  return lines;
+}
+
+function formatTicketReceiptLabelValueLines(label, value, width = FACTURACION_TICKET_WIDTH) {
+  const prefix = String(label || "");
+  const safeValue = normalizeTicketReceiptText(value) || "-";
+  const availableWidth = Math.max(width - prefix.length, 8);
+  const wrapped = wrapTicketReceiptText(safeValue, availableWidth);
+  return wrapped.map((line, index) => {
+    if (index === 0) {
+      return `${prefix}${line}`;
+    }
+    return `${" ".repeat(prefix.length)}${line}`;
+  });
+}
+
+function formatTicketReceiptDualValueLines(labelLeft, valueLeft, labelRight, valueRight, width = FACTURACION_TICKET_WIDTH) {
+  const leftSide = `${String(labelLeft || "")}${normalizeTicketReceiptText(valueLeft) || "-"}`;
+  const rightSide = `${String(labelRight || "")}${normalizeTicketReceiptText(valueRight) || "-"}`;
+  if (leftSide.length + 2 + rightSide.length <= width) {
+    return [`${leftSide}${" ".repeat(width - leftSide.length - rightSide.length)}${rightSide}`];
+  }
+
+  const leftWidth = Math.max(Math.floor(width * 0.58), 16);
+  const rightWidth = Math.max(width - leftWidth, 12);
+  const leftLines = wrapTicketReceiptText(leftSide, leftWidth);
+  const rightLines = wrapTicketReceiptText(rightSide, rightWidth);
+  const totalLines = Math.max(leftLines.length, rightLines.length);
+  const lines = [];
+
+  for (let index = 0; index < totalLines; index += 1) {
+    const leftPart = leftLines[index] || "";
+    const rightPart = rightLines[index] || "";
+    lines.push(`${padTicketReceiptRight(leftPart, leftWidth)}${rightPart}`);
+  }
+
+  return lines;
+}
+
+function resolveFacturacionCompanyHeaderLines(venta) {
+  const explicitLines = Array.isArray(venta?.companyHeaderLines)
+    ? venta.companyHeaderLines.map((line) => normalizeTicketReceiptText(line)).filter(Boolean)
+    : [];
+  if (explicitLines.length) {
+    return explicitLines;
+  }
+
+  if (venta?.emisionContingencia) {
+    return [
+      "SENIAT",
+      "RIF J-308460281",
+      "CREA - DESARROLLOS, S.A. (CREDESA)",
+      "CALLE 78 Y 79 LOS OLIVOS",
+      "C.C. LOS OLIVOS PLAZA NIVEL P.B",
+      "LOCAL 1 URB. LOS OLIVOS",
+      "MARACAIBO, EDO. ZULIA",
+    ];
+  }
+
+  return ["ROCKY MAXX"];
+}
+
+function buildFacturacionInvoiceTemplateStyle(variant) {
+  const baseStyle = `@page { size: 80mm auto; margin: 2.5mm; } html, body { width: 74mm; margin: 0 auto; padding: 0; background: #ffffff; } body { font-family: "Courier New", monospace; color: #000000; font-size: 10px; line-height: 1.2; padding: 2mm 0; } * { box-sizing: border-box; } .ticket { width: 100%; } .ticket-pre { margin: 0; white-space: pre-wrap; font-family: "Courier New", monospace; font-size: 10px; line-height: 1.2; }`;
+  const variantStyleMap = {
+    default: "",
+    peq: `@page { size: 58mm auto; margin: 2mm; } html, body { width: 54mm; } .ticket-pre { font-size: 9px; }`,
+    "peq-1": `@page { size: 72mm auto; margin: 2.5mm; } html, body { width: 67mm; } .ticket-pre { font-size: 9.5px; }`,
+    "peq-2": `@page { size: 80mm auto; margin: 2mm; } html, body { width: 76mm; }`,
+    grd: `@page { size: A5 portrait; margin: 8mm; } html, body { width: 180mm; } .ticket-pre { font-size: 12px; line-height: 1.35; }`,
+  };
+  return `${baseStyle}${variantStyleMap[variant] || variantStyleMap.default}`;
+}
+
 function buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary) {
   const normalizedDraft = normalizeFacturacionDraft(draft);
   const items = normalizeFacturacionItems(normalizedDraft.items).filter((item) => String(item.codigoBarra || "").trim());
   const rows = Array.isArray(paymentRows) ? paymentRows.filter((row) => parseFacturacionPaymentAmount(row?.monto) > 0) : [];
-  const saleDateLabel = formatDateDisplay(venta?.fecha || new Date().toISOString());
-  const contingenciaLabel = venta?.emisionContingencia ? '<div class="ticket-tag">EMISION DE CONTINGENCIA</div>' : '';
-  const itemsMarkup = items.length
-    ? items
-      .map((item, index) => {
-        const quantity = toFacturacionNumber(item?.cantidad || 0);
-        const price = toFacturacionNumber(item?.precio || 0);
-        const subtotal = toFacturacionNumber(item?.subtotal || price);
-        const listLabel = getFacturacionPriceListShortLabel(item?.priceList);
-        return `
-          <div class="ticket-item">
-            <div class="ticket-item-title">${index + 1}. ${escapeHtml(String(item?.nombre || ''))}</div>
-            <div class="ticket-item-meta">${escapeHtml(String(item?.codigoBarra || ''))} | ${escapeHtml(listLabel)}</div>
-            <div class="ticket-item-values">
-              <span>${escapeHtml(formatTransferAmount(quantity))} x ${escapeHtml(formatTransferAmount(price))}</span>
-              <strong>${escapeHtml(formatTransferAmount(subtotal))}</strong>
-            </div>
-          </div>
-        `;
-      })
-      .join("")
-    : '<div class="ticket-empty">Sin articulos cargados.</div>';
-  const paymentMarkup = rows.length
-    ? rows
-      .map((row) => {
-        const originalAmount = parseFacturacionPaymentAmount(row?.monto);
-        const amountBs = resolveFacturacionPaymentAmountInBs(row, summary?.rateBsPerUsd || 0);
-        const amountLabel = facturacionPaymentMethodUsesUsdAmount(row?.formaPago)
-          ? `${formatTransferAmount(originalAmount)} $`
-          : `${formatTransferAmount(originalAmount)} BsS`;
-        return `
-          <div class="ticket-payment-row">
-            <span>${escapeHtml(String(row?.formaPago || ''))}</span>
-            <span>${escapeHtml(amountLabel)}</span>
-            <strong>${escapeHtml(formatTransferAmount(amountBs))} BsS</strong>
-          </div>
-        `;
-      })
-      .join("")
-    : '<div class="ticket-empty">Sin formas de pago registradas.</div>';
+  const saleDate = venta?.fecha ? new Date(venta.fecha) : new Date();
+  const safeSaleDate = Number.isNaN(saleDate.getTime()) ? new Date() : saleDate;
+  const saleDateLabel = formatDateOnlyDisplay(safeSaleDate).replace(/\//g, "-");
+  const saleTimeLabel = new Intl.DateTimeFormat("es-VE", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(safeSaleDate);
+  const variant = resolveFacturacionInvoiceTemplateVariant(venta);
+  const discountOverride = resolveFacturacionDiscountOverride(normalizedDraft);
+  const invoiceNumber = String(venta?.numeroFactura || "").trim() || "-";
+  const cashRegisterLabel = String(venta?.numeroCaja ?? state.cashRegisters?.draft?.numeroCaja ?? "").trim() || "000";
+  const cashierLabel = String(venta?.nombreUsuario || state.user?.nombreUsuario || venta?.usuario || state.user?.codUsuario || "").trim() || "CAJA";
+  const clientCode = String(venta?.cliente || normalizedDraft.clienteCodigo || "").trim() || "-";
+  const clientName = String(venta?.clienteNombre || normalizedDraft.clienteNombre || "").trim() || "-";
+  const clientPhone = String(venta?.clienteTelefono || normalizedDraft.clienteTelefono || "").trim() || "-";
+  const clientAddress = String(venta?.clienteDireccion || normalizedDraft.clienteDireccion || "").trim() || "-";
+  const clientInfo = String(venta?.clienteInfo || normalizedDraft.clienteInfo || "").trim();
+  const sellerCode = String(venta?.vendedor || normalizedDraft.vendedorCedula || "").trim();
+  const sellerName = String(venta?.vendedorNombre || normalizedDraft.vendedorNombre || "").trim() || "-";
+  const sellerLabel = sellerCode ? `${sellerName} (${sellerCode})` : sellerName;
+  const companyLines = resolveFacturacionCompanyHeaderLines(venta);
+  const lines = [];
 
-  return `<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <title>Factura ${escapeHtml(String(venta?.numeroFactura || ''))}</title>
-  <style>
-    @page { size: 80mm auto; margin: 3mm; }
-    html, body { width: 74mm; margin: 0 auto; padding: 0; background: #ffffff; }
-    body { font-family: "Courier New", monospace; color: #000000; font-size: 11px; line-height: 1.35; padding: 2mm 0; }
-    * { box-sizing: border-box; }
-    h1, h2, h3, p { margin: 0; }
-    .ticket { width: 100%; }
-    .center { text-align: center; }
-    .header { padding-bottom: 6px; border-bottom: 1px dashed #000; }
-    .brand { font-size: 18px; font-weight: 700; letter-spacing: 0.04em; }
-    .subtitle { font-size: 11px; margin-top: 2px; }
-    .ticket-tag { margin-top: 6px; font-size: 10px; font-weight: 700; }
-    .meta, .section { padding: 6px 0; border-bottom: 1px dashed #000; }
-    .meta-row, .summary-row, .ticket-payment-row, .ticket-item-values { display: flex; justify-content: space-between; gap: 8px; }
-    .meta-row span:first-child, .summary-row span:first-child, .ticket-payment-row span:first-child { flex: 1; }
-    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
-    .ticket-item { padding: 4px 0; border-bottom: 1px dotted #999; }
-    .ticket-item:last-child { border-bottom: none; }
-    .ticket-item-title { font-weight: 700; word-break: break-word; }
-    .ticket-item-meta { font-size: 10px; color: #333; word-break: break-word; margin: 2px 0; }
-    .ticket-empty { padding: 6px 0; }
-    .summary-row { padding: 1px 0; }
-    .summary-row.total { margin-top: 4px; padding-top: 4px; border-top: 1px solid #000; font-size: 13px; font-weight: 700; }
-    .footer { padding-top: 8px; text-align: center; }
-    .footer small { display: block; font-size: 10px; }
-  </style>
-</head>
-<body>
-  <div class="ticket">
-    <section class="header center">
-      <div class="brand">Rocky Maxx</div>
-      <div class="subtitle">FACTURA DE VENTA</div>
-      ${contingenciaLabel}
-    </section>
+  for (const line of companyLines) {
+    lines.push(centerTicketReceiptText(line));
+  }
+  if (venta?.emisionContingencia) {
+    lines.push(centerTicketReceiptText("EMISION DE CONTINGENCIA"));
+  }
+  lines.push("");
+  lines.push(...formatTicketReceiptLabelValueLines("Documento: ", invoiceNumber));
+  lines.push(...formatTicketReceiptLabelValueLines("Cliente: ", clientName));
+  lines.push(...formatTicketReceiptLabelValueLines("Rif: ", clientCode));
+  if (clientInfo) {
+    lines.push(...formatTicketReceiptLabelValueLines("Condicion: ", clientInfo));
+  }
+  lines.push(...formatTicketReceiptLabelValueLines("Telefono: ", clientPhone));
+  lines.push(...formatTicketReceiptLabelValueLines("Dir.: ", clientAddress));
+  lines.push(...formatTicketReceiptDualValueLines("Cajero: ", cashierLabel, "Caja: ", cashRegisterLabel));
+  lines.push(...formatTicketReceiptLabelValueLines("Vendedor: ", sellerLabel));
+  lines.push(...formatTicketReceiptDualValueLines("FACTURA: ", invoiceNumber, "HORA: ", saleTimeLabel));
+  lines.push(...formatTicketReceiptDualValueLines("FECHA: ", saleDateLabel, "Tasa: ", formatExchangeRateAmount(summary?.rateBsPerUsd || 0)));
+  lines.push("");
 
-    <section class="meta">
-      <div class="meta-row"><span>Factura</span><strong>${escapeHtml(String(venta?.numeroFactura || ''))}</strong></div>
-      <div class="meta-row"><span>Serie</span><strong>${escapeHtml(String(venta?.serie || ''))}</strong></div>
-      <div class="meta-row"><span>Fecha</span><strong>${escapeHtml(saleDateLabel)}</strong></div>
-      <div class="meta-row"><span>Tasa</span><strong>${escapeHtml(formatExchangeRateAmount(summary?.rateBsPerUsd || 0))}</strong></div>
-    </section>
+  if (items.length) {
+    items.forEach((item) => {
+      const quantity = Math.max(toFacturacionNumber(item?.cantidad || 0), 1);
+      const price = toFacturacionNumber(item?.precio || 0);
+      const grossSubtotal = toFacturacionNumber(item?.subtotal || quantity * price);
+      const itemDiscountPercent = discountOverride.active
+        ? discountOverride.percent
+        : Math.max(toFacturacionNumber(item?.descuentoPorcentaje || 0), 0);
+      const itemDiscountAmount = itemDiscountPercent > 0
+        ? Math.max((grossSubtotal * itemDiscountPercent) / 100, 0)
+        : 0;
+      const itemLabel = quantity > 1
+        ? `${formatTransferAmount(quantity)} x ${String(item?.nombre || item?.codigoBarra || "ARTICULO")}`
+        : String(item?.nombre || item?.codigoBarra || "ARTICULO");
+      lines.push(...formatTicketReceiptTwoColumnLines(itemLabel, `Bs ${formatTransferAmount(grossSubtotal)}`));
+      if (itemDiscountAmount > 0) {
+        lines.push(...formatTicketReceiptTwoColumnLines("DESC", `Bs -${formatTransferAmount(itemDiscountAmount)}`));
+      }
+    });
+  } else {
+    lines.push("Sin articulos cargados.");
+  }
 
-    <section class="section">
-      <div class="section-title">Cliente</div>
-      <div>${escapeHtml(String(normalizedDraft.clienteCodigo || '-'))}</div>
-      <div>${escapeHtml(String(normalizedDraft.clienteNombre || '-'))}</div>
-    </section>
+  lines.push("");
+  lines.push(...formatTicketReceiptTwoColumnLines("Valor mercancia", `${summary?.valorMercanciaDisplay || "0,00"} BsS`));
+  lines.push(...formatTicketReceiptTwoColumnLines("Descuento", `${summary?.descuentoMontoDisplay || "0,00"} BsS`));
+  lines.push(...formatTicketReceiptTwoColumnLines("Subtotal", `${summary?.subtotalDisplay || "0,00"} BsS`));
+  lines.push(...formatTicketReceiptTwoColumnLines("Impuesto", `${summary?.impuestoMontoDisplay || "0,00"} BsS`));
+  lines.push(...formatTicketReceiptTwoColumnLines("Total unidades", `${summary?.totalUnidadesDisplay || "0,00"}`));
+  lines.push(...formatTicketReceiptTwoColumnLines("Total USD", `${summary?.totalUsdDisplay || "0,00"} $`));
+  lines.push(...formatTicketReceiptTwoColumnLines("TOTAL", `${summary?.totalVentaDisplay || "0,00"} BsS`));
 
-    <section class="section">
-      <div class="section-title">Vendedor</div>
-      <div>${escapeHtml(String(normalizedDraft.vendedorCedula || '-'))}</div>
-      <div>${escapeHtml(String(normalizedDraft.vendedorNombre || '-'))}</div>
-    </section>
+  if (rows.length) {
+    lines.push("");
+    lines.push("Pagos");
+    rows.forEach((row) => {
+      const originalAmount = parseFacturacionPaymentAmount(row?.monto);
+      const amountBs = resolveFacturacionPaymentAmountInBs(row, summary?.rateBsPerUsd || 0);
+      const amountLabel = facturacionPaymentMethodUsesUsdAmount(row?.formaPago)
+        ? `${formatTransferAmount(originalAmount)} $ (${formatTransferAmount(amountBs)} BsS)`
+        : `${formatTransferAmount(amountBs)} BsS`;
+      lines.push(...formatTicketReceiptTwoColumnLines(String(row?.formaPago || ""), amountLabel));
+    });
+  }
 
-    <section class="section">
-      <div class="section-title">Articulos</div>
-      ${itemsMarkup}
-    </section>
-
-    <section class="section">
-      <div class="section-title">Pagos</div>
-      ${paymentMarkup}
-    </section>
-
-    <section class="section">
-      <div class="section-title">Resumen</div>
-      <div class="summary-row"><span>Valor mercancia</span><strong>${escapeHtml(summary?.valorMercanciaDisplay || '0,00')} BsS</strong></div>
-      <div class="summary-row"><span>Descuento</span><strong>${escapeHtml(summary?.descuentoMontoDisplay || '0,00')} BsS</strong></div>
-      <div class="summary-row"><span>Subtotal</span><strong>${escapeHtml(summary?.subtotalDisplay || '0,00')} BsS</strong></div>
-      <div class="summary-row"><span>Impuesto</span><strong>${escapeHtml(summary?.impuestoMontoDisplay || '0,00')} BsS</strong></div>
-      <div class="summary-row"><span>Total unidades</span><strong>${escapeHtml(summary?.totalUnidadesDisplay || '0,00')}</strong></div>
-      <div class="summary-row"><span>Total USD</span><strong>${escapeHtml(summary?.totalUsdDisplay || '0,00')} $</strong></div>
-      <div class="summary-row total"><span>TOTAL</span><strong>${escapeHtml(summary?.totalVentaDisplay || '0,00')} BsS</strong></div>
-    </section>
-
-    <section class="footer">
-      <small>Impresion directa en impresora termica</small>
-      <small>Gracias por su compra</small>
-    </section>
-  </div>
-</body>
-</html>`;
+  lines.push("");
+  lines.push(centerTicketReceiptText("Gracias por su compra"));
+  const ticketText = lines.join("\n");
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8" /><title>Factura ${escapeHtml(invoiceNumber)}</title><style>${buildFacturacionInvoiceTemplateStyle(variant)}</style></head><body><div class="ticket"><pre class="ticket-pre">${escapeHtml(ticketText)}</pre></div></body></html>`;
 }
 
-function openBrowserPrintPreview(html) {
+function openBrowserHtmlPreview(html, options = {}) {
   const previewWindow = window.open("", "_blank", "noopener,noreferrer,width=980,height=760");
   if (!previewWindow) {
     throw new Error("El navegador bloqueo la ventana de impresion.");
   }
-
   previewWindow.document.open();
   previewWindow.document.write(html);
   previewWindow.document.close();
   previewWindow.focus();
-  window.setTimeout(() => {
-    previewWindow.print();
-  }, 150);
+  if (options.autoPrint !== false) {
+    window.setTimeout(() => {
+      previewWindow.print();
+    }, 150);
+  }
+  return previewWindow;
+}
+
+function openBrowserPrintPreview(html) {
+  openBrowserHtmlPreview(html, { autoPrint: true });
 }
 
 async function printFacturacionInvoice(venta, draft, paymentRows, summary) {
@@ -4867,27 +5078,113 @@ async function printFacturacionInvoice(venta, draft, paymentRows, summary) {
   const bridge = getRockyClientBridge();
   if (!bridge || typeof bridge.printHtml !== "function") {
     openBrowserPrintPreview(html);
-    return {
-      ok: true,
-      printerName: "",
-      preview: true,
-    };
+    return { ok: true, printerName: "", preview: true };
   }
-
   if (!state.desktopPrinting.loaded && !state.desktopPrinting.loading) {
     await loadDesktopPrinters({ renderAfter: false, silent: true });
   }
-
   const configuredPrinterName = normalizeCashRegisterPrinterDraftValue(venta?.nombreImpresora || "");
   const fallbackPrinterName = getDefaultDesktopPrinterName();
-  return bridge.printHtml({
-    html,
-    printerName: configuredPrinterName || fallbackPrinterName,
-    copies: Number(venta?.numeroCopias || 1) || 1,
-    jobTitle: `Factura ${String(venta?.numeroFactura || '').trim() || 'Rocky Maxx'}`,
+  return bridge.printHtml({ html, printerName: configuredPrinterName || fallbackPrinterName, copies: Number(venta?.numeroCopias || 1) || 1, jobTitle: `Factura ${String(venta?.numeroFactura || "").trim() || "Rocky Maxx"}` });
+}
+function buildImpresoraFormatoContingenciaPreviewPayload(draft = state.impresoras.draft) {
+  const currentDraft = draft || createEmptyImpresoraDraft(state.impresoras.metadata);
+  const reportFormat = findImpresoraReportFormatById(currentDraft.idProcesoImpresion, state.impresoras.metadata);
+  if (!reportFormat) {
+    throw new Error("Debes seleccionar el formato de contingencia que quieres probar.");
+  }
+  const rateBsPerUsd = 582.68;
+  const valorMercancia = 135;
+  const totalImpuesto = 21.6;
+  const totalVenta = 156.6;
+  const sampleDraft = normalizeFacturacionDraft({
+    clienteCodigo: "V12345678",
+    clienteNombre: "Cliente de prueba",
+
+    clienteInfo: "AFILIADO",
+
+    clienteTelefono: "04121234567",
+
+    clienteDireccion: "CALLE 1, MARACAIBO",
+
+    vendedorCedula: "V98765432",
+    vendedorNombre: "Vendedor de prueba",
+    emisionContingencia: true,
+    items: [
+      { codigoBarra: "RMX-001", nombre: "Blusa modelo prueba", priceList: "detal", cantidad: "1", precio: "45.00", subtotal: "45.00" },
+      { codigoBarra: "RMX-002", nombre: "Pantalon modelo prueba", priceList: "mayor", cantidad: "1", precio: "55.00", subtotal: "55.00" },
+      { codigoBarra: "RMX-003", nombre: "Accesorio modelo prueba", priceList: "afiliado", cantidad: "1", precio: "35.00", subtotal: "35.00" },
+    ],
   });
+  return {
+    reportFormat,
+    venta: {
+      numeroFactura: "PRUEBA-001",
+      serie: "CONT-01",
+      fecha: new Date().toISOString(),
+      nombreImpresora: String(currentDraft.nombreImpresora || "").trim(),
+      numeroCopias: 1,
+
+      numeroCaja: 8,
+
+      usuario: "caja",
+
+      nombreUsuario: "CAJA PRINCIPAL",
+
+      clienteNombre: "CLIENTE DE PRUEBA",
+
+      clienteTelefono: "04121234567",
+
+      clienteDireccion: "CALLE 1, MARACAIBO",
+
+      vendedorNombre: "VENDEDOR DE PRUEBA",
+
+      emisionContingencia: true,
+      formatoContingenciaId: reportFormat.id,
+      formatoContingenciaArchivo: reportFormat.fileName,
+      esPruebaFormatoContingencia: true,
+    },
+    draft: sampleDraft,
+    paymentRows: [{ item: 1, formaPago: "EFECTIVO", monto: String(totalVenta) }],
+    summary: {
+      rateBsPerUsd,
+      valorMercanciaDisplay: formatTransferAmount(valorMercancia),
+      descuentoMontoDisplay: "0,00",
+      subtotalDisplay: formatTransferAmount(valorMercancia),
+      impuestoMontoDisplay: formatTransferAmount(totalImpuesto),
+      totalUnidadesDisplay: "3,00",
+      totalUsdDisplay: formatTransferAmount(totalVenta / rateBsPerUsd),
+      totalVentaDisplay: formatTransferAmount(totalVenta),
+    },
+  };
 }
 
+function previewImpresoraFormatoContingencia() {
+  const payload = buildImpresoraFormatoContingenciaPreviewPayload();
+  const html = buildFacturacionInvoiceHtml(payload.venta, payload.draft, payload.paymentRows, payload.summary);
+  openBrowserHtmlPreview(html, { autoPrint: false });
+}
+
+async function printImpresoraFormatoContingencia() {
+  const payload = buildImpresoraFormatoContingenciaPreviewPayload();
+  const html = buildFacturacionInvoiceHtml(payload.venta, payload.draft, payload.paymentRows, payload.summary);
+  const bridge = getRockyClientBridge();
+  if (!bridge || typeof bridge.printHtml !== "function") {
+    openBrowserPrintPreview(html);
+    setFlash("Se abrio la vista previa porque la impresion directa solo esta disponible desde Rocky Maxx Cliente.", "info");
+    render();
+    return;
+  }
+  if (!state.desktopPrinting.loaded && !state.desktopPrinting.loading) {
+    await loadDesktopPrinters({ renderAfter: false, silent: true });
+  }
+  const configuredPrinterName = normalizeCashRegisterPrinterDraftValue(payload.venta.nombreImpresora || "");
+  const fallbackPrinterName = getDefaultDesktopPrinterName();
+  const result = await bridge.printHtml({ html, printerName: configuredPrinterName || fallbackPrinterName, copies: 1, jobTitle: `Prueba ${payload.reportFormat.fileName}` });
+  const printedOn = String(result?.printerName || configuredPrinterName || fallbackPrinterName || "").trim();
+  setFlash(printedOn ? `Se envio la prueba del formato ${payload.reportFormat.label} a ${printedOn}.` : `Se envio la prueba del formato ${payload.reportFormat.label}.`, "success");
+  render();
+}
 function renderCashRegistersWorkspace() {
   const draft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
   const metadata = state.cashRegisters.metadata || {};
@@ -7214,6 +7511,9 @@ function renderImpresorasWorkspace() {
   const items = Array.isArray(state.impresoras.items) ? state.impresoras.items : [];
   const detectedPrinters = getDetectedDesktopPrinters();
   const detectedCount = detectedPrinters.length;
+  const reportFormats = getImpresoraReportFormats(state.impresoras.metadata);
+  const selectedReportFormat = findImpresoraReportFormatById(draft.idProcesoImpresion, state.impresoras.metadata);
+  const isContingenciaPrinter = Number.parseInt(String(draft.status ?? "0"), 10) === 1;
   const isSaving = state.impresoras.saving;
   const isDeleting = state.impresoras.deleting;
   const isBusy = isSaving || isDeleting;
@@ -7222,6 +7522,9 @@ function renderImpresorasWorkspace() {
         ? `Se detectaron ${detectedCount} impresora(s) en este computador.`
         : "No se detectaron impresoras en este computador.")
     : "La deteccion de impresoras solo esta disponible desde el ejecutable de Rocky Maxx.";
+  const reportFormatMessage = reportFormats.length
+    ? `${reportFormats.length} formato(s) de contingencia detectados en la carpeta de pruebas.`
+    : "No se detectaron formatos .rpt en la carpeta de pruebas.";
 
   return `
     <div class="modern-page clients-page">
@@ -7249,14 +7552,7 @@ function renderImpresorasWorkspace() {
             <div class="clients-grid">
               <label class="clients-field clients-field-code">
                 <span>ID</span>
-                <input
-                  type="number"
-                  name="id"
-                  min="0"
-                  step="1"
-                  value="${escapeHtml(toInputValue(draft.id))}"
-                  readonly
-                />
+                <input type="number" name="id" min="0" step="1" value="${escapeHtml(toInputValue(draft.id))}" readonly />
               </label>
 
               <label class="clients-field clients-field-wide">
@@ -7279,8 +7575,27 @@ function renderImpresorasWorkspace() {
                   </label>
                 </div>
               </fieldset>
+
+              ${isContingenciaPrinter ? `
+                <label class="clients-field clients-field-wide">
+                  <span>Formato contingencia</span>
+                  <select name="idProcesoImpresion">
+                    ${renderImpresoraReportFormatOptions(draft.idProcesoImpresion, state.impresoras.metadata)}
+                  </select>
+                  <small>Solo se usara cuando la factura se marque como emision de contingencia.</small>
+                </label>
+
+                <div class="clients-field clients-field-wide">
+                  <span>Prueba del formato</span>
+                  <div class="clients-history-actions">
+                    <button class="button button-ghost" type="button" data-preview-impresora-formato ${!reportFormats.length ? "disabled" : ""}>Vista previa</button>
+                    <button class="button" type="button" data-print-impresora-formato ${!reportFormats.length ? "disabled" : ""}>Imprimir prueba</button>
+                  </div>
+                  <small>${escapeHtml(selectedReportFormat?.label || "Selecciona uno de los formatos .rpt detectados.")}</small>
+                </div>
+              ` : ""}
             </div>
-            <div class="muted">${escapeHtml(detectionMessage)}</div>
+            <div class="muted">${escapeHtml(`${detectionMessage} ${reportFormatMessage}`)}</div>
           </div>
 
           <div class="clients-history-panel">
@@ -7292,20 +7607,12 @@ function renderImpresorasWorkspace() {
               <div class="clients-history-actions">
                 <label class="field">
                   <span>Buscar</span>
-                  <input
-                    type="search"
-                    name="impresoraBuscar"
-                    data-impresora-search
-                    value="${escapeHtml(toInputValue(state.impresoras.search))}"
-                    placeholder="ID o nombre"
-                  />
+                  <input type="search" name="impresoraBuscar" data-impresora-search value="${escapeHtml(toInputValue(state.impresoras.search))}" placeholder="ID o nombre" />
                 </label>
                 <button class="button button-ghost" type="button" data-refresh-impresoras ${state.impresoras.loading || isBusy ? "disabled" : ""}>
                   ${state.impresoras.loading ? "Actualizando..." : "Actualizar"}
                 </button>
-                <button class="button button-ghost" type="button" data-impresora-reset ${isBusy ? "disabled" : ""}>
-                  Limpiar
-                </button>
+                <button class="button button-ghost" type="button" data-impresora-reset ${isBusy ? "disabled" : ""}>Limpiar</button>
               </div>
             </div>
             ${state.impresoras.loading ? renderLoadingState("Cargando impresoras...") : renderImpresorasTable()}
@@ -7315,7 +7622,6 @@ function renderImpresorasWorkspace() {
     </div>
   `;
 }
-
 function renderImpresorasTable() {
   const items = Array.isArray(state.impresoras.items) ? state.impresoras.items : [];
   const search = normalizeSearchText(state.impresoras.search);
@@ -7340,6 +7646,7 @@ function renderImpresorasTable() {
             <th>ID</th>
             <th>Impresora</th>
             <th>Status</th>
+            <th>Formato contingencia</th>
             <th>Detectada</th>
             <th class="sucursal-row-actions">Accion</th>
           </tr>
@@ -7348,24 +7655,19 @@ function renderImpresorasTable() {
           ${visibleItems
             .map((item) => {
               const isSelected = String(state.impresoras.selectedId || "") === String(item.id || "");
+              const formatLabel = Number(item.status ?? 0) === 1
+                ? renderImpresoraReportFormatLabel(item.idProcesoImpresion, state.impresoras.metadata)
+                : "No aplica";
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
                   <td><strong>${escapeHtml(String(item.id || "-"))}</strong></td>
                   <td>${escapeHtml(item.nombreImpresora || "-")}</td>
                   <td>${renderImpresoraStatusBadge(item.status)}</td>
+                  <td>${escapeHtml(formatLabel)}</td>
                   <td>${renderImpresoraDetectedBadge(item.nombreImpresora)}</td>
                   <td class="sucursal-row-actions">
-                    <button class="button button-ghost" type="button" data-impresora-select="${escapeHtml(String(item.id || ""))}">
-                      Abrir
-                    </button>
-                    <button
-                      class="button button-danger"
-                      type="button"
-                      data-delete-impresora="${escapeHtml(String(item.id || ""))}"
-                      ${state.impresoras.deleting ? "disabled" : ""}
-                    >
-                      Eliminar
-                    </button>
+                    <button class="button button-ghost" type="button" data-impresora-select="${escapeHtml(String(item.id || ""))}">Abrir</button>
+                    <button class="button button-danger" type="button" data-delete-impresora="${escapeHtml(String(item.id || ""))}" ${state.impresoras.deleting ? "disabled" : ""}>Eliminar</button>
                   </td>
                 </tr>
               `;
@@ -7376,7 +7678,6 @@ function renderImpresorasTable() {
     </div>
   `;
 }
-
 function renderImpresoraStatusBadge(status) {
   const numericStatus = Number(status ?? 0);
   return `<span class="modern-chip">${numericStatus === 1 ? "Contingencia" : "No contingencia"}</span>`;
@@ -7386,6 +7687,55 @@ function renderImpresoraDetectedBadge(nombreImpresora) {
   return `<span class="modern-chip">${isDetectedDesktopPrinter(nombreImpresora) ? "Detectada" : "No detectada"}</span>`;
 }
 
+function getImpresoraReportFormats(metadata) {
+  const rawFormats = Array.isArray(metadata?.reportFormats) ? metadata.reportFormats : [];
+  return rawFormats
+    .map((item) => ({
+      id: Number.parseInt(String(item?.id ?? "").trim(), 10),
+      fileName: String(item?.fileName || "").trim(),
+      label: String(item?.label || item?.fileName || "").trim(),
+    }))
+    .filter((item) => Number.isInteger(item.id) && item.id > 0 && item.label);
+}
+
+function findImpresoraReportFormatById(value, metadata) {
+  const numericId = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isInteger(numericId) || numericId < 1) {
+    return null;
+  }
+
+  return getImpresoraReportFormats(metadata).find((item) => item.id === numericId) || null;
+}
+
+function normalizeImpresoraReportFormatId(value, metadata, fallbackValue = "") {
+  const matched = findImpresoraReportFormatById(value, metadata);
+  if (matched) {
+    return String(matched.id);
+  }
+
+  const fallback = findImpresoraReportFormatById(fallbackValue, metadata) || getImpresoraReportFormats(metadata)[0] || null;
+  return fallback ? String(fallback.id) : "";
+}
+
+function renderImpresoraReportFormatOptions(selectedValue, metadata) {
+  const formats = getImpresoraReportFormats(metadata);
+  if (!formats.length) {
+    return '<option value="">No se detectaron formatos .rpt</option>';
+  }
+
+  const normalizedValue = normalizeImpresoraReportFormatId(selectedValue, metadata);
+  return formats
+    .map((item) => `
+      <option value="${escapeHtml(String(item.id))}" ${String(item.id) === normalizedValue ? "selected" : ""}>
+        ${escapeHtml(item.label)}
+      </option>
+    `)
+    .join("");
+}
+
+function renderImpresoraReportFormatLabel(value, metadata) {
+  return findImpresoraReportFormatById(value, metadata)?.label || "-";
+}
 function renderImpresoraDetectedOptions(selectedValue) {
   const printers = getDetectedDesktopPrinters();
   const options = printers.map((item) => {
@@ -9061,6 +9411,56 @@ function bindLoginEvents() {
   });
 }
 
+async function handleLogin() {
+  const usuario = String(state.loginDraft?.usuario || "").trim();
+  const password = String(state.loginDraft?.password || "").trim();
+
+  if (!usuario || !password) {
+    setFlash("Debes indicar usuario y clave para ingresar.", "error");
+    render();
+    return;
+  }
+
+  state.isAuthenticating = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch("/auth/login", {
+      method: "POST",
+      auth: false,
+      body: {
+        usuario,
+        password,
+      },
+    });
+
+    if (!response?.accessToken) {
+      throw new Error("La autenticacion no devolvio un token valido.");
+    }
+
+    state.token = response.accessToken;
+    state.user = response?.usuario || null;
+    await hydrateAuthenticatedState();
+    persistSession();
+    state.loginDraft = {
+      usuario,
+      password: "",
+      mantenerSesion: Boolean(state.loginDraft?.mantenerSesion),
+    };
+    state.isAuthenticating = false;
+    clearFlash();
+    render();
+  } catch (error) {
+    console.error(error);
+    state.token = "";
+    state.user = null;
+    state.isAuthenticating = false;
+    setFlash(extractErrorMessage(error), "error");
+    render();
+  }
+}
+
 function bindShellEvents() {
   const shell = document.querySelector(".desktop-shell");
   if (shell) {
@@ -9354,6 +9754,1026 @@ function bindShellEvents() {
 
       await setRoleCatalogImportAccess(roleCode, nextEnabled);
     });
+  });
+}
+
+function bindFacturacionEvents() {
+  document.querySelectorAll("[data-facturacion-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      captureFacturacionDraft();
+      const action = button.getAttribute("data-facturacion-action") || "";
+
+      if (action === "salir" || action === "salir-vista") {
+        resetFacturacionState();
+        state.currentView = "desktop";
+        state.navigation.openMenu = "";
+        state.navigation.openSubmenu = "";
+        state.navigation.menuPinned = false;
+        clearFlash();
+        render();
+        return;
+      }
+
+      if (action === "nuevo" || action === "cancelar" || action === "cancelar-documento") {
+        const currentPriceList = getCurrentFacturacionPriceList();
+        state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentPriceList });
+        state.facturacion.selectedLineIndex = -1;
+        state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
+        state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
+        state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+        clearFlash();
+        render();
+        return;
+      }
+
+      if (action === "descuento") {
+        const currentDraft = normalizeFacturacionDraft(state.facturacion.draft);
+        if (currentDraft.overrideDiscountAuthorized) {
+          focusFacturacionGlobalDiscountInput();
+          return;
+        }
+
+        openFacturacionDiscountAuthModal();
+        render();
+        return;
+      }
+
+      if (action === "congelar") {
+        freezeCurrentFacturacionDraft();
+        return;
+      }
+
+      if (action === "descongelar") {
+        openFacturacionFrozenLookupModal();
+        render();
+        return;
+      }
+
+      if (action === "forma-pago") {
+        openFacturacionPaymentModal();
+        render();
+        return;
+      }
+
+      if (action === "cambiar-lista") {
+        const currentDraft = normalizeFacturacionDraft(state.facturacion.draft);
+        const selectedLineIndex = getFacturacionSelectedLineIndex();
+        if (selectedLineIndex < 0) {
+          setFlash("Selecciona primero una linea de la factura para cambiar su lista de precios.", "error");
+          render();
+          return;
+        }
+
+        const selectedLine = currentDraft.items[selectedLineIndex];
+        if (!selectedLine || !String(selectedLine.codigoBarra || "").trim()) {
+          setFlash("La linea seleccionada no tiene un articulo cargado.", "error");
+          render();
+          return;
+        }
+
+        const nextPriceList = getNextFacturacionPriceList(selectedLine.priceList);
+        state.facturacion.draft = recalculateFacturacionDraftLinePriceList(currentDraft, selectedLineIndex, nextPriceList);
+        clearFlash();
+        setFlash(`Lista de precios del articulo ${selectedLineIndex + 1}: ${getFacturacionPriceListLabel(nextPriceList)}.`, "success");
+        render();
+        return;
+      }
+
+      const labels = {
+        nuevo: "Nuevo documento",
+        buscar: "Buscar cliente o vendedor",
+        guardar: "Guardar factura",
+        cancelar: "Cancelar factura",
+        descuento: "Descuento global",
+        "forma-pago": "Forma de pago",
+        "cancelar-documento": "Cancelar documento",
+      };
+
+      setFlash(`${labels[action] || "Accion"} lista para conectar con la logica de facturacion.`, "info");
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-facturacion-discount-auth-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeFacturacionDiscountAuthModal();
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-facturacion-payment-close], [data-facturacion-payment-cancel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (state.facturacion.savingSale) {
+        return;
+      }
+      closeFacturacionPaymentModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-payment-accept]")?.addEventListener("click", async () => {
+    if (state.facturacion.savingSale) {
+      return;
+    }
+
+    const draft = normalizeFacturacionDraft(state.facturacion.draft);
+    const summary = calculateFacturacionSummary(
+      draft.items,
+      getActiveFacturacionTax(),
+      state.facturacion.exchangeRate,
+      draft,
+    );
+    const validationMessage = validateFacturacionPaymentRows(summary, state.facturacion.paymentModal?.rows);
+    if (validationMessage) {
+      setFlash(validationMessage, "error");
+      render();
+      return;
+    }
+
+    state.facturacion.savingSale = true;
+    clearFlash();
+    render();
+
+    try {
+      const paymentRowsSnapshot = normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows);
+      const payload = buildFacturacionSalePayload(draft, paymentRowsSnapshot, state.facturacion.exchangeRate);
+      const response = await apiFetch("/facturacion/sales", {
+        method: "POST",
+        body: payload,
+      });
+      const venta = response?.venta || {};
+      const currentPriceList = getCurrentFacturacionPriceList();
+      const preservedRate = normalizeFacturacionExchangeRateState(state.facturacion.exchangeRate);
+
+      state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentPriceList });
+      state.facturacion.exchangeRate = preservedRate;
+      state.facturacion.savingSale = false;
+      state.facturacion.selectedLineIndex = -1;
+      state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
+      state.facturacion.lookup = {
+        open: false,
+        loading: false,
+        type: "",
+        items: [],
+      };
+      state.facturacion.lineLookup = {
+        open: false,
+        loading: false,
+        lineIndex: -1,
+        search: "",
+        items: [],
+        activeIndex: -1,
+      };
+      state.facturacion.frozenLookup = createEmptyFacturacionFrozenLookupState();
+      state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
+      state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+
+      let flashType = "success";
+      let successMessage = venta.emisionContingencia
+        ? `Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""} como emision de contingencia.`
+        : `Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""}.`;
+
+      try {
+        const printDraft = normalizeFacturacionDraft({
+          ...draft,
+          emisionContingencia: Boolean(venta.emisionContingencia),
+        });
+        const printSummary = calculateFacturacionSummary(
+          printDraft.items,
+          getActiveFacturacionTax(),
+          state.facturacion.exchangeRate,
+          printDraft,
+        );
+        const printResult = await printFacturacionInvoice(venta, printDraft, paymentRowsSnapshot, printSummary);
+        const printedOn = String(printResult?.printerName || "").trim();
+        if (printedOn) {
+          successMessage += ` Impresa en ${printedOn}.`;
+        }
+      } catch (printError) {
+        console.error(printError);
+        flashType = "error";
+        successMessage += ` La venta se guardo, pero no se pudo imprimir: ${extractErrorMessage(printError)}.`;
+      }
+
+      setFlash(successMessage, flashType);
+    } catch (error) {
+      console.error(error);
+      state.facturacion.savingSale = false;
+      setFlash(extractErrorMessage(error), "error");
+    }
+
+    render();
+  });
+
+  document.querySelectorAll("[data-facturacion-payment-field]").forEach((field) => {
+    const syncField = () => {
+      const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-row") || "", 10);
+      const fieldName = field.getAttribute("data-facturacion-payment-field") || "";
+      if (!Number.isInteger(rowIndex) || rowIndex < 0 || !fieldName || !("value" in field)) {
+        return;
+      }
+
+      updateFacturacionPaymentField(rowIndex, fieldName, field.value);
+    };
+
+    field.addEventListener("change", () => {
+      syncField();
+      render();
+    });
+
+    if (field instanceof HTMLInputElement) {
+      field.addEventListener("input", () => {
+        syncField();
+        const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-row") || "", 10);
+        const fieldName = field.getAttribute("data-facturacion-payment-field") || "";
+        if (fieldName === "monto" && Number.isInteger(rowIndex) && rowIndex >= 0) {
+          rerenderFacturacionPaymentField(rowIndex, fieldName);
+        }
+      });
+    }
+  });
+
+  document.querySelectorAll("[data-facturacion-payment-cedula]").forEach((field) => {
+    field.addEventListener("click", () => {
+      const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-cedula") || "", 10);
+      if (!Number.isInteger(rowIndex) || rowIndex < 0) {
+        return;
+      }
+
+      const currentRow = normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows)[rowIndex];
+      if (!facturacionPaymentMethodIsCard(currentRow?.formaPago) || String(currentRow?.cedula || "").trim()) {
+        return;
+      }
+
+      openFacturacionPaymentCedulaPrompt(rowIndex);
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-facturacion-payment-cedula-close], [data-facturacion-payment-cedula-no]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const rowIndex = Number.isInteger(state.facturacion.paymentCedulaPrompt?.rowIndex)
+        ? state.facturacion.paymentCedulaPrompt.rowIndex
+        : -1;
+      closeFacturacionPaymentCedulaPrompt({ focusRowIndex: rowIndex });
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-payment-cedula-yes]")?.addEventListener("click", () => {
+    const rowIndex = Number.isInteger(state.facturacion.paymentCedulaPrompt?.rowIndex)
+      ? state.facturacion.paymentCedulaPrompt.rowIndex
+      : -1;
+    if (rowIndex < 0) {
+      closeFacturacionPaymentCedulaPrompt();
+      render();
+      return;
+    }
+
+    applyFacturacionPaymentClientCedula(rowIndex);
+    render();
+  });
+
+  const facturacionDiscountAuthForm = document.getElementById("facturacion-discount-auth-form");
+  if (facturacionDiscountAuthForm instanceof HTMLFormElement) {
+    facturacionDiscountAuthForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureFacturacionDiscountAuthDraft();
+      await authorizeFacturacionGlobalDiscount();
+    });
+  }
+
+  document.querySelectorAll("[data-facturacion-frozen-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeFacturacionFrozenLookupModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-frozen-refresh]")?.addEventListener("click", () => {
+    openFacturacionFrozenLookupModal();
+    render();
+  });
+
+  document.querySelectorAll("[data-facturacion-frozen-select]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      const recordId = row.getAttribute("data-facturacion-frozen-select") || "";
+      if (!recordId) {
+        return;
+      }
+
+      await restoreFacturacionFrozenDraft(recordId);
+    });
+  });
+
+  document.querySelectorAll("[data-facturacion-select-line]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const rowNumber = Number.parseInt(row.getAttribute("data-facturacion-select-line") || "", 10);
+      if (!Number.isInteger(rowNumber) || rowNumber < 1) {
+        return;
+      }
+
+      selectFacturacionLine(rowNumber - 1);
+      renderFacturacionAndFocusLine(rowNumber);
+    });
+  });
+
+  document.querySelector("[data-facturacion-cliente-codigo]")?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    await resolveFacturacionClienteFromField();
+  });
+
+  document.querySelector("[data-facturacion-vendedor-cedula]")?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    await resolveFacturacionTrabajadorFromField();
+  });
+
+  document.querySelector("[data-facturacion-contingencia]")?.addEventListener("change", () => {
+    captureFacturacionDraft();
+    clearFlash();
+    render();
+  });
+  document.querySelector("[data-facturacion-open-vendedor-lookup]")?.addEventListener("click", async () => {
+    captureFacturacionDraft();
+    await openFacturacionLookupModal("trabajadores");
+  });
+
+  document.querySelector("[data-facturacion-open-cliente-lookup]")?.addEventListener("click", async () => {
+    captureFacturacionDraft();
+    await openFacturacionClientEditor();
+  });
+
+  document.querySelectorAll("[data-facturacion-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeFacturacionLookupModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-lookup-refresh]")?.addEventListener("click", async () => {
+    const type = state.facturacion.lookup?.type || "trabajadores";
+    await openFacturacionLookupModal(type);
+  });
+
+  document.querySelectorAll("[data-facturacion-lookup-select]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      const recordId = row.getAttribute("data-facturacion-lookup-select") || "";
+      if (!recordId) {
+        return;
+      }
+
+      const type = state.facturacion.lookup?.type;
+      if (type === "trabajadores") {
+        const selected = (state.facturacion.lookup.items || []).find((item) => String(item.cedula || "") === recordId);
+        if (selected) {
+          applyTrabajadorToFacturacionDraft(selected);
+        }
+      } else {
+        const selected = (state.facturacion.lookup.items || []).find((item) => String(item.codigo || "") === recordId);
+        if (selected) {
+          applyClienteToFacturacionDraft(selected);
+        }
+      }
+
+      closeFacturacionLookupModal();
+      clearFlash();
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-facturacion-client-editor-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeFacturacionClientEditor();
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-client-editor-edit]")?.addEventListener("click", async () => {
+    captureFacturacionClientEditorDraft();
+    await loadFacturacionClientEditorForEdit();
+  });
+
+  const facturacionClientEditorForm = document.getElementById("facturacion-client-editor-form");
+  if (facturacionClientEditorForm instanceof HTMLFormElement) {
+    facturacionClientEditorForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureFacturacionClientEditorDraft();
+      await saveFacturacionClientEditor();
+    });
+  }
+
+  document.querySelectorAll("[data-facturacion-line-codigo]").forEach((input) => {
+    input.addEventListener("input", () => {
+      captureFacturacionDraft();
+    });
+
+    input.addEventListener("focus", () => {
+      const rowNumber = Number.parseInt(input.getAttribute("data-facturacion-line-codigo") || "0", 10);
+      if (!rowNumber) {
+        return;
+      }
+
+      selectFacturacionLine(rowNumber - 1);
+    });
+
+    input.addEventListener("keydown", async (event) => {
+      const rowNumber = Number.parseInt(input.getAttribute("data-facturacion-line-codigo") || "0", 10);
+      if (!rowNumber) {
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusFacturacionLineInput(rowNumber + 1);
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusFacturacionLineInput(rowNumber - 1);
+        return;
+      }
+
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      await resolveFacturacionLineFromField(rowNumber - 1);
+    });
+  });
+
+  const facturacionGlobalDiscountInput = document.querySelector("[data-facturacion-global-discount]");
+  if (facturacionGlobalDiscountInput instanceof HTMLInputElement) {
+    facturacionGlobalDiscountInput.addEventListener("focus", () => {
+      facturacionGlobalDiscountInput.select();
+    });
+
+    facturacionGlobalDiscountInput.addEventListener("change", () => {
+      applyFacturacionGlobalDiscountFromField(facturacionGlobalDiscountInput.value);
+    });
+
+    facturacionGlobalDiscountInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      applyFacturacionGlobalDiscountFromField(facturacionGlobalDiscountInput.value);
+    });
+  }
+
+  document.querySelectorAll("[data-facturacion-line-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const { lineIndex } = state.facturacion.lineLookup || {};
+      closeFacturacionLineLookupModal();
+      if (typeof lineIndex === "number" && lineIndex >= 0) {
+        renderFacturacionAndFocusLine(lineIndex + 1);
+        return;
+      }
+
+      render();
+    });
+  });
+
+  document.querySelector("[data-facturacion-line-lookup-refresh]")?.addEventListener("click", async () => {
+    const { lineIndex } = state.facturacion.lineLookup || {};
+    if (typeof lineIndex !== "number" || lineIndex < 0) {
+      return;
+    }
+
+    await resolveFacturacionLineFromField(lineIndex);
+  });
+
+  document.querySelectorAll("[data-facturacion-line-lookup-select]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const selectedIndex = Number.parseInt(row.getAttribute("data-facturacion-line-lookup-select") || "", 10);
+      if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+        return;
+      }
+
+      const lookup = state.facturacion.lineLookup;
+      const selected = (lookup.items || [])[selectedIndex];
+      if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+        return;
+      }
+
+      fillFacturacionLineFromInventory(lookup.lineIndex, selected);
+      closeFacturacionLineLookupModal();
+      clearFlash();
+      renderFacturacionAndFocusLine(lookup.lineIndex + 1);
+    });
+  });
+
+  const facturacionLineLookupDialog = document.querySelector("[data-facturacion-line-lookup-dialog]");
+  if (facturacionLineLookupDialog instanceof HTMLElement) {
+    queueMicrotask(() => {
+      facturacionLineLookupDialog.focus();
+    });
+
+    facturacionLineLookupDialog.addEventListener("keydown", (event) => {
+      const lookup = state.facturacion.lineLookup;
+      const items = Array.isArray(lookup?.items) ? lookup.items : [];
+      if (!lookup?.open || !items.length) {
+        return;
+      }
+
+      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0
+        ? lookup.activeIndex
+        : 0;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.facturacion.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex + 1) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.facturacion.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex - 1 + items.length) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const selected = items[currentIndex];
+        if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+          return;
+        }
+
+        fillFacturacionLineFromInventory(lookup.lineIndex, selected);
+        closeFacturacionLineLookupModal();
+        clearFlash();
+        renderFacturacionAndFocusLine(lookup.lineIndex + 1);
+        return;
+      }
+    });
+  }
+}
+
+function bindComprasEvents() {
+  document.querySelector("[data-refresh-compras]")?.addEventListener("click", async () => {
+    await loadCompras();
+  });
+
+  document.querySelector("[data-new-compra]")?.addEventListener("click", async () => {
+    resetCompraDraft();
+    clearFlash();
+    render();
+    await openCompraArticleLookupModal("");
+  });
+
+  document.querySelector("[data-open-compra-lookup]")?.addEventListener("click", async () => {
+    await openCompraArticleLookupModal(state.compras.articleLookup?.search || "");
+  });
+
+  document.querySelector("[data-delete-compra-current]")?.addEventListener("click", async () => {
+    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+    if (!draft.originalDocumento || !draft.originalProveedor) {
+      return;
+    }
+
+    await deleteCompra(draft.originalDocumento, draft.originalProveedor);
+  });
+
+  document.querySelector("[data-approve-compra-current]")?.addEventListener("click", async () => {
+    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+    if (!draft.originalDocumento || !draft.originalProveedor) {
+      return;
+    }
+
+    await approveCompra(draft.originalDocumento, draft.originalProveedor);
+  });
+
+  document.querySelector("[data-compra-search]")?.addEventListener("input", (event) => {
+    state.compras.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelectorAll("[data-compra-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const documento = button.getAttribute("data-compra-select") || "";
+      const proveedor = button.getAttribute("data-compra-proveedor") || "";
+      if (!documento || !proveedor) {
+        return;
+      }
+
+      await loadCompraForEdit(documento, proveedor);
+    });
+  });
+
+  document.querySelectorAll("[data-compra-remove-item]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number.parseInt(button.getAttribute("data-compra-remove-item") || "", 10);
+      if (!Number.isInteger(index) || index < 0) {
+        return;
+      }
+
+      removeCompraDraftItem(index);
+      clearFlash();
+      render();
+    });
+  });
+
+  const comprasForm = document.getElementById("compras-form");
+  if (comprasForm) {
+    comprasForm.addEventListener("input", () => {
+      captureCompraDraft();
+      syncCompraComputedFields(comprasForm);
+    });
+
+    comprasForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureCompraDraft();
+      await saveCompra();
+    });
+  }
+
+  document.querySelectorAll("[data-compra-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeCompraArticleLookupModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-compra-lookup-refresh]")?.addEventListener("click", async () => {
+    await loadCompraArticleLookup(state.compras.articleLookup?.search || "");
+  });
+
+  document.querySelector("[data-compra-lookup-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    const search = readFormFieldValue(form, "buscar", state.compras.articleLookup?.search || "");
+    await loadCompraArticleLookup(search);
+  });
+
+  document.querySelectorAll("[data-compra-lookup-select]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const index = Number.parseInt(row.getAttribute("data-compra-lookup-select") || "", 10);
+      if (!Number.isInteger(index) || index < 0) {
+        return;
+      }
+
+      const lookup = state.compras.articleLookup || createEmptyCompraArticleLookupState();
+      const selected = (lookup.items || [])[index];
+      if (!selected) {
+        return;
+      }
+
+      addArticleToCompraDraft(selected);
+      render();
+    });
+  });
+
+  const compraLookupDialog = document.querySelector("[data-compra-lookup-dialog]");
+  if (compraLookupDialog instanceof HTMLElement) {
+    queueMicrotask(() => {
+      compraLookupDialog.focus();
+    });
+
+    compraLookupDialog.addEventListener("keydown", (event) => {
+      const lookup = state.compras.articleLookup || createEmptyCompraArticleLookupState();
+      const items = Array.isArray(lookup.items) ? lookup.items : [];
+      const target = event.target;
+      const typingTarget =
+        target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+
+      if (typingTarget && event.key !== "Escape") {
+        return;
+      }
+
+      if (!lookup.open || !items.length) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeCompraArticleLookupModal();
+          render();
+        }
+        return;
+      }
+
+      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0 ? lookup.activeIndex : 0;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.compras.articleLookup = {
+          ...lookup,
+          activeIndex: (currentIndex + 1) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.compras.articleLookup = {
+          ...lookup,
+          activeIndex: (currentIndex - 1 + items.length) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const selected = items[currentIndex];
+        if (!selected) {
+          return;
+        }
+
+        addArticleToCompraDraft(selected);
+        render();
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCompraArticleLookupModal();
+        render();
+      }
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "compras" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "a"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.compras.saving || state.compras.deleting || state.compras.approving) {
+      return;
+    }
+
+    if (key === "c") {
+      resetCompraDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      captureCompraDraft();
+      await saveCompra();
+      return;
+    }
+
+    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+    if (!draft.originalDocumento || !draft.originalProveedor) {
+      return;
+    }
+
+    await approveCompra(draft.originalDocumento, draft.originalProveedor);
+  };
+}
+
+function bindCashRegisterCloseEvents() {
+  document.querySelector("[data-refresh-cajas-close]")?.addEventListener("click", async () => {
+    await loadCashRegisters();
+  });
+
+  document.querySelector("[data-open-caja-close-lookup]")?.addEventListener("click", () => {
+    const searchField = document.querySelector("[data-caja-close-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  });
+
+  document.querySelector("[data-caja-close-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-caja-close-reset]")?.addEventListener("click", () => {
+    const firstOpenItem = getCloseableCashRegisters()[0] || null;
+    state.cashRegisters.selectedKey = firstOpenItem ? buildCashRegisterKey(firstOpenItem.serie, firstOpenItem.fecha) : "";
+    state.cashRegisters.draft = firstOpenItem
+      ? buildCashRegisterCloseDraft(firstOpenItem, state.cashRegisters.draft)
+      : createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-caja-close-search]")?.addEventListener("input", (event) => {
+    state.cashRegisters.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelectorAll("[data-caja-close-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const serie = button.getAttribute("data-caja-close-select") || "";
+      const fecha = button.getAttribute("data-caja-close-fecha") || "";
+      const item = getCloseableCashRegisters().find(
+        (entry) => buildCashRegisterKey(entry.serie, entry.fecha) === buildCashRegisterKey(serie, fecha),
+      );
+      if (!item) {
+        return;
+      }
+
+      state.cashRegisters.selectedKey = buildCashRegisterKey(item.serie, item.fecha);
+      state.cashRegisters.draft = buildCashRegisterCloseDraft(item, state.cashRegisters.draft);
+      clearFlash();
+      render();
+    });
+  });
+
+  const submitClose = async (event) => {
+    event?.preventDefault?.();
+    const form = document.getElementById("caja-close-form");
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    const draft = readCashRegisterDraft(form);
+    state.cashRegisters.draft = draft;
+    await closeCashRegister(draft.originalSerie || draft.serie, draft.originalFecha || draft.fecha, draft.horaCierre);
+  };
+
+  document.querySelector("[data-close-caja]")?.addEventListener("click", submitClose);
+  document.getElementById("caja-close-form")?.addEventListener("submit", submitClose);
+}
+function bindCashRegisterEvents() {
+  document.querySelector("[data-refresh-cajas]")?.addEventListener("click", async () => {
+    await loadCashRegisters();
+  });
+
+  document.querySelector("[data-new-caja]")?.addEventListener("click", () => {
+    resetCashRegisterDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-open-caja-lookup]")?.addEventListener("click", () => {
+    const searchField = document.querySelector("[data-caja-search]");
+    if (searchField && typeof searchField.focus === "function") {
+      searchField.focus();
+      searchField.select?.();
+    }
+  });
+
+  document.querySelectorAll("[data-delete-caja]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const serie = button.getAttribute("data-delete-caja") || "";
+      const fecha = button.getAttribute("data-delete-caja-fecha") || "";
+      if (!serie || !fecha) {
+        return;
+      }
+
+      await deleteCashRegister(serie, fecha);
+    });
+  });
+
+  document.querySelector("[data-caja-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+    document.querySelector("[data-caja-reset]")?.addEventListener("click", () => {
+    resetCashRegisterDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-refresh-desktop-printers]")?.addEventListener("click", async () => {
+    await loadDesktopPrinters();
+
+    const currentDraft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+    if (!String(currentDraft.nombreImpresora || "").trim()) {
+      state.cashRegisters.draft = {
+        ...currentDraft,
+        nombreImpresora: getDefaultDesktopPrinterName(),
+      };
+      render();
+    }
+  });
+
+  document.querySelector("[data-caja-search]")?.addEventListener("input", (event) => {
+    state.cashRegisters.search = event.target.value || "";
+    render();
+  });
+
+  document.querySelectorAll("[data-caja-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const serie = button.getAttribute("data-caja-select") || "";
+      const fecha = button.getAttribute("data-caja-fecha") || "";
+      if (!serie || !fecha) {
+        return;
+      }
+
+      await loadCashRegisterForEdit(serie, fecha);
+    });
+  });
+
+  const cajaForm = document.getElementById("caja-form");
+  if (cajaForm) {
+    cajaForm.addEventListener("input", () => {
+      captureCashRegisterDraft();
+    });
+
+    cajaForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureCashRegisterDraft();
+      await saveCashRegister();
+    });
+  }
+
+  document.onkeydown = async (event) => {
+    if (state.currentView !== "cajas" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const key = String(event.key || "").toLowerCase();
+    if (!["c", "g", "s"].includes(key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (state.cashRegisters.saving || state.cashRegisters.deleting) {
+      return;
+    }
+
+    if (key === "c") {
+      resetCashRegisterDraft();
+      clearFlash();
+      render();
+      return;
+    }
+
+    if (key === "g") {
+      const cajaFormElement = document.getElementById("caja-form");
+      if (cajaFormElement) {
+        captureCashRegisterDraft();
+        await saveCashRegister();
+      }
+      return;
+    }
+
+    if (key === "s") {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    }
+  };
+}
+
+
+function bindExchangeRateRegisterEvents() {
+  const form = document.getElementById("exchange-rate-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  form.addEventListener("input", () => {
+    captureExchangeRateRegisterDraft();
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    captureExchangeRateRegisterDraft();
+    await saveExchangeRateRegister();
+  });
+
+  document.querySelector("[data-exchange-rate-cancel]")?.addEventListener("click", () => {
+    resetExchangeRateRegisterDraft();
+    clearFlash();
+    render();
   });
 }
 
@@ -10998,6 +12418,29 @@ function bindImpresorasEvents() {
     await deleteImpresora(id);
   });
 
+  document.querySelector("[data-preview-impresora-formato]")?.addEventListener("click", () => {
+    try {
+      captureImpresoraDraft();
+      previewImpresoraFormatoContingencia();
+      clearFlash();
+    } catch (error) {
+      console.error(error);
+      setFlash(extractErrorMessage(error), "error");
+      render();
+    }
+  });
+
+  document.querySelector("[data-print-impresora-formato]")?.addEventListener("click", async () => {
+    try {
+      captureImpresoraDraft();
+      await printImpresoraFormatoContingencia();
+    } catch (error) {
+      console.error(error);
+      setFlash(extractErrorMessage(error), "error");
+      render();
+    }
+  });
+
   document.querySelector("[data-impresora-search]")?.addEventListener("input", (event) => {
     state.impresoras.search = event.target.value || "";
     render();
@@ -11040,6 +12483,7 @@ function bindImpresorasEvents() {
 
     impresoraForm.addEventListener("change", () => {
       captureImpresoraDraft();
+      render();
     });
 
     impresoraForm.addEventListener("submit", async (event) => {
@@ -11084,3092 +12528,6 @@ function bindImpresorasEvents() {
       searchField.select?.();
     }
   };
-}
-function bindExchangeRateRegisterEvents() {
-  document.querySelector("[data-exchange-rate-cancel]")?.addEventListener("click", () => {
-    resetExchangeRateRegisterDraft();
-    clearFlash();
-    render();
-  });
-
-  const exchangeRateForm = document.getElementById("exchange-rate-form");
-  if (exchangeRateForm instanceof HTMLFormElement) {
-    exchangeRateForm.addEventListener("input", () => {
-      captureExchangeRateRegisterDraft();
-    });
-
-    exchangeRateForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      captureExchangeRateRegisterDraft();
-      await saveExchangeRateRegister();
-    });
-  }
-
-  document.onkeydown = async (event) => {
-    if (state.currentView !== "registrar-tasa-cambio" || !event.ctrlKey || event.altKey || event.metaKey) {
-      return;
-    }
-
-    const key = String(event.key || "").toLowerCase();
-    if (!["g", "c"].includes(key)) {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (state.exchangeRateRegister.loading || state.exchangeRateRegister.saving) {
-      return;
-    }
-
-    if (key === "g") {
-      captureExchangeRateRegisterDraft();
-      await saveExchangeRateRegister();
-      return;
-    }
-
-    resetExchangeRateRegisterDraft();
-    clearFlash();
-    render();
-  };
-}
-
-function bindFacturacionEvents() {
-  document.querySelectorAll("[data-facturacion-action]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      captureFacturacionDraft();
-      const action = button.getAttribute("data-facturacion-action") || "";
-
-      if (action === "salir" || action === "salir-vista") {
-        resetFacturacionState();
-        state.currentView = "desktop";
-        state.navigation.openMenu = "";
-        state.navigation.openSubmenu = "";
-        state.navigation.menuPinned = false;
-        clearFlash();
-        render();
-        return;
-      }
-
-      if (action === "nuevo" || action === "cancelar" || action === "cancelar-documento") {
-        const currentPriceList = getCurrentFacturacionPriceList();
-        state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentPriceList });
-        state.facturacion.selectedLineIndex = -1;
-        state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
-        state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
-        state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
-        clearFlash();
-        render();
-        return;
-      }
-
-      if (action === "descuento") {
-        const currentDraft = normalizeFacturacionDraft(state.facturacion.draft);
-        if (currentDraft.overrideDiscountAuthorized) {
-          focusFacturacionGlobalDiscountInput();
-          return;
-        }
-
-        openFacturacionDiscountAuthModal();
-        render();
-        return;
-      }
-
-      if (action === "congelar") {
-        freezeCurrentFacturacionDraft();
-        return;
-      }
-
-      if (action === "descongelar") {
-        openFacturacionFrozenLookupModal();
-        render();
-        return;
-      }
-
-      if (action === "forma-pago") {
-        openFacturacionPaymentModal();
-        render();
-        return;
-      }
-
-      if (action === "cambiar-lista") {
-        const currentDraft = normalizeFacturacionDraft(state.facturacion.draft);
-        const selectedLineIndex = getFacturacionSelectedLineIndex();
-        if (selectedLineIndex < 0) {
-          setFlash("Selecciona primero una linea de la factura para cambiar su lista de precios.", "error");
-          render();
-          return;
-        }
-
-        const selectedLine = currentDraft.items[selectedLineIndex];
-        if (!selectedLine || !String(selectedLine.codigoBarra || "").trim()) {
-          setFlash("La linea seleccionada no tiene un articulo cargado.", "error");
-          render();
-          return;
-        }
-
-        const nextPriceList = getNextFacturacionPriceList(selectedLine.priceList);
-        state.facturacion.draft = recalculateFacturacionDraftLinePriceList(currentDraft, selectedLineIndex, nextPriceList);
-        clearFlash();
-        setFlash(`Lista de precios del articulo ${selectedLineIndex + 1}: ${getFacturacionPriceListLabel(nextPriceList)}.`, "success");
-        render();
-        return;
-      }
-
-      const labels = {
-        nuevo: "Nuevo documento",
-        buscar: "Buscar cliente o vendedor",
-        guardar: "Guardar factura",
-        cancelar: "Cancelar factura",
-        descuento: "Descuento global",
-        "forma-pago": "Forma de pago",
-        "cancelar-documento": "Cancelar documento",
-      };
-
-      setFlash(`${labels[action] || "Accion"} lista para conectar con la logica de facturacion.`, "info");
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-facturacion-discount-auth-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeFacturacionDiscountAuthModal();
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-facturacion-payment-close], [data-facturacion-payment-cancel]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (state.facturacion.savingSale) {
-        return;
-      }
-      closeFacturacionPaymentModal();
-      render();
-    });
-  });
-
-  document.querySelector("[data-facturacion-payment-accept]")?.addEventListener("click", async () => {
-    if (state.facturacion.savingSale) {
-      return;
-    }
-
-    const draft = normalizeFacturacionDraft(state.facturacion.draft);
-    const summary = calculateFacturacionSummary(
-      draft.items,
-      getActiveFacturacionTax(),
-      state.facturacion.exchangeRate,
-      draft,
-    );
-    const validationMessage = validateFacturacionPaymentRows(summary, state.facturacion.paymentModal?.rows);
-    if (validationMessage) {
-      setFlash(validationMessage, "error");
-      render();
-      return;
-    }
-
-    state.facturacion.savingSale = true;
-    clearFlash();
-    render();
-
-    try {
-      const paymentRowsSnapshot = normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows);
-      const payload = buildFacturacionSalePayload(draft, paymentRowsSnapshot, state.facturacion.exchangeRate);
-      const response = await apiFetch("/facturacion/sales", {
-        method: "POST",
-        body: payload,
-      });
-      const venta = response?.venta || {};
-      const currentPriceList = getCurrentFacturacionPriceList();
-      const preservedRate = normalizeFacturacionExchangeRateState(state.facturacion.exchangeRate);
-
-      state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentPriceList });
-      state.facturacion.exchangeRate = preservedRate;
-      state.facturacion.savingSale = false;
-      state.facturacion.selectedLineIndex = -1;
-      state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
-      state.facturacion.lookup = {
-        open: false,
-        loading: false,
-        type: "",
-        items: [],
-      };
-      state.facturacion.lineLookup = {
-        open: false,
-        loading: false,
-        lineIndex: -1,
-        search: "",
-        items: [],
-        activeIndex: -1,
-      };
-      state.facturacion.frozenLookup = createEmptyFacturacionFrozenLookupState();
-      state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
-      state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
-
-      let flashType = "success";
-      let successMessage = venta.emisionContingencia
-        ? `Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""} como emision de contingencia.`
-        : `Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""}.`;
-
-      try {
-        const printDraft = normalizeFacturacionDraft({
-          ...draft,
-          emisionContingencia: Boolean(venta.emisionContingencia),
-        });
-        const printSummary = calculateFacturacionSummary(
-          printDraft.items,
-          getActiveFacturacionTax(),
-          state.facturacion.exchangeRate,
-          printDraft,
-        );
-        const printResult = await printFacturacionInvoice(venta, printDraft, paymentRowsSnapshot, printSummary);
-        const printedOn = String(printResult?.printerName || "").trim();
-        if (printedOn) {
-          successMessage += ` Impresa en ${printedOn}.`;
-        }
-      } catch (printError) {
-        console.error(printError);
-        flashType = "error";
-        successMessage += ` La venta se guardo, pero no se pudo imprimir: ${extractErrorMessage(printError)}.`;
-      }
-
-      setFlash(successMessage, flashType);
-    } catch (error) {
-      console.error(error);
-      state.facturacion.savingSale = false;
-      setFlash(extractErrorMessage(error), "error");
-    }
-
-    render();
-  });
-
-  document.querySelectorAll("[data-facturacion-payment-field]").forEach((field) => {
-    const syncField = () => {
-      const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-row") || "", 10);
-      const fieldName = field.getAttribute("data-facturacion-payment-field") || "";
-      if (!Number.isInteger(rowIndex) || rowIndex < 0 || !fieldName || !("value" in field)) {
-        return;
-      }
-
-      updateFacturacionPaymentField(rowIndex, fieldName, field.value);
-    };
-
-    field.addEventListener("change", () => {
-      syncField();
-      render();
-    });
-
-    if (field instanceof HTMLInputElement) {
-      field.addEventListener("input", () => {
-        syncField();
-        const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-row") || "", 10);
-        const fieldName = field.getAttribute("data-facturacion-payment-field") || "";
-        if (fieldName === "monto" && Number.isInteger(rowIndex) && rowIndex >= 0) {
-          rerenderFacturacionPaymentField(rowIndex, fieldName);
-        }
-      });
-    }
-  });
-
-  document.querySelectorAll("[data-facturacion-payment-cedula]").forEach((field) => {
-    field.addEventListener("click", () => {
-      const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-cedula") || "", 10);
-      if (!Number.isInteger(rowIndex) || rowIndex < 0) {
-        return;
-      }
-
-      const currentRow = normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows)[rowIndex];
-      if (!facturacionPaymentMethodIsCard(currentRow?.formaPago) || String(currentRow?.cedula || "").trim()) {
-        return;
-      }
-
-      openFacturacionPaymentCedulaPrompt(rowIndex);
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-facturacion-payment-cedula-close], [data-facturacion-payment-cedula-no]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const rowIndex = Number.isInteger(state.facturacion.paymentCedulaPrompt?.rowIndex)
-        ? state.facturacion.paymentCedulaPrompt.rowIndex
-        : -1;
-      closeFacturacionPaymentCedulaPrompt({ focusRowIndex: rowIndex });
-      render();
-    });
-  });
-
-  document.querySelector("[data-facturacion-payment-cedula-yes]")?.addEventListener("click", () => {
-    const rowIndex = Number.isInteger(state.facturacion.paymentCedulaPrompt?.rowIndex)
-      ? state.facturacion.paymentCedulaPrompt.rowIndex
-      : -1;
-    if (rowIndex < 0) {
-      closeFacturacionPaymentCedulaPrompt();
-      render();
-      return;
-    }
-
-    applyFacturacionPaymentClientCedula(rowIndex);
-    render();
-  });
-
-  const facturacionDiscountAuthForm = document.getElementById("facturacion-discount-auth-form");
-  if (facturacionDiscountAuthForm instanceof HTMLFormElement) {
-    facturacionDiscountAuthForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      captureFacturacionDiscountAuthDraft();
-      await authorizeFacturacionGlobalDiscount();
-    });
-  }
-
-  document.querySelectorAll("[data-facturacion-frozen-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeFacturacionFrozenLookupModal();
-      render();
-    });
-  });
-
-  document.querySelector("[data-facturacion-frozen-refresh]")?.addEventListener("click", () => {
-    openFacturacionFrozenLookupModal();
-    render();
-  });
-
-  document.querySelectorAll("[data-facturacion-frozen-select]").forEach((row) => {
-    row.addEventListener("click", async () => {
-      const recordId = row.getAttribute("data-facturacion-frozen-select") || "";
-      if (!recordId) {
-        return;
-      }
-
-      await restoreFacturacionFrozenDraft(recordId);
-    });
-  });
-
-  document.querySelectorAll("[data-facturacion-select-line]").forEach((row) => {
-    row.addEventListener("click", () => {
-      const rowNumber = Number.parseInt(row.getAttribute("data-facturacion-select-line") || "", 10);
-      if (!Number.isInteger(rowNumber) || rowNumber < 1) {
-        return;
-      }
-
-      selectFacturacionLine(rowNumber - 1);
-      renderFacturacionAndFocusLine(rowNumber);
-    });
-  });
-
-  document.querySelector("[data-facturacion-cliente-codigo]")?.addEventListener("keydown", async (event) => {
-    if (event.key !== "Enter") {
-      return;
-    }
-
-    event.preventDefault();
-    await resolveFacturacionClienteFromField();
-  });
-
-  document.querySelector("[data-facturacion-vendedor-cedula]")?.addEventListener("keydown", async (event) => {
-    if (event.key !== "Enter") {
-      return;
-    }
-
-    event.preventDefault();
-    await resolveFacturacionTrabajadorFromField();
-  });
-
-  document.querySelector("[data-facturacion-contingencia]")?.addEventListener("change", () => {
-    captureFacturacionDraft();
-    clearFlash();
-    render();
-  });
-  document.querySelector("[data-facturacion-open-vendedor-lookup]")?.addEventListener("click", async () => {
-    captureFacturacionDraft();
-    await openFacturacionLookupModal("trabajadores");
-  });
-
-  document.querySelector("[data-facturacion-open-cliente-lookup]")?.addEventListener("click", async () => {
-    captureFacturacionDraft();
-    await openFacturacionClientEditor();
-  });
-
-  document.querySelectorAll("[data-facturacion-lookup-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeFacturacionLookupModal();
-      render();
-    });
-  });
-
-  document.querySelector("[data-facturacion-lookup-refresh]")?.addEventListener("click", async () => {
-    const type = state.facturacion.lookup?.type || "trabajadores";
-    await openFacturacionLookupModal(type);
-  });
-
-  document.querySelectorAll("[data-facturacion-lookup-select]").forEach((row) => {
-    row.addEventListener("click", async () => {
-      const recordId = row.getAttribute("data-facturacion-lookup-select") || "";
-      if (!recordId) {
-        return;
-      }
-
-      const type = state.facturacion.lookup?.type;
-      if (type === "trabajadores") {
-        const selected = (state.facturacion.lookup.items || []).find((item) => String(item.cedula || "") === recordId);
-        if (selected) {
-          applyTrabajadorToFacturacionDraft(selected);
-        }
-      } else {
-        const selected = (state.facturacion.lookup.items || []).find((item) => String(item.codigo || "") === recordId);
-        if (selected) {
-          applyClienteToFacturacionDraft(selected);
-        }
-      }
-
-      closeFacturacionLookupModal();
-      clearFlash();
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-facturacion-client-editor-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeFacturacionClientEditor();
-      render();
-    });
-  });
-
-  document.querySelector("[data-facturacion-client-editor-edit]")?.addEventListener("click", async () => {
-    captureFacturacionClientEditorDraft();
-    await loadFacturacionClientEditorForEdit();
-  });
-
-  const facturacionClientEditorForm = document.getElementById("facturacion-client-editor-form");
-  if (facturacionClientEditorForm instanceof HTMLFormElement) {
-    facturacionClientEditorForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      captureFacturacionClientEditorDraft();
-      await saveFacturacionClientEditor();
-    });
-  }
-
-  document.querySelectorAll("[data-facturacion-line-codigo]").forEach((input) => {
-    input.addEventListener("input", () => {
-      captureFacturacionDraft();
-    });
-
-    input.addEventListener("focus", () => {
-      const rowNumber = Number.parseInt(input.getAttribute("data-facturacion-line-codigo") || "0", 10);
-      if (!rowNumber) {
-        return;
-      }
-
-      selectFacturacionLine(rowNumber - 1);
-    });
-
-    input.addEventListener("keydown", async (event) => {
-      const rowNumber = Number.parseInt(input.getAttribute("data-facturacion-line-codigo") || "0", 10);
-      if (!rowNumber) {
-        return;
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        focusFacturacionLineInput(rowNumber + 1);
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        focusFacturacionLineInput(rowNumber - 1);
-        return;
-      }
-
-      if (event.key !== "Enter") {
-        return;
-      }
-
-      event.preventDefault();
-      await resolveFacturacionLineFromField(rowNumber - 1);
-    });
-  });
-
-  const facturacionGlobalDiscountInput = document.querySelector("[data-facturacion-global-discount]");
-  if (facturacionGlobalDiscountInput instanceof HTMLInputElement) {
-    facturacionGlobalDiscountInput.addEventListener("focus", () => {
-      facturacionGlobalDiscountInput.select();
-    });
-
-    facturacionGlobalDiscountInput.addEventListener("change", () => {
-      applyFacturacionGlobalDiscountFromField(facturacionGlobalDiscountInput.value);
-    });
-
-    facturacionGlobalDiscountInput.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") {
-        return;
-      }
-
-      event.preventDefault();
-      applyFacturacionGlobalDiscountFromField(facturacionGlobalDiscountInput.value);
-    });
-  }
-
-  document.querySelectorAll("[data-facturacion-line-lookup-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const { lineIndex } = state.facturacion.lineLookup || {};
-      closeFacturacionLineLookupModal();
-      if (typeof lineIndex === "number" && lineIndex >= 0) {
-        renderFacturacionAndFocusLine(lineIndex + 1);
-        return;
-      }
-
-      render();
-    });
-  });
-
-  document.querySelector("[data-facturacion-line-lookup-refresh]")?.addEventListener("click", async () => {
-    const { lineIndex } = state.facturacion.lineLookup || {};
-    if (typeof lineIndex !== "number" || lineIndex < 0) {
-      return;
-    }
-
-    await resolveFacturacionLineFromField(lineIndex);
-  });
-
-  document.querySelectorAll("[data-facturacion-line-lookup-select]").forEach((row) => {
-    row.addEventListener("click", () => {
-      const selectedIndex = Number.parseInt(row.getAttribute("data-facturacion-line-lookup-select") || "", 10);
-      if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
-        return;
-      }
-
-      const lookup = state.facturacion.lineLookup;
-      const selected = (lookup.items || [])[selectedIndex];
-      if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
-        return;
-      }
-
-      fillFacturacionLineFromInventory(lookup.lineIndex, selected);
-      closeFacturacionLineLookupModal();
-      clearFlash();
-      renderFacturacionAndFocusLine(lookup.lineIndex + 1);
-    });
-  });
-
-  const facturacionLineLookupDialog = document.querySelector("[data-facturacion-line-lookup-dialog]");
-  if (facturacionLineLookupDialog instanceof HTMLElement) {
-    queueMicrotask(() => {
-      facturacionLineLookupDialog.focus();
-    });
-
-    facturacionLineLookupDialog.addEventListener("keydown", (event) => {
-      const lookup = state.facturacion.lineLookup;
-      const items = Array.isArray(lookup?.items) ? lookup.items : [];
-      if (!lookup?.open || !items.length) {
-        return;
-      }
-
-      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0
-        ? lookup.activeIndex
-        : 0;
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        state.facturacion.lineLookup = {
-          ...lookup,
-          activeIndex: (currentIndex + 1) % items.length,
-        };
-        render();
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        state.facturacion.lineLookup = {
-          ...lookup,
-          activeIndex: (currentIndex - 1 + items.length) % items.length,
-        };
-        render();
-        return;
-      }
-
-      if (event.key === "Enter") {
-        event.preventDefault();
-        const selected = items[currentIndex];
-        if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
-          return;
-        }
-
-        fillFacturacionLineFromInventory(lookup.lineIndex, selected);
-        closeFacturacionLineLookupModal();
-        clearFlash();
-        renderFacturacionAndFocusLine(lookup.lineIndex + 1);
-        return;
-      }
-    });
-  }
-}
-
-function bindComprasEvents() {
-  document.querySelector("[data-refresh-compras]")?.addEventListener("click", async () => {
-    await loadCompras();
-  });
-
-  document.querySelector("[data-new-compra]")?.addEventListener("click", async () => {
-    resetCompraDraft();
-    clearFlash();
-    render();
-    await openCompraArticleLookupModal("");
-  });
-
-  document.querySelector("[data-open-compra-lookup]")?.addEventListener("click", async () => {
-    await openCompraArticleLookupModal(state.compras.articleLookup?.search || "");
-  });
-
-  document.querySelector("[data-delete-compra-current]")?.addEventListener("click", async () => {
-    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
-    if (!draft.originalDocumento || !draft.originalProveedor) {
-      return;
-    }
-
-    await deleteCompra(draft.originalDocumento, draft.originalProveedor);
-  });
-
-  document.querySelector("[data-approve-compra-current]")?.addEventListener("click", async () => {
-    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
-    if (!draft.originalDocumento || !draft.originalProveedor) {
-      return;
-    }
-
-    await approveCompra(draft.originalDocumento, draft.originalProveedor);
-  });
-
-  document.querySelector("[data-compra-search]")?.addEventListener("input", (event) => {
-    state.compras.search = event.target.value || "";
-    render();
-  });
-
-  document.querySelectorAll("[data-compra-select]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const documento = button.getAttribute("data-compra-select") || "";
-      const proveedor = button.getAttribute("data-compra-proveedor") || "";
-      if (!documento || !proveedor) {
-        return;
-      }
-
-      await loadCompraForEdit(documento, proveedor);
-    });
-  });
-
-  document.querySelectorAll("[data-compra-remove-item]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = Number.parseInt(button.getAttribute("data-compra-remove-item") || "", 10);
-      if (!Number.isInteger(index) || index < 0) {
-        return;
-      }
-
-      removeCompraDraftItem(index);
-      clearFlash();
-      render();
-    });
-  });
-
-  const comprasForm = document.getElementById("compras-form");
-  if (comprasForm) {
-    comprasForm.addEventListener("input", () => {
-      captureCompraDraft();
-      syncCompraComputedFields(comprasForm);
-    });
-
-    comprasForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      captureCompraDraft();
-      await saveCompra();
-    });
-  }
-
-  document.querySelectorAll("[data-compra-lookup-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeCompraArticleLookupModal();
-      render();
-    });
-  });
-
-  document.querySelector("[data-compra-lookup-refresh]")?.addEventListener("click", async () => {
-    await loadCompraArticleLookup(state.compras.articleLookup?.search || "");
-  });
-
-  document.querySelector("[data-compra-lookup-form]")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-
-    const search = readFormFieldValue(form, "buscar", state.compras.articleLookup?.search || "");
-    await loadCompraArticleLookup(search);
-  });
-
-  document.querySelectorAll("[data-compra-lookup-select]").forEach((row) => {
-    row.addEventListener("click", () => {
-      const index = Number.parseInt(row.getAttribute("data-compra-lookup-select") || "", 10);
-      if (!Number.isInteger(index) || index < 0) {
-        return;
-      }
-
-      const lookup = state.compras.articleLookup || createEmptyCompraArticleLookupState();
-      const selected = (lookup.items || [])[index];
-      if (!selected) {
-        return;
-      }
-
-      addArticleToCompraDraft(selected);
-      render();
-    });
-  });
-
-  const compraLookupDialog = document.querySelector("[data-compra-lookup-dialog]");
-  if (compraLookupDialog instanceof HTMLElement) {
-    queueMicrotask(() => {
-      compraLookupDialog.focus();
-    });
-
-    compraLookupDialog.addEventListener("keydown", (event) => {
-      const lookup = state.compras.articleLookup || createEmptyCompraArticleLookupState();
-      const items = Array.isArray(lookup.items) ? lookup.items : [];
-      const target = event.target;
-      const typingTarget =
-        target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
-
-      if (typingTarget && event.key !== "Escape") {
-        return;
-      }
-
-      if (!lookup.open || !items.length) {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          closeCompraArticleLookupModal();
-          render();
-        }
-        return;
-      }
-
-      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0 ? lookup.activeIndex : 0;
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        state.compras.articleLookup = {
-          ...lookup,
-          activeIndex: (currentIndex + 1) % items.length,
-        };
-        render();
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        state.compras.articleLookup = {
-          ...lookup,
-          activeIndex: (currentIndex - 1 + items.length) % items.length,
-        };
-        render();
-        return;
-      }
-
-      if (event.key === "Enter") {
-        event.preventDefault();
-        const selected = items[currentIndex];
-        if (!selected) {
-          return;
-        }
-
-        addArticleToCompraDraft(selected);
-        render();
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeCompraArticleLookupModal();
-        render();
-      }
-    });
-  }
-
-  document.onkeydown = async (event) => {
-    if (state.currentView !== "compras" || !event.ctrlKey || event.altKey || event.metaKey) {
-      return;
-    }
-
-    const key = String(event.key || "").toLowerCase();
-    if (!["c", "g", "a"].includes(key)) {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (state.compras.saving || state.compras.deleting || state.compras.approving) {
-      return;
-    }
-
-    if (key === "c") {
-      resetCompraDraft();
-      clearFlash();
-      render();
-      return;
-    }
-
-    if (key === "g") {
-      captureCompraDraft();
-      await saveCompra();
-      return;
-    }
-
-    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
-    if (!draft.originalDocumento || !draft.originalProveedor) {
-      return;
-    }
-
-    await approveCompra(draft.originalDocumento, draft.originalProveedor);
-  };
-}
-
-function bindCashRegisterCloseEvents() {
-  document.querySelector("[data-refresh-cajas-close]")?.addEventListener("click", async () => {
-    await loadCashRegisters();
-  });
-
-  document.querySelector("[data-open-caja-close-lookup]")?.addEventListener("click", () => {
-    const searchField = document.querySelector("[data-caja-close-search]");
-    if (searchField && typeof searchField.focus === "function") {
-      searchField.focus();
-      searchField.select?.();
-    }
-  });
-
-  document.querySelector("[data-caja-close-exit]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-caja-close-reset]")?.addEventListener("click", () => {
-    const firstOpenItem = getCloseableCashRegisters()[0] || null;
-    state.cashRegisters.selectedKey = firstOpenItem ? buildCashRegisterKey(firstOpenItem.serie, firstOpenItem.fecha) : "";
-    state.cashRegisters.draft = firstOpenItem
-      ? buildCashRegisterCloseDraft(firstOpenItem, state.cashRegisters.draft)
-      : createEmptyCashRegisterDraft(state.cashRegisters.metadata);
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-caja-close-search]")?.addEventListener("input", (event) => {
-    state.cashRegisters.search = event.target.value || "";
-    render();
-  });
-
-  document.querySelectorAll("[data-caja-close-select]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const serie = button.getAttribute("data-caja-close-select") || "";
-      const fecha = button.getAttribute("data-caja-close-fecha") || "";
-      const item = getCloseableCashRegisters().find(
-        (entry) => buildCashRegisterKey(entry.serie, entry.fecha) === buildCashRegisterKey(serie, fecha),
-      );
-      if (!item) {
-        return;
-      }
-
-      state.cashRegisters.selectedKey = buildCashRegisterKey(item.serie, item.fecha);
-      state.cashRegisters.draft = buildCashRegisterCloseDraft(item, state.cashRegisters.draft);
-      clearFlash();
-      render();
-    });
-  });
-
-  const submitClose = async (event) => {
-    event?.preventDefault?.();
-    const form = document.getElementById("caja-close-form");
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-
-    const draft = readCashRegisterDraft(form);
-    state.cashRegisters.draft = draft;
-    await closeCashRegister(draft.originalSerie || draft.serie, draft.originalFecha || draft.fecha, draft.horaCierre);
-  };
-
-  document.querySelector("[data-close-caja]")?.addEventListener("click", submitClose);
-  document.getElementById("caja-close-form")?.addEventListener("submit", submitClose);
-}
-function bindCashRegisterEvents() {
-  document.querySelector("[data-refresh-cajas]")?.addEventListener("click", async () => {
-    await loadCashRegisters();
-  });
-
-  document.querySelector("[data-new-caja]")?.addEventListener("click", () => {
-    resetCashRegisterDraft();
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-open-caja-lookup]")?.addEventListener("click", () => {
-    const searchField = document.querySelector("[data-caja-search]");
-    if (searchField && typeof searchField.focus === "function") {
-      searchField.focus();
-      searchField.select?.();
-    }
-  });
-
-  document.querySelectorAll("[data-delete-caja]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const serie = button.getAttribute("data-delete-caja") || "";
-      const fecha = button.getAttribute("data-delete-caja-fecha") || "";
-      if (!serie || !fecha) {
-        return;
-      }
-
-      await deleteCashRegister(serie, fecha);
-    });
-  });
-
-  document.querySelector("[data-caja-exit]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
-
-    document.querySelector("[data-caja-reset]")?.addEventListener("click", () => {
-    resetCashRegisterDraft();
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-refresh-desktop-printers]")?.addEventListener("click", async () => {
-    await loadDesktopPrinters();
-
-    const currentDraft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
-    if (!String(currentDraft.nombreImpresora || "").trim()) {
-      state.cashRegisters.draft = {
-        ...currentDraft,
-        nombreImpresora: getDefaultDesktopPrinterName(),
-      };
-      render();
-    }
-  });
-
-  document.querySelector("[data-caja-search]")?.addEventListener("input", (event) => {
-    state.cashRegisters.search = event.target.value || "";
-    render();
-  });
-
-  document.querySelectorAll("[data-caja-select]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const serie = button.getAttribute("data-caja-select") || "";
-      const fecha = button.getAttribute("data-caja-fecha") || "";
-      if (!serie || !fecha) {
-        return;
-      }
-
-      await loadCashRegisterForEdit(serie, fecha);
-    });
-  });
-
-  const cajaForm = document.getElementById("caja-form");
-  if (cajaForm) {
-    cajaForm.addEventListener("input", () => {
-      captureCashRegisterDraft();
-    });
-
-    cajaForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      captureCashRegisterDraft();
-      await saveCashRegister();
-    });
-  }
-
-  document.onkeydown = async (event) => {
-    if (state.currentView !== "cajas" || !event.ctrlKey || event.altKey || event.metaKey) {
-      return;
-    }
-
-    const key = String(event.key || "").toLowerCase();
-    if (!["c", "g", "s"].includes(key)) {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (state.cashRegisters.saving || state.cashRegisters.deleting) {
-      return;
-    }
-
-    if (key === "c") {
-      resetCashRegisterDraft();
-      clearFlash();
-      render();
-      return;
-    }
-
-    if (key === "g") {
-      const cajaFormElement = document.getElementById("caja-form");
-      if (cajaFormElement) {
-        captureCashRegisterDraft();
-        await saveCashRegister();
-      }
-      return;
-    }
-
-    if (key === "s") {
-      state.currentView = "desktop";
-      state.navigation.openMenu = "";
-      state.navigation.openSubmenu = "";
-      state.navigation.menuPinned = false;
-      clearFlash();
-      render();
-    }
-  };
-}
-
-async function handleLogin() {
-  state.isAuthenticating = true;
-  clearFlash();
-  render();
-
-  try {
-    const payload = {
-      usuario: state.loginDraft.usuario.trim(),
-      password: state.loginDraft.password,
-    };
-
-    const response = await apiFetch("/auth/login", {
-      method: "POST",
-      auth: false,
-      body: payload,
-    });
-
-    state.token = response.accessToken;
-    state.user = response.usuario;
-    persistSession();
-
-    await preloadAuthenticatedDesktopData();
-
-    state.currentView = "desktop";
-    state.navigation = {
-      openMenu: "",
-      openSubmenu: "",
-      menuPinned: false,
-    };
-    state.articleEditorTab = "general";
-    resetArticleForm();
-    state.loginDraft = {
-      usuario: "",
-      password: "",
-      mantenerSesion: state.loginDraft.mantenerSesion,
-    };
-    setFlash(`Bienvenido ${state.user?.nombreUsuario || state.user?.codUsuario || ""}.`, "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.isAuthenticating = false;
-    render();
-  }
-}
-
-async function refreshDashboard() {
-  clearFlash();
-  if (!userCanAccessFullInventory()) {
-    render();
-    return;
-  }
-
-  await Promise.all([
-    loadCreationMetadata(),
-    loadArticles(state.pagination.page || 1),
-  ]);
-}
-
-async function loadCreationMetadata(options = {}) {
-  if (!userCanAccessFullInventory()) {
-    return;
-  }
-
-  const { renderAfter = true } = options;
-  state.loadingMetadata = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    state.metadata = await apiFetch("/inventory/creation-metadata");
-    if (state.formMode === "create") {
-      state.formDraft = withDraftDefaults(state.formDraft || createEmptyDraft());
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar los catalogos: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.loadingMetadata = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function importCatalogExcel(kind, file) {
-  const config = getCatalogImportConfig(kind);
-  if (!config) {
-    setFlash("El catalogo seleccionado no admite importacion por Excel.", "error");
-    render();
-    return;
-  }
-
-  state.catalogImport.uploadingKind = kind;
-  clearFlash();
-  render();
-
-  try {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const response = await apiFetch(`/inventory/catalogs/import/${encodeURIComponent(kind)}`, {
-      method: "POST",
-      body: formData,
-    });
-
-    await loadCatalogImportItems(kind, { renderAfter: false });
-    if (userCanAccessFullInventory()) {
-      await loadCreationMetadata({ renderAfter: false });
-    }
-
-    const summary = response?.resumen || {};
-    const title = config.title;
-    const detailErrors = Array.isArray(summary.detalleErrores) && summary.detalleErrores.length > 0
-      ? ` Primeros errores: ${summary.detalleErrores.join(" | ")}`
-      : "";
-
-    setFlash(
-      `${title} importadas. Procesadas: ${summary.procesados || 0}, creadas: ${summary.creados || 0}, actualizadas: ${summary.actualizados || 0}, omitidas: ${summary.omitidos || 0}, errores: ${summary.errores || 0}.${detailErrors}`,
-      summary.errores > 0 ? "info" : "success",
-    );
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.catalogImport.uploadingKind = "";
-    render();
-  }
-}
-
-async function saveCatalogManualEntry(kind) {
-  const config = getCatalogImportConfig(kind);
-  if (!config) {
-    return;
-  }
-
-  const draft = getCatalogManualDraft(kind);
-  const validationMessage = validateCatalogManualDraft(kind, draft);
-  if (validationMessage) {
-    setFlash(validationMessage, "error");
-    render();
-    return;
-  }
-
-  state.catalogImport.manualSubmittingKind = kind;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/inventory/catalogs/${encodeURIComponent(kind)}`, {
-      method: "POST",
-      body: buildCatalogManualPayload(kind, draft),
-    });
-
-    await loadCatalogImportItems(kind, { renderAfter: false });
-    if (userCanAccessFullInventory()) {
-      await loadCreationMetadata({ renderAfter: false });
-    }
-
-    state.catalogImport.manualDraftsByKind = {
-      ...(state.catalogImport.manualDraftsByKind || {}),
-      [kind]: createCatalogManualDraft(kind),
-    };
-
-    const savedItem = response?.item || {};
-    const summary = savedItem.nombre ? `${savedItem.codigo || ""} ${savedItem.nombre}`.trim() : savedItem.codigo || config.singular;
-    setFlash(`${capitalize(config.singular)} ${summary} guardado correctamente.`, "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.catalogImport.manualSubmittingKind = "";
-    render();
-  }
-}
-
-async function deleteCatalogEntry(kind, code) {
-  const config = getCatalogImportConfig(kind);
-  if (!config || !config.canDelete) {
-    setFlash("Este catalogo no admite eliminacion desde esta pantalla.", "error");
-    render();
-    return;
-  }
-
-  const normalizedCode = String(code || "").trim().toUpperCase();
-  if (!normalizedCode) {
-    setFlash("No se encontro el codigo del registro a eliminar.", "error");
-    render();
-    return;
-  }
-
-  const catalogLabel = getCatalogSingularLabel(config.singular);
-  const confirmed = window.confirm(
-    `Vas a eliminar ${catalogLabel} con codigo ${normalizedCode}. Esta accion no se puede deshacer. Â¿Deseas continuar?`,
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
-  state.catalogImport.deletingEntryKey = buildCatalogEntryDeleteKey(kind, normalizedCode);
-  clearFlash();
-  render();
-
-  try {
-    await apiFetch(`/inventory/catalogs/${encodeURIComponent(kind)}/${encodeURIComponent(normalizedCode)}`, {
-      method: "DELETE",
-    });
-
-    await loadCatalogImportItems(kind, { renderAfter: false });
-    if (userCanAccessFullInventory()) {
-      await loadCreationMetadata({ renderAfter: false });
-    }
-
-    setFlash(`Registro ${normalizedCode} eliminado correctamente del catalogo de ${config.title.toLowerCase()}.`, "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.catalogImport.deletingEntryKey = "";
-    render();
-  }
-}
-
-async function loadCatalogImportItems(kind, options = {}) {
-  const config = getCatalogImportConfig(kind);
-  if (!config) {
-    return;
-  }
-
-  const { renderAfter = true } = options;
-  state.catalogImport.loadingKind = kind;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const response = await apiFetch(`/inventory/catalogs/${encodeURIComponent(kind)}`);
-    state.catalogImport.itemsByKind = {
-      ...(state.catalogImport.itemsByKind || {}),
-      [kind]: Array.isArray(response.items) ? response.items : [],
-    };
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el catalogo ${config.title.toLowerCase()}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    if (state.catalogImport.loadingKind === kind) {
-      state.catalogImport.loadingKind = "";
-    }
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadRoleAccess(options = {}) {
-  const { renderAfter = true } = options;
-  state.roleAccess.loading = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const response = await apiFetch("/roles");
-    state.roleAccess.roles = Array.isArray(response.roles) ? response.roles : [];
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar los roles: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.roleAccess.loading = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function setRoleCatalogImportAccess(roleCode, enabled) {
-  if (!userIsSystemOperator()) {
-    setFlash("Solo el usuario sistema puede cambiar este permiso.", "error");
-    render();
-    return;
-  }
-
-  state.roleAccess.savingRole = roleCode;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/roles/${encodeURIComponent(roleCode)}/catalog-import-access`, {
-      method: "PATCH",
-      body: {
-        enabled,
-      },
-    });
-
-    const updatedRole = response?.rol || null;
-    if (updatedRole) {
-      state.roleAccess.roles = state.roleAccess.roles.map((role) =>
-        role.codigo === updatedRole.codigo ? updatedRole : role,
-      );
-    } else {
-      await loadRoleAccess({ renderAfter: false });
-    }
-
-    setFlash(
-      `Acceso de importacion Excel ${enabled ? "habilitado" : "revocado"} para el rol ${roleCode}.`,
-      "success",
-    );
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.roleAccess.savingRole = "";
-    render();
-  }
-}
-
-async function loadTransfersModule(options = {}) {
-  const { renderAfter = true } = options;
-
-  await Promise.all([
-    loadTransfersMetadata({ renderAfter: false }),
-    loadTransfers({ renderAfter: false }),
-  ]);
-
-  if (renderAfter) {
-    render();
-  }
-}
-
-async function loadTransfersMetadata(options = {}) {
-  const { renderAfter = true } = options;
-  state.transfers.loadingMetadata = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    state.transfers.metadata = await apiFetch("/transfers/metadata");
-    if (!state.transfers.draft?.numero) {
-      state.transfers.draft = createEmptyTransferDraft(state.transfers.metadata);
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar la configuracion de transferencias: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.transfers.loadingMetadata = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadTransfers(options = {}) {
-  const { renderAfter = true } = options;
-  state.transfers.loadingList = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const params = new URLSearchParams();
-    const search = state.transfers.search || createEmptyTransferSearch();
-
-    if (search.buscar) {
-      params.set("buscar", search.buscar);
-    }
-    if (search.status !== "") {
-      params.set("status", search.status);
-    }
-    if (search.limit) {
-      params.set("limit", search.limit);
-    }
-
-    const query = params.toString();
-    const endpoint = state.currentView === "cargar-transferencia" ? "/transfers/inbound" : "/transfers";
-    const response = await apiFetch(`${endpoint}${query ? `?${query}` : ""}`);
-    state.transfers.items = Array.isArray(response.items) ? response.items : [];
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar las transferencias: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.transfers.loadingList = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadTransferForEdit(numero) {
-  state.transfers.loadingDetail = true;
-  clearFlash();
-  render();
-
-  try {
-    if (!state.transfers.metadata) {
-      await loadTransfersMetadata({ renderAfter: false });
-    }
-
-    const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}`);
-    state.transfers.selectedNumero = numero;
-    state.transfers.receiptNumero = null;
-    state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
-    state.currentView = "registro-transferencia";
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar la transferencia ${numero}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.transfers.loadingDetail = false;
-    render();
-  }
-}
-
-async function loadTransferForReceipt(numero) {
-  state.transfers.loadingDetail = true;
-  clearFlash();
-  render();
-
-  try {
-    if (!state.transfers.metadata) {
-      await loadTransfersMetadata({ renderAfter: false });
-    }
-
-    const response = await apiFetch(`/transfers/inbound/${encodeURIComponent(numero)}`);
-    state.transfers.selectedNumero = numero;
-    state.transfers.receiptNumero = numero;
-    state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
-    state.currentView = "cargar-transferencia";
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar la transferencia ${numero}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.transfers.loadingDetail = false;
-    render();
-  }
-}
-
-async function fillTransferLineFromInventory(index, codigoBarra) {
-  captureTransferDraft();
-  const draft = state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
-  const items = Array.isArray(draft.items) && draft.items.length ? [...draft.items] : [createEmptyTransferLineDraft()];
-
-  try {
-    const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
-    const article = response.mercancia || response;
-    const currentLine = items[index] || createEmptyTransferLineDraft();
-    const preserveCorrectionReference = Boolean(draft.correccion);
-
-    items[index] = {
-      ...currentLine,
-      codigoBarra: article.codigoBarra || codigoBarra,
-      referencia: preserveCorrectionReference
-        ? currentLine.referencia || article.referencia || ""
-        : article.referencia || currentLine.referencia || "",
-      articuloNombre: article.general?.nombre || article.nombre || currentLine.articuloNombre || "",
-      existenciaActual: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaActual ?? ""),
-      existenciaLote: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaLote ?? ""),
-      valor: toInputValue(article.inventario?.costos?.ultimo ?? currentLine.valor ?? ""),
-    };
-
-    state.transfers.draft = {
-      ...draft,
-      items,
-    };
-    clearFlash();
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el articulo ${codigoBarra}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    render();
-  }
-}
-
-async function saveTransfer() {
-  const draft = state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
-  const validationMessage = validateTransferDraft(draft);
-  if (validationMessage) {
-    setFlash(validationMessage, "error");
-    render();
-    return;
-  }
-
-  state.transfers.saving = true;
-  clearFlash();
-  render();
-
-  try {
-    const payload = buildTransferPayload(draft);
-    const response = draft.numero
-      ? await apiFetch(`/transfers/${encodeURIComponent(draft.numero)}`, {
-          method: "PATCH",
-          body: payload,
-        })
-      : await apiFetch("/transfers", {
-          method: "POST",
-          body: payload,
-        });
-
-    state.transfers.selectedNumero = response.transferencia?.numero || draft.numero || null;
-    state.transfers.receiptNumero = null;
-    state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
-
-    await Promise.all([
-      loadTransfers({ renderAfter: false }),
-      loadTransfersMetadata({ renderAfter: false }),
-    ]);
-
-    setFlash(
-      draft.numero
-        ? `Transferencia ${response.transferencia?.numero || draft.numero} actualizada correctamente.`
-        : `Transferencia ${response.transferencia?.numero || ""} guardada correctamente.`,
-      "success",
-    );
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.transfers.saving = false;
-    render();
-  }
-}
-
-async function approveTransfer(numero) {
-  state.transfers.approving = true;
-  clearFlash();
-  render();
-
-  try {
-    await approveTransferWithPayload(numero);
-  } catch (error) {
-    console.error(error);
-    if (isTransferDuplicateBarcodeError(error)) {
-      await resolveDuplicateBarcodesAndApprove(numero, error);
-      return;
-    }
-
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.transfers.approving = false;
-    render();
-  }
-}
-
-async function loadInboundTransfer(numero) {
-  state.transfers.approving = true;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/transfers/inbound/${encodeURIComponent(numero)}/load`, {
-      method: "POST",
-    });
-
-    state.transfers.selectedNumero = numero;
-    state.transfers.receiptNumero = numero;
-    state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
-    await loadTransfers({ renderAfter: false });
-
-    setFlash(
-      response.alreadyLoaded
-        ? `Transferencia ${numero} ya estaba cargada en inventario.`
-        : `Transferencia ${numero} cargada correctamente en inventario.`,
-      "success",
-    );
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.transfers.approving = false;
-    render();
-  }
-}
-
-async function approveTransferWithPayload(numero, payload = {}) {
-  const response = await apiFetch(`/transfers/${encodeURIComponent(numero)}/approve`, {
-    method: "POST",
-    body: payload,
-  });
-
-  state.transfers.selectedNumero = numero;
-  if (state.currentView === "cargar-transferencia") {
-    state.transfers.receiptNumero = numero;
-  }
-  state.transfers.draft = transferToDraft(response.transferencia, state.transfers.metadata);
-  await loadTransfers({ renderAfter: false });
-  setFlash(`Transferencia ${numero} aprobada correctamente.`, "success");
-}
-
-async function resolveDuplicateBarcodesAndApprove(numero, error) {
-  const duplicates = Array.isArray(error?.payload?.duplicates) ? error.payload.duplicates : [];
-  if (!duplicates.length) {
-    setFlash(extractErrorMessage(error), "error");
-    return;
-  }
-
-  const duplicateResolutions = [];
-
-  for (const item of duplicates) {
-    const codigoBarra = String(item.codigoBarra || "").trim().toUpperCase();
-    const nombre = item.nombre ? ` - ${item.nombre}` : "";
-    const shouldModifyExisting = window.confirm(
-      `El codigo de barra ${codigoBarra}${nombre} ya existe en inventario.\n\nAceptar: modificar el articulo existente con los atributos de la transferencia.\nCancelar: crear un articulo nuevo con otro codigo de barra.`,
-    );
-
-    if (shouldModifyExisting) {
-      duplicateResolutions.push({
-        codigoBarra,
-        action: "modify-existing",
-      });
-      continue;
-    }
-
-    const nuevoCodigoBarra = window.prompt(
-      `Indica el nuevo codigo de barra para crear el articulo recibido desde ${codigoBarra}.`,
-      "",
-    );
-
-    if (!nuevoCodigoBarra || !String(nuevoCodigoBarra).trim()) {
-      setFlash("La aprobacion fue cancelada porque falta el nuevo codigo de barra.", "error");
-      return;
-    }
-
-    duplicateResolutions.push({
-      codigoBarra,
-      action: "create-new",
-      nuevoCodigoBarra: String(nuevoCodigoBarra).trim().toUpperCase(),
-    });
-  }
-
-  try {
-    await approveTransferWithPayload(numero, { duplicateResolutions });
-  } catch (retryError) {
-    console.error(retryError);
-    setFlash(extractErrorMessage(retryError), "error");
-  }
-}
-
-function isTransferDuplicateBarcodeError(error) {
-  return error?.payload?.code === "TRANSFER_DUPLICATE_BARCODE";
-}
-
-async function deleteTransfer(numero) {
-  const confirmed = window.confirm(
-    `Se eliminara la transferencia pendiente ${numero} y se devolvera al inventario lo descontado. Deseas continuar?`,
-  );
-  if (!confirmed) {
-    return;
-  }
-
-  state.transfers.deleting = true;
-  clearFlash();
-  render();
-
-  try {
-    await apiFetch(`/transfers/${encodeURIComponent(numero)}`, {
-      method: "DELETE",
-    });
-
-    resetTransferDraft();
-    await Promise.all([
-      loadTransfers({ renderAfter: false }),
-      loadTransfersMetadata({ renderAfter: false }),
-    ]);
-    setFlash(`Transferencia ${numero} eliminada correctamente.`, "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.transfers.deleting = false;
-    render();
-  }
-}
-
-async function loadFacturacionExchangeRate(options = {}) {
-  const { renderAfter = true, silent = false } = options;
-  const previous = state.facturacion.exchangeRate || createEmptyFacturacionExchangeRateState();
-
-  state.facturacion.exchangeRate = {
-    ...previous,
-    loading: true,
-    error: "",
-  };
-
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const response = await apiFetch("/exchange-rates/manual");
-    applyManualRateToFacturacionState(response?.item || {});
-  } catch (error) {
-    console.error(error);
-    state.facturacion.exchangeRate = {
-      ...previous,
-      loading: false,
-      error: extractErrorMessage(error),
-    };
-
-    if (!silent) {
-      setFlash(`No se pudo consultar la tasa manual de cambio: ${extractErrorMessage(error)}`, "error");
-    }
-  } finally {
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadArticlePricingRates(options = {}) {
-  const { renderAfter = true, silent = false } = options;
-  const previous = state.articlePricingRates || createEmptyArticlePricingRateState();
-
-  state.articlePricingRates = {
-    ...previous,
-    loading: true,
-    error: "",
-  };
-
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const response = await apiFetch("/exchange-rates/manual");
-    applyManualRateToArticleState(response?.item || {});
-    state.formDraft = applyArticleDollarRatesToDraft(state.formDraft || createEmptyDraft());
-  } catch (error) {
-    console.error(error);
-    state.articlePricingRates = {
-      ...previous,
-      loading: false,
-      error: extractErrorMessage(error),
-    };
-
-    if (!silent) {
-      setFlash(`No se pudo consultar la tasa manual para articulos: ${extractErrorMessage(error)}`, "error");
-    }
-  } finally {
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadDevReturnsMetadata(options = {}) {
-  const { renderAfter = true } = options;
-  state.devReturns.loadingMetadata = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    state.devReturns.metadata = await apiFetch("/dev-returns/metadata");
-    if (!state.devReturns.draft?.numero) {
-      state.devReturns.draft = createEmptyDevReturnDraft(state.devReturns.metadata);
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar la configuracion de devoluciones: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.devReturns.loadingMetadata = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadDevReturnsModule(options = {}) {
-  const { renderAfter = true } = options;
-  state.devReturns.loadingDashboard = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    if (!state.devReturns.metadata) {
-      await loadDevReturnsMetadata({ renderAfter: false });
-    }
-
-    await pullDevReturnsFromRemoteForDraft({
-      force: true,
-      limit: 100,
-    });
-
-    const [sentResponse, inboundResponse] = await Promise.all([
-      apiFetch("/dev-returns/drafts?limit=12"),
-      apiFetch("/dev-returns/drafts/inbound?limit=12"),
-    ]);
-    state.devReturns.items = Array.isArray(sentResponse.items) ? sentResponse.items : [];
-    state.devReturns.inboundItems = Array.isArray(inboundResponse.items) ? inboundResponse.items : [];
-    if (!state.devReturns.draft?.numero) {
-      state.devReturns.draft = createEmptyDevReturnDraft(state.devReturns.metadata);
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar las bandejas de devoluciones: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.devReturns.loadingDashboard = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function pullDevReturnsFromRemoteForDraft(options = {}) {
-  if (!state.token || devReturnRemotePullInFlight) {
-    return null;
-  }
-
-  const now = Date.now();
-  const force = Boolean(options.force);
-  const limit = Number.parseInt(String(options.limit || "100"), 10);
-  if (!force && now - devReturnRemotePullLastAt < 5000) {
-    return null;
-  }
-
-  devReturnRemotePullInFlight = true;
-  devReturnRemotePullLastAt = now;
-
-  try {
-    return await apiFetch("/dev-returns/sync/pull", {
-      method: "POST",
-      body: {
-        limit: Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 100,
-      },
-    });
-  } catch (error) {
-    console.error(error);
-    return null;
-  } finally {
-    devReturnRemotePullInFlight = false;
-  }
-}
-
-async function openDevReturnLookupModal(options = {}) {
-  const mode = options.mode === "records" ? "records" : "drafts";
-  if (mode === "drafts") {
-    captureDevReturnDraft();
-  }
-  state.devReturnLookup.open = true;
-  state.devReturnLookup.loading = true;
-  state.devReturnLookup.items = [];
-  state.devReturnLookup.mode = mode;
-  render();
-
-  try {
-    const response = await apiFetch(mode === "records" ? "/dev-returns/returns?limit=50" : "/dev-returns/drafts?limit=50");
-    const items = Array.isArray(response.items) ? response.items : [];
-    state.devReturnLookup.items = items;
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el catalogo de borradores: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.devReturnLookup.loading = false;
-    render();
-  }
-}
-
-function closeDevReturnLookupModal() {
-  state.devReturnLookup.open = false;
-  state.devReturnLookup.loading = false;
-  state.devReturnLookup.mode = "drafts";
-}
-
-async function loadDevReturnDraftForEdit(numero) {
-  state.devReturns.loadingDetail = true;
-  clearFlash();
-  render();
-
-  try {
-    if (!state.devReturns.metadata) {
-      await loadDevReturnsMetadata({ renderAfter: false });
-    }
-
-    const response = await apiFetch(`/dev-returns/drafts/${encodeURIComponent(numero)}`);
-    state.devReturns.selectedNumero = numero;
-    state.devReturns.inboundDetail = null;
-    state.devReturns.selectedInboundGlobalId = "";
-    state.devReturns.draft = devReturnToDraft(response.borrador, state.devReturns.metadata);
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el borrador ${numero}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.devReturns.loadingDetail = false;
-    render();
-  }
-}
-
-async function loadInboundDevReturnDraftDetail(globalId) {
-  state.devReturns.loadingInboundDetail = true;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/dev-returns/drafts/inbound/${encodeURIComponent(globalId)}`);
-    state.devReturns.selectedInboundGlobalId = globalId;
-    state.devReturns.inboundDetail = response.borrador || null;
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el borrador recibido: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.devReturns.loadingInboundDetail = false;
-    render();
-  }
-}
-
-async function approveInboundDevReturnDraft(globalId) {
-  state.devReturns.approvingInbound = true;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/dev-returns/drafts/inbound/${encodeURIComponent(globalId)}/approve`, {
-      method: "POST",
-    });
-    state.devReturns.inboundDetail = response.borrador || state.devReturns.inboundDetail;
-    await loadDevReturnsModule({ renderAfter: false });
-    await loadDevReturnRecords({ renderAfter: false });
-    const returnNumero = Number.parseInt(String(response.returnNumero || ""), 10);
-    setFlash(
-      Number.isInteger(returnNumero)
-        ? `Borrador aprobado correctamente. La devoluciÃ³n ${returnNumero} ya quedÃ³ registrada.`
-        : "Borrador aprobado correctamente.",
-      "success",
-    );
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.devReturns.approvingInbound = false;
-    render();
-  }
-}
-
-async function saveDevReturn() {
-  const draft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
-  const validationMessage = validateDevReturnDraft(draft);
-  if (validationMessage) {
-    setFlash(validationMessage, "error");
-    render();
-    return;
-  }
-
-  state.devReturns.saving = true;
-  clearFlash();
-  render();
-
-  try {
-    const payload = buildDevReturnPayload(draft);
-    const response = draft.numero
-      ? await apiFetch(`/dev-returns/drafts/${encodeURIComponent(draft.numero)}`, {
-          method: "PATCH",
-          body: payload,
-        })
-      : await apiFetch("/dev-returns/drafts", {
-          method: "POST",
-          body: payload,
-        });
-
-    state.devReturns.selectedNumero = response.borrador?.numero || draft.numero || null;
-    state.devReturns.draft = devReturnToDraft(response.borrador, state.devReturns.metadata);
-    await loadDevReturnsModule({ renderAfter: false });
-    setFlash(
-      draft.numero
-        ? `Borrador ${response.borrador?.numero || draft.numero} actualizado correctamente.`
-        : `Borrador ${response.borrador?.numero || ""} guardado correctamente.`,
-      "success",
-    );
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.devReturns.saving = false;
-    render();
-  }
-}
-
-async function exportDevReturn(numero) {
-  state.devReturns.exporting = true;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/dev-returns/drafts/${encodeURIComponent(numero)}/export`, {
-      method: "POST",
-    });
-
-    state.devReturns.selectedNumero = numero;
-    state.devReturns.draft = devReturnToDraft(response.borrador, state.devReturns.metadata);
-    await loadDevReturnsModule({ renderAfter: false });
-    setFlash(`Borrador ${numero} exportado correctamente.`, "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.devReturns.exporting = false;
-    render();
-  }
-}
-
-async function loadDevReturnRecords(options = {}) {
-  const { renderAfter = true } = options;
-  state.devReturnRecords.loading = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const response = await apiFetch("/dev-returns/returns?limit=25");
-    state.devReturnRecords.items = Array.isArray(response.items) ? response.items : [];
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el registro de devoluciones: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.devReturnRecords.loading = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadDevReturnRecordDetail(numero) {
-  state.devReturnRecords.loadingDetail = true;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/dev-returns/returns/${encodeURIComponent(numero)}`);
-    state.devReturnRecords.selectedNumero = numero;
-    state.devReturnRecords.detail = response.devolucion || null;
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar la devoluciÃ³n ${numero}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.devReturnRecords.loadingDetail = false;
-    render();
-  }
-}
-
-async function exportDevReturnRecord(numero) {
-  state.devReturnRecords.exporting = true;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/dev-returns/returns/${encodeURIComponent(numero)}/export`, {
-      method: "POST",
-    });
-    state.devReturnRecords.selectedNumero = numero;
-    state.devReturnRecords.detail = response.devolucion || state.devReturnRecords.detail;
-    await loadDevReturnRecords({ renderAfter: false });
-    setFlash(`Registro de devoluciÃ³n ${numero} exportado correctamente.`, "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.devReturnRecords.exporting = false;
-    render();
-  }
-}
-
-async function loadInboundDevReturns(options = {}) {
-  const { renderAfter = true } = options;
-  state.devReturnInbound.loading = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    await pullDevReturnsFromRemoteForDraft({
-      force: true,
-      limit: 100,
-    });
-
-    const response = await apiFetch("/dev-returns/inbound?limit=25");
-    state.devReturnInbound.items = Array.isArray(response.items) ? response.items : [];
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar la bandeja de devoluciones recibidas: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.devReturnInbound.loading = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadInboundDevReturnDetail(numero, codigoEnvia) {
-  state.devReturnInbound.loadingDetail = true;
-  clearFlash();
-  render();
-
-  try {
-    const query = codigoEnvia ? `?codigoEnvia=${encodeURIComponent(codigoEnvia)}` : "";
-    const response = await apiFetch(`/dev-returns/inbound/${encodeURIComponent(numero)}${query}`);
-    state.devReturnInbound.selectedNumero = numero;
-    state.devReturnInbound.selectedCodigoEnvia = codigoEnvia || "";
-    state.devReturnInbound.detail = response.devolucion || null;
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar la devoluciÃ³n recibida ${numero}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.devReturnInbound.loadingDetail = false;
-    render();
-  }
-}
-
-async function approveInboundDevReturn(numero, codigoEnvia) {
-  state.devReturnInbound.approving = true;
-  clearFlash();
-  render();
-
-  try {
-    const query = codigoEnvia ? `?codigoEnvia=${encodeURIComponent(codigoEnvia)}` : "";
-    const response = await apiFetch(`/dev-returns/inbound/${encodeURIComponent(numero)}/approve${query}`, {
-      method: "POST",
-    });
-    state.devReturnInbound.detail = response.devolucion || state.devReturnInbound.detail;
-    await loadInboundDevReturns({ renderAfter: false });
-    setFlash("DevoluciÃ³n aprobada correctamente. El inventario ya fue cargado en destino.", "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.devReturnInbound.approving = false;
-    render();
-  }
-}
-
-async function fillDevReturnLineFromInventory(index, codigoBarra) {
-  captureDevReturnDraft();
-  const initialDraft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
-
-  try {
-    const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
-    const article = response.mercancia || response;
-    captureDevReturnDraft();
-    const latestDraft = state.devReturns.draft || initialDraft;
-    const items = Array.isArray(latestDraft.items) && latestDraft.items.length
-      ? [...latestDraft.items]
-      : [createEmptyDevReturnLineDraft()];
-    const currentLine = items[index] || createEmptyDevReturnLineDraft();
-    const ultimoCosto = article.inventario?.costos?.ultimo ?? article.costos?.ultimo ?? currentLine.costo ?? "";
-
-    items[index] = {
-      ...currentLine,
-      codigoBarra: article.codigoBarra || codigoBarra,
-      referencia: article.referencia || currentLine.referencia || "",
-      nombre: article.general?.nombre || article.nombre || currentLine.nombre || "",
-      costo: toInputValue(ultimoCosto),
-      cantidad: currentLine.cantidad || "1",
-      numeroCaja: currentLine.numeroCaja || "0",
-    };
-
-    state.devReturns.draft = {
-      ...latestDraft,
-      items,
-    };
-    clearFlash();
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el articulo ${codigoBarra}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    render();
-  }
-}
-
-async function loadAdjustmentsMetadata(options = {}) {
-  const { renderAfter = true } = options;
-  state.adjustments.loadingMetadata = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    state.adjustments.metadata = await apiFetch("/adjustments/metadata");
-    if (!state.adjustments.draft?.numero) {
-      state.adjustments.draft = createEmptyAdjustmentDraft(state.adjustments.metadata);
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar la configuracion de ajustes: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.adjustments.loadingMetadata = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function fillAdjustmentLineFromInventory(index, codigoBarra) {
-  captureAdjustmentDraft();
-  const draft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
-  const items = Array.isArray(draft.items) && draft.items.length ? [...draft.items] : [createEmptyAdjustmentLineDraft()];
-
-  try {
-    const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
-    const article = response.mercancia || response;
-    const currentLine = items[index] || createEmptyAdjustmentLineDraft();
-    const ultimoCosto = article.inventario?.costos?.ultimo ?? article.costos?.ultimo ?? currentLine.costo ?? "";
-
-    items[index] = {
-      ...currentLine,
-      codigoBarra: article.codigoBarra || codigoBarra,
-      referencia: article.referencia || currentLine.referencia || "",
-      nombre: article.general?.nombre || article.nombre || currentLine.nombre || "",
-      costo: toInputValue(ultimoCosto),
-      existenciaActual: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaActual ?? ""),
-      cantidad: currentLine.cantidad || "1",
-    };
-
-    state.adjustments.draft = {
-      ...draft,
-      items,
-    };
-    clearFlash();
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el articulo ${codigoBarra}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    render();
-  }
-}
-
-async function saveAdjustment() {
-  const draft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
-  const validationMessage = validateAdjustmentDraft(draft);
-  if (validationMessage) {
-    setFlash(validationMessage, "error");
-    render();
-    return;
-  }
-
-  state.adjustments.saving = true;
-  clearFlash();
-  render();
-
-  try {
-    const payload = buildAdjustmentPayload(draft);
-    const response = draft.numero
-      ? await apiFetch(`/adjustments/${encodeURIComponent(draft.numero)}`, {
-          method: "PATCH",
-          body: payload,
-        })
-      : await apiFetch("/adjustments", {
-          method: "POST",
-          body: payload,
-        });
-
-    state.adjustments.draft = adjustmentToDraft(response.ajuste, state.adjustments.metadata);
-    setFlash(
-      draft.numero
-        ? `Ajuste ${response.ajuste?.numero || draft.numero} actualizado correctamente.`
-        : `Ajuste ${response.ajuste?.numero || ""} guardado correctamente.`,
-      "success",
-    );
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.adjustments.saving = false;
-    render();
-  }
-}
-
-async function approveAdjustment(numero) {
-  state.adjustments.approving = true;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/adjustments/${encodeURIComponent(numero)}/approve`, {
-      method: "POST",
-      body: {},
-    });
-
-    state.adjustments.draft = adjustmentToDraft(response.ajuste, state.adjustments.metadata);
-    setFlash(`Ajuste ${response.ajuste?.numero || numero} aprobado correctamente.`, "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.adjustments.approving = false;
-    render();
-  }
-}
-
-async function loadSucursales(options = {}) {
-  const { renderAfter = true } = options;
-  state.sucursales.loading = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const response = await apiFetch("/sucursales");
-    state.sucursales.items = Array.isArray(response.sucursales) ? response.sucursales : [];
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar las sucursales: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.sucursales.loading = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadSucursalForEdit(codigo) {
-  state.sucursales.loading = true;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/sucursales/${encodeURIComponent(codigo)}`);
-    state.sucursales.selectedCodigo = response.sucursal?.codigo || codigo;
-    state.sucursales.draft = sucursalToDraft(response.sucursal);
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar la sucursal ${codigo}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.sucursales.loading = false;
-    render();
-  }
-}
-
-async function loadClientes(options = {}) {
-  const renderAfter = options.renderAfter !== false;
-  state.clientes.loading = true;
-  state.clientes.loadingMetadata = true;
-
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const [metadata, response] = await Promise.all([
-      apiFetch("/clientes/metadata"),
-      apiFetch("/clientes"),
-    ]);
-
-    state.clientes.metadata = metadata;
-    state.clientes.items = Array.isArray(response.clientes) ? response.clientes : [];
-
-    if (!state.clientes.draft?.originalCodigo) {
-      state.clientes.draft = createEmptyClienteDraft(metadata);
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar los clientes: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.clientes.loading = false;
-    state.clientes.loadingMetadata = false;
-
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadClienteForEdit(codigo) {
-  if (!codigo) {
-    return;
-  }
-
-  state.clientes.loading = true;
-  render();
-
-  try {
-    const response = await apiFetch(`/clientes/${encodeURIComponent(codigo)}`);
-    state.clientes.selectedCodigo = response.cliente?.codigo || codigo;
-    state.clientes.draft = clienteToDraft(response.cliente, state.clientes.metadata);
-    clearFlash();
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el cliente: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.clientes.loading = false;
-    render();
-  }
-}
-
-async function saveCliente() {
-  const draft = state.clientes.draft || createEmptyClienteDraft(state.clientes.metadata);
-  const validationError = validateClienteDraft(draft);
-  if (validationError) {
-    setFlash(validationError, "error");
-    render();
-    return;
-  }
-
-  state.clientes.saving = true;
-  render();
-
-  try {
-    const payload = buildClientePayload(draft);
-    const response = draft.originalCodigo
-      ? await apiFetch(`/clientes/${encodeURIComponent(draft.originalCodigo)}`, {
-          method: "PATCH",
-          body: payload,
-        })
-      : await apiFetch("/clientes", {
-          method: "POST",
-          body: payload,
-        });
-
-    state.clientes.selectedCodigo = response.cliente?.codigo || draft.originalCodigo || draft.codigo;
-    state.clientes.draft = clienteToDraft(response.cliente, state.clientes.metadata);
-    await loadClientes({ renderAfter: false });
-    setFlash(draft.originalCodigo ? "Cliente actualizado correctamente." : "Cliente guardado correctamente.", "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.clientes.saving = false;
-    render();
-  }
-}
-
-async function deleteCliente(codigo) {
-  const normalizedCodigo = String(codigo || "").trim();
-  if (!normalizedCodigo) {
-    return;
-  }
-
-  state.clientes.deleting = true;
-  render();
-
-  try {
-    await apiFetch(`/clientes/${encodeURIComponent(normalizedCodigo)}`, {
-      method: "DELETE",
-    });
-
-    if (String(state.clientes.selectedCodigo || "") === normalizedCodigo) {
-      resetClienteDraft();
-    }
-
-    await loadClientes({ renderAfter: false });
-    setFlash("Cliente eliminado correctamente.", "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.clientes.deleting = false;
-    render();
-  }
-}
-
-async function loadProveedores(options = {}) {
-  const renderAfter = options.renderAfter !== false;
-  state.proveedores.loading = true;
-  state.proveedores.loadingMetadata = true;
-
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const [metadata, response] = await Promise.all([
-      apiFetch("/proveedores/metadata"),
-      apiFetch("/proveedores"),
-    ]);
-
-    state.proveedores.metadata = metadata;
-    state.proveedores.items = Array.isArray(response.proveedores) ? response.proveedores : [];
-
-    if (!state.proveedores.draft?.originalCodigo) {
-      state.proveedores.draft = createEmptyProveedorDraft(metadata);
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar los proveedores: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.proveedores.loading = false;
-    state.proveedores.loadingMetadata = false;
-
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadProveedorForEdit(codigo) {
-  if (!codigo) {
-    return;
-  }
-
-  state.proveedores.loading = true;
-  render();
-
-  try {
-    const response = await apiFetch(`/proveedores/${encodeURIComponent(codigo)}`);
-    state.proveedores.selectedCodigo = response.proveedor?.codigo || codigo;
-    state.proveedores.draft = proveedorToDraft(response.proveedor, state.proveedores.metadata);
-    clearFlash();
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el proveedor: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.proveedores.loading = false;
-    render();
-  }
-}
-
-async function saveProveedor() {
-  const draft = state.proveedores.draft || createEmptyProveedorDraft(state.proveedores.metadata);
-  const validationError = validateProveedorDraft(draft);
-  const isEditing = Boolean(draft.originalCodigo);
-  if (validationError) {
-    setFlash(validationError, "error");
-    render();
-    return;
-  }
-
-  state.proveedores.saving = true;
-  render();
-
-  try {
-    const payload = buildProveedorPayload(draft);
-    const response = draft.originalCodigo
-      ? await apiFetch(`/proveedores/${encodeURIComponent(draft.originalCodigo)}`, {
-          method: "PATCH",
-          body: payload,
-        })
-      : await apiFetch("/proveedores", {
-          method: "POST",
-          body: payload,
-        });
-
-    state.proveedores.selectedCodigo = response.proveedor?.codigo || draft.originalCodigo || draft.codigo;
-    await loadProveedores({ renderAfter: false });
-
-    if (isEditing) {
-      state.proveedores.draft = proveedorToDraft(response.proveedor, state.proveedores.metadata);
-      setFlash("Proveedor actualizado correctamente.", "success");
-    } else {
-      resetProveedorDraft({ blank: true });
-      setFlash("Proveedor guardado correctamente.", "success");
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.proveedores.saving = false;
-    render();
-  }
-}
-
-async function deleteProveedor(codigo) {
-  const normalizedCodigo = String(codigo || "").trim().toUpperCase();
-  if (!normalizedCodigo) {
-    return;
-  }
-
-  const confirmed = window.confirm(
-    `Vas a eliminar el proveedor ${normalizedCodigo}. Esta accion no se puede deshacer. Deseas continuar?`,
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
-  state.proveedores.deleting = true;
-  render();
-
-  try {
-    await apiFetch(`/proveedores/${encodeURIComponent(normalizedCodigo)}`, {
-      method: "DELETE",
-    });
-
-    if (String(state.proveedores.selectedCodigo || "") === normalizedCodigo) {
-      resetProveedorDraft();
-    }
-
-    await loadProveedores({ renderAfter: false });
-    setFlash("Proveedor eliminado correctamente.", "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.proveedores.deleting = false;
-    render();
-  }
-}
-async function loadTrabajadores(options = {}) {
-  const { renderAfter = true } = options;
-  state.trabajadores.loading = true;
-  state.trabajadores.loadingMetadata = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const [metadata, response] = await Promise.all([
-      apiFetch("/trabajadores/metadata"),
-      apiFetch("/trabajadores"),
-    ]);
-
-    state.trabajadores.metadata = metadata;
-    state.trabajadores.items = Array.isArray(response.trabajadores) ? response.trabajadores : [];
-
-    if (!state.trabajadores.draft?.originalCedula) {
-      state.trabajadores.draft = createEmptyTrabajadorDraft(metadata);
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar los trabajadores: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.trabajadores.loading = false;
-    state.trabajadores.loadingMetadata = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadTrabajadorForEdit(cedula) {
-  state.trabajadores.loading = true;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch(`/trabajadores/${encodeURIComponent(cedula)}`);
-    state.trabajadores.selectedCedula = response.trabajador?.cedula || cedula;
-    state.trabajadores.draft = trabajadorToDraft(response.trabajador, state.trabajadores.metadata);
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el trabajador ${cedula}: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.trabajadores.loading = false;
-    render();
-  }
-}
-
-async function saveTrabajador() {
-  const draft = state.trabajadores.draft || createEmptyTrabajadorDraft(state.trabajadores.metadata);
-  const validationMessage = validateTrabajadorDraft(draft);
-  if (validationMessage) {
-    setFlash(validationMessage, "error");
-    render();
-    return;
-  }
-
-  state.trabajadores.saving = true;
-  clearFlash();
-  render();
-
-  try {
-    const payload = buildTrabajadorPayload(draft);
-    const response = draft.originalCedula
-      ? await apiFetch(`/trabajadores/${encodeURIComponent(draft.originalCedula)}`, {
-          method: "PATCH",
-          body: payload,
-        })
-      : await apiFetch("/trabajadores", {
-          method: "POST",
-          body: payload,
-        });
-
-    state.trabajadores.selectedCedula = response.trabajador?.cedula || draft.originalCedula || draft.cedula;
-    state.trabajadores.draft = trabajadorToDraft(response.trabajador, state.trabajadores.metadata);
-    await loadTrabajadores({ renderAfter: false });
-    setFlash(
-      draft.originalCedula
-        ? `Trabajador ${response.trabajador?.cedula || draft.originalCedula} actualizado correctamente.`
-        : `Trabajador ${response.trabajador?.cedula || ""} guardado correctamente.`,
-      "success",
-    );
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.trabajadores.saving = false;
-    render();
-  }
-}
-
-async function deleteTrabajador(cedula) {
-  const normalizedCedula = String(cedula || "").trim().toUpperCase();
-  if (!normalizedCedula) {
-    return;
-  }
-
-  const confirmed = window.confirm(
-    `Vas a eliminar al trabajador ${normalizedCedula}. Esta accion no se puede deshacer. Â¿Deseas continuar?`,
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
-  state.trabajadores.deleting = true;
-  clearFlash();
-  render();
-
-  try {
-    await apiFetch(`/trabajadores/${encodeURIComponent(normalizedCedula)}`, {
-      method: "DELETE",
-    });
-
-    resetTrabajadorDraft();
-    await loadTrabajadores({ renderAfter: false });
-    setFlash(`Trabajador ${normalizedCedula} eliminado correctamente.`, "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.trabajadores.deleting = false;
-    render();
-  }
-}
-
-async function loadImpuestos(options = {}) {
-  const { renderAfter = true } = options;
-  state.impuestos.loading = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const response = await apiFetch("/inventory/catalogs/impuestos");
-    state.impuestos.items = Array.isArray(response.items) ? response.items : [];
-
-    if (!state.impuestos.draft?.codigo) {
-      state.impuestos.draft = createEmptyImpuestoDraft(state.impuestos.items);
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar los impuestos: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.impuestos.loading = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function saveImpuesto() {
-  const draft = state.impuestos.draft || createEmptyImpuestoDraft(state.impuestos.items);
-  const validationMessage = validateImpuestoDraft(draft);
-  if (validationMessage) {
-    setFlash(validationMessage, "error");
-    render();
-    return;
-  }
-
-  state.impuestos.saving = true;
-  clearFlash();
-  render();
-
-  try {
-    const response = await apiFetch("/inventory/catalogs/impuestos", {
-      method: "POST",
-      body: buildImpuestoPayload(draft),
-    });
-
-    state.impuestos.selectedCodigo = response.item?.codigo || draft.codigo;
-    state.impuestos.draft = impuestoToDraft(response.item);
-    await loadImpuestos({ renderAfter: false });
-    if (userCanAccessFullInventory()) {
-      await loadCreationMetadata({ renderAfter: false });
-    }
-    setFlash(`Impuesto ${response.item?.codigo || draft.codigo} guardado correctamente.`, "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.impuestos.saving = false;
-    render();
-  }
-}
-
-async function loadBancos(options = {}) {
-  const { renderAfter = true } = options;
-  state.bancos.loading = true;
-  state.bancos.loadingMetadata = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const [metadata, response] = await Promise.all([
-      apiFetch("/bancos/metadata"),
-      apiFetch("/bancos"),
-    ]);
-
-    state.bancos.metadata = metadata;
-    state.bancos.items = Array.isArray(response.bancos) ? response.bancos : [];
-
-    if (!state.bancos.draft?.originalCodigo) {
-      state.bancos.draft = createEmptyBancoDraft(metadata);
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar los bancos: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.bancos.loading = false;
-    state.bancos.loadingMetadata = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadBancoForEdit(codigo) {
-  if (!codigo) {
-    return;
-  }
-
-  state.bancos.loading = true;
-  render();
-
-  try {
-    const response = await apiFetch(`/bancos/${encodeURIComponent(codigo)}`);
-    state.bancos.selectedCodigo = response.banco?.codigo || codigo;
-    state.bancos.draft = bancoToDraft(response.banco, state.bancos.metadata);
-    clearFlash();
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el banco: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.bancos.loading = false;
-    render();
-  }
-}
-
-async function saveBanco() {
-  const draft = state.bancos.draft || createEmptyBancoDraft(state.bancos.metadata);
-  const validationMessage = validateBancoDraft(draft);
-  const isEditing = Boolean(draft.originalCodigo);
-  if (validationMessage) {
-    setFlash(validationMessage, "error");
-    render();
-    return;
-  }
-
-  state.bancos.saving = true;
-  clearFlash();
-  render();
-
-  try {
-    const payload = buildBancoPayload(draft);
-    const response = draft.originalCodigo
-      ? await apiFetch(`/bancos/${encodeURIComponent(draft.originalCodigo)}`, {
-          method: "PATCH",
-          body: payload,
-        })
-      : await apiFetch("/bancos", {
-          method: "POST",
-          body: payload,
-        });
-
-    state.bancos.selectedCodigo = response.banco?.codigo || draft.originalCodigo || draft.codigo;
-    await loadBancos({ renderAfter: false });
-
-    if (isEditing) {
-      state.bancos.draft = bancoToDraft(response.banco, state.bancos.metadata);
-      setFlash("Banco actualizado correctamente.", "success");
-    } else {
-      resetBancoDraft();
-      setFlash("Banco guardado correctamente.", "success");
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.bancos.saving = false;
-    render();
-  }
-}
-
-async function deleteBanco(codigo) {
-  const normalizedCodigo = String(codigo || "").trim().toUpperCase();
-  if (!normalizedCodigo) {
-    return;
-  }
-
-  const confirmed = window.confirm(
-    `Vas a eliminar el banco ${normalizedCodigo}. Esta accion no se puede deshacer. Deseas continuar?`,
-  );
-  if (!confirmed) {
-    return;
-  }
-
-  state.bancos.deleting = true;
-  render();
-
-  try {
-    await apiFetch(`/bancos/${encodeURIComponent(normalizedCodigo)}`, {
-      method: "DELETE",
-    });
-
-    if (String(state.bancos.selectedCodigo || "") === normalizedCodigo) {
-      resetBancoDraft();
-    }
-
-    await loadBancos({ renderAfter: false });
-    setFlash("Banco eliminado correctamente.", "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.bancos.deleting = false;
-    render();
-  }
-}
-
-async function loadTiposPago(options = {}) {
-  const { renderAfter = true } = options;
-  state.tiposPago.loading = true;
-  state.tiposPago.loadingMetadata = true;
-  if (renderAfter) {
-    render();
-  }
-
-  try {
-    const [metadata, response] = await Promise.all([
-      apiFetch("/tipos-pago/metadata"),
-      apiFetch("/tipos-pago"),
-    ]);
-
-    state.tiposPago.metadata = metadata;
-    state.tiposPago.items = Array.isArray(response.tiposPago) ? response.tiposPago : [];
-
-    if (!state.tiposPago.draft?.originalCodigo) {
-      state.tiposPago.draft = createEmptyTipoPagoDraft(metadata);
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudieron cargar los tipos de pago: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.tiposPago.loading = false;
-    state.tiposPago.loadingMetadata = false;
-    if (renderAfter) {
-      render();
-    }
-  }
-}
-
-async function loadTipoPagoForEdit(codigo) {
-  if (!codigo) {
-    return;
-  }
-
-  state.tiposPago.loading = true;
-  render();
-
-  try {
-    const response = await apiFetch(`/tipos-pago/${encodeURIComponent(codigo)}`);
-    state.tiposPago.selectedCodigo = String(response.tipoPago?.codigo || codigo);
-    state.tiposPago.draft = tipoPagoToDraft(response.tipoPago, state.tiposPago.metadata);
-    clearFlash();
-  } catch (error) {
-    console.error(error);
-    setFlash(`No se pudo cargar el tipo de pago: ${extractErrorMessage(error)}`, "error");
-  } finally {
-    state.tiposPago.loading = false;
-    render();
-  }
-}
-
-async function saveTipoPago() {
-  const draft = state.tiposPago.draft || createEmptyTipoPagoDraft(state.tiposPago.metadata);
-  const validationMessage = validateTipoPagoDraft(draft);
-  const isEditing = Boolean(draft.originalCodigo);
-  if (validationMessage) {
-    setFlash(validationMessage, "error");
-    render();
-    return;
-  }
-
-  state.tiposPago.saving = true;
-  clearFlash();
-  render();
-
-  try {
-    const payload = buildTipoPagoPayload(draft);
-    const response = draft.originalCodigo
-      ? await apiFetch(`/tipos-pago/${encodeURIComponent(draft.originalCodigo)}`, {
-          method: "PATCH",
-          body: payload,
-        })
-      : await apiFetch("/tipos-pago", {
-          method: "POST",
-          body: payload,
-        });
-
-    state.tiposPago.selectedCodigo = String(response.tipoPago?.codigo || draft.originalCodigo || draft.codigo);
-    await loadTiposPago({ renderAfter: false });
-
-    if (isEditing) {
-      state.tiposPago.draft = tipoPagoToDraft(response.tipoPago, state.tiposPago.metadata);
-      setFlash("Tipo de pago actualizado correctamente.", "success");
-    } else {
-      resetTipoPagoDraft();
-      setFlash("Tipo de pago guardado correctamente.", "success");
-    }
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.tiposPago.saving = false;
-    render();
-  }
-}
-
-async function deleteTipoPago(codigo) {
-  const normalizedCodigo = Number.parseInt(String(codigo || "").trim(), 10);
-  if (!Number.isInteger(normalizedCodigo) || normalizedCodigo <= 0) {
-    return;
-  }
-
-  const confirmed = window.confirm(
-    `Vas a eliminar el tipo de pago ${normalizedCodigo}. Esta accion no se puede deshacer. Deseas continuar?`,
-  );
-  if (!confirmed) {
-    return;
-  }
-
-  state.tiposPago.deleting = true;
-  render();
-
-  try {
-    await apiFetch(`/tipos-pago/${encodeURIComponent(String(normalizedCodigo))}`, {
-      method: "DELETE",
-    });
-
-    if (String(state.tiposPago.selectedCodigo || "") === String(normalizedCodigo)) {
-      resetTipoPagoDraft();
-    }
-
-    await loadTiposPago({ renderAfter: false });
-    setFlash("Tipo de pago eliminado correctamente.", "success");
-  } catch (error) {
-    console.error(error);
-    setFlash(extractErrorMessage(error), "error");
-  } finally {
-    state.tiposPago.deleting = false;
-    render();
-  }
 }
 async function loadImpresoras(options = {}) {
   const { renderAfter = true } = options;
@@ -14378,6 +12736,29 @@ async function saveExchangeRateRegister() {
   } finally {
     state.exchangeRateRegister.saving = false;
     render();
+  }
+}
+
+async function loadCreationMetadata(options = {}) {
+  const { renderAfter = true, silent = false } = options;
+  state.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    state.metadata = await apiFetch("/inventory/creation-metadata");
+    state.formDraft = applyArticleDollarRatesToDraft(state.formDraft || createEmptyDraft());
+  } catch (error) {
+    console.error(error);
+    if (!silent) {
+      setFlash(`No se pudieron cargar los catalogos del articulo: ${extractErrorMessage(error)}`, "error");
+    }
+  } finally {
+    state.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
   }
 }
 
@@ -16706,6 +15087,7 @@ function createEmptyImpresoraDraft(metadata) {
     id: toInputValue(defaults.id ?? ""),
     nombreImpresora: "",
     status: String(defaults.status ?? 0),
+    idProcesoImpresion: normalizeImpresoraReportFormatId(defaults.idProcesoImpresion ?? "", metadata, defaults.idProcesoImpresion ?? ""),
   };
 }
 
@@ -16727,6 +15109,11 @@ function readImpresoraDraft(form) {
       : readFormFieldValue(form, "id", currentDraft.id || ""),
     nombreImpresora: readFormFieldValue(form, "nombreImpresora", currentDraft.nombreImpresora || ""),
     status: readRadioValue(form, "status", String(currentDraft.status ?? 0)),
+    idProcesoImpresion: normalizeImpresoraReportFormatId(
+      readFormFieldValue(form, "idProcesoImpresion", currentDraft.idProcesoImpresion || ""),
+      state.impresoras.metadata,
+      currentDraft.idProcesoImpresion || "",
+    ),
   };
 }
 
@@ -16740,14 +15127,27 @@ function validateImpresoraDraft(draft) {
     return "Debes seleccionar una impresora detectada.";
   }
 
+  if (Number.parseInt(String(draft.status || "0"), 10) === 1) {
+    const reportFormats = getImpresoraReportFormats(state.impresoras.metadata);
+    if (!reportFormats.length) {
+      return "No se detectaron formatos .rpt para la impresora de contingencia.";
+    }
+
+    if (!findImpresoraReportFormatById(draft.idProcesoImpresion, state.impresoras.metadata)) {
+      return "Debes seleccionar el formato de factura para la impresora de contingencia.";
+    }
+  }
+
   return "";
 }
 
 function buildImpresoraPayload(draft) {
+  const reportFormat = findImpresoraReportFormatById(draft.idProcesoImpresion, state.impresoras.metadata);
   return {
     id: Number.parseInt(String(draft.id || "0").trim(), 10),
     nombreImpresora: String(draft.nombreImpresora || "").trim(),
     status: Number.parseInt(String(draft.status || "0"), 10) === 1 ? 1 : 0,
+    idProcesoImpresion: reportFormat?.id ?? undefined,
   };
 }
 
@@ -16761,6 +15161,11 @@ function impresoraToDraft(item, metadata = state.impresoras?.metadata) {
     id: toInputValue(item.id ?? ""),
     nombreImpresora: item.nombreImpresora || "",
     status: String(item.status ?? 0),
+    idProcesoImpresion: normalizeImpresoraReportFormatId(
+      item.idProcesoImpresion ?? metadata?.defaults?.idProcesoImpresion ?? "",
+      metadata,
+      metadata?.defaults?.idProcesoImpresion ?? "",
+    ),
   };
 }
 function createEmptyExchangeRateRegisterDraft() {
@@ -17060,6 +15465,11 @@ function createEmptyFacturacionDraft() {
     clienteCodigo: "",
     clienteNombre: "",
     clienteInfo: "",
+
+    clienteTelefono: "",
+
+    clienteDireccion: "",
+
     vendedorCedula: "",
     vendedorNombre: "",
     vendedorInfo: "",
@@ -17324,6 +15734,11 @@ function normalizeFacturacionDraft(draft = {}) {
     clienteCodigo: toInputValue(draft?.clienteCodigo),
     clienteNombre: toInputValue(draft?.clienteNombre),
     clienteInfo: toInputValue(draft?.clienteInfo),
+
+    clienteTelefono: toInputValue(draft?.clienteTelefono),
+
+    clienteDireccion: toInputValue(draft?.clienteDireccion),
+
     vendedorCedula: toInputValue(draft?.vendedorCedula),
     vendedorNombre: toInputValue(draft?.vendedorNombre),
     vendedorInfo: toInputValue(draft?.vendedorInfo),
@@ -17366,6 +15781,9 @@ function readFacturacionDraft() {
     clienteCodigo: clienteCodigo instanceof HTMLInputElement ? clienteCodigo.value : currentDraft.clienteCodigo,
     clienteNombre: clienteNombre instanceof HTMLInputElement ? clienteNombre.value : currentDraft.clienteNombre,
     clienteInfo: clienteInfo instanceof HTMLInputElement ? clienteInfo.value : currentDraft.clienteInfo,
+    clienteTelefono: currentDraft.clienteTelefono,
+    clienteDireccion: currentDraft.clienteDireccion,
+
     vendedorCedula: vendedorCedula instanceof HTMLInputElement ? vendedorCedula.value : currentDraft.vendedorCedula,
     vendedorNombre: vendedorNombre instanceof HTMLInputElement ? vendedorNombre.value : currentDraft.vendedorNombre,
     vendedorInfo: vendedorInfo instanceof HTMLInputElement ? vendedorInfo.value : currentDraft.vendedorInfo,
@@ -17381,6 +15799,8 @@ function applyClienteToFacturacionDraft(cliente) {
     clienteCodigo: cliente?.codigo || currentDraft.clienteCodigo,
     clienteNombre: cliente?.nombre || "",
     clienteInfo: cliente ? (cliente.tipoNombre || cliente.telefono || "") : "",
+    clienteTelefono: cliente?.telefono || "",
+    clienteDireccion: cliente?.direccion || "",
   };
 }
 
@@ -17390,7 +15810,10 @@ function clearFacturacionCliente() {
     ...currentDraft,
     clienteNombre: "",
     clienteInfo: "",
+    clienteTelefono: "",
+    clienteDireccion: "",
   };
+
 }
 
 function applyTrabajadorToFacturacionDraft(trabajador) {
@@ -19961,6 +18384,10 @@ function hasPersistentSession() {
 function getSessionStorage() {
   return shouldPersistSession() || hasPersistentSession() ? window.localStorage : window.sessionStorage;
 }
+
+
+
+
 
 
 

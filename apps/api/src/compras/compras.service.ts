@@ -369,6 +369,8 @@ export class ComprasService {
         throw new ConflictException("La compra ya esta aprobada.");
       }
 
+      await this.applyApprovedCompraInventory(tx, existing);
+
       await tx.compras.update({
         where: {
           Documento_Proveedor: {
@@ -409,6 +411,73 @@ export class ComprasService {
     return this.toCompraView(approved, destinos);
   }
 
+  private async applyApprovedCompraInventory(tx: CompraTx, compra: CompraWithRelations) {
+    const lines = Array.isArray(compra.movCompras) ? compra.movCompras : [];
+    if (!lines.length) {
+      throw new BadRequestException("La compra no tiene renglones para aprobar.");
+    }
+
+    const quantityByBarcode = new Map<string, Prisma.Decimal>();
+    for (const line of lines) {
+      const codigoBarra = String(line.CodigoBarra || "").trim().toUpperCase();
+      if (!codigoBarra) {
+        continue;
+      }
+
+      const cantidad = new Prisma.Decimal(line.Cantidad ?? ZERO);
+      quantityByBarcode.set(
+        codigoBarra,
+        (quantityByBarcode.get(codigoBarra) ?? ZERO).plus(cantidad),
+      );
+    }
+
+    const codes = [...quantityByBarcode.keys()];
+    if (!codes.length) {
+      throw new BadRequestException("La compra no tiene articulos validos para aprobar.");
+    }
+
+    const inventoryItems = await tx.inventario.findMany({
+      where: {
+        CodigoBarra: {
+          in: codes,
+        },
+      },
+      select: {
+        CodigoBarra: true,
+        Existencia: true,
+        FechaPrimerMovimiento: true,
+      },
+    });
+
+    const inventoryByCode = new Map(
+      inventoryItems.map((item) => [String(item.CodigoBarra || "").trim().toUpperCase(), item]),
+    );
+    const missingCodes = codes.filter((code) => !inventoryByCode.has(code));
+    if (missingCodes.length) {
+      throw new NotFoundException(
+        `No se encontraron articulos en inventario para aprobar la compra: ${missingCodes.join(", ")}.`,
+      );
+    }
+
+    const now = new Date();
+    for (const [codigoBarra, cantidad] of quantityByBarcode.entries()) {
+      const article = inventoryByCode.get(codigoBarra);
+      if (!article) {
+        continue;
+      }
+
+      await tx.inventario.update({
+        where: {
+          CodigoBarra: article.CodigoBarra,
+        },
+        data: {
+          Existencia: article.Existencia.plus(cantidad),
+          UltimaActualizacion: now,
+          FechaPrimerMovimiento: article.FechaPrimerMovimiento ?? now,
+        },
+      });
+    }
+  }
   async remove(documento: string, proveedor: string) {
     const existing = await this.findCompraOrThrow(documento, proveedor);
     if (Number(existing.Status ?? 0) === 1) {

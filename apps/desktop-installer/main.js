@@ -94,6 +94,34 @@ const REMOTE_NODES = [
     remoteDatabaseName: "rocky_bodega_002_vps",
     localDatabaseName: "rocky_bodega_002",
   },
+  {
+    id: "sistemas-tienda",
+    label: "Prueba Sistemas - Tienda",
+    baseUrl: "http://68.183.105.135/prueba-sistemas-tienda",
+    remoteDatabaseName: "rocky_prueba_sistemas_tienda",
+    localDatabaseName: "rocky_prueba_sistemas_tienda",
+  },
+  {
+    id: "sistemas-bodega",
+    label: "Prueba Sistemas - Bodega",
+    baseUrl: "http://68.183.105.135/prueba-sistemas-bodega",
+    remoteDatabaseName: "rocky_prueba_sistemas_bodega",
+    localDatabaseName: "rocky_prueba_sistemas_bodega",
+  },
+  {
+    id: "analista-tienda",
+    label: "Prueba Analista - Tienda",
+    baseUrl: "http://68.183.105.135/prueba-analista-tienda",
+    remoteDatabaseName: "rocky_prueba_analista_tienda",
+    localDatabaseName: "rocky_prueba_analista_tienda",
+  },
+  {
+    id: "analista-bodega",
+    label: "Prueba Analista - Bodega",
+    baseUrl: "http://68.183.105.135/prueba-analista-bodega",
+    remoteDatabaseName: "rocky_prueba_analista_bodega",
+    localDatabaseName: "rocky_prueba_analista_bodega",
+  },
 ];
 
 let mainWindow = null;

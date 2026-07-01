@@ -1,6 +1,6 @@
 {
   "name": "@sistema-arabe/desktop-installer",
-  "version": "2.1.5",
+  "version": "2.1.7",
   "private": true,
   "description": "Instalador Rocky Maxx para PostgreSQL, pgAdmin y restauracion desde VPS.",
   "author": "OpenAI Codex",

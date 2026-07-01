@@ -80,7 +80,9 @@ function renderRemoteNodes(nodes, selectedId) {
   for (const node of nodes) {
     const option = document.createElement("option");
     option.value = node.id;
-    option.textContent = `${node.label} (${node.remoteDatabaseName})`;
+    option.textContent = node.requiresManualUrl
+      ? `${node.label} (${node.remoteDatabaseName}) - URL manual`
+      : `${node.label} (${node.remoteDatabaseName})`;
     if (node.id === selectedId) {
       option.selected = true;
     }

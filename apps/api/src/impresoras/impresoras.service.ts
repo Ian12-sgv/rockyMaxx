@@ -1,7 +1,8 @@
-﻿import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { ContingenciaReportFormat, getContingenciaReportFormats } from "./contingencia-report-formats.util";
 import { CreateImpresoraDto } from "./dto/create-impresora.dto";
 import { FindImpresorasDto } from "./dto/find-impresoras.dto";
 import { UpdateImpresoraDto } from "./dto/update-impresora.dto";
@@ -25,12 +26,15 @@ export class ImpresorasService {
   async getMetadata() {
     const rows = await this.findRows();
     const maxId = rows.reduce((max, item) => Math.max(max, this.normalizeIdValue(item.ID, 0)), 0);
+    const reportFormats = getContingenciaReportFormats();
 
     return {
       defaults: {
         id: maxId + 1,
         status: 0,
+        idProcesoImpresion: reportFormats[0]?.id ?? 0,
       },
+      reportFormats,
     };
   }
 
@@ -73,8 +77,14 @@ export class ImpresorasService {
     }
 
     const metadata = await this.getMetadata();
+    const reportFormats = Array.isArray(metadata.reportFormats) ? metadata.reportFormats : [];
     const id = this.normalizeIdValue(createImpresoraDto.id, metadata.defaults.id);
     const status = this.resolveStatus(createImpresoraDto.status);
+    const idProcesoImpresion = this.resolveReportFormatId(
+      createImpresoraDto.idProcesoImpresion,
+      reportFormats,
+      metadata.defaults.idProcesoImpresion,
+    );
 
     const existing = await this.findRowById(id);
     if (existing) {
@@ -94,7 +104,7 @@ export class ImpresorasService {
         ${id},
         ${nombreImpresora},
         ${status},
-        ${status},
+        ${idProcesoImpresion},
         ${DEFAULT_MONTO_MAXIMO_DIARIO},
         ${false}
       )
@@ -122,13 +132,20 @@ export class ImpresorasService {
     }
 
     const status = this.resolveStatus(updateImpresoraDto.status);
+    const reportFormats = getContingenciaReportFormats();
+    const existingReportFormatId = this.normalizeIdValue(existing.IdProcesoImpresion, reportFormats[0]?.id ?? 0);
+    const idProcesoImpresion = this.resolveReportFormatId(
+      updateImpresoraDto.idProcesoImpresion,
+      reportFormats,
+      existingReportFormatId,
+    );
 
     await this.prisma.$executeRaw`
       UPDATE "dbo"."IMPRESORAFISCAL"
       SET
         "NombreImpresora" = ${nombreImpresora},
         "Status" = ${status},
-        "IdProcesoImpresion" = ${status}
+        "IdProcesoImpresion" = ${idProcesoImpresion}
       WHERE "ID" = ${normalizedId}
     `;
 
@@ -228,5 +245,22 @@ export class ImpresorasService {
 
   private resolveStatus(value?: number) {
     return Number(value ?? 0) === 1 ? 1 : 0;
+  }
+
+  private resolveReportFormatId(
+    value: number | undefined,
+    reportFormats: ContingenciaReportFormat[],
+    fallback: number,
+  ) {
+    if (!reportFormats.length) {
+      return 0;
+    }
+
+    const normalized = Number.parseInt(String(value ?? "").trim(), 10);
+    if (Number.isInteger(normalized) && reportFormats.some((item) => item.id === normalized)) {
+      return normalized;
+    }
+
+    return reportFormats.some((item) => item.id === fallback) ? fallback : reportFormats[0].id;
   }
 }

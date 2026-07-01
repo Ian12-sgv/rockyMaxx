@@ -1,6 +1,7 @@
-﻿import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type DiarioCaja, type Inventario } from "@prisma/client";
 
+import { findContingenciaReportFormatById, getContingenciaReportFormats } from "../impresoras/contingencia-report-formats.util";
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { UserView } from "../users/user-view.util";
@@ -139,7 +140,7 @@ export class FacturacionService {
           return sum.plus(unitCost.mul(item.cantidad));
         }, ZERO).toDecimalPlaces(2);
         const headerPaymentCode = this.resolveHeaderPaymentCode(paymentSummary.paymentCodes, paymentCatalog);
-        const printerName = await this.resolvePrinterNameForSale(
+        const printerConfig = await this.resolvePrinterConfigurationForSale(
           tx,
           contingenciaActiva,
           cajaActiva.caja?.NombreImpresora ?? "",
@@ -251,10 +252,19 @@ export class FacturacionService {
           totalDolares: totalDolares.toString(),
           tasaCambio: tasaCambioVenta.toString(),
           cliente: cliente.Codigo,
+          clienteNombre: cliente.Nombre,
+          clienteTelefono: cliente.Telefono ?? "",
+          clienteDireccion: cliente.Direccion ?? "",
           vendedor: vendedor.Cedula,
-          nombreImpresora: printerName,
+          vendedorNombre: vendedor.Nombre,
+          numeroCaja: cajaActiva.caja?.Numero ?? 0,
+          usuario,
+          nombreUsuario: user?.nombreUsuario || user?.codUsuario || usuario,
+          nombreImpresora: printerConfig.printerName,
           numeroCopias: cajaActiva.caja?.NumeroCopias ?? 1,
           emisionContingencia: Boolean(payload.emisionContingencia),
+          formatoContingenciaId: printerConfig.formatoContingenciaId,
+          formatoContingenciaArchivo: printerConfig.formatoContingenciaArchivo,
           items: normalizedItems.length,
         };
       },
@@ -319,14 +329,14 @@ export class FacturacionService {
     return matched;
   }
 
-  private async resolvePrinterNameForSale(
+  private async resolvePrinterConfigurationForSale(
     tx: FacturacionTransactionClient,
     contingenciaActiva: boolean,
     fallbackPrinterName: string,
   ) {
     const targetStatus = contingenciaActiva ? 1 : 0;
-    const rows = await tx.$queryRaw<Array<{ NombreImpresora: string | null }>>`
-      SELECT "NombreImpresora"
+    const rows = await tx.$queryRaw<Array<{ NombreImpresora: string | null; IdProcesoImpresion: string | number | bigint | null }>>`
+      SELECT "NombreImpresora", "IdProcesoImpresion"
       FROM "dbo"."IMPRESORAFISCAL"
       WHERE "Status" = ${targetStatus}
       ORDER BY "ID" ASC
@@ -334,11 +344,17 @@ export class FacturacionService {
     `;
 
     const configuredPrinterName = String(rows[0]?.NombreImpresora || "").trim();
-    if (configuredPrinterName) {
-      return configuredPrinterName;
-    }
+    const reportFormats = contingenciaActiva ? getContingenciaReportFormats() : [];
+    const fallbackFormat = contingenciaActiva ? reportFormats[0] ?? null : null;
+    const selectedFormat = contingenciaActiva
+      ? findContingenciaReportFormatById(rows[0]?.IdProcesoImpresion) ?? fallbackFormat
+      : null;
 
-    return String(fallbackPrinterName || "").trim();
+    return {
+      printerName: configuredPrinterName || String(fallbackPrinterName || "").trim(),
+      formatoContingenciaId: selectedFormat?.id ?? 0,
+      formatoContingenciaArchivo: selectedFormat?.fileName ?? "",
+    };
   }
   private async resolveTrabajador(tx: FacturacionTransactionClient, cedula: string) {
     const normalizedCedula = String(cedula || "").trim();

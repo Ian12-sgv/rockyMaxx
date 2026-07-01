@@ -1,4 +1,4 @@
-﻿import { Transform, Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import { IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
 
 import { toOptionalInteger, toTrimmedString } from "../impresora-dto.helpers";
@@ -21,4 +21,10 @@ export class CreateImpresoraDto {
   @Min(0)
   @Transform(({ value }) => toOptionalInteger(value))
   declare status?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Transform(({ value }) => toOptionalInteger(value))
+  declare idProcesoImpresion?: number;
 }

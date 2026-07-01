@@ -504,35 +504,144 @@ function normalizePrinterLookupValue(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function resolvePrinterDeviceName(printers, requestedPrinterName) {
+function buildPrinterLookupText(printer = {}) {
+  return [printer?.name, printer?.displayName, printer?.description]
+    .map((value) => normalizePrinterLookupValue(value))
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isVirtualPrinter(printer = {}) {
+  const haystack = buildPrinterLookupText(printer);
+  if (!haystack) {
+    return false;
+  }
+
+  return [
+    "microsoft print to pdf",
+    "print to pdf",
+    "pdf",
+    "microsoft xps",
+    "xps",
+    "fax",
+    "onenote",
+    "adobe pdf",
+    "virtual",
+    "anydesk printer",
+  ].some((pattern) => haystack.includes(pattern));
+}
+
+function scorePreferredPrinter(printer = {}) {
+  const haystack = buildPrinterLookupText(printer);
+  let score = 0;
+
+  if (printer?.isAvailable !== false) {
+    score += 50;
+  }
+  if (!isVirtualPrinter(printer)) {
+    score += 200;
+  }
+  if (printer?.isDefault) {
+    score += 20;
+  }
+
+  [
+    ["dp8", 240],
+    ["bixolon", 220],
+    ["thermal", 180],
+    ["termica", 180],
+    ["receipt", 150],
+    ["ticket", 150],
+    ["pos", 120],
+    ["epson tm", 110],
+    ["generic / text only", 90],
+  ].forEach(([pattern, value]) => {
+    if (haystack.includes(pattern)) {
+      score += value;
+    }
+  });
+
+  return score;
+}
+
+function pickPreferredPrinter(printers, options = {}) {
+  const allowVirtual = options?.allowVirtual === true;
+  const candidates = (allowVirtual ? printers : printers.filter((printer) => !isVirtualPrinter(printer)))
+    .filter((printer) => printer?.name);
+
+  if (!candidates.length) {
+    return allowVirtual ? printers.find((printer) => printer?.name) || null : null;
+  }
+
+  return [...candidates].sort((left, right) => scorePreferredPrinter(right) - scorePreferredPrinter(left))[0] || null;
+}
+
+function resolvePrinterDeviceName(printers, requestedPrinterName, options = {}) {
+  const allowVirtual = options?.allowVirtual === true;
   const normalizedRequested = normalizePrinterLookupValue(requestedPrinterName);
   if (normalizedRequested) {
     const exactMatch = printers.find((printer) => {
       const values = [printer?.name, printer?.displayName, printer?.description].map((value) => normalizePrinterLookupValue(value));
       return values.includes(normalizedRequested);
     });
-    if (exactMatch?.name) {
+    if (exactMatch?.name && (allowVirtual || !isVirtualPrinter(exactMatch))) {
       return exactMatch.name;
     }
 
     const partialMatch = printers.find((printer) => {
-      const haystack = [printer?.name, printer?.displayName, printer?.description]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      const haystack = buildPrinterLookupText(printer);
       return haystack.includes(normalizedRequested);
     });
-    if (partialMatch?.name) {
+    if (partialMatch?.name && (allowVirtual || !isVirtualPrinter(partialMatch))) {
       return partialMatch.name;
     }
   }
 
-  const defaultPrinter = printers.find((printer) => printer.isDefault) || printers[0];
-  return defaultPrinter?.name || "";
+  const preferredPrinter = pickPreferredPrinter(printers, { allowVirtual });
+  if (preferredPrinter?.name) {
+    return preferredPrinter.name;
+  }
+
+  if (allowVirtual) {
+    const defaultPrinter = printers.find((printer) => printer.isDefault) || printers[0];
+    return defaultPrinter?.name || "";
+  }
+
+  return "";
 }
+
+
 
 function buildPrintableHtmlUrl(html) {
   return `data:text/html;charset=utf-8,${encodeURIComponent(String(html || ""))}`;
+}
+
+async function executePrintJob(printWindow, options = {}) {
+  const copies = Number.isInteger(options?.copies) && options.copies > 0 ? options.copies : 1;
+  const deviceName = String(options?.deviceName || "").trim();
+  const silent = options?.silent !== false;
+
+  return new Promise((resolve, reject) => {
+    printWindow.webContents.print(
+      {
+        silent,
+        printBackground: true,
+        deviceName: deviceName || undefined,
+        copies,
+      },
+      (success, failureReason) => {
+        if (!success) {
+          reject(new Error(failureReason || "No se pudo completar la impresion."));
+          return;
+        }
+
+        resolve({
+          printerName: deviceName,
+          silent,
+        });
+      },
+    );
+  });
 }
 
 async function printHtmlDocument(payload = {}) {
@@ -545,12 +654,19 @@ async function printHtmlDocument(payload = {}) {
   const requestedCopies = Number.parseInt(String(payload?.copies ?? 1), 10);
   const copies = Number.isInteger(requestedCopies) && requestedCopies > 0 ? requestedCopies : 1;
   const silent = payload?.silent !== false;
+  const allowVirtualPrinter = payload?.allowVirtualPrinter === true;
+  const allowDialogFallback = payload?.allowDialogFallback === true;
   const jobTitle = String(payload?.jobTitle || "Factura Rocky Maxx").trim() || "Factura Rocky Maxx";
   const printers = await getAvailablePrinters();
-  const deviceName = resolvePrinterDeviceName(printers, requestedPrinterName);
+  const resolvedDeviceName = resolvePrinterDeviceName(printers, requestedPrinterName, { allowVirtual: allowVirtualPrinter });
+  const preferredFallbackDeviceName = resolvePrinterDeviceName(printers, "", { allowVirtual: allowVirtualPrinter });
 
-  if (!deviceName && silent) {
-    throw new Error("No se encontro ninguna impresora disponible en Windows.");
+  if (!resolvedDeviceName && silent) {
+    throw new Error(
+      allowVirtualPrinter
+        ? "No se encontro ninguna impresora disponible en Windows."
+        : "No se encontro una impresora fisica disponible en Windows para imprimir la factura.",
+    );
   }
 
   const printWindow = new BrowserWindow({
@@ -568,37 +684,72 @@ async function printHtmlDocument(payload = {}) {
   try {
     await printWindow.loadURL(buildPrintableHtmlUrl(html));
 
-    await new Promise((resolve, reject) => {
-      printWindow.webContents.print(
-        {
-          silent,
-          printBackground: true,
-          deviceName: deviceName || undefined,
+    const attempts = [];
+    if (resolvedDeviceName) {
+      attempts.push({
+        deviceName: resolvedDeviceName,
+        silent,
+        mode: silent ? "directa" : "dialogo",
+      });
+    }
+
+    if (silent && preferredFallbackDeviceName && preferredFallbackDeviceName !== resolvedDeviceName) {
+      attempts.push({
+        deviceName: preferredFallbackDeviceName,
+        silent: true,
+        mode: "respaldo",
+      });
+    }
+
+    if (allowDialogFallback) {
+      attempts.push({
+        deviceName: preferredFallbackDeviceName || resolvedDeviceName || "",
+        silent: false,
+        mode: "dialogo",
+      });
+    }
+
+    let lastError = null;
+    for (const attempt of attempts) {
+      try {
+        writeRuntimeLog(
+          `Intentando imprimir ${jobTitle}. printer=${attempt.deviceName || '-'} mode=${attempt.mode} requested=${requestedPrinterName || '-'}`,
+        );
+        if (!attempt.silent && !printWindow.isDestroyed()) {
+          printWindow.show();
+          printWindow.focus();
+        }
+        const result = await executePrintJob(printWindow, {
+          deviceName: attempt.deviceName,
           copies,
-        },
-        (success, failureReason) => {
-          if (!success) {
-            reject(new Error(failureReason || "No se pudo completar la impresion."));
-            return;
-          }
+          silent: attempt.silent,
+        });
+        writeRuntimeLog(
+          `Impresion completada ${jobTitle}. printer=${result.printerName || attempt.deviceName || '-'} mode=${attempt.mode}`,
+        );
+        return {
+          ok: true,
+          printerName: result.printerName || attempt.deviceName || resolvedDeviceName || preferredFallbackDeviceName,
+          jobTitle,
+          copies,
+          fallbackMode: attempt.mode,
+        };
+      } catch (error) {
+        lastError = error;
+        writeRuntimeLog(
+          `Fallo impresion ${jobTitle}. printer=${attempt.deviceName || '-'} mode=${attempt.mode}: ${error.message}`,
+        );
+      }
+    }
 
-          resolve();
-        },
-      );
-    });
-
-    return {
-      ok: true,
-      printerName: deviceName,
-      jobTitle,
-      copies,
-    };
+    throw lastError || new Error("No se pudo completar la impresion.");
   } finally {
     if (!printWindow.isDestroyed()) {
       printWindow.close();
     }
   }
 }
+
 ipcMain.handle("client-config:get", async () => {
   const config = loadClientConfig();
   return {
