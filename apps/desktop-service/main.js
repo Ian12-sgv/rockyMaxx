@@ -29,6 +29,12 @@ const RUNTIME_LOG_PATH = join(RUNTIME_LOG_DIR, "service-runtime.log");
 const SERVICE_CONFIG_FILE = "service-config.json";
 const execFileAsync = promisify(execFile);
 const ANSI_ESCAPE_PATTERN = /\u001b\[[0-9;]*m/g;
+const SERVICE_LAUNCH_FLAGS = new Set(
+  process.argv
+    .slice(1)
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean),
+);
 
 let configuredApiPort = DEFAULT_API_PORT;
 let configuredApiHost = DEFAULT_API_HOST;
@@ -47,6 +53,9 @@ let serviceConfigurationPersisted = false;
 let lastBackendDiagnostic = "";
 let lastServiceErrorMessage = "";
 let lastRemoteMirrorStatus = null;
+let launchWindowHidden = SERVICE_LAUNCH_FLAGS.has("--background") || SERVICE_LAUNCH_FLAGS.has("--autostart");
+let restartBackendOnLaunchRequested =
+  SERVICE_LAUNCH_FLAGS.has("--restart-backend") || SERVICE_LAUNCH_FLAGS.has("--autostart");
 
 function writeRuntimeLog(message) {
   try {
@@ -108,6 +117,75 @@ function clearServiceErrorMessage() {
   lastServiceErrorMessage = "";
 }
 
+function shouldKeepRunningInBackground() {
+  return serviceConfigurationPersisted;
+}
+
+function shouldStartWindowHidden() {
+  return launchWindowHidden && serviceConfigurationPersisted;
+}
+
+function enableBackgroundWindowMode() {
+  launchWindowHidden = true;
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  mainWindow.focus();
+}
+
+function hideMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.hide();
+}
+
+function supportsWindowsAutoLaunch() {
+  return process.platform === "win32" && app.isPackaged;
+}
+
+function getWindowsAutoLaunchArgs() {
+  return ["--autostart", "--background", "--restart-backend"];
+}
+
+function syncWindowsAutoLaunch(enabled) {
+  if (!supportsWindowsAutoLaunch()) {
+    return false;
+  }
+
+  const openAtLogin = Boolean(enabled);
+
+  try {
+    app.setLoginItemSettings({
+      openAtLogin,
+      path: process.execPath,
+      args: openAtLogin ? getWindowsAutoLaunchArgs() : [],
+      enabled: openAtLogin,
+      name: app.getName(),
+    });
+    writeRuntimeLog(
+      `Autoarranque de Windows ${openAtLogin ? "habilitado" : "deshabilitado"} para ${process.execPath}.`,
+    );
+    return true;
+  } catch (error) {
+    writeRuntimeLog(`No se pudo actualizar el autoarranque de Windows: ${error.message}`);
+    return false;
+  }
+}
+
 function formatBackendFailureMessage(rawError) {
   const text = stripAnsi(rawError).trim();
   const lower = text.toLowerCase();
@@ -167,6 +245,7 @@ function reportBackendFailure(error, options = {}) {
   setServiceErrorMessage(friendlyMessage);
   writeRuntimeLog(`Diagnostico de fallo del backend local: ${rawMessage}`);
   ensureMainWindow();
+  showMainWindow();
   broadcastServiceState(friendlyMessage);
 
   if (showDialog) {
@@ -670,9 +749,10 @@ function startApiServer() {
   });
 }
 
-async function ensureApiRunning() {
+async function ensureApiRunning(options = {}) {
+  const forceRestart = Boolean(options?.forceRestart);
   writeRuntimeLog(
-    `Arranque del servicio local. pid=${process.pid} execPath=${process.execPath} resourcesPath=${process.resourcesPath || "sin-resourcesPath"} perfil=${currentServiceProfile?.id || "sin-perfil"}`,
+    `Arranque del servicio local. pid=${process.pid} execPath=${process.execPath} resourcesPath=${process.resourcesPath || "sin-resourcesPath"} perfil=${currentServiceProfile?.id || "sin-perfil"} forceRestart=${forceRestart}`,
   );
 
   if (!currentServiceProfile) {
@@ -687,12 +767,19 @@ async function ensureApiRunning() {
     return;
   }
 
-  if (await isApiReady()) {
+  if (forceRestart) {
+    writeRuntimeLog("Se solicito reinicio forzado del backend local durante el arranque.");
+    await shutdownApiServer();
+    await releaseApiPort();
+  } else if (await isApiReady()) {
     writeRuntimeLog("Se detecto un backend local ya disponible en el puerto configurado.");
     return;
   }
 
-  await releaseApiPort();
+  if (!forceRestart) {
+    await releaseApiPort();
+  }
+
   startApiServer();
   await waitForApiReady();
   clearServiceErrorMessage();
@@ -835,7 +922,7 @@ async function restartApiWithCurrentProfile() {
   currentHealthPayload = null;
   await shutdownApiServer();
   await delay(1000);
-  await ensureApiRunning();
+  await ensureApiRunning({ forceRestart: true });
 }
 
 function createMainWindow() {
@@ -861,9 +948,16 @@ function createMainWindow() {
   });
 
   mainWindow.once("ready-to-show", () => {
-    if (mainWindow) {
-      mainWindow.show();
+    if (mainWindow && !shouldStartWindowHidden()) {
+      showMainWindow();
       broadcastServiceState();
+    }
+  });
+
+  mainWindow.on("close", (event) => {
+    if (!appIsQuitting && shouldKeepRunningInBackground()) {
+      event.preventDefault();
+      hideMainWindow();
     }
   });
 
@@ -923,6 +1017,8 @@ ipcMain.handle("service-config:save", async (_event, payload) => {
     throw new Error("No se encontro el perfil de base de datos seleccionado.");
   }
 
+  const isInitialConfiguration = !serviceConfigurationPersisted;
+
   configuredMirrorSyncEnabled = true;
   configuredMirrorSyncRemoteApiUrl =
     mirrorSyncRemoteApiUrl || resolveDefaultMirrorSyncRemoteApiUrl(selectedProfile);
@@ -938,9 +1034,16 @@ ipcMain.handle("service-config:save", async (_event, payload) => {
   try {
     await restartApiWithCurrentProfile();
     clearServiceErrorMessage();
+    syncWindowsAutoLaunch(true);
     lastRemoteMirrorStatus = await probeRemoteMirrorHealth();
     const state = buildServiceState();
     broadcastServiceState();
+
+    if (isInitialConfiguration) {
+      enableBackgroundWindowMode();
+      hideMainWindow();
+    }
+
     return state;
   } catch (error) {
     const message = reportBackendFailure(error, { showDialog: false });
@@ -951,10 +1054,7 @@ ipcMain.handle("service-config:save", async (_event, payload) => {
 
 app.on("second-instance", () => {
   ensureMainWindow();
-  if (mainWindow?.isMinimized()) {
-    mainWindow.restore();
-  }
-  mainWindow?.focus();
+  showMainWindow();
 });
 
 app.on("before-quit", () => {
@@ -971,15 +1071,20 @@ app.on("window-all-closed", () => {
 app.on("activate", () => {
   if (!mainWindow) {
     createMainWindow();
+    return;
   }
+
+  showMainWindow();
 });
 
 app.whenReady().then(async () => {
   initializeServiceProfile();
+  syncWindowsAutoLaunch(serviceConfigurationPersisted);
   createMainWindow();
 
   try {
-    await ensureApiRunning();
+    await ensureApiRunning({ forceRestart: restartBackendOnLaunchRequested });
+    restartBackendOnLaunchRequested = false;
   } catch (error) {
     writeRuntimeLog(`Fallo el arranque del servicio local: ${error.stack || error.message}`);
     reportBackendFailure(error);

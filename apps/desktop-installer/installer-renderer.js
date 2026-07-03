@@ -13,12 +13,18 @@ const pgadminPath = document.getElementById("pgadmin-path");
 const serviceStatus = document.getElementById("service-status");
 const servicePath = document.getElementById("service-path");
 const serviceNote = document.getElementById("service-note");
+const printerDriversStatus = document.getElementById("printer-drivers-status");
+const printerDriversPath = document.getElementById("printer-drivers-path");
+const printerDriversNote = document.getElementById("printer-drivers-note");
+const printerDriverPackages = document.getElementById("printer-driver-packages");
 
 const installPostgresButton = document.getElementById("install-postgres");
 const installPgadminButton = document.getElementById("install-pgadmin");
 const installBothButton = document.getElementById("install-both");
 const restoreButton = document.getElementById("restore-button");
 const refreshButton = document.getElementById("refresh-button");
+const downloadPrinterDriversButton = document.getElementById("download-printer-drivers");
+const openPrinterDriversFolderButton = document.getElementById("open-printer-drivers-folder");
 
 let currentState = null;
 let busy = false;
@@ -43,6 +49,8 @@ function setBusy(nextBusy) {
   installBothButton.disabled = nextBusy;
   restoreButton.disabled = nextBusy;
   refreshButton.disabled = nextBusy;
+  downloadPrinterDriversButton.disabled = nextBusy;
+  openPrinterDriversFolderButton.disabled = nextBusy;
 }
 
 function createStatusChip(label, ok) {
@@ -90,6 +98,16 @@ function renderRemoteNodes(nodes, selectedId) {
   }
 }
 
+
+function renderPrinterDriverPackages(packages) {
+  printerDriverPackages.innerHTML = "";
+  for (const item of Array.isArray(packages) ? packages : []) {
+    const entry = document.createElement("li");
+    entry.textContent = `${item.label} (${item.id})`;
+    printerDriverPackages.appendChild(entry);
+  }
+}
+
 function hydrateState(state) {
   currentState = state;
 
@@ -121,6 +139,18 @@ function hydrateState(state) {
   serviceNote.textContent = state.serviceRuntime.installed
     ? "El runtime del servicio local ya existe. Si restauras una base, el instalador tambien actualizara sus perfiles .env."
     : "Si instalas Rocky Maxx Servicio Local despues, conviene dejar el usuario PostgreSQL en 'postgres' o volver a ejecutar este instalador para ajustar credenciales.";
+
+  printerDriversStatus.innerHTML = createStatusChip(
+    state.printerDrivers.downloaded
+      ? `Descargado (${state.printerDrivers.downloadedPackages || 0} paquete(s))`
+      : "Pendiente",
+    state.printerDrivers.downloaded,
+  );
+  printerDriversPath.textContent = state.printerDrivers.path || "-";
+  printerDriversNote.textContent = state.printerDrivers.downloaded
+    ? "El pack base ya existe en la carpeta mostrada. Si la ticketera es muy especifica, instala tambien el driver exacto del fabricante."
+    : "Este pack descarga soporte base para muchas ticketeteras ESC/POS y deja una guia local para impresoras USB y de red.";
+  renderPrinterDriverPackages(state.printerDrivers.packages);
 }
 
 function buildPayload() {
@@ -211,6 +241,32 @@ refreshButton.addEventListener("click", async () => {
     await reloadState("Estado actualizado.", "success");
   } catch (error) {
     setFlash(formatErrorMessage(error) || "No se pudo actualizar el estado.", "error");
+  } finally {
+    setBusy(false);
+  }
+});
+
+downloadPrinterDriversButton.addEventListener("click", async () => {
+  setBusy(true);
+  setFlash("Descargando el pack base de impresoras...", "info");
+  try {
+    const result = await window.rockyInstaller.downloadPrinterDrivers();
+    await reloadState(result.message || "Pack base de impresoras descargado.", "success");
+  } catch (error) {
+    setFlash(formatErrorMessage(error) || "No se pudo descargar el pack base de impresoras.", "error");
+  } finally {
+    setBusy(false);
+  }
+});
+
+openPrinterDriversFolderButton.addEventListener("click", async () => {
+  setBusy(true);
+  setFlash("Abriendo carpeta de drivers...", "info");
+  try {
+    const result = await window.rockyInstaller.openPrinterDriversFolder();
+    await reloadState(result.message || "Carpeta de drivers abierta.", "success");
+  } catch (error) {
+    setFlash(formatErrorMessage(error) || "No se pudo abrir la carpeta de drivers.", "error");
   } finally {
     setBusy(false);
   }

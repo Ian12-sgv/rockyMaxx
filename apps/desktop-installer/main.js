@@ -20,6 +20,7 @@ const app = typeof electronModule === "string" ? null : electronModule.app;
 const BrowserWindow = typeof electronModule === "string" ? null : electronModule.BrowserWindow;
 const dialog = typeof electronModule === "string" ? null : electronModule.dialog;
 const ipcMain = typeof electronModule === "string" ? null : electronModule.ipcMain;
+const shell = typeof electronModule === "string" ? null : electronModule.shell;
 
 const execFileAsync = promisify(execFile);
 
@@ -37,6 +38,14 @@ const ROCKY_SERVICE_RUNTIME_DIR = join(
   "resources",
   "api",
 );
+const PRINTER_DRIVER_PACKAGES = [
+  { id: "EPSON.EpsonConnectPrinterSetup", label: "Epson Connect Printer Setup" },
+  { id: "EPSON.EpsonNetPrint", label: "EpsonNet Print" },
+  { id: "EPSON.PrinterConnectionChecker", label: "Epson Printer Connection Checker" },
+  { id: "EPSON.SoftwareUpdater", label: "Epson Software Updater" },
+  { id: "Apple.BonjourPrintServices", label: "Bonjour Print Services" },
+];
+const PRINTER_DRIVER_README_NAME = "LEEME-DRIVERS-IMPRESORAS.txt";
 const REMOTE_NODES = [
   {
     id: "central",
@@ -332,6 +341,61 @@ function detectServiceRuntime() {
   };
 }
 
+
+function resolvePrinterDriverDownloadDir() {
+  const downloadsDir = app
+    ? app.getPath("downloads")
+    : join(process.env.USERPROFILE || "C:\\Users\\Public", "Downloads");
+  return join(downloadsDir, "Rocky Maxx Drivers");
+}
+
+function sanitizePrinterDriverFolderName(value) {
+  return String(value || "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    || "paquete";
+}
+
+function buildPrinterDriverReadmeContent() {
+  return [
+    "ROCKY MAXX - PACK BASE DE IMPRESORAS",
+    "",
+    "Este pack deja descargadas varias herramientas de soporte para impresoras termicas, USB y de red.",
+    "",
+    "QUE INCLUYE:",
+    ...PRINTER_DRIVER_PACKAGES.map((item) => `- ${item.label} (${item.id})`),
+    "",
+    "RECOMENDACIONES:",
+    "1. Si Windows ya detecta la ticketera, Rocky Maxx podra verla desde el cliente de escritorio.",
+    "2. Si la impresora es clon ESC/POS, prueba primero Generic / Text Only o drivers tipo Epson.",
+    "3. Si el modelo no aparece o imprime mal, instala tambien el driver exacto del fabricante.",
+    "4. Para impresoras de red, Bonjour y EpsonNet Print ayudan a completar la deteccion.",
+    "",
+    "NOTA:",
+    "No existe un driver unico que garantice 100% de compatibilidad con cualquier ticketera del mercado.",
+    "Este pack deja la base tecnica mas comun para Rocky Maxx y para muchas impresoras compatibles con ESC/POS.",
+  ].join("\r\n");
+}
+
+function detectPrinterDriverPack() {
+  const path = resolvePrinterDriverDownloadDir();
+  const downloadedPackages = PRINTER_DRIVER_PACKAGES.filter((item) => existsSync(join(path, sanitizePrinterDriverFolderName(item.id))));
+  return {
+    downloaded: downloadedPackages.length > 0,
+    path,
+    downloadedPackages: downloadedPackages.length,
+    packages: PRINTER_DRIVER_PACKAGES.map((item) => ({ ...item })),
+    readmePath: join(path, PRINTER_DRIVER_README_NAME),
+  };
+}
+
+function ensurePrinterDriverReadme(downloadDirectory) {
+  const readmePath = join(downloadDirectory, PRINTER_DRIVER_README_NAME);
+  writeFileSync(readmePath, buildPrinterDriverReadmeContent(), "utf8");
+  return readmePath;
+}
+
 function buildState() {
   const config = loadInstallerConfig();
   return {
@@ -341,6 +405,7 @@ function buildState() {
     postgres: detectPostgresInstallation(),
     pgAdmin: detectPgAdminInstallation(),
     serviceRuntime: detectServiceRuntime(),
+    printerDrivers: detectPrinterDriverPack(),
   };
 }
 
@@ -801,6 +866,77 @@ async function updateServiceRuntimeEnvFiles(localUser, localPassword) {
   }
 }
 
+
+async function downloadPrinterDrivers() {
+  const wingetCommand = await resolveWingetCommand();
+  const printerDriverState = detectPrinterDriverPack();
+  mkdirSync(printerDriverState.path, { recursive: true });
+  ensurePrinterDriverReadme(printerDriverState.path);
+
+  const downloaded = [];
+  const failed = [];
+
+  for (const item of PRINTER_DRIVER_PACKAGES) {
+    const targetDirectory = join(printerDriverState.path, sanitizePrinterDriverFolderName(item.id));
+    mkdirSync(targetDirectory, { recursive: true });
+
+    try {
+      await runCommand(wingetCommand.command, [
+        ...wingetCommand.argsPrefix,
+        "download",
+        "--id",
+        item.id,
+        "-e",
+        "--source",
+        "winget",
+        "--accept-source-agreements",
+        "--accept-package-agreements",
+        "--disable-interactivity",
+        "--skip-dependencies",
+        "--download-directory",
+        targetDirectory,
+      ]);
+      downloaded.push(item.label);
+    } catch (error) {
+      failed.push(`${item.label}: ${error.message}`);
+    }
+  }
+
+  if (shell?.openPath) {
+    await shell.openPath(printerDriverState.path);
+  }
+
+  if (!downloaded.length) {
+    throw new Error(`No se pudo descargar el pack base de impresoras. ${failed.join(" | ")}`.trim());
+  }
+
+  return {
+    ok: true,
+    downloadDirectory: printerDriverState.path,
+    message: failed.length
+      ? `Se descargaron ${downloaded.length} herramienta(s) de impresion en ${printerDriverState.path}. Algunas descargas fallaron: ${failed.join(" | ")}`
+      : `Se descargaron ${downloaded.length} herramienta(s) de impresion en ${printerDriverState.path}.`,
+  };
+}
+
+async function openPrinterDriversFolder() {
+  const printerDriverState = detectPrinterDriverPack();
+  mkdirSync(printerDriverState.path, { recursive: true });
+  ensurePrinterDriverReadme(printerDriverState.path);
+
+  if (shell?.openPath) {
+    const result = await shell.openPath(printerDriverState.path);
+    if (result) {
+      throw new Error(`No se pudo abrir la carpeta de drivers: ${result}`);
+    }
+  }
+
+  return {
+    ok: true,
+    message: `Se abrio la carpeta ${printerDriverState.path}.`,
+  };
+}
+
 async function restoreFromVps(payload) {
   const config = saveInstallerConfig(payload);
   const postgresState = detectPostgresInstallation();
@@ -890,6 +1026,10 @@ ipcMain.handle("installer:install-pgadmin", async () => installPgAdmin());
 ipcMain.handle("installer:install-stack", async (_event, payload) => installStack(payload));
 
 ipcMain.handle("installer:restore-from-vps", async (_event, payload) => restoreFromVps(payload));
+
+ipcMain.handle("installer:download-printer-drivers", async () => downloadPrinterDrivers());
+
+ipcMain.handle("installer:open-printer-drivers-folder", async () => openPrinterDriversFolder());
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

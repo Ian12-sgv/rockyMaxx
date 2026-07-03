@@ -14,6 +14,14 @@ function formatTime(value: Date | null | undefined) {
   return `${hours}:${minutes}`;
 }
 
+function formatDateKey(value: Date | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  return value.toISOString().slice(0, 10);
+}
+
 function resolveStatusName(status: number) {
   if (status === 2) {
     return "Caja cerrada";
@@ -29,7 +37,7 @@ function resolveStatusName(status: number) {
 export function toCajaView(item: DiarioCajaWithCaja) {
   return {
     serie: item.Serie,
-    fecha: item.Fecha,
+    fecha: formatDateKey(item.Fecha),
     numeroCaja: item.Numero,
     facturaInicial: item.FacturaInicial?.toString() ?? "0",
     ultimaFactura: item.FacturaFinal?.toString() ?? "0",

@@ -284,6 +284,7 @@ const state = {
     savedDraft: createEmptyExchangeRateRegisterDraft(),
     updatedAt: "",
   },
+  reportes: createEmptyReportesState(),
   articlePricingRates: createEmptyArticlePricingRateState(),
   desktopPrinting: createEmptyDesktopPrintingState(),
   cashRegisters: {
@@ -747,6 +748,7 @@ async function hydrateAuthenticatedState() {
     savedDraft: createEmptyExchangeRateRegisterDraft(),
     updatedAt: "",
   };
+  state.reportes = createEmptyReportesState();
   state.cashRegisters = {
     loading: false,
     loadingMetadata: false,
@@ -1024,7 +1026,7 @@ function renderShellView() {
               ${isCashier ? "" : renderDesktopMenu("archivos", "Archivos", renderDesktopArchivoMenuV2())}
               ${renderDesktopMenu("procesos", "Procesos", renderDesktopProcesosMenu())}
                 ${canManageAllModules ? renderDesktopMenu("reportes", "Reportes", `
-                  ${renderDesktopMenuLink("reportes", "General")}
+                  ${renderDesktopMenuLink("reportes", "Cierre general")}
                 `) : ""}
                 ${
                   canManageAllModules
@@ -1176,6 +1178,10 @@ function renderDesktopWorkspace() {
 
   if (state.currentView === "cierre-caja") {
     return renderCashRegisterCloseWorkspace();
+  }
+
+  if (state.currentView === "reportes") {
+    return renderGeneralCloseReportsWorkspace();
   }
 
   if (state.currentView === "cargar-devoluciones") {
@@ -5192,6 +5198,8 @@ function renderCashRegistersWorkspace() {
   const isSaving = state.cashRegisters.saving;
   const isDeleting = state.cashRegisters.deleting;
   const isBusy = isSaving || isDeleting;
+  const isLocked = Number(draft.status ?? 0) === 2;
+  const isFormLocked = isBusy || isLocked;
   const openingStatusLabel = renderCashRegisterConditionText(draft.status);
   const desktopPrinterState = state.desktopPrinting || createEmptyDesktopPrintingState();
   const detectedPrinters = Array.isArray(desktopPrinterState.items) ? desktopPrinterState.items : [];
@@ -5225,7 +5233,7 @@ function renderCashRegistersWorkspace() {
               <span class="transfer-command-icon">B</span>
               Buscar
             </button>
-            <button class="transfer-command-button transfer-command-primary" type="submit" form="caja-form" ${isBusy ? "disabled" : ""}>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="caja-form" ${isFormLocked ? "disabled" : ""}>
               <span class="transfer-command-icon">G</span>
               ${isSaving ? "Guardando" : "Guardar"}
             </button>
@@ -5234,6 +5242,13 @@ function renderCashRegistersWorkspace() {
               Salir
             </button>
           </div>
+
+          ${isLocked ? `
+            <div class="article-editor-note">
+              <strong>Caja bloqueada</strong>
+              <span>Esta caja ya fue cerrada y no admite nuevos ingresos ni modificaciones.</span>
+            </div>
+          ` : ""}
 
           <div class="cash-register-header-panel">
             <label class="cash-register-field cash-register-field-serie">
@@ -7780,6 +7795,56 @@ function isDetectedDesktopPrinter(nombreImpresora) {
     return values.includes(normalized);
   });
 }
+function renderGeneralCloseReportsWorkspace() {
+  const reportState = state.reportes || createEmptyReportesState();
+  const isBusy = Boolean(reportState.generatingGeneralClose);
+
+  return `
+    <div class="modern-page exchange-rate-page">
+      ${renderDesktopBreadcrumb(["Reportes", "Cierre general"])}
+
+      <section class="transfer-register-shell adjustment-window exchange-rate-window">
+        <div class="adjustment-titlebar">Cierre general</div>
+        <form id="reportes-general-form" class="adjustment-form exchange-rate-form">
+          <div class="exchange-rate-panel">
+            <div class="exchange-rate-meta">Genera el balance consolidado de todas las cajas de la fecha seleccionada.</div>
+
+            <label class="exchange-rate-field">
+              <span>Fecha del cierre</span>
+              <input
+                type="date"
+                name="fecha"
+                value="${escapeHtml(toDateInputValue(reportState.fechaCierreGeneral || new Date()))}"
+                data-reportes-general-date
+                ${isBusy ? "disabled" : ""}
+              />
+            </label>
+
+            <div class="exchange-rate-actions">
+              <button
+                class="button button-primary"
+                type="submit"
+                form="reportes-general-form"
+                ${isBusy ? "disabled" : ""}
+              >
+                ${isBusy ? "Generando..." : "Descargar PDF"}
+              </button>
+              <button
+                class="button button-danger"
+                type="button"
+                data-reportes-general-exit
+                ${isBusy ? "disabled" : ""}
+              >
+                Salir
+              </button>
+            </div>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
 function renderExchangeRateRegisterWorkspace() {
   const draft = state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
   const updatedAt = String(state.exchangeRateRegister.updatedAt || draft.actualizadoEn || "").trim();
@@ -8186,7 +8251,7 @@ function getDesktopBreadcrumb(view) {
   }
 
   if (view === "reportes") {
-    return ["Reportes", "General"];
+    return ["Reportes", "Cierre general"];
   }
 
   if (view === "transferencias" || view === "registro-transferencia") {
@@ -8381,21 +8446,43 @@ function formatDateDisplay(value) {
   }).format(date);
 }
 
-function formatDateOnlyDisplay(value) {
+function extractDateOnlyParts(value) {
   if (!value) {
-    return "-";
+    return null;
   }
 
-  const date = value instanceof Date ? value : new Date(value);
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) {
+      return null;
+    }
+
+    const directMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+    if (directMatch) {
+      const [, year, month, day] = directMatch;
+      return { year, month, day };
+    }
+  }
+
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
   if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return {
+    year: String(date.getFullYear()),
+    month: String(date.getMonth() + 1).padStart(2, "0"),
+    day: String(date.getDate()).padStart(2, "0"),
+  };
+}
+
+function formatDateOnlyDisplay(value) {
+  const parts = extractDateOnlyParts(value);
+  if (!parts) {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("es-VE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
+  return `${parts.day}/${parts.month}/${parts.year}`;
 }
 
 function toDisplayValue(value) {
@@ -9738,6 +9825,7 @@ function bindShellEvents() {
   bindImpresorasEvents();
   bindImpuestoEvents();
   bindExchangeRateRegisterEvents();
+  bindReportesEvents();
   bindFacturacionEvents();
   bindCashRegisterEvents();
   bindCashRegisterCloseEvents();
@@ -10266,6 +10354,13 @@ function bindFacturacionEvents() {
         return;
       }
 
+      const validationMessage = getFacturacionArticleValidationMessage(selected);
+      if (validationMessage) {
+        setFlash(validationMessage, "error");
+        render();
+        return;
+      }
+
       fillFacturacionLineFromInventory(lookup.lineIndex, selected);
       closeFacturacionLineLookupModal();
       clearFlash();
@@ -10314,6 +10409,13 @@ function bindFacturacionEvents() {
         event.preventDefault();
         const selected = items[currentIndex];
         if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+          return;
+        }
+
+        const validationMessage = getFacturacionArticleValidationMessage(selected);
+        if (validationMessage) {
+          setFlash(validationMessage, "error");
+          render();
           return;
         }
 
@@ -10551,6 +10653,37 @@ function bindComprasEvents() {
   };
 }
 
+function bindReportesEvents() {
+  const syncDraft = () => {
+    const field = document.querySelector("[data-reportes-general-date]");
+    const currentState = state.reportes || createEmptyReportesState();
+    state.reportes = {
+      ...currentState,
+      fechaCierreGeneral: toDateInputValue(field?.value || currentState.fechaCierreGeneral || new Date()),
+    };
+  };
+
+  document.querySelector("[data-reportes-general-date]")?.addEventListener("input", syncDraft);
+  document.querySelector("[data-reportes-general-date]")?.addEventListener("change", syncDraft);
+
+  document.querySelector("[data-reportes-general-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+  const submit = async (event) => {
+    event?.preventDefault?.();
+    syncDraft();
+    await generateGeneralCloseReport();
+  };
+
+  document.getElementById("reportes-general-form")?.addEventListener("submit", submit);
+}
+
 function bindCashRegisterCloseEvents() {
   document.querySelector("[data-refresh-cajas-close]")?.addEventListener("click", async () => {
     await loadCashRegisters();
@@ -10621,7 +10754,24 @@ function bindCashRegisterCloseEvents() {
   document.querySelector("[data-close-caja]")?.addEventListener("click", submitClose);
   document.getElementById("caja-close-form")?.addEventListener("submit", submitClose);
 }
+function applyCashRegisterLockState() {
+  if (state.currentView !== "cajas") {
+    return;
+  }
+  const draft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  if (Number(draft.status ?? 0) !== 2) {
+    return;
+  }
+  const fieldNames = ["numeroCaja", "facturaInicial", "ultimaFactura", "horaApertura", "horaCierre", "nombreImpresora"];
+  fieldNames.forEach((fieldName) => {
+    const element = document.querySelector(`#caja-form [name="${fieldName}"]`);
+    if (element instanceof HTMLInputElement || element instanceof HTMLSelectElement) {
+      element.disabled = true;
+    }
+  });
+}
 function bindCashRegisterEvents() {
+  applyCashRegisterLockState();
   document.querySelector("[data-refresh-cajas]")?.addEventListener("click", async () => {
     await loadCashRegisters();
   });
@@ -12671,6 +12821,41 @@ async function deleteImpresora(id) {
     render();
   }
 }
+async function loadFacturacionExchangeRate(options = {}) {
+  const { renderAfter = true, silent = false } = options;
+  const previous = state.facturacion.exchangeRate || createEmptyFacturacionExchangeRateState();
+
+  state.facturacion.exchangeRate = {
+    ...previous,
+    loading: true,
+    error: "",
+  };
+
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/exchange-rates/manual");
+    applyManualRateToFacturacionState(response?.item || {});
+  } catch (error) {
+    console.error(error);
+    state.facturacion.exchangeRate = {
+      ...previous,
+      loading: false,
+      error: extractErrorMessage(error),
+    };
+
+    if (!silent) {
+      setFlash(`No se pudo consultar la tasa manual de cambio: ${extractErrorMessage(error)}`, "error");
+    }
+  } finally {
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
 async function loadExchangeRateRegister(options = {}) {
   const { renderAfter = true, silent = false } = options;
   state.exchangeRateRegister.loading = true;
@@ -12939,8 +13124,78 @@ async function saveCashRegister() {
   }
 }
 
-async function closeCashRegister(serie, fecha, horaCierre) {
-  const normalizedSerie = String(serie || "").trim().toUpperCase();
+function downloadCashRegisterCloseReport(report) {
+  const base64 = String(report?.pdfBase64 || "").trim();
+  if (!base64 || typeof window.atob !== "function" || typeof Blob === "undefined") {
+    return false;
+  }
+
+  try {
+    const binary = window.atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = String(report?.fileName || "cierre-caja.pdf").trim() || "cierre-caja.pdf";
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      anchor.remove();
+    }, 1000);
+    return true;
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+}
+async function generateGeneralCloseReport() {
+  const currentState = state.reportes || createEmptyReportesState();
+  const normalizedFecha = toDateInputValue(currentState.fechaCierreGeneral || new Date());
+
+  if (!normalizedFecha) {
+    setFlash("Debes seleccionar una fecha valida para generar el cierre general.", "error");
+    render();
+    return;
+  }
+
+  state.reportes = {
+    ...currentState,
+    fechaCierreGeneral: normalizedFecha,
+    generatingGeneralClose: true,
+  };
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/cajas/reports/general/${encodeURIComponent(normalizedFecha)}`);
+    const downloadedReport = downloadCashRegisterCloseReport(response.reporte);
+    setFlash(
+      downloadedReport
+        ? `Cierre general del ${formatDateOnlyDisplay(normalizedFecha)} descargado correctamente.`
+        : `Cierre general del ${formatDateOnlyDisplay(normalizedFecha)} generado correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.reportes = {
+      ...(state.reportes || createEmptyReportesState()),
+      fechaCierreGeneral: normalizedFecha,
+      generatingGeneralClose: false,
+    };
+    render();
+  }
+}
+
+async function closeCashRegister(serie, fecha, horaCierre) {  const normalizedSerie = String(serie || "").trim().toUpperCase();
   const normalizedFecha = toDateInputValue(fecha);
   const normalizedHoraCierre = String(horaCierre || "").trim() || getCurrentTimeInputValue();
 
@@ -12967,10 +13222,15 @@ async function closeCashRegister(serie, fecha, horaCierre) {
       },
     });
 
-    state.cashRegisters.selectedKey = buildCashRegisterKey(response.caja?.serie, response.caja?.fecha);
-    state.cashRegisters.draft = cashRegisterToDraft(response.caja);
+    const downloadedReport = downloadCashRegisterCloseReport(response.reporte);
+    state.cashRegisters.selectedKey = "";
+    state.cashRegisters.draft = createEmptyCashRegisterDraft(state.cashRegisters.metadata);
     await loadCashRegisters({ renderAfter: false });
-    setFlash(`Caja ${response.caja?.serie || normalizedSerie} cerrada correctamente.`, "success");
+    setFlash(
+      downloadedReport
+        ? `Caja ${response.caja?.serie || normalizedSerie} cerrada correctamente. Se descargo el PDF del balance diario.`
+        : `Caja ${response.caja?.serie || normalizedSerie} cerrada correctamente.`
+      , "success");
   } catch (error) {
     console.error(error);
     setFlash(extractErrorMessage(error), "error");
@@ -13559,6 +13819,15 @@ async function resolveFacturacionLineFromField(index) {
     }
 
     if (exactBarcodeMatch) {
+      const validationMessage = getFacturacionArticleValidationMessage(exactBarcodeMatch);
+      if (validationMessage) {
+        clearFacturacionLine(index, searchValue);
+        closeFacturacionLineLookupModal();
+        setFlash(validationMessage, "error");
+        renderFacturacionAndFocusLine(index + 1);
+        return;
+      }
+
       fillFacturacionLineFromInventory(index, exactBarcodeMatch);
       closeFacturacionLineLookupModal();
       clearFlash();
@@ -13567,6 +13836,15 @@ async function resolveFacturacionLineFromField(index) {
     }
 
     if (itemsFound.length === 1) {
+      const validationMessage = getFacturacionArticleValidationMessage(itemsFound[0]);
+      if (validationMessage) {
+        clearFacturacionLine(index, searchValue);
+        closeFacturacionLineLookupModal();
+        setFlash(validationMessage, "error");
+        renderFacturacionAndFocusLine(index + 1);
+        return;
+      }
+
       fillFacturacionLineFromInventory(index, itemsFound[0]);
       closeFacturacionLineLookupModal();
       clearFlash();
@@ -15168,6 +15446,13 @@ function impresoraToDraft(item, metadata = state.impresoras?.metadata) {
     ),
   };
 }
+function createEmptyReportesState() {
+  return {
+    fechaCierreGeneral: toDateInputValue(new Date()),
+    generatingGeneralClose: false,
+  };
+}
+
 function createEmptyExchangeRateRegisterDraft() {
   return {
     valorCambio: "",
@@ -15850,6 +16135,34 @@ function fillFacturacionLineFromInventory(index, article) {
   };
 }
 
+function getFacturacionArticleExistence(article) {
+  return toFacturacionNumber(
+    article?.inventario?.existenciaActual ?? article?.inventario?.existencia ?? article?.existenciaActual ?? article?.existencia ?? "0",
+  );
+}
+
+function facturacionArticleHasConfiguredCosts(article) {
+  const costoInicial = toFacturacionNumber(article?.inventario?.costos?.inicial ?? article?.costoInicial ?? "0");
+  const costoPromedio = toFacturacionNumber(article?.inventario?.costos?.promedio ?? article?.costoPromedio ?? "0");
+  const ultimoCosto = toFacturacionNumber(article?.inventario?.costos?.ultimo ?? article?.ultimoCosto ?? "0");
+
+  return costoInicial > 0 || costoPromedio > 0 || ultimoCosto > 0;
+}
+
+function getFacturacionArticleValidationMessage(article) {
+  const codigoBarra = String(article?.codigoBarra || "").trim() || "seleccionado";
+
+  if (getFacturacionArticleExistence(article) <= 0) {
+    return `El articulo ${codigoBarra} no se puede facturar porque no tiene existencia.`;
+  }
+
+  if (!facturacionArticleHasConfiguredCosts(article)) {
+    return `Error sin precio. El articulo ${codigoBarra} no tiene costos configurados.`;
+  }
+
+  return "";
+}
+
 function clearFacturacionLine(index, keepCode = "") {
   const currentDraft = normalizeFacturacionDraft(state.facturacion.draft || createEmptyFacturacionDraft());
   const items = Array.isArray(currentDraft.items) && currentDraft.items.length
@@ -15992,20 +16305,14 @@ function recalculateFacturacionDraftLinePriceList(draft, lineIndex, priceList) {
 }
 
 function resolveFacturacionUsdRate(rows, exchangeRate) {
-  const populatedRows = (Array.isArray(rows) ? rows : []).filter((item) => String(item?.codigoBarra || "").trim());
   const detailRate = toFacturacionNumber(exchangeRate?.rateBsPerUsd);
   const mayorRate = toFacturacionNumber(exchangeRate?.rateMayor);
 
-  if (!populatedRows.length) {
+  if (detailRate > 0) {
     return detailRate;
   }
 
-  const allMayor = populatedRows.every((item) => normalizeFacturacionPriceList(item?.priceList) === "mayor");
-  if (allMayor && mayorRate > 0) {
-    return mayorRate;
-  }
-
-  return detailRate;
+  return mayorRate;
 }
 
 function calculateFacturacionSummary(items, activeTax = null, exchangeRate = null, draft = null) {
@@ -17633,19 +17940,12 @@ function toInputValue(value) {
 }
 
 function toDateInputValue(value) {
-  if (!value) {
+  const parts = extractDateOnlyParts(value);
+  if (!parts) {
     return "";
   }
 
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 function toApiDateTime(value, boundary = "start") {

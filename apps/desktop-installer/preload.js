@@ -16,4 +16,10 @@ contextBridge.exposeInMainWorld("rockyInstaller", {
   restoreFromVps(payload) {
     return ipcRenderer.invoke("installer:restore-from-vps", payload);
   },
+  downloadPrinterDrivers() {
+    return ipcRenderer.invoke("installer:download-printer-drivers");
+  },
+  openPrinterDriversFolder() {
+    return ipcRenderer.invoke("installer:open-printer-drivers-folder");
+  },
 });

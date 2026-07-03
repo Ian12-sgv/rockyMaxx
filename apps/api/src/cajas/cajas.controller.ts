@@ -22,6 +22,12 @@ export class CajasController {
       cajas: await this.cajasService.findAll(findCajasDto),
     };
   }
+  @Get("reports/general/:fecha")
+  async buildGeneralCloseReport(@Param("fecha") fecha: string) {
+    return {
+      reporte: await this.cajasService.buildGeneralCloseReport(fecha),
+    };
+  }
   @Get(":serie/:fecha")
   async findOne(@Param("serie") serie: string, @Param("fecha") fecha: string) {
     return {
@@ -50,9 +56,7 @@ export class CajasController {
     @Param("fecha") fecha: string,
     @Body() closeCajaDto: CloseCajaDto,
   ) {
-    return {
-      caja: await this.cajasService.close(serie, fecha, closeCajaDto),
-    };
+    return this.cajasService.close(serie, fecha, closeCajaDto);
   }
   @Delete(":serie/:fecha")
   async remove(@Param("serie") serie: string, @Param("fecha") fecha: string) {

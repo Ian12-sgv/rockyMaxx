@@ -241,6 +241,23 @@
         word-break: break-word;
       }
 
+      .panel-full {
+        margin-top: 24px;
+      }
+
+      .section-copy {
+        margin: 0 0 16px;
+        color: var(--text-soft);
+        line-height: 1.5;
+      }
+
+      .driver-package-list {
+        margin: 0;
+        padding-left: 20px;
+        color: var(--text-soft);
+        line-height: 1.55;
+      }
+
       @media (max-width: 980px) {
         .layout {
           grid-template-columns: 1fr;
@@ -374,6 +391,43 @@
           </div>
         </section>
       </div>
+
+      <section class="panel panel-full">
+        <h2>3. Descargar driver de impresora</h2>
+        <p class="section-copy">
+          Descarga un pack base de soporte para impresoras termicas y ticketeras USB o de red.
+          El instalador guardara los archivos en una carpeta local junto con una guia de uso.
+        </p>
+
+        <div class="button-row">
+          <button id="download-printer-drivers" class="button-primary" type="button">Descargar pack de impresion</button>
+          <button id="open-printer-drivers-folder" class="button-secondary" type="button">Abrir carpeta</button>
+        </div>
+
+        <div class="layout">
+          <div class="status-card">
+            <h3>Pack local</h3>
+            <div class="status-line">
+              <span>Estado</span>
+              <span id="printer-drivers-status">-</span>
+            </div>
+            <div class="status-line">
+              <span>Ruta de descarga</span>
+              <code id="printer-drivers-path">-</code>
+            </div>
+            <div class="status-line">
+              <span>Observacion</span>
+              <span id="printer-drivers-note">El instalador descargara soporte base para muchas ticketeteras y dejara la guia local.</span>
+            </div>
+          </div>
+
+          <div class="status-card">
+            <h3>Incluye</h3>
+            <ul id="printer-driver-packages" class="driver-package-list"></ul>
+          </div>
+        </div>
+      </section>
+
     </main>
 
     <script src="./installer-renderer.js"></script>

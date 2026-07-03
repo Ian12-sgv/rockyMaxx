@@ -1,6 +1,14 @@
 ﻿import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, type Cajas } from "@prisma/client";
+import { Prisma, type Cajas, type FormaPago } from "@prisma/client";
 
+import {
+  buildCashRegisterCloseReportPdf,
+  buildCashRegisterGeneralCloseReportPdf,
+  createEmptyCashRegisterPaymentSummary,
+  mergeCashRegisterPaymentSummary,
+  parseCashRegisterPaymentSummary,
+  serializeCashRegisterPaymentSummary,
+} from "./caja-close-report.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { toCajaConfigView, toCajaView } from "./caja-view.util";
 import { CreateCajaDto } from "./dto/create-caja.dto";
@@ -11,6 +19,7 @@ import { CloseCajaDto } from "./dto/close-caja.dto";
 const ZERO = new Prisma.Decimal(0);
 
 type CajaTransactionClient = Prisma.TransactionClient;
+type CajaSessionRecord = Prisma.DiarioCajaGetPayload<{ include: { caja: true } }>;
 
 type NormalizedCajaInput = {
   serie: string;
@@ -109,7 +118,7 @@ export class CajasService {
               : null,
             NumeroReporteZ: ZERO,
             Status: derivedState.status,
-            ReporteZTexto: "",
+            ReporteZTexto: serializeCashRegisterPaymentSummary(createEmptyCashRegisterPaymentSummary()),
             Acumulado: ZERO,
           },
           include: { caja: true },
@@ -234,7 +243,11 @@ export class CajasService {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    return toCajaView(closed);
+    const reporte = await this.buildCloseReportPayload(closed as CajaSessionRecord);
+    return {
+      caja: toCajaView(closed),
+      reporte,
+    };
   }
   async remove(serie: string, fecha: string) {
     const normalizedSerie = this.normalizeSerie(serie);
@@ -275,8 +288,303 @@ export class CajasService {
     });
   }
 
-  private buildWhere(findCajasDto: FindCajasDto): Prisma.DiarioCajaWhereInput {
-    const conditions: Prisma.DiarioCajaWhereInput[] = [];
+  async buildGeneralCloseReport(fecha: string) {
+    const normalizedFecha = this.parseDateKey(fecha);
+    const { start, end } = this.getDayRange(normalizedFecha);
+
+    const items = await this.prisma.diarioCaja.findMany({
+      where: {
+        Fecha: {
+          gte: start,
+          lt: end,
+        },
+      },
+      include: { caja: true },
+      orderBy: [{ Numero: "asc" }, { Serie: "asc" }],
+    });
+
+    const syncedItems = await Promise.all(items.map((item) => this.syncCajaSessionState(item)));
+    const salesAggregate = await this.prisma.ventas.aggregate({
+      where: {
+        Fecha: {
+          gte: start,
+          lt: end,
+        },
+      },
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        TotalMercancia: true,
+        TotalDescuento: true,
+        TotalImpuesto: true,
+        TotalPago: true,
+        TotalDolares: true,
+      },
+    });
+
+    let mergedSummary = createEmptyCashRegisterPaymentSummary();
+    const fallbackSeries = new Set<string>();
+
+    for (const item of syncedItems) {
+      const parsedSummary = parseCashRegisterPaymentSummary(item.ReporteZTexto);
+      if (parsedSummary.payments.length) {
+        mergedSummary = mergeCashRegisterPaymentSummary(
+          mergedSummary,
+          parsedSummary.payments.map((entry) => ({
+            label: entry.label,
+            totalVed: entry.totalVed,
+            totalUsd: entry.totalUsd,
+            movimientos: Number(entry.movimientos || 0),
+          })),
+        );
+        continue;
+      }
+
+      fallbackSeries.add(item.Serie);
+    }
+
+    const fallbackBreakdown = await this.buildFallbackGeneralCloseBreakdown([...fallbackSeries], start, end);
+    if (fallbackBreakdown.length) {
+      mergedSummary = mergeCashRegisterPaymentSummary(mergedSummary, fallbackBreakdown);
+    }
+
+    const breakdown = mergedSummary.payments.map((entry) => ({
+      label: entry.label,
+      totalVed: this.formatDecimal(entry.totalVed),
+      totalUsd: this.formatDecimal(entry.totalUsd),
+      movimientos: Number(entry.movimientos || 0),
+    }));
+
+    const summary = {
+      fecha: this.formatReportDate(normalizedFecha),
+      totalCajas: syncedItems.length,
+      cajasCerradas: syncedItems.filter((item) => Number(item.Status ?? 0) === 2).length,
+      cajasConVentas: syncedItems.filter((item) => Number(item.Status ?? 0) === 1).length,
+      cajasSoloApertura: syncedItems.filter((item) => Number(item.Status ?? 0) === 0).length,
+      totalFacturas: Number(salesAggregate._count?._all || 0),
+      totalMercanciaVed: this.formatDecimal(salesAggregate._sum?.TotalMercancia),
+      totalDescuentoVed: this.formatDecimal(salesAggregate._sum?.TotalDescuento),
+      totalImpuestoVed: this.formatDecimal(salesAggregate._sum?.TotalImpuesto),
+      totalGeneralVed: this.formatDecimal(salesAggregate._sum?.TotalPago),
+      totalGeneralUsd: this.formatDecimal(salesAggregate._sum?.TotalDolares),
+      cajas: syncedItems.map((item) => ({
+        serie: String(item.Serie || "").trim(),
+        numeroCaja: Number(item.Numero || 0),
+        status: toCajaView(item).statusNombre,
+        facturaInicial: String(item.FacturaInicial?.toString() ?? "0"),
+        ultimaFactura: String(item.FacturaFinal?.toString() ?? "0"),
+        horaApertura: this.formatTimeValue(item.HoraApertura),
+        horaCierre: this.formatTimeValue(item.HoraCierre),
+      })),
+      breakdown,
+      generatedAt: this.formatReportTimestamp(new Date()),
+    };
+
+    const pdf = buildCashRegisterGeneralCloseReportPdf(summary);
+    return {
+      fileName: `cierre-general-${this.formatFileDate(normalizedFecha)}.pdf`,
+      generatedAt: summary.generatedAt,
+      summary,
+      pdfBase64: pdf.toString("base64"),
+    };
+  }
+
+  private async buildCloseReportPayload(item: CajaSessionRecord) {
+    const { start, end } = this.getDayRange(item.Fecha);
+    const salesAggregate = await this.prisma.ventas.aggregate({
+      where: {
+        Serie: item.Serie,
+        Fecha: {
+          gte: start,
+          lt: end,
+        },
+      },
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        TotalMercancia: true,
+        TotalDescuento: true,
+        TotalImpuesto: true,
+        TotalPago: true,
+        TotalDolares: true,
+      },
+    });
+
+    const parsedSummary = parseCashRegisterPaymentSummary(item.ReporteZTexto);
+    const fallbackBreakdown = parsedSummary.payments.length
+      ? []
+      : await this.buildFallbackCloseBreakdown(item.Serie, start, end);
+    const breakdown = (parsedSummary.payments.length
+      ? parsedSummary.payments.map((entry) => ({
+          label: entry.label,
+          totalVed: this.formatDecimal(entry.totalVed),
+          totalUsd: this.formatDecimal(entry.totalUsd),
+          movimientos: Number(entry.movimientos || 0),
+        }))
+      : fallbackBreakdown)
+      .sort((left, right) => String(left.label || "").localeCompare(String(right.label || ""), "es"));
+
+    const summary = {
+      serie: item.Serie,
+      numeroCaja: Number(item.Numero || 0),
+      fecha: this.formatReportDate(item.Fecha),
+      horaApertura: this.formatTimeValue(item.HoraApertura),
+      horaCierre: this.formatTimeValue(item.HoraCierre),
+      status: toCajaView(item).statusNombre,
+      totalFacturas: Number(salesAggregate._count?._all || 0),
+      totalMercanciaVed: this.formatDecimal(salesAggregate._sum?.TotalMercancia),
+      totalDescuentoVed: this.formatDecimal(salesAggregate._sum?.TotalDescuento),
+      totalImpuestoVed: this.formatDecimal(salesAggregate._sum?.TotalImpuesto),
+      totalGeneralVed: this.formatDecimal(salesAggregate._sum?.TotalPago),
+      totalGeneralUsd: this.formatDecimal(salesAggregate._sum?.TotalDolares),
+      breakdown,
+      generatedAt: this.formatReportTimestamp(new Date()),
+    };
+    const pdf = buildCashRegisterCloseReportPdf(summary);
+    const fileName = `cierre-caja-${String(item.Serie || "CAJA").trim().toLowerCase()}-${this.formatFileDate(item.Fecha)}.pdf`;
+
+    return {
+      fileName,
+      generatedAt: summary.generatedAt,
+      summary,
+      pdfBase64: pdf.toString("base64"),
+    };
+  }
+
+  private async buildFallbackCloseBreakdown(serie: string, start: Date, end: Date) {
+    const grouped = await this.prisma.ventas.groupBy({
+      by: ["FormaPago"],
+      where: {
+        Serie: serie,
+        Fecha: {
+          gte: start,
+          lt: end,
+        },
+      },
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        TotalPago: true,
+        TotalDolares: true,
+      },
+    });
+
+    if (!grouped.length) {
+      return [];
+    }
+
+    const paymentCodes = grouped.map((item) => Number(item.FormaPago || 0));
+    const paymentCatalog = await this.prisma.formaPago.findMany({
+      where: {
+        Codigo: {
+          in: paymentCodes,
+        },
+      },
+    });
+    const paymentNameMap = new Map<number, FormaPago>(paymentCatalog.map((item) => [item.Codigo, item]));
+
+    return grouped.map((item) => {
+      const payment = paymentNameMap.get(Number(item.FormaPago || 0));
+      return {
+        label: String(payment?.Nombre || `FORMA ${String(item.FormaPago || 0)}`).trim() || `FORMA ${String(item.FormaPago || 0)}`,
+        totalVed: this.formatDecimal(item._sum?.TotalPago),
+        totalUsd: this.formatDecimal(item._sum?.TotalDolares),
+        movimientos: Number(item._count?._all || 0),
+      };
+    });
+  }
+
+  private async buildFallbackGeneralCloseBreakdown(series: string[], start: Date, end: Date) {
+    const normalizedSeries = [...new Set((Array.isArray(series) ? series : []).map((item) => String(item || "").trim()).filter(Boolean))];
+    if (!normalizedSeries.length) {
+      return [];
+    }
+
+    const grouped = await this.prisma.ventas.groupBy({
+      by: ["FormaPago"],
+      where: {
+        Serie: {
+          in: normalizedSeries,
+        },
+        Fecha: {
+          gte: start,
+          lt: end,
+        },
+      },
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        TotalPago: true,
+        TotalDolares: true,
+      },
+    });
+
+    if (!grouped.length) {
+      return [];
+    }
+
+    const paymentCodes = grouped.map((item) => Number(item.FormaPago || 0));
+    const paymentCatalog = await this.prisma.formaPago.findMany({
+      where: {
+        Codigo: {
+          in: paymentCodes,
+        },
+      },
+    });
+    const paymentNameMap = new Map<number, FormaPago>(paymentCatalog.map((item) => [item.Codigo, item]));
+
+    return grouped.map((item) => {
+      const payment = paymentNameMap.get(Number(item.FormaPago || 0));
+      return {
+        label: String(payment?.Nombre || `FORMA ${String(item.FormaPago || 0)}`).trim() || `FORMA ${String(item.FormaPago || 0)}`,
+        totalVed: this.formatDecimal(item._sum?.TotalPago),
+        totalUsd: this.formatDecimal(item._sum?.TotalDolares),
+        movimientos: Number(item._count?._all || 0),
+      };
+    });
+  }
+
+  private formatDecimal(value: Prisma.Decimal | string | number | null | undefined) {
+    if (value === null || value === undefined) {
+      return "0.00";
+    }
+
+    const normalized = value instanceof Prisma.Decimal
+      ? value.toDecimalPlaces(2)
+      : new Prisma.Decimal(value || 0).toDecimalPlaces(2);
+    return normalized.toString();
+  }
+
+  private formatReportDate(value: Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${day}/${month}/${year}`;
+  }
+
+  private formatFileDate(value: Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  private formatTimeValue(value: Date | null | undefined) {
+    if (!value) {
+      return "-";
+    }
+    return this.formatTime(value);
+  }
+
+  private formatReportTimestamp(value: Date) {
+    return `${this.formatReportDate(value)} ${this.formatTime(value)}`;
+  }
+
+  private buildWhere(findCajasDto: FindCajasDto): Prisma.DiarioCajaWhereInput {    const conditions: Prisma.DiarioCajaWhereInput[] = [];
     const search = String(findCajasDto.buscar || "").trim();
 
     if (typeof findCajasDto.status === "number") {

@@ -1,6 +1,12 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type DiarioCaja, type Inventario } from "@prisma/client";
 
+import {
+  createEmptyCashRegisterPaymentSummary,
+  mergeCashRegisterPaymentSummary,
+  parseCashRegisterPaymentSummary,
+  serializeCashRegisterPaymentSummary,
+} from "../cajas/caja-close-report.util";
 import { findContingenciaReportFormatById, getContingenciaReportFormats } from "../impresoras/contingencia-report-formats.util";
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -87,6 +93,7 @@ export class FacturacionService {
         }
 
         this.ensureInventoryAvailability(inventoryByCode, normalizedItems);
+        this.ensureInventoryHasPrice(inventoryByCode, normalizedItems);
 
         const discountOverride = this.resolveDiscountOverride(payload);
         const lineDiscountMonto = normalizedItems.reduce((sum, item) => {
@@ -130,6 +137,18 @@ export class FacturacionService {
           paymentCatalog,
           totalVenta,
           tasaCambioVenta,
+        );
+        const paymentBreakdown = this.buildCashRegisterPaymentBreakdown(
+          normalizedPayments,
+          paymentCatalog,
+          tasaCambioVenta,
+        );
+        const currentCashSummary = cajaActiva.ReporteZTexto
+          ? parseCashRegisterPaymentSummary(cajaActiva.ReporteZTexto)
+          : createEmptyCashRegisterPaymentSummary();
+        const updatedCashSummary = mergeCashRegisterPaymentSummary(
+          currentCashSummary,
+          paymentBreakdown,
         );
 
         const saleDate = this.buildSaleDateTime(cajaActiva.Fecha);
@@ -220,6 +239,7 @@ export class FacturacionService {
             Status: 1,
             Acumulado: (cajaActiva.Acumulado ?? ZERO).plus(totalVenta).toDecimalPlaces(2),
             PorcentajeImpuesto: impuestoPorcentaje.toDecimalPlaces(2),
+            ReporteZTexto: serializeCashRegisterPaymentSummary(updatedCashSummary),
           },
         });
         await tx.cajas.update({
@@ -522,6 +542,29 @@ export class FacturacionService {
     }
   }
 
+  private ensureInventoryHasPrice(
+    inventoryByCode: Map<string, Inventario>,
+    items: NormalizedSaleItem[],
+  ) {
+    const uniqueCodes = [...new Set(items.map((item) => item.codigoBarra))];
+
+    for (const codigoBarra of uniqueCodes) {
+      const inventory = inventoryByCode.get(codigoBarra);
+      if (!inventory) {
+        continue;
+      }
+
+      const hasConfiguredCosts =
+        inventory.CostoInicial.greaterThan(ZERO) ||
+        inventory.CostoPromedio.greaterThan(ZERO) ||
+        inventory.UltimoCosto.greaterThan(ZERO);
+
+      if (!hasConfiguredCosts) {
+        throw new BadRequestException(`Error sin precio. El articulo ${codigoBarra} no tiene costos configurados.`);
+      }
+    }
+  }
+
   private validatePayments(
     rows: NormalizedPaymentRow[],
     paymentCatalog: PaymentCatalogRow[],
@@ -556,8 +599,32 @@ export class FacturacionService {
     };
   }
 
-  private convertUsdToBs(amount: Prisma.Decimal, rate: Prisma.Decimal) {
-    if (rate.lessThanOrEqualTo(ZERO)) {
+  private buildCashRegisterPaymentBreakdown(
+    rows: NormalizedPaymentRow[],
+    paymentCatalog: PaymentCatalogRow[],
+    tasaCambio: Prisma.Decimal,
+  ) {
+    return rows.map((row) => {
+      const paymentCode = this.resolvePaymentCode(row.formaPago, paymentCatalog);
+      const paymentItem = paymentCatalog.find((item) => item.Codigo === paymentCode);
+      const label = String(paymentItem?.Nombre || row.formaPago || "").trim() || "OTRO";
+      const amountVed = this.paymentUsesUsdAmount(row.formaPago)
+        ? this.convertUsdToBs(row.monto, tasaCambio)
+        : row.monto;
+      const amountUsd = this.paymentUsesUsdAmount(row.formaPago)
+        ? row.monto
+        : ZERO;
+
+      return {
+        label,
+        totalVed: amountVed.toDecimalPlaces(2).toString(),
+        totalUsd: amountUsd.toDecimalPlaces(2).toString(),
+        movimientos: 1,
+      };
+    });
+  }
+
+  private convertUsdToBs(amount: Prisma.Decimal, rate: Prisma.Decimal) {    if (rate.lessThanOrEqualTo(ZERO)) {
       return ZERO;
     }
 
@@ -609,13 +676,11 @@ export class FacturacionService {
   }
 
   private resolveSaleUsdRate(items: NormalizedSaleItem[], detailRate: Prisma.Decimal, mayorRate: Prisma.Decimal) {
-    const hasItems = items.length > 0;
-    const allMayor = hasItems && items.every((item) => item.priceList === "mayor");
-    if (allMayor && mayorRate.greaterThan(ZERO)) {
-      return mayorRate.toDecimalPlaces(4);
+    if (detailRate.greaterThan(ZERO)) {
+      return detailRate.toDecimalPlaces(4);
     }
 
-    return detailRate.toDecimalPlaces(4);
+    return mayorRate.toDecimalPlaces(4);
   }
 
   private buildSaleDateTime(sessionDate: Date) {

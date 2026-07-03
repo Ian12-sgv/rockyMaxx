@@ -1,54 +1,54 @@
 {
-    "name":  "@sistema-arabe/desktop",
-    "version":  "2.1.8",
-    "private":  true,
-    "description":  "Cliente de escritorio Rocky Maxx para conectarse al servicio local de la red.",
-    "author":  "OpenAI Codex",
-    "main":  "main.js",
-    "scripts":  {
-                    "start":  "node start-electron.js",
-                    "dist:win":  "electron-builder --win nsis"
-                },
-    "devDependencies":  {
-                            "electron":  "41.2.1",
-                            "electron-builder":  "^26.0.12"
-                        },
-    "build":  {
-                  "appId":  "com.rockymaxx.client",
-                  "productName":  "Rocky Maxx Cliente",
-                  "executableName":  "RockyMaxxCliente",
-                  "electronVersion":  "41.2.1",
-                  "asar":  true,
-                  "extraMetadata":  {
-                                        "name":  "rocky-maxx-cliente",
-                                        "productName":  "Rocky Maxx Cliente"
-                                    },
-                  "directories":  {
-                                      "output":  "../../dist/desktop-client"
-                                  },
-                  "files":  [
-                                "main.js",
-                                "preload.js",
-                                "config.html",
-                                "config-renderer.js",
-                                "start-electron.js",
-                                "package.json"
-                            ],
-                  "win":  {
-                              "target":  [
-                                             {
-                                                 "target":  "nsis",
-                                                 "arch":  [
-                                                              "x64"
-                                                          ]
-                                             }
-                                         ]
-                          },
-                  "nsis":  {
-                               "oneClick":  true,
-                               "perMachine":  false,
-                               "allowToChangeInstallationDirectory":  false,
-                               "runAfterFinish":  true
-                           }
-              }
+  "name": "@sistema-arabe/desktop",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Cliente de escritorio Rocky Maxx para conectarse al servicio local de la red.",
+  "author": "OpenAI Codex",
+  "main": "main.js",
+  "scripts": {
+    "start": "node start-electron.js",
+    "dist:win": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "41.2.1",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.rockymaxx.client",
+    "productName": "Rocky Maxx Cliente",
+    "executableName": "RockyMaxxCliente",
+    "electronVersion": "41.2.1",
+    "asar": true,
+    "extraMetadata": {
+      "name": "rocky-maxx-cliente",
+      "productName": "Rocky Maxx Cliente"
+    },
+    "directories": {
+      "output": "../../dist/desktop-client"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "config.html",
+      "config-renderer.js",
+      "start-electron.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "runAfterFinish": true
+    }
+  }
 }
