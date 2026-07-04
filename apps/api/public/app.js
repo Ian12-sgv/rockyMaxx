@@ -5226,20 +5226,42 @@ function resolveFacturacionCompanyHeaderLines(venta) {
     return explicitLines;
   }
 
+  const companyName =
+    normalizeTicketReceiptText(venta?.companyName) || "ROCKY MAXX";
+  const companyDescription = normalizeTicketReceiptText(
+    venta?.companyDescription,
+  );
+  const companyAddress = normalizeTicketReceiptText(venta?.companyAddress);
+  const companyTaxIdLabel =
+    normalizeTicketReceiptText(venta?.companyTaxIdLabel) || "RIF";
+  const companyTaxId = normalizeTicketReceiptText(venta?.companyTaxId);
+  const companyTaxLine = companyTaxId
+    ? `${companyTaxIdLabel}: ${companyTaxId}`
+    : "";
+  const companyDescriptionLines = companyDescription
+    ? wrapTicketReceiptText(companyDescription).filter(Boolean)
+    : [];
+  const companyAddressLines = companyAddress
+    ? wrapTicketReceiptText(companyAddress).filter(Boolean)
+    : [];
+
   if (venta?.emisionContingencia) {
     return [
-      "",
+      " - ",
       "SENIAT",
-      "RIF J-308460281",
-      "CREA - DESARROLLOS, S.A. (CREDESA)",
-      "CALLE 78 Y 79 LOS OLIVOS",
-      "C.C. LOS OLIVOS PLAZA NIVEL P.B",
-      "LOCAL 1 URB. LOS OLIVOS",
-      "MARACAIBO, EDO. ZULIA",
-    ];
+      companyTaxLine,
+      ...companyDescriptionLines,
+      ...companyAddressLines,
+    ].filter(Boolean);
   }
 
-  return ["ROCKY MAXX"];
+  return [
+    companyName,
+    "FACTURA",
+    companyTaxLine,
+    ...companyDescriptionLines,
+    ...companyAddressLines,
+  ].filter(Boolean);
 }
 
 function buildFacturacionInvoiceTemplateStyle(variant) {
@@ -5313,18 +5335,10 @@ function buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary) {
   const companyLines = resolveFacturacionCompanyHeaderLines(venta);
   const lines = [];
 
-  if (venta?.emisionContingencia) {
-    lines.push("");
-  }
-
   for (const line of companyLines) {
-    lines.push(
-      padTicketReceiptRight(
-        centerTicketReceiptText(line),
-        FACTURACION_TICKET_WIDTH,
-      ),
-    );
+    lines.push(centerTicketReceiptText(line));
   }
+  lines.push(centerTicketReceiptText("FACTURA"));
   lines.push("");
   lines.push(
     ...formatTicketReceiptLabelValueLines("Documento: ", invoiceNumber),
@@ -5363,6 +5377,7 @@ function buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary) {
       formatExchangeRateAmount(summary?.rateBsPerUsd || 0),
     ),
   );
+  lines.push("-".repeat(FACTURACION_TICKET_WIDTH));
   lines.push("");
 
   if (items.length) {
@@ -5597,6 +5612,14 @@ function buildImpresoraFormatoContingenciaPreviewPayload(
       clienteTelefono: "04121234567",
 
       clienteDireccion: "CALLE 1, MARACAIBO",
+
+      companyName: "Tienda 001 - RockyMaxxCentro",
+      companyDescription:
+        "Venta de ropa intima y deportiva para dama y caballeros, ninos y ninas y otro tipo de mercancia.",
+      companyAddress:
+        "Calle 97 entre Avenidas 14A y 15, Prolongacion de la Av. 15 Las Delicias, C.C. Law Center PB Local 19, Maracaibo, Zulia Z.P. 4001",
+      companyTaxIdLabel: "RIF",
+      companyTaxId: "J508243501",
 
       vendedorNombre: "VENDEDOR DE PRUEBA",
 

@@ -17,11 +17,31 @@ import { CreateFacturacionSaleDto, FacturacionPaymentRowDto, FacturacionSaleItem
 const ZERO = new Prisma.Decimal(0);
 const ONE = new Prisma.Decimal(1);
 const HUNDRED = new Prisma.Decimal(100);
-const DEFAULT_FACTURACION_COMPANY_NAME = "ROCKY MAXX";
+const DEFAULT_FACTURACION_COMPANY_NAME = "SENIAT";
 const DEFAULT_FACTURACION_COMPANY_DESCRIPTION = "Venta de ropa intima y deportiva para dama y caballeros, niÃ±os y niÃ±as y otro tipo de mercancia.";
 const DEFAULT_FACTURACION_COMPANY_TAX_LABEL = "RIF";
 const DEFAULT_FACTURACION_COMPANY_TAX_ID = "J-308460281";
 const DEFAULT_FACTURACION_STORE_CODE = "ORIGEN";
+const FACTURACION_STORE_TAX_ID_BY_CODE: Record<string, string> = {
+  "001": "J508243501",
+  "002": "J507479307",
+  "003": "J507479307",
+  "004": "J508243501",
+  "005": "J50759282-2",
+  "006": "J506873850",
+  ORIGEN: "",
+  B002: "",
+};
+const FACTURACION_STORE_ADDRESS_BY_CODE: Record<string, string> = {
+  "001": "Calle 97 entre Avenidas 14A y 15, Prolongacion de la Av. 15 Las Delicias, C.C. Law Center PB Local 19, Maracaibo, Zulia Z.P. 4001",
+  "002": "Av. Libertador, calle 100 C.C. Plaza Lago Nivel Planta Baja, Local 48 Sector Casco Central, Maracaibo, Zulia Z.P. 4001",
+  "003": "Av. Libertador, calle 100 C.C. Plaza Lago Nivel Planta Baja, Local 48 Sector Casco Central, Maracaibo, Zulia Z.P. 4001",
+  "004": "Calle 97 entre Avenidas 14A y 15, Prolongacion de la Av. 15 Las Delicias, C.C. Law Center PB Local 19, Maracaibo, Zulia Z.P. 4001",
+  "005": "Av 20 entre calles 29 y 30 local nro S/N sector Centro Barquisimeto, Lara zona postal 3001",
+  "006": "Av 26 entre calle 31 y 32, Edif. Anyul, piso planta baja, local N 6, Centro Barquisimeto, Lara zona postal 3001",
+  ORIGEN: "",
+  B002: "",
+};
 
 type FacturacionTransactionClient = Prisma.TransactionClient;
 
@@ -61,6 +81,7 @@ type PaymentCatalogRow = {
 type CompanyPrintProfile = {
   companyName: string;
   companyDescription: string;
+  companyAddress: string;
   companyTaxIdLabel: string;
   companyTaxId: string;
 };
@@ -292,6 +313,7 @@ export class FacturacionService {
           clienteDireccion: cliente.Direccion ?? "",
           companyName: companyProfile.companyName,
           companyDescription: companyProfile.companyDescription,
+          companyAddress: companyProfile.companyAddress,
           companyTaxIdLabel: companyProfile.companyTaxIdLabel,
           companyTaxId: companyProfile.companyTaxId,
           vendedor: vendedor.Cedula,
@@ -383,11 +405,9 @@ export class FacturacionService {
     `;
 
     const configuredPrinterName = String(rows[0]?.NombreImpresora || "").trim();
-    const reportFormats = contingenciaActiva ? getContingenciaReportFormats() : [];
-    const fallbackFormat = contingenciaActiva ? reportFormats[0] ?? null : null;
-    const selectedFormat = contingenciaActiva
-      ? findContingenciaReportFormatById(rows[0]?.IdProcesoImpresion) ?? fallbackFormat
-      : null;
+    const reportFormats = getContingenciaReportFormats();
+    const fallbackFormat = reportFormats[0] ?? null;
+    const selectedFormat = findContingenciaReportFormatById(rows[0]?.IdProcesoImpresion) ?? fallbackFormat;
 
     return {
       printerName: configuredPrinterName || String(fallbackPrinterName || "").trim(),
@@ -417,14 +437,16 @@ export class FacturacionService {
       || (shouldUseCommercialFallback ? null : sucursalName)
       || currentStore.fallbackName
       || DEFAULT_FACTURACION_COMPANY_NAME;
+    const fallbackTaxId = this.normalizeOptionalTicketText(parametros?.IDEmpresa)
+      || this.normalizeOptionalTicketText(parametros?.Codigo)
+      || DEFAULT_FACTURACION_COMPANY_TAX_ID;
 
     return {
       companyName: this.formatCompanyNameForTicket(rawStoreName),
       companyDescription: DEFAULT_FACTURACION_COMPANY_DESCRIPTION,
+      companyAddress: this.resolveCompanyAddressForStore(currentStore.sucursalCodigo),
       companyTaxIdLabel: this.normalizeOptionalTicketText(parametros?.NombreIdFiscal) || DEFAULT_FACTURACION_COMPANY_TAX_LABEL,
-      companyTaxId: this.normalizeOptionalTicketText(parametros?.IDEmpresa)
-        || this.normalizeOptionalTicketText(parametros?.Codigo)
-        || DEFAULT_FACTURACION_COMPANY_TAX_ID,
+      companyTaxId: this.resolveCompanyTaxIdForStore(currentStore.sucursalCodigo, fallbackTaxId),
     };
   }
 
@@ -466,8 +488,28 @@ export class FacturacionService {
     };
   }
 
-  private formatCompanyNameForTicket(value: string | null | undefined) {
-    const normalized = this.normalizeOptionalTicketText(value) || DEFAULT_FACTURACION_COMPANY_NAME;
+  private resolveCompanyTaxIdForStore(
+    storeCode: string | null | undefined,
+    fallbackValue: string,
+  ) {
+    const normalizedStoreCode = String(storeCode || "").trim().toUpperCase();
+    if (Object.prototype.hasOwnProperty.call(FACTURACION_STORE_TAX_ID_BY_CODE, normalizedStoreCode)) {
+      return FACTURACION_STORE_TAX_ID_BY_CODE[normalizedStoreCode] || "";
+    }
+
+    return fallbackValue;
+  }
+
+  private resolveCompanyAddressForStore(storeCode: string | null | undefined) {
+    const normalizedStoreCode = String(storeCode || "").trim().toUpperCase();
+    if (Object.prototype.hasOwnProperty.call(FACTURACION_STORE_ADDRESS_BY_CODE, normalizedStoreCode)) {
+      return FACTURACION_STORE_ADDRESS_BY_CODE[normalizedStoreCode] || "";
+    }
+
+    return "";
+  }
+
+  private formatCompanyNameForTicket(value: string | null | undefined) {    const normalized = this.normalizeOptionalTicketText(value) || DEFAULT_FACTURACION_COMPANY_NAME;
     if (/\b(C\.?\s*A\.?|S\.?\s*A\.?)\b/i.test(normalized)) {
       return normalized;
     }
