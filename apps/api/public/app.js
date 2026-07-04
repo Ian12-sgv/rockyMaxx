@@ -363,7 +363,10 @@ async function bootstrap() {
     } catch (error) {
       console.error(error);
       clearSession();
-      setFlash("La sesion anterior ya no es valida. Inicia sesion nuevamente.", "error");
+      setFlash(
+        "La sesion anterior ya no es valida. Inicia sesion nuevamente.",
+        "error",
+      );
     }
   }
 
@@ -385,7 +388,11 @@ function createEmptyDesktopPrintingState() {
 }
 
 function getRockyClientBridge() {
-  if (typeof window === "undefined" || !window.rockyClient || typeof window.rockyClient !== "object") {
+  if (
+    typeof window === "undefined" ||
+    !window.rockyClient ||
+    typeof window.rockyClient !== "object"
+  ) {
     return null;
   }
 
@@ -394,15 +401,23 @@ function getRockyClientBridge() {
 
 function desktopClientSupportsPrinting() {
   const bridge = getRockyClientBridge();
-  return Boolean(bridge && typeof bridge.listPrinters === "function" && typeof bridge.printHtml === "function");
+  return Boolean(
+    bridge &&
+    typeof bridge.listPrinters === "function" &&
+    typeof bridge.printHtml === "function",
+  );
 }
 
 function getDetectedDesktopPrinters() {
-  return Array.isArray(state.desktopPrinting?.items) ? state.desktopPrinting.items : [];
+  return Array.isArray(state.desktopPrinting?.items)
+    ? state.desktopPrinting.items
+    : [];
 }
 
 function normalizeDesktopPrinterLookupValue(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 function buildDesktopPrinterLookupText(printer = {}) {
@@ -467,9 +482,16 @@ function scorePreferredDesktopPrinter(printer = {}) {
 
 function getDefaultDesktopPrinterName() {
   const printers = getDetectedDesktopPrinters();
-  const physicalPrinters = printers.filter((item) => !isVirtualDesktopPrinter(item));
+  const physicalPrinters = printers.filter(
+    (item) => !isVirtualDesktopPrinter(item),
+  );
   const candidates = physicalPrinters.length ? physicalPrinters : printers;
-  const printer = [...candidates].sort((left, right) => scorePreferredDesktopPrinter(right) - scorePreferredDesktopPrinter(left))[0] || null;
+  const printer =
+    [...candidates].sort(
+      (left, right) =>
+        scorePreferredDesktopPrinter(right) -
+        scorePreferredDesktopPrinter(left),
+    )[0] || null;
   return String(printer?.name || "").trim();
 }
 
@@ -519,7 +541,10 @@ async function loadDesktopPrinters(options = {}) {
     };
 
     if (!silent) {
-      setFlash(`No se pudieron detectar las impresoras de esta PC: ${extractErrorMessage(error)}`, "error");
+      setFlash(
+        `No se pudieron detectar las impresoras de esta PC: ${extractErrorMessage(error)}`,
+        "error",
+      );
     }
 
     return [];
@@ -908,7 +933,9 @@ function renderLoginIcon(icon) {
 }
 
 function renderLoginView() {
-  const submitLabel = state.isAuthenticating ? "Validando acceso..." : "Ingresar";
+  const submitLabel = state.isAuthenticating
+    ? "Validando acceso..."
+    : "Ingresar";
 
   return `
     <main class="login-shell">
@@ -1019,26 +1046,46 @@ function renderShellView() {
               </div>
 
             <nav class="modern-nav">
-              ${renderDesktopMenu("sistema", "Sistema", `
+              ${renderDesktopMenu(
+                "sistema",
+                "Sistema",
+                `
                 ${renderDesktopMenuLink("desktop", "Panel principal")}
                 <button class="modern-dropdown-link" type="button" data-menu-action="logout">Cerrar sesion</button>
-              `)}
+              `,
+              )}
               ${isCashier ? "" : renderDesktopMenu("archivos", "Archivos", renderDesktopArchivoMenuV2())}
               ${renderDesktopMenu("procesos", "Procesos", renderDesktopProcesosMenu())}
-                ${canManageAllModules ? renderDesktopMenu("reportes", "Reportes", `
-                  ${renderDesktopMenuLink("reportes", "Cierre general")}
-                `) : ""}
                 ${
                   canManageAllModules
-                    ? renderDesktopMenu("utilidades", "Utilidades", `
-                        ${renderDesktopMenuLink("usuarios", "Usuarios")}
-                        ${renderDesktopMenuLink("roles", "Roles")}
-                      `)
+                    ? renderDesktopMenu(
+                        "reportes",
+                        "Reportes",
+                        `
+                  ${renderDesktopMenuLink("reportes", "Cierre general")}
+                `,
+                      )
                     : ""
                 }
-                ${renderDesktopMenu("ayuda", "Ayuda", `
+                ${
+                  canManageAllModules
+                    ? renderDesktopMenu(
+                        "utilidades",
+                        "Utilidades",
+                        `
+                        ${renderDesktopMenuLink("usuarios", "Usuarios")}
+                        ${renderDesktopMenuLink("roles", "Roles")}
+                      `,
+                      )
+                    : ""
+                }
+                ${renderDesktopMenu(
+                  "ayuda",
+                  "Ayuda",
+                  `
                   ${renderDesktopMenuLink("ayuda", "Acerca de Rocky Maxx")}
-                `)}
+                `,
+                )}
               </nav>
           </div>
 
@@ -1148,7 +1195,10 @@ function renderDesktopWorkspace() {
     return renderRoleAccessWorkspace();
   }
 
-  if (state.currentView === "transferencias" || state.currentView === "registro-transferencia") {
+  if (
+    state.currentView === "transferencias" ||
+    state.currentView === "registro-transferencia"
+  ) {
     return renderTransfersWorkspace();
   }
 
@@ -1208,7 +1258,10 @@ function renderDesktopWorkspace() {
     return renderProveedoresWorkspace();
   }
 
-  if (state.currentView === "trabajadores" || state.currentView === "personal") {
+  if (
+    state.currentView === "trabajadores" ||
+    state.currentView === "personal"
+  ) {
     return renderTrabajadoresWorkspace();
   }
 
@@ -1228,7 +1281,11 @@ function renderDesktopWorkspace() {
     return renderImpresorasWorkspace();
   }
 
-  if (["categorias", "marcas", "tallas", "colores", "fabricantes"].includes(state.currentView)) {
+  if (
+    ["categorias", "marcas", "tallas", "colores", "fabricantes"].includes(
+      state.currentView,
+    )
+  ) {
     return renderCatalogImportWorkspace(state.currentView);
   }
 
@@ -1240,7 +1297,9 @@ function renderDesktopWorkspace() {
 
 function renderDesktopArticlesWorkspace() {
   const selectedLabel =
-    state.formMode === "edit" && state.activeArticleCode ? state.activeArticleCode : "Nuevo registro";
+    state.formMode === "edit" && state.activeArticleCode
+      ? state.activeArticleCode
+      : "Nuevo registro";
 
   return `
     <div class="modern-page">
@@ -1399,7 +1458,8 @@ function renderDesktopProcesosMenu() {
     `;
   }
 
-  const transfersOpen = state.navigation.openSubmenu === "transferencias-procesos";
+  const transfersOpen =
+    state.navigation.openSubmenu === "transferencias-procesos";
 
   return `
     <div class="modern-mega-menu">
@@ -1471,8 +1531,10 @@ function getCatalogImportConfig(kind) {
       canDelete: true,
       maxCodeLength: 6,
       maxNameLength: 60,
-      description: "Carga categorias desde Excel a la base de datos. Esta operacion esta pensada para administradores.",
-      helpText: "Usa encabezados como Codigo, Nombre y Status. Si falta el codigo, el sistema lo genera automaticamente. Si tu rol no puede importar por Excel, puedes registrar el dato manualmente aqui mismo.",
+      description:
+        "Carga categorias desde Excel a la base de datos. Esta operacion esta pensada para administradores.",
+      helpText:
+        "Usa encabezados como Codigo, Nombre y Status. Si falta el codigo, el sistema lo genera automaticamente. Si tu rol no puede importar por Excel, puedes registrar el dato manualmente aqui mismo.",
       columns: [
         { key: "codigo", label: "Codigo" },
         { key: "nombre", label: "Nombre" },
@@ -1485,8 +1547,10 @@ function getCatalogImportConfig(kind) {
       canDelete: true,
       maxCodeLength: 3,
       maxNameLength: 20,
-      description: "Carga marcas desde Excel a la base de datos. Esta operacion esta pensada para administradores.",
-      helpText: "Usa encabezados como Codigo, Nombre y Status. Si falta el codigo, el sistema lo genera automaticamente. Si tu rol no puede importar por Excel, puedes registrar el dato manualmente aqui mismo.",
+      description:
+        "Carga marcas desde Excel a la base de datos. Esta operacion esta pensada para administradores.",
+      helpText:
+        "Usa encabezados como Codigo, Nombre y Status. Si falta el codigo, el sistema lo genera automaticamente. Si tu rol no puede importar por Excel, puedes registrar el dato manualmente aqui mismo.",
       columns: [
         { key: "codigo", label: "Codigo" },
         { key: "nombre", label: "Nombre" },
@@ -1498,8 +1562,10 @@ function getCatalogImportConfig(kind) {
       singular: "talla",
       canDelete: true,
       maxCodeLength: 6,
-      description: "Carga tallas desde Excel a la base de datos. Esta operacion esta pensada para administradores.",
-      helpText: "Usa encabezados como Codigo, Talla o Nombre. En este catalogo solo se guarda el codigo de la talla. Si tu rol no puede importar por Excel, puedes registrar la talla manualmente.",
+      description:
+        "Carga tallas desde Excel a la base de datos. Esta operacion esta pensada para administradores.",
+      helpText:
+        "Usa encabezados como Codigo, Talla o Nombre. En este catalogo solo se guarda el codigo de la talla. Si tu rol no puede importar por Excel, puedes registrar la talla manualmente.",
       columns: [{ key: "codigo", label: "Codigo" }],
     },
     colores: {
@@ -1508,8 +1574,10 @@ function getCatalogImportConfig(kind) {
       canDelete: true,
       maxCodeLength: 3,
       maxNameLength: 30,
-      description: "Carga colores desde Excel a la base de datos. Esta operacion esta pensada para administradores.",
-      helpText: "Usa encabezados como Codigo, Nombre y Status. Si falta el codigo, el sistema lo genera automaticamente. Si tu rol no puede importar por Excel, puedes registrar el dato manualmente aqui mismo.",
+      description:
+        "Carga colores desde Excel a la base de datos. Esta operacion esta pensada para administradores.",
+      helpText:
+        "Usa encabezados como Codigo, Nombre y Status. Si falta el codigo, el sistema lo genera automaticamente. Si tu rol no puede importar por Excel, puedes registrar el dato manualmente aqui mismo.",
       columns: [
         { key: "codigo", label: "Codigo" },
         { key: "nombre", label: "Nombre" },
@@ -1522,8 +1590,10 @@ function getCatalogImportConfig(kind) {
       canDelete: false,
       maxCodeLength: 12,
       maxNameLength: 50,
-      description: "Carga fabricantes desde Excel a la base de datos. Esta operacion esta pensada para administradores.",
-      helpText: "Usa encabezados como Codigo, Nombre y Status. Si falta el codigo, el sistema lo genera automaticamente. Si tu rol no puede importar por Excel, puedes registrar el dato manualmente aqui mismo.",
+      description:
+        "Carga fabricantes desde Excel a la base de datos. Esta operacion esta pensada para administradores.",
+      helpText:
+        "Usa encabezados como Codigo, Nombre y Status. Si falta el codigo, el sistema lo genera automaticamente. Si tu rol no puede importar por Excel, puedes registrar el dato manualmente aqui mismo.",
       columns: [
         { key: "codigo", label: "Codigo" },
         { key: "nombre", label: "Nombre" },
@@ -1555,10 +1625,16 @@ function renderCatalogImportWorkspace(kind) {
   const isManualSubmitting = state.catalogImport.manualSubmittingKind === kind;
   const isLoading = state.catalogImport.loadingKind === kind;
   const supportsName = config.columns.some((column) => column.key === "nombre");
-  const supportsStatus = config.columns.some((column) => column.key === "status");
+  const supportsStatus = config.columns.some(
+    (column) => column.key === "status",
+  );
   const canImportFromExcel = userCanImportCatalogsFromExcel();
-  const codeLimitHint = config.maxCodeLength ? `Max. ${config.maxCodeLength} caracteres` : "";
-  const nameLimitHint = config.maxNameLength ? `Max. ${config.maxNameLength} caracteres` : "";
+  const codeLimitHint = config.maxCodeLength
+    ? `Max. ${config.maxCodeLength} caracteres`
+    : "";
+  const nameLimitHint = config.maxNameLength
+    ? `Max. ${config.maxNameLength} caracteres`
+    : "";
 
   return `
     <div class="modern-page">
@@ -1728,18 +1804,23 @@ function renderCatalogImportTable(kind, items, config) {
         </thead>
         <tbody>
           ${items
-            .map(
-              (item) => {
-                const deleteKey = buildCatalogEntryDeleteKey(kind, item.codigo);
-                const isDeleting = state.catalogImport.deletingEntryKey === deleteKey;
+            .map((item) => {
+              const deleteKey = buildCatalogEntryDeleteKey(kind, item.codigo);
+              const isDeleting =
+                state.catalogImport.deletingEntryKey === deleteKey;
 
-                return `
+              return `
                 <tr>
                   ${columns
                     .map((column) => {
                       const rawValue =
-                        column.key === "nombre" ? item.nombre || item.codigo || "-" : item[column.key];
-                      const displayValue = column.key === "status" ? toDisplayValue(rawValue) : rawValue || "-";
+                        column.key === "nombre"
+                          ? item.nombre || item.codigo || "-"
+                          : item[column.key];
+                      const displayValue =
+                        column.key === "status"
+                          ? toDisplayValue(rawValue)
+                          : rawValue || "-";
                       const content = escapeHtml(displayValue);
 
                       if (column.key === "codigo") {
@@ -1768,8 +1849,7 @@ function renderCatalogImportTable(kind, items, config) {
                   }
                 </tr>
               `;
-              },
-            )
+            })
             .join("")}
         </tbody>
       </table>
@@ -1779,7 +1859,9 @@ function renderCatalogImportTable(kind, items, config) {
 
 function renderRoleAccessWorkspace() {
   const isSystemOperator = userIsSystemOperator();
-  const roles = Array.isArray(state.roleAccess.roles) ? state.roleAccess.roles : [];
+  const roles = Array.isArray(state.roleAccess.roles)
+    ? state.roleAccess.roles
+    : [];
 
   return `
     <div class="modern-page">
@@ -1915,7 +1997,9 @@ function renderTransfersWorkspace() {
   const isBusy = isSaving || isApproving || isDeleting;
   const transferCreatedAt = draft.fecha || new Date().toISOString();
   const transferApprovedAt =
-    Number(draft.status) === 1 && draft.fechaEmision ? formatDateDisplay(draft.fechaEmision) : "Pendiente";
+    Number(draft.status) === 1 && draft.fechaEmision
+      ? formatDateDisplay(draft.fechaEmision)
+      : "Pendiente";
 
   return `
     <div class="modern-page transfer-register-page">
@@ -1986,7 +2070,9 @@ function renderTransfersWorkspace() {
                 ${isLocked ? "disabled" : ""}
               >
                 ${renderTransferLocationOptions(
-                  Array.isArray(state.transfers.metadata?.sucursales) ? state.transfers.metadata.sucursales : [],
+                  Array.isArray(state.transfers.metadata?.sucursales)
+                    ? state.transfers.metadata.sucursales
+                    : [],
                   String(draft.codigoRecibe || ""),
                 )}
               </select>
@@ -2011,8 +2097,14 @@ function renderTransfersWorkspace() {
               <span>Despacho</span>
               <select name="idDespacho" ${isLocked ? "disabled" : ""}>
                 ${renderTransferDispatchOptions(
-                  Array.isArray(state.transfers.metadata?.tiposDespacho) ? state.transfers.metadata.tiposDespacho : [],
-                  String(draft.idDespacho || state.transfers.metadata?.defaults?.idDespacho || "0"),
+                  Array.isArray(state.transfers.metadata?.tiposDespacho)
+                    ? state.transfers.metadata.tiposDespacho
+                    : [],
+                  String(
+                    draft.idDespacho ||
+                      state.transfers.metadata?.defaults?.idDespacho ||
+                      "0",
+                  ),
                 )}
               </select>
             </label>
@@ -2061,14 +2153,17 @@ function renderTransfersWorkspace() {
 }
 
 function renderDevReturnsWorkspace() {
-  const draft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
+  const draft =
+    state.devReturns.draft ||
+    createEmptyDevReturnDraft(state.devReturns.metadata);
   const isLocked = Boolean(draft.numero) && Number(draft.status) !== 0;
-  const isBusy = state.devReturns.saving
-    || state.devReturns.exporting
-    || state.devReturns.loadingMetadata
-    || state.devReturns.loadingDashboard
-    || state.devReturns.loadingInboundDetail
-    || state.devReturns.approvingInbound;
+  const isBusy =
+    state.devReturns.saving ||
+    state.devReturns.exporting ||
+    state.devReturns.loadingMetadata ||
+    state.devReturns.loadingDashboard ||
+    state.devReturns.loadingInboundDetail ||
+    state.devReturns.approvingInbound;
   const inboundDetail = state.devReturns.inboundDetail;
 
   return `
@@ -2232,14 +2327,17 @@ function renderInventoryExistenceWorkspace() {
     );
   }
 
-  const items = Array.isArray(state.inventoryExistence.items) ? state.inventoryExistence.items : [];
+  const items = Array.isArray(state.inventoryExistence.items)
+    ? state.inventoryExistence.items
+    : [];
   const pagination = state.inventoryExistence.pagination || {
     page: 1,
     limit: 25,
     total: 0,
     totalPages: 0,
   };
-  const isBusy = state.inventoryExistence.loading || state.inventoryExistence.refreshing;
+  const isBusy =
+    state.inventoryExistence.loading || state.inventoryExistence.refreshing;
   const syncedLabel = state.inventoryExistence.lastUpdatedAt
     ? `Actualizado ${formatDateDisplay(state.inventoryExistence.lastUpdatedAt)}`
     : "Sin consulta reciente";
@@ -2275,8 +2373,12 @@ function renderInventoryExistenceWorkspace() {
 
 function renderInventoryExistenceSearchForm() {
   const metadata = state.metadata || {};
-  const statusOptions = Array.isArray(metadata?.opciones?.status) ? metadata.opciones.status : [];
-  const typeOptions = Array.isArray(metadata?.opciones?.tipos) ? metadata.opciones.tipos : [];
+  const statusOptions = Array.isArray(metadata?.opciones?.status)
+    ? metadata.opciones.status
+    : [];
+  const typeOptions = Array.isArray(metadata?.opciones?.tipos)
+    ? metadata.opciones.tipos
+    : [];
   const search = state.inventoryExistence.search || {};
   const pagination = state.inventoryExistence.pagination || {};
 
@@ -2295,30 +2397,42 @@ function renderInventoryExistenceSearchForm() {
         <span>Status</span>
         <select name="status">
           <option value="">Todos</option>
-          ${statusOptions.map((option) => `
+          ${statusOptions
+            .map(
+              (option) => `
             <option value="${escapeHtml(String(option.codigo))}" ${String(search.status || "") === String(option.codigo) ? "selected" : ""}>
               ${escapeHtml(capitalize(option.nombre || String(option.codigo)))}
             </option>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </select>
       </label>
       <label class="field">
         <span>Tipo</span>
         <select name="tipo">
           <option value="">Todos</option>
-          ${typeOptions.map((option) => `
+          ${typeOptions
+            .map(
+              (option) => `
             <option value="${escapeHtml(String(option.codigo))}" ${String(search.tipo || "") === String(option.codigo) ? "selected" : ""}>
               ${escapeHtml(capitalize(option.nombre || String(option.codigo)))}
             </option>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </select>
       </label>
       <label class="field">
         <span>Limite</span>
         <select name="limit">
-          ${["25", "50", "100"].map((value) => `
+          ${["25", "50", "100"]
+            .map(
+              (value) => `
             <option value="${value}" ${String(pagination.limit || 25) === value ? "selected" : ""}>${value}</option>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </select>
       </label>
       <div class="search-actions inventory-existence-search-actions">
@@ -2492,7 +2606,9 @@ function renderDevReturnStatusText(status) {
 }
 
 function renderDevReturnStatusClass(status) {
-  return Number(status || 0) > 0 ? "adjustment-status-approved" : "adjustment-status-pending";
+  return Number(status || 0) > 0
+    ? "adjustment-status-approved"
+    : "adjustment-status-pending";
 }
 
 function renderDevReturnSyncStatusChip(label, tone = "neutral") {
@@ -2509,32 +2625,40 @@ function renderDevReturnSyncStatusChip(label, tone = "neutral") {
 }
 
 function renderDevReturnOriginOptions(selectedValue) {
-  const origenes = Array.isArray(state.devReturns.metadata?.origenes) ? state.devReturns.metadata.origenes : [];
+  const origenes = Array.isArray(state.devReturns.metadata?.origenes)
+    ? state.devReturns.metadata.origenes
+    : [];
   if (!origenes.length) {
     return `<option value="">Sin origenes</option>`;
   }
 
   return origenes
-    .map((item) => `
+    .map(
+      (item) => `
       <option value="${escapeHtml(String(item.codigo || ""))}" ${String(selectedValue || "") === String(item.codigo || "") ? "selected" : ""}>
         ${escapeHtml(formatLocationOptionLabel(item))}
       </option>
-    `)
+    `,
+    )
     .join("");
 }
 
 function renderDevReturnDestinationOptions(selectedValue, originValue = "") {
-  const destinos = Array.isArray(state.devReturns.metadata?.destinos) ? state.devReturns.metadata.destinos : [];
+  const destinos = Array.isArray(state.devReturns.metadata?.destinos)
+    ? state.devReturns.metadata.destinos
+    : [];
   if (!destinos.length) {
     return `<option value="">Sin bodegas</option>`;
   }
 
   return destinos
-    .map((item) => `
+    .map(
+      (item) => `
       <option value="${escapeHtml(String(item.codigo || ""))}" ${String(selectedValue || "") === String(item.codigo || "") ? "selected" : ""}>
         ${escapeHtml(formatLocationOptionLabel(item))}
       </option>
-    `)
+    `,
+    )
     .join("");
 }
 
@@ -2569,7 +2693,8 @@ function renderDevReturnLinesEditor(draft, { isLocked = false } = {}) {
         </thead>
         <tbody>
           ${rows
-            .map((line, index) => `
+            .map(
+              (line, index) => `
               <tr data-dev-return-line-row="${index}">
                 <td class="adjustment-row-number">${index + 1}</td>
                 <td>
@@ -2606,7 +2731,8 @@ function renderDevReturnLinesEditor(draft, { isLocked = false } = {}) {
                   />
                 </td>
               </tr>
-            `)
+            `,
+            )
             .join("")}
         </tbody>
       </table>
@@ -2639,7 +2765,9 @@ function renderDevReturnSentDraftsTable(items) {
           </tr>
         </thead>
         <tbody>
-          ${items.map((item) => `
+          ${items
+            .map(
+              (item) => `
             <tr>
               <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
               <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
@@ -2653,7 +2781,9 @@ function renderDevReturnSentDraftsTable(items) {
                 </button>
               </td>
             </tr>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </tbody>
       </table>
     </div>
@@ -2684,7 +2814,9 @@ function renderDevReturnReceivedDraftsTable(items) {
           </tr>
         </thead>
         <tbody>
-          ${items.map((item) => `
+          ${items
+            .map(
+              (item) => `
             <tr>
               <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
               <td>${escapeHtml(item.codigoOrigen || "-")}</td>
@@ -2697,7 +2829,9 @@ function renderDevReturnReceivedDraftsTable(items) {
                 </button>
               </td>
             </tr>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </tbody>
       </table>
     </div>
@@ -2736,7 +2870,9 @@ function renderDevReturnReadOnlyLines(items, lastColumnLabel = "Valor") {
           </tr>
         </thead>
         <tbody>
-          ${(items || []).map((item) => `
+          ${(items || [])
+            .map(
+              (item) => `
             <tr>
               <td>${escapeHtml(String(item.item || "-"))}</td>
               <td>${escapeHtml(item.codigoBarra || "-")}</td>
@@ -2745,7 +2881,9 @@ function renderDevReturnReadOnlyLines(items, lastColumnLabel = "Valor") {
               <td>${escapeHtml(String(item.numeroCaja ?? "-"))}</td>
               <td>${escapeHtml(showValue ? formatTransferAmount(item.valor || "0") : formatTransferQuantity(item.cantidad || "0"))}</td>
             </tr>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </tbody>
       </table>
     </div>
@@ -2758,15 +2896,23 @@ function renderDevReturnLookupModal() {
   }
 
   const isRecordLookup = state.devReturnLookup.mode === "records";
-  const items = Array.isArray(state.devReturnLookup.items) ? state.devReturnLookup.items : [];
+  const items = Array.isArray(state.devReturnLookup.items)
+    ? state.devReturnLookup.items
+    : [];
   const totalLabel = state.devReturnLookup.loading
-    ? isRecordLookup ? "Cargando devoluciones registradas..." : "Cargando borradores..."
+    ? isRecordLookup
+      ? "Cargando devoluciones registradas..."
+      : "Cargando borradores..."
     : `Catalogo (${escapeHtml(String(items.length))} Registros)`;
-  const titleEyebrow = isRecordLookup ? "Registro de devoluciones" : "Borradores";
+  const titleEyebrow = isRecordLookup
+    ? "Registro de devoluciones"
+    : "Borradores";
   const description = isRecordLookup
     ? "Haz clic sobre una devoluciÃ³n ya registrada para cargar su detalle."
     : "Haz clic sobre un borrador guardado o exportado para cargarlo en el formulario.";
-  const loadingTitle = isRecordLookup ? "Cargando devoluciones" : "Cargando borradores";
+  const loadingTitle = isRecordLookup
+    ? "Cargando devoluciones"
+    : "Cargando borradores";
   const loadingCopy = isRecordLookup
     ? "Estamos trayendo las devoluciones ya registradas en esta sede."
     : "Estamos trayendo los borradores guardados y exportados.";
@@ -2840,8 +2986,18 @@ function renderDevReturnLookupModal() {
 
 function renderDevReturnLookupRow(item) {
   const isExported = Number(item.status || 0) > 0;
-  const originLabel = item.codigoOrigenInfo?.nombre || item.codigoEnviaInfo?.nombre || item.codigoOrigen || item.codigoEnvia || "-";
-  const destinationLabel = item.codigoDestinoInfo?.nombre || item.codigoRecibeInfo?.nombre || item.codigoDestino || item.codigoRecibe || "-";
+  const originLabel =
+    item.codigoOrigenInfo?.nombre ||
+    item.codigoEnviaInfo?.nombre ||
+    item.codigoOrigen ||
+    item.codigoEnvia ||
+    "-";
+  const destinationLabel =
+    item.codigoDestinoInfo?.nombre ||
+    item.codigoRecibeInfo?.nombre ||
+    item.codigoDestino ||
+    item.codigoRecibe ||
+    "-";
 
   return `
     <tr class="adjustment-lookup-row ${isExported ? "adjustment-lookup-row-approved" : "adjustment-lookup-row-pending"}" data-dev-return-lookup-select="${escapeHtml(String(item.numero || ""))}">
@@ -2942,7 +3098,9 @@ function renderDevReturnRecordsTable(items) {
           </tr>
         </thead>
         <tbody>
-          ${items.map((item) => `
+          ${items
+            .map(
+              (item) => `
             <tr>
               <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
               <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
@@ -2956,7 +3114,9 @@ function renderDevReturnRecordsTable(items) {
                 </button>
               </td>
             </tr>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </tbody>
       </table>
     </div>
@@ -2966,15 +3126,27 @@ function renderDevReturnRecordsTable(items) {
 function renderDevReturnRecordsWorkspace() {
   const detail = state.devReturnRecords.detail || null;
   const items = Array.isArray(detail?.items) ? detail.items : [];
-  const totalQuantity = items.reduce((total, item) => total + Number(item?.cantidad || 0), 0);
-  const statusLabel = detail ? String(detail.statusNombre || "-").toUpperCase() : "SIN CARGAR";
-  const statusClass = detail && Number(detail.status || 0) === 1
-    ? "adjustment-status adjustment-status-approved"
-    : "adjustment-status";
-  const branchLabel = detail?.codigoRecibeInfo?.nombre || detail?.codigoRecibe || "";
-  const originLabel = detail?.codigoEnviaInfo?.nombre || detail?.codigoEnvia || "";
+  const totalQuantity = items.reduce(
+    (total, item) => total + Number(item?.cantidad || 0),
+    0,
+  );
+  const statusLabel = detail
+    ? String(detail.statusNombre || "-").toUpperCase()
+    : "SIN CARGAR";
+  const statusClass =
+    detail && Number(detail.status || 0) === 1
+      ? "adjustment-status adjustment-status-approved"
+      : "adjustment-status";
+  const branchLabel =
+    detail?.codigoRecibeInfo?.nombre || detail?.codigoRecibe || "";
+  const originLabel =
+    detail?.codigoEnviaInfo?.nombre || detail?.codigoEnvia || "";
   const alreadyExported = Boolean(detail?.exportacion?.bloqueada);
-  const exportDisabled = !detail || alreadyExported || state.devReturnRecords.exporting || state.devReturnRecords.loadingDetail;
+  const exportDisabled =
+    !detail ||
+    alreadyExported ||
+    state.devReturnRecords.exporting ||
+    state.devReturnRecords.loadingDetail;
   const helperCopy = detail
     ? alreadyExported
       ? `Documento ${escapeHtml(String(detail.numero || "-"))} ya exportado al destino. El boton queda bloqueado para evitar reenvios duplicados.`
@@ -3103,8 +3275,10 @@ function renderDevReturnRecordLinesGrid(items) {
             </tr>
           </thead>
           <tbody>
-            ${normalizedItems.map((item, index) => item
-              ? `
+            ${normalizedItems
+              .map((item, index) =>
+                item
+                  ? `
                 <tr>
                   <td class="adjustment-row-number">${index + 1}</td>
                   <td><span class="dev-return-record-cell">${escapeHtml(item.codigoBarra || "-")}</span></td>
@@ -3114,7 +3288,7 @@ function renderDevReturnRecordLinesGrid(items) {
                   <td><span class="dev-return-record-cell dev-return-record-cell-number">${escapeHtml(formatTransferQuantity(item.cantidad || "0"))}</span></td>
                 </tr>
               `
-              : `
+                  : `
                 <tr class="dev-return-record-empty-row">
                   <td class="adjustment-row-number">${index + 1}</td>
                   <td><span class="dev-return-record-cell">&nbsp;</span></td>
@@ -3123,7 +3297,9 @@ function renderDevReturnRecordLinesGrid(items) {
                   <td><span class="dev-return-record-cell">&nbsp;</span></td>
                   <td><span class="dev-return-record-cell">&nbsp;</span></td>
                 </tr>
-              `).join("")}
+              `,
+              )
+              .join("")}
           </tbody>
         </table>
       </div>
@@ -3221,7 +3397,9 @@ function renderInboundDevReturnTable(items) {
           </tr>
         </thead>
         <tbody>
-          ${items.map((item) => `
+          ${items
+            .map(
+              (item) => `
             <tr>
               <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
               <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
@@ -3239,7 +3417,9 @@ function renderInboundDevReturnTable(items) {
                 </button>
               </td>
             </tr>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </tbody>
       </table>
     </div>
@@ -3247,9 +3427,14 @@ function renderInboundDevReturnTable(items) {
 }
 
 function renderInventoryAdjustmentWorkspace() {
-  const draft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
+  const draft =
+    state.adjustments.draft ||
+    createEmptyAdjustmentDraft(state.adjustments.metadata);
   const isApproved = Number(draft.status) === 1;
-  const isBusy = state.adjustments.saving || state.adjustments.approving || state.adjustments.loadingMetadata;
+  const isBusy =
+    state.adjustments.saving ||
+    state.adjustments.approving ||
+    state.adjustments.loadingMetadata;
   const statusText = isApproved ? "APROBADA" : "PENDIENTE";
 
   return `
@@ -3359,7 +3544,9 @@ function renderAdjustmentTypeOptions(selectedValue) {
 }
 
 function renderAdjustmentLotOptions(selectedValue) {
-  const lotes = Array.isArray(state.adjustments.metadata?.lotes) ? state.adjustments.metadata.lotes : [];
+  const lotes = Array.isArray(state.adjustments.metadata?.lotes)
+    ? state.adjustments.metadata.lotes
+    : [];
   if (lotes.length === 0) {
     return `<option value="${escapeHtml(String(selectedValue || ""))}">S/DEFINIR</option>`;
   }
@@ -3397,7 +3584,8 @@ function renderAdjustmentLinesEditor(draft, { isApproved = false } = {}) {
         </thead>
         <tbody>
           ${rows
-            .map((line, index) => `
+            .map(
+              (line, index) => `
               <tr data-adjustment-line-row="${index}">
                 <td class="adjustment-row-number">${index + 1}</td>
                 <td>
@@ -3426,7 +3614,8 @@ function renderAdjustmentLinesEditor(draft, { isApproved = false } = {}) {
                   />
                 </td>
               </tr>
-            `)
+            `,
+            )
             .join("")}
         </tbody>
       </table>
@@ -3523,13 +3712,15 @@ function hasLoadedTransferReceipt() {
   const draft = state.transfers.draft;
   return Boolean(
     draft?.numero &&
-      state.currentView === "cargar-transferencia" &&
-      Number(state.transfers.receiptNumero || 0) === Number(draft.numero || 0),
+    state.currentView === "cargar-transferencia" &&
+    Number(state.transfers.receiptNumero || 0) === Number(draft.numero || 0),
   );
 }
 
 function renderTransfersTable() {
-  const items = Array.isArray(state.transfers.items) ? state.transfers.items : [];
+  const items = Array.isArray(state.transfers.items)
+    ? state.transfers.items
+    : [];
 
   if (!items.length) {
     return `
@@ -3557,7 +3748,9 @@ function renderTransfersTable() {
         <tbody>
           ${items
             .map((item) => {
-              const isSelected = Number(state.transfers.selectedNumero || 0) === Number(item.numero || 0);
+              const isSelected =
+                Number(state.transfers.selectedNumero || 0) ===
+                Number(item.numero || 0);
 
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
@@ -3593,9 +3786,16 @@ function renderLoadedTransferReceiptPanel() {
   const isLoaded = Boolean(draft.cargada);
   const loadedLabel = isLoaded ? "Cargada" : "Pendiente de carga";
   const lineCount = countTransferDraftLines(draft);
-  const quantityTotal = formatTransferQuantity(computeTransferDraftQuantity(draft));
-  const loadButtonLabel = isLoaded ? "Carga aplicada" : state.transfers.approving ? "Cargando" : "Cargar";
-  const detailStatusText = Number(draft.status || 0) === 1 ? "APROBADA" : "PENDIENTE";
+  const quantityTotal = formatTransferQuantity(
+    computeTransferDraftQuantity(draft),
+  );
+  const loadButtonLabel = isLoaded
+    ? "Carga aplicada"
+    : state.transfers.approving
+      ? "Cargando"
+      : "Cargar";
+  const detailStatusText =
+    Number(draft.status || 0) === 1 ? "APROBADA" : "PENDIENTE";
 
   return `
     <section class="transfer-register-shell transfer-import-window">
@@ -3669,7 +3869,9 @@ function renderLoadedTransferReceiptPanel() {
 }
 
 function countTransferDraftLines(draft) {
-  return (draft?.items || []).filter((item) => item.codigoBarra || item.referencia || item.articuloNombre).length;
+  return (draft?.items || []).filter(
+    (item) => item.codigoBarra || item.referencia || item.articuloNombre,
+  ).length;
 }
 
 function renderReadonlyTransferField(label, value) {
@@ -3682,8 +3884,13 @@ function renderReadonlyTransferField(label, value) {
 }
 
 function renderLoadedTransferLines(draft) {
-  const lines = (draft.items || []).filter((item) => item.codigoBarra || item.referencia || item.articuloNombre);
-  const rows = lines.length >= 15 ? lines : [...lines, ...Array.from({ length: 15 - lines.length }, () => null)];
+  const lines = (draft.items || []).filter(
+    (item) => item.codigoBarra || item.referencia || item.articuloNombre,
+  );
+  const rows =
+    lines.length >= 15
+      ? lines
+      : [...lines, ...Array.from({ length: 15 - lines.length }, () => null)];
 
   if (!lines.length) {
     return `
@@ -3741,7 +3948,10 @@ function renderLoadedTransferLines(draft) {
 
 function renderTransferLinesEditor(draft, options = {}) {
   const { isLocked = false, allowReferenceEdit = false } = options;
-  const lines = Array.isArray(draft.items) && draft.items.length > 0 ? draft.items : [createEmptyTransferLineDraft()];
+  const lines =
+    Array.isArray(draft.items) && draft.items.length > 0
+      ? draft.items
+      : [createEmptyTransferLineDraft()];
 
   return `
     <div class="table-wrap">
@@ -3885,23 +4095,38 @@ function renderTransferStatusBadge(status) {
 
 function renderFacturacionWorkspace() {
   const draft = state.facturacion.draft || createEmptyFacturacionDraft();
-  const items = Array.isArray(draft.items) && draft.items.length ? draft.items : createEmptyFacturacionItems();
+  const items =
+    Array.isArray(draft.items) && draft.items.length
+      ? draft.items
+      : createEmptyFacturacionItems();
   const activeTax = getActiveFacturacionTax();
-  const exchangeRate = state.facturacion.exchangeRate || createEmptyFacturacionExchangeRateState();
-  const summary = calculateFacturacionSummary(items, activeTax, exchangeRate, draft);
+  const exchangeRate =
+    state.facturacion.exchangeRate || createEmptyFacturacionExchangeRateState();
+  const summary = calculateFacturacionSummary(
+    items,
+    activeTax,
+    exchangeRate,
+    draft,
+  );
   const exchangeRateLabel = formatFacturacionExchangeRateLabel(exchangeRate);
   const contingenciaActiva = Boolean(draft.emisionContingencia);
   const selectedLineIndex = getFacturacionSelectedLineIndex();
-  const currentPriceListLabel = getFacturacionPriceListLabel(getFacturacionSelectedLinePriceList());
-  const discountPercentInputValue = getFacturacionDiscountPercentInputValue(draft, summary);
-  const lineRows = items.map((item, index) => {
-    const rowNumber = index + 1;
-    const normalizedLine = normalizeFacturacionLineDraft(item);
-    const isSelected = index === selectedLineIndex;
-    const priceListCode = String(normalizedLine.codigoBarra || "").trim()
-      ? getFacturacionPriceListShortLabel(normalizedLine.priceList)
-      : "";
-    return `
+  const currentPriceListLabel = getFacturacionPriceListLabel(
+    getFacturacionSelectedLinePriceList(),
+  );
+  const discountPercentInputValue = getFacturacionDiscountPercentInputValue(
+    draft,
+    summary,
+  );
+  const lineRows = items
+    .map((item, index) => {
+      const rowNumber = index + 1;
+      const normalizedLine = normalizeFacturacionLineDraft(item);
+      const isSelected = index === selectedLineIndex;
+      const priceListCode = String(normalizedLine.codigoBarra || "").trim()
+        ? getFacturacionPriceListShortLabel(normalizedLine.priceList)
+        : "";
+      return `
       <tr class="${isSelected ? "facturacion-line-selected" : ""}" data-facturacion-select-line="${rowNumber}">
         <td class="facturacion-row-number">${rowNumber}</td>
         <td class="facturacion-price-list-cell">${escapeHtml(priceListCode)}</td>
@@ -3912,7 +4137,8 @@ function renderFacturacionWorkspace() {
         <td><input type="text" value="${escapeHtml(toInputValue(normalizedLine.subtotal))}" class="facturacion-cell-right" readonly /></td>
       </tr>
     `;
-  }).join("");
+    })
+    .join("");
 
   return `
     <div class="modern-page facturacion-page">
@@ -4160,9 +4386,15 @@ function renderFacturacionLookupModal() {
 
 function renderFacturacionLookupRow(item, type) {
   const isWorkerLookup = type === "trabajadores";
-  const recordId = isWorkerLookup ? String(item.cedula || "") : String(item.codigo || "");
-  const secondary = isWorkerLookup ? (item.cargoNombre || item.cargo || "-") : (item.tipoNombre || "-");
-  const statusLabel = item.statusNombre || (Number(item.status ?? 1) === 1 ? "Activo" : "Inactivo");
+  const recordId = isWorkerLookup
+    ? String(item.cedula || "")
+    : String(item.codigo || "");
+  const secondary = isWorkerLookup
+    ? item.cargoNombre || item.cargo || "-"
+    : item.tipoNombre || "-";
+  const statusLabel =
+    item.statusNombre ||
+    (Number(item.status ?? 1) === 1 ? "Activo" : "Inactivo");
 
   return `
     <tr class="article-lookup-row" data-facturacion-lookup-select="${escapeHtml(recordId)}">
@@ -4182,8 +4414,12 @@ function renderFacturacionClientEditorModal() {
 
   const metadata = state.clientes.metadata || {};
   const draft = editor.draft || createEmptyClienteDraft(metadata);
-  const tiposCliente = Array.isArray(metadata.tiposCliente) ? metadata.tiposCliente : [];
-  const tiposContribuyente = Array.isArray(metadata.tiposContribuyente) ? metadata.tiposContribuyente : [];
+  const tiposCliente = Array.isArray(metadata.tiposCliente)
+    ? metadata.tiposCliente
+    : [];
+  const tiposContribuyente = Array.isArray(metadata.tiposContribuyente)
+    ? metadata.tiposContribuyente
+    : [];
   const isBusy = editor.loading || editor.saving;
 
   return `
@@ -4245,7 +4481,10 @@ function renderFacturacionClientEditorModal() {
                 <span>Tipo</span>
                 <select name="tipo">
                   ${renderSelectOptions(
-                    tiposCliente.map((item) => ({ value: String(item.codigo), label: `${item.codigo} - ${item.nombre}` })),
+                    tiposCliente.map((item) => ({
+                      value: String(item.codigo),
+                      label: `${item.codigo} - ${item.nombre}`,
+                    })),
                     String(draft.tipo || ""),
                   )}
                 </select>
@@ -4271,7 +4510,10 @@ function renderFacturacionClientEditorModal() {
                 <span>Contribuyente</span>
                 <select name="tipoContribuyente">
                   ${renderSelectOptions(
-                    tiposContribuyente.map((item) => ({ value: String(item.codigo), label: `${item.codigo} - ${item.nombre}` })),
+                    tiposContribuyente.map((item) => ({
+                      value: String(item.codigo),
+                      label: `${item.codigo} - ${item.nombre}`,
+                    })),
                     String(draft.tipoContribuyente || ""),
                   )}
                 </select>
@@ -4303,7 +4545,9 @@ function renderFacturacionLineLookupModal() {
   }
 
   const items = Array.isArray(lookup.items) ? lookup.items : [];
-  const activeIndex = Number.isInteger(lookup.activeIndex) ? lookup.activeIndex : -1;
+  const activeIndex = Number.isInteger(lookup.activeIndex)
+    ? lookup.activeIndex
+    : -1;
   const totalLabel = lookup.loading
     ? "Cargando coincidencias..."
     : `Coincidencias (${escapeHtml(String(items.length))} Registros)`;
@@ -4371,8 +4615,13 @@ function renderFacturacionLineLookupModal() {
 }
 
 function renderFacturacionLineLookupRow(item, index, isActive) {
-  const lineIndex = Number.isInteger(state.facturacion?.lineLookup?.lineIndex) ? state.facturacion.lineLookup.lineIndex : -1;
-  const precio = resolveFacturacionPriceForList(item, getFacturacionLinePriceList(lineIndex));
+  const lineIndex = Number.isInteger(state.facturacion?.lineLookup?.lineIndex)
+    ? state.facturacion.lineLookup.lineIndex
+    : -1;
+  const precio = resolveFacturacionPriceForList(
+    item,
+    getFacturacionLinePriceList(lineIndex),
+  );
 
   return `
     <tr
@@ -4456,11 +4705,24 @@ function renderFacturacionFrozenLookupModal() {
 
 function renderFacturacionFrozenLookupRow(item, activeTax) {
   const draft = normalizeFacturacionDraft(item?.draft);
-  const exchangeRate = normalizeFacturacionExchangeRateState(item?.exchangeRate);
-  const summary = calculateFacturacionSummary(draft.items, activeTax, exchangeRate, draft);
-  const clientLabel = [draft.clienteCodigo, draft.clienteNombre].filter(Boolean).join(" - ") || "Sin cliente";
-  const sellerLabel = [draft.vendedorCedula, draft.vendedorNombre].filter(Boolean).join(" - ") || "Sin vendedor";
-  const lineCount = draft.items.filter((line) => String(line?.codigoBarra || "").trim()).length;
+  const exchangeRate = normalizeFacturacionExchangeRateState(
+    item?.exchangeRate,
+  );
+  const summary = calculateFacturacionSummary(
+    draft.items,
+    activeTax,
+    exchangeRate,
+    draft,
+  );
+  const clientLabel =
+    [draft.clienteCodigo, draft.clienteNombre].filter(Boolean).join(" - ") ||
+    "Sin cliente";
+  const sellerLabel =
+    [draft.vendedorCedula, draft.vendedorNombre].filter(Boolean).join(" - ") ||
+    "Sin vendedor";
+  const lineCount = draft.items.filter((line) =>
+    String(line?.codigoBarra || "").trim(),
+  ).length;
 
   return `
     <tr class="article-lookup-row" data-facturacion-frozen-select="${escapeHtml(String(item.id || ""))}">
@@ -4541,9 +4803,20 @@ function renderFacturacionPaymentModal() {
   }
 
   const draft = normalizeFacturacionDraft(state.facturacion.draft);
-  const summary = calculateFacturacionSummary(draft.items, getActiveFacturacionTax(), state.facturacion.exchangeRate, draft);
-  const paymentSummary = calculateFacturacionPaymentSummary(summary, paymentModal.rows);
-  const latestRateLabel = summary.rateBsPerUsd > 0 ? formatExchangeRateAmount(summary.rateBsPerUsd) : "0,0000";
+  const summary = calculateFacturacionSummary(
+    draft.items,
+    getActiveFacturacionTax(),
+    state.facturacion.exchangeRate,
+    draft,
+  );
+  const paymentSummary = calculateFacturacionPaymentSummary(
+    summary,
+    paymentModal.rows,
+  );
+  const latestRateLabel =
+    summary.rateBsPerUsd > 0
+      ? formatExchangeRateAmount(summary.rateBsPerUsd)
+      : "0,0000";
   const estimatedUsdLabel = `${summary.totalUsdDisplay} $`;
   const savingSale = Boolean(state.facturacion.savingSale);
   const contingenciaActiva = Boolean(draft.emisionContingencia);
@@ -4789,7 +5062,11 @@ function resolveFacturacionInvoiceTemplateVariant(venta) {
   if (!venta?.emisionContingencia) {
     return "default";
   }
-  const normalized = String(venta?.formatoContingenciaArchivo || venta?.formatoContingenciaNombre || "").trim().toLowerCase();
+  const normalized = String(
+    venta?.formatoContingenciaArchivo || venta?.formatoContingenciaNombre || "",
+  )
+    .trim()
+    .toLowerCase();
   if (!normalized) {
     return "default";
   }
@@ -4871,7 +5148,11 @@ function wrapTicketReceiptText(value, width = FACTURACION_TICKET_WIDTH) {
   return lines.length ? lines : [""];
 }
 
-function formatTicketReceiptTwoColumnLines(leftText, rightText, width = FACTURACION_TICKET_WIDTH) {
+function formatTicketReceiptTwoColumnLines(
+  leftText,
+  rightText,
+  width = FACTURACION_TICKET_WIDTH,
+) {
   const safeLeft = normalizeTicketReceiptText(leftText) || "-";
   const safeRight = normalizeTicketReceiptText(rightText);
   if (!safeRight) {
@@ -4887,7 +5168,11 @@ function formatTicketReceiptTwoColumnLines(leftText, rightText, width = FACTURAC
   return lines;
 }
 
-function formatTicketReceiptLabelValueLines(label, value, width = FACTURACION_TICKET_WIDTH) {
+function formatTicketReceiptLabelValueLines(
+  label,
+  value,
+  width = FACTURACION_TICKET_WIDTH,
+) {
   const prefix = String(label || "");
   const safeValue = normalizeTicketReceiptText(value) || "-";
   const availableWidth = Math.max(width - prefix.length, 8);
@@ -4900,11 +5185,19 @@ function formatTicketReceiptLabelValueLines(label, value, width = FACTURACION_TI
   });
 }
 
-function formatTicketReceiptDualValueLines(labelLeft, valueLeft, labelRight, valueRight, width = FACTURACION_TICKET_WIDTH) {
+function formatTicketReceiptDualValueLines(
+  labelLeft,
+  valueLeft,
+  labelRight,
+  valueRight,
+  width = FACTURACION_TICKET_WIDTH,
+) {
   const leftSide = `${String(labelLeft || "")}${normalizeTicketReceiptText(valueLeft) || "-"}`;
   const rightSide = `${String(labelRight || "")}${normalizeTicketReceiptText(valueRight) || "-"}`;
   if (leftSide.length + 2 + rightSide.length <= width) {
-    return [`${leftSide}${" ".repeat(width - leftSide.length - rightSide.length)}${rightSide}`];
+    return [
+      `${leftSide}${" ".repeat(width - leftSide.length - rightSide.length)}${rightSide}`,
+    ];
   }
 
   const leftWidth = Math.max(Math.floor(width * 0.58), 16);
@@ -4925,7 +5218,9 @@ function formatTicketReceiptDualValueLines(labelLeft, valueLeft, labelRight, val
 
 function resolveFacturacionCompanyHeaderLines(venta) {
   const explicitLines = Array.isArray(venta?.companyHeaderLines)
-    ? venta.companyHeaderLines.map((line) => normalizeTicketReceiptText(line)).filter(Boolean)
+    ? venta.companyHeaderLines
+        .map((line) => normalizeTicketReceiptText(line))
+        .filter(Boolean)
     : [];
   if (explicitLines.length) {
     return explicitLines;
@@ -4933,6 +5228,7 @@ function resolveFacturacionCompanyHeaderLines(venta) {
 
   if (venta?.emisionContingencia) {
     return [
+      "",
       "SENIAT",
       "RIF J-308460281",
       "CREA - DESARROLLOS, S.A. (CREDESA)",
@@ -4960,8 +5256,12 @@ function buildFacturacionInvoiceTemplateStyle(variant) {
 
 function buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary) {
   const normalizedDraft = normalizeFacturacionDraft(draft);
-  const items = normalizeFacturacionItems(normalizedDraft.items).filter((item) => String(item.codigoBarra || "").trim());
-  const rows = Array.isArray(paymentRows) ? paymentRows.filter((row) => parseFacturacionPaymentAmount(row?.monto) > 0) : [];
+  const items = normalizeFacturacionItems(normalizedDraft.items).filter(
+    (item) => String(item.codigoBarra || "").trim(),
+  );
+  const rows = Array.isArray(paymentRows)
+    ? paymentRows.filter((row) => parseFacturacionPaymentAmount(row?.monto) > 0)
+    : [];
   const saleDate = venta?.fecha ? new Date(venta.fecha) : new Date();
   const safeSaleDate = Number.isNaN(saleDate.getTime()) ? new Date() : saleDate;
   const saleDateLabel = formatDateOnlyDisplay(safeSaleDate).replace(/\//g, "-");
@@ -4973,57 +5273,129 @@ function buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary) {
   const variant = resolveFacturacionInvoiceTemplateVariant(venta);
   const discountOverride = resolveFacturacionDiscountOverride(normalizedDraft);
   const invoiceNumber = String(venta?.numeroFactura || "").trim() || "-";
-  const cashRegisterLabel = String(venta?.numeroCaja ?? state.cashRegisters?.draft?.numeroCaja ?? "").trim() || "000";
-  const cashierLabel = String(venta?.nombreUsuario || state.user?.nombreUsuario || venta?.usuario || state.user?.codUsuario || "").trim() || "CAJA";
-  const clientCode = String(venta?.cliente || normalizedDraft.clienteCodigo || "").trim() || "-";
-  const clientName = String(venta?.clienteNombre || normalizedDraft.clienteNombre || "").trim() || "-";
-  const clientPhone = String(venta?.clienteTelefono || normalizedDraft.clienteTelefono || "").trim() || "-";
-  const clientAddress = String(venta?.clienteDireccion || normalizedDraft.clienteDireccion || "").trim() || "-";
-  const clientInfo = String(venta?.clienteInfo || normalizedDraft.clienteInfo || "").trim();
-  const sellerCode = String(venta?.vendedor || normalizedDraft.vendedorCedula || "").trim();
-  const sellerName = String(venta?.vendedorNombre || normalizedDraft.vendedorNombre || "").trim() || "-";
+  const cashRegisterLabel =
+    String(
+      venta?.numeroCaja ?? state.cashRegisters?.draft?.numeroCaja ?? "",
+    ).trim() || "000";
+  const cashierLabel =
+    String(
+      venta?.nombreUsuario ||
+        state.user?.nombreUsuario ||
+        venta?.usuario ||
+        state.user?.codUsuario ||
+        "",
+    ).trim() || "CAJA";
+  const clientCode =
+    String(venta?.cliente || normalizedDraft.clienteCodigo || "").trim() || "-";
+  const clientName =
+    String(
+      venta?.clienteNombre || normalizedDraft.clienteNombre || "",
+    ).trim() || "-";
+  const clientPhone =
+    String(
+      venta?.clienteTelefono || normalizedDraft.clienteTelefono || "",
+    ).trim() || "-";
+  const clientAddress =
+    String(
+      venta?.clienteDireccion || normalizedDraft.clienteDireccion || "",
+    ).trim() || "-";
+  const clientInfo = String(
+    venta?.clienteInfo || normalizedDraft.clienteInfo || "",
+  ).trim();
+  const sellerCode = String(
+    venta?.vendedor || normalizedDraft.vendedorCedula || "",
+  ).trim();
+  const sellerName =
+    String(
+      venta?.vendedorNombre || normalizedDraft.vendedorNombre || "",
+    ).trim() || "-";
   const sellerLabel = sellerCode ? `${sellerName} (${sellerCode})` : sellerName;
   const companyLines = resolveFacturacionCompanyHeaderLines(venta);
   const lines = [];
 
-  for (const line of companyLines) {
-    lines.push(centerTicketReceiptText(line));
-  }
   if (venta?.emisionContingencia) {
-    lines.push(centerTicketReceiptText("EMISION DE CONTINGENCIA"));
+    lines.push("");
+  }
+
+  for (const line of companyLines) {
+    lines.push(
+      padTicketReceiptRight(
+        centerTicketReceiptText(line),
+        FACTURACION_TICKET_WIDTH,
+      ),
+    );
   }
   lines.push("");
-  lines.push(...formatTicketReceiptLabelValueLines("Documento: ", invoiceNumber));
+  lines.push(
+    ...formatTicketReceiptLabelValueLines("Documento: ", invoiceNumber),
+  );
   lines.push(...formatTicketReceiptLabelValueLines("Cliente: ", clientName));
   lines.push(...formatTicketReceiptLabelValueLines("Rif: ", clientCode));
   if (clientInfo) {
-    lines.push(...formatTicketReceiptLabelValueLines("Condicion: ", clientInfo));
+    lines.push(
+      ...formatTicketReceiptLabelValueLines("Condicion: ", clientInfo),
+    );
   }
   lines.push(...formatTicketReceiptLabelValueLines("Telefono: ", clientPhone));
   lines.push(...formatTicketReceiptLabelValueLines("Dir.: ", clientAddress));
-  lines.push(...formatTicketReceiptDualValueLines("Cajero: ", cashierLabel, "Caja: ", cashRegisterLabel));
+  lines.push(
+    ...formatTicketReceiptDualValueLines(
+      "Cajero: ",
+      cashierLabel,
+      "Caja: ",
+      cashRegisterLabel,
+    ),
+  );
   lines.push(...formatTicketReceiptLabelValueLines("Vendedor: ", sellerLabel));
-  lines.push(...formatTicketReceiptDualValueLines("FACTURA: ", invoiceNumber, "HORA: ", saleTimeLabel));
-  lines.push(...formatTicketReceiptDualValueLines("FECHA: ", saleDateLabel, "Tasa: ", formatExchangeRateAmount(summary?.rateBsPerUsd || 0)));
+  lines.push(
+    ...formatTicketReceiptDualValueLines(
+      "FACTURA: ",
+      invoiceNumber,
+      "HORA: ",
+      saleTimeLabel,
+    ),
+  );
+  lines.push(
+    ...formatTicketReceiptDualValueLines(
+      "FECHA: ",
+      saleDateLabel,
+      "Tasa: ",
+      formatExchangeRateAmount(summary?.rateBsPerUsd || 0),
+    ),
+  );
   lines.push("");
 
   if (items.length) {
     items.forEach((item) => {
       const quantity = Math.max(toFacturacionNumber(item?.cantidad || 0), 1);
       const price = toFacturacionNumber(item?.precio || 0);
-      const grossSubtotal = toFacturacionNumber(item?.subtotal || quantity * price);
+      const grossSubtotal = toFacturacionNumber(
+        item?.subtotal || quantity * price,
+      );
       const itemDiscountPercent = discountOverride.active
         ? discountOverride.percent
         : Math.max(toFacturacionNumber(item?.descuentoPorcentaje || 0), 0);
-      const itemDiscountAmount = itemDiscountPercent > 0
-        ? Math.max((grossSubtotal * itemDiscountPercent) / 100, 0)
-        : 0;
-      const itemLabel = quantity > 1
-        ? `${formatTransferAmount(quantity)} x ${String(item?.nombre || item?.codigoBarra || "ARTICULO")}`
-        : String(item?.nombre || item?.codigoBarra || "ARTICULO");
-      lines.push(...formatTicketReceiptTwoColumnLines(itemLabel, `Bs ${formatTransferAmount(grossSubtotal)}`));
+      const itemDiscountAmount =
+        itemDiscountPercent > 0
+          ? Math.max((grossSubtotal * itemDiscountPercent) / 100, 0)
+          : 0;
+      const itemLabel =
+        quantity > 1
+          ? `${formatTransferAmount(quantity)} x ${String(item?.nombre || item?.codigoBarra || "ARTICULO")}`
+          : String(item?.nombre || item?.codigoBarra || "ARTICULO");
+      lines.push(
+        ...formatTicketReceiptTwoColumnLines(
+          itemLabel,
+          `Bs ${formatTransferAmount(grossSubtotal)}`,
+        ),
+      );
       if (itemDiscountAmount > 0) {
-        lines.push(...formatTicketReceiptTwoColumnLines("DESC", `Bs -${formatTransferAmount(itemDiscountAmount)}`));
+        lines.push(
+          ...formatTicketReceiptTwoColumnLines(
+            "DESC",
+            `Bs -${formatTransferAmount(itemDiscountAmount)}`,
+          ),
+        );
       }
     });
   } else {
@@ -5031,24 +5403,67 @@ function buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary) {
   }
 
   lines.push("");
-  lines.push(...formatTicketReceiptTwoColumnLines("Valor mercancia", `${summary?.valorMercanciaDisplay || "0,00"} BsS`));
-  lines.push(...formatTicketReceiptTwoColumnLines("Descuento", `${summary?.descuentoMontoDisplay || "0,00"} BsS`));
-  lines.push(...formatTicketReceiptTwoColumnLines("Subtotal", `${summary?.subtotalDisplay || "0,00"} BsS`));
-  lines.push(...formatTicketReceiptTwoColumnLines("Impuesto", `${summary?.impuestoMontoDisplay || "0,00"} BsS`));
-  lines.push(...formatTicketReceiptTwoColumnLines("Total unidades", `${summary?.totalUnidadesDisplay || "0,00"}`));
-  lines.push(...formatTicketReceiptTwoColumnLines("Total USD", `${summary?.totalUsdDisplay || "0,00"} $`));
-  lines.push(...formatTicketReceiptTwoColumnLines("TOTAL", `${summary?.totalVentaDisplay || "0,00"} BsS`));
+  lines.push(
+    ...formatTicketReceiptTwoColumnLines(
+      "Valor mercancia",
+      `${summary?.valorMercanciaDisplay || "0,00"} BsS`,
+    ),
+  );
+  lines.push(
+    ...formatTicketReceiptTwoColumnLines(
+      "Descuento",
+      `${summary?.descuentoMontoDisplay || "0,00"} BsS`,
+    ),
+  );
+  lines.push(
+    ...formatTicketReceiptTwoColumnLines(
+      "Subtotal",
+      `${summary?.subtotalDisplay || "0,00"} BsS`,
+    ),
+  );
+  lines.push(
+    ...formatTicketReceiptTwoColumnLines(
+      "Impuesto",
+      `${summary?.impuestoMontoDisplay || "0,00"} BsS`,
+    ),
+  );
+  lines.push(
+    ...formatTicketReceiptTwoColumnLines(
+      "Total unidades",
+      `${summary?.totalUnidadesDisplay || "0,00"}`,
+    ),
+  );
+  lines.push(
+    ...formatTicketReceiptTwoColumnLines(
+      "Total USD",
+      `${summary?.totalUsdDisplay || "0,00"} $`,
+    ),
+  );
+  lines.push(
+    ...formatTicketReceiptTwoColumnLines(
+      "TOTAL",
+      `${summary?.totalVentaDisplay || "0,00"} BsS`,
+    ),
+  );
 
   if (rows.length) {
     lines.push("");
     lines.push("Pagos");
     rows.forEach((row) => {
       const originalAmount = parseFacturacionPaymentAmount(row?.monto);
-      const amountBs = resolveFacturacionPaymentAmountInBs(row, summary?.rateBsPerUsd || 0);
+      const amountBs = resolveFacturacionPaymentAmountInBs(
+        row,
+        summary?.rateBsPerUsd || 0,
+      );
       const amountLabel = facturacionPaymentMethodUsesUsdAmount(row?.formaPago)
         ? `${formatTransferAmount(originalAmount)} $ (${formatTransferAmount(amountBs)} BsS)`
         : `${formatTransferAmount(amountBs)} BsS`;
-      lines.push(...formatTicketReceiptTwoColumnLines(String(row?.formaPago || ""), amountLabel));
+      lines.push(
+        ...formatTicketReceiptTwoColumnLines(
+          String(row?.formaPago || ""),
+          amountLabel,
+        ),
+      );
     });
   }
 
@@ -5059,7 +5474,11 @@ function buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary) {
 }
 
 function openBrowserHtmlPreview(html, options = {}) {
-  const previewWindow = window.open("", "_blank", "noopener,noreferrer,width=980,height=760");
+  const previewWindow = window.open(
+    "",
+    "_blank",
+    "noopener,noreferrer,width=980,height=760",
+  );
   if (!previewWindow) {
     throw new Error("El navegador bloqueo la ventana de impresion.");
   }
@@ -5089,15 +5508,30 @@ async function printFacturacionInvoice(venta, draft, paymentRows, summary) {
   if (!state.desktopPrinting.loaded && !state.desktopPrinting.loading) {
     await loadDesktopPrinters({ renderAfter: false, silent: true });
   }
-  const configuredPrinterName = normalizeCashRegisterPrinterDraftValue(venta?.nombreImpresora || "");
+  const configuredPrinterName = normalizeCashRegisterPrinterDraftValue(
+    venta?.nombreImpresora || "",
+  );
   const fallbackPrinterName = getDefaultDesktopPrinterName();
-  return bridge.printHtml({ html, printerName: configuredPrinterName || fallbackPrinterName, copies: Number(venta?.numeroCopias || 1) || 1, jobTitle: `Factura ${String(venta?.numeroFactura || "").trim() || "Rocky Maxx"}` });
+  return bridge.printHtml({
+    html,
+    printerName: configuredPrinterName || fallbackPrinterName,
+    copies: Number(venta?.numeroCopias || 1) || 1,
+    jobTitle: `Factura ${String(venta?.numeroFactura || "").trim() || "Rocky Maxx"}`,
+  });
 }
-function buildImpresoraFormatoContingenciaPreviewPayload(draft = state.impresoras.draft) {
-  const currentDraft = draft || createEmptyImpresoraDraft(state.impresoras.metadata);
-  const reportFormat = findImpresoraReportFormatById(currentDraft.idProcesoImpresion, state.impresoras.metadata);
+function buildImpresoraFormatoContingenciaPreviewPayload(
+  draft = state.impresoras.draft,
+) {
+  const currentDraft =
+    draft || createEmptyImpresoraDraft(state.impresoras.metadata);
+  const reportFormat = findImpresoraReportFormatById(
+    currentDraft.idProcesoImpresion,
+    state.impresoras.metadata,
+  );
   if (!reportFormat) {
-    throw new Error("Debes seleccionar el formato de contingencia que quieres probar.");
+    throw new Error(
+      "Debes seleccionar el formato de contingencia que quieres probar.",
+    );
   }
   const rateBsPerUsd = 582.68;
   const valorMercancia = 135;
@@ -5117,9 +5551,30 @@ function buildImpresoraFormatoContingenciaPreviewPayload(draft = state.impresora
     vendedorNombre: "Vendedor de prueba",
     emisionContingencia: true,
     items: [
-      { codigoBarra: "RMX-001", nombre: "Blusa modelo prueba", priceList: "detal", cantidad: "1", precio: "45.00", subtotal: "45.00" },
-      { codigoBarra: "RMX-002", nombre: "Pantalon modelo prueba", priceList: "mayor", cantidad: "1", precio: "55.00", subtotal: "55.00" },
-      { codigoBarra: "RMX-003", nombre: "Accesorio modelo prueba", priceList: "afiliado", cantidad: "1", precio: "35.00", subtotal: "35.00" },
+      {
+        codigoBarra: "RMX-001",
+        nombre: "Blusa modelo prueba",
+        priceList: "detal",
+        cantidad: "1",
+        precio: "45.00",
+        subtotal: "45.00",
+      },
+      {
+        codigoBarra: "RMX-002",
+        nombre: "Pantalon modelo prueba",
+        priceList: "mayor",
+        cantidad: "1",
+        precio: "55.00",
+        subtotal: "55.00",
+      },
+      {
+        codigoBarra: "RMX-003",
+        nombre: "Accesorio modelo prueba",
+        priceList: "afiliado",
+        cantidad: "1",
+        precio: "35.00",
+        subtotal: "35.00",
+      },
     ],
   });
   return {
@@ -5151,7 +5606,9 @@ function buildImpresoraFormatoContingenciaPreviewPayload(draft = state.impresora
       esPruebaFormatoContingencia: true,
     },
     draft: sampleDraft,
-    paymentRows: [{ item: 1, formaPago: "EFECTIVO", monto: String(totalVenta) }],
+    paymentRows: [
+      { item: 1, formaPago: "EFECTIVO", monto: String(totalVenta) },
+    ],
     summary: {
       rateBsPerUsd,
       valorMercanciaDisplay: formatTransferAmount(valorMercancia),
@@ -5167,32 +5624,61 @@ function buildImpresoraFormatoContingenciaPreviewPayload(draft = state.impresora
 
 function previewImpresoraFormatoContingencia() {
   const payload = buildImpresoraFormatoContingenciaPreviewPayload();
-  const html = buildFacturacionInvoiceHtml(payload.venta, payload.draft, payload.paymentRows, payload.summary);
+  const html = buildFacturacionInvoiceHtml(
+    payload.venta,
+    payload.draft,
+    payload.paymentRows,
+    payload.summary,
+  );
   openBrowserHtmlPreview(html, { autoPrint: false });
 }
 
 async function printImpresoraFormatoContingencia() {
   const payload = buildImpresoraFormatoContingenciaPreviewPayload();
-  const html = buildFacturacionInvoiceHtml(payload.venta, payload.draft, payload.paymentRows, payload.summary);
+  const html = buildFacturacionInvoiceHtml(
+    payload.venta,
+    payload.draft,
+    payload.paymentRows,
+    payload.summary,
+  );
   const bridge = getRockyClientBridge();
   if (!bridge || typeof bridge.printHtml !== "function") {
     openBrowserPrintPreview(html);
-    setFlash("Se abrio la vista previa porque la impresion directa solo esta disponible desde Rocky Maxx Cliente.", "info");
+    setFlash(
+      "Se abrio la vista previa porque la impresion directa solo esta disponible desde Rocky Maxx Cliente.",
+      "info",
+    );
     render();
     return;
   }
   if (!state.desktopPrinting.loaded && !state.desktopPrinting.loading) {
     await loadDesktopPrinters({ renderAfter: false, silent: true });
   }
-  const configuredPrinterName = normalizeCashRegisterPrinterDraftValue(payload.venta.nombreImpresora || "");
+  const configuredPrinterName = normalizeCashRegisterPrinterDraftValue(
+    payload.venta.nombreImpresora || "",
+  );
   const fallbackPrinterName = getDefaultDesktopPrinterName();
-  const result = await bridge.printHtml({ html, printerName: configuredPrinterName || fallbackPrinterName, copies: 1, jobTitle: `Prueba ${payload.reportFormat.fileName}` });
-  const printedOn = String(result?.printerName || configuredPrinterName || fallbackPrinterName || "").trim();
-  setFlash(printedOn ? `Se envio la prueba del formato ${payload.reportFormat.label} a ${printedOn}.` : `Se envio la prueba del formato ${payload.reportFormat.label}.`, "success");
+  const result = await bridge.printHtml({
+    html,
+    printerName: configuredPrinterName || fallbackPrinterName,
+    copies: 1,
+    jobTitle: `Prueba ${payload.reportFormat.fileName}`,
+  });
+  const printedOn = String(
+    result?.printerName || configuredPrinterName || fallbackPrinterName || "",
+  ).trim();
+  setFlash(
+    printedOn
+      ? `Se envio la prueba del formato ${payload.reportFormat.label} a ${printedOn}.`
+      : `Se envio la prueba del formato ${payload.reportFormat.label}.`,
+    "success",
+  );
   render();
 }
 function renderCashRegistersWorkspace() {
-  const draft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  const draft =
+    state.cashRegisters.draft ||
+    createEmptyCashRegisterDraft(state.cashRegisters.metadata);
   const metadata = state.cashRegisters.metadata || {};
   const existingSeries = Array.isArray(metadata.series) ? metadata.series : [];
   const isSaving = state.cashRegisters.saving;
@@ -5201,11 +5687,16 @@ function renderCashRegistersWorkspace() {
   const isLocked = Number(draft.status ?? 0) === 2;
   const isFormLocked = isBusy || isLocked;
   const openingStatusLabel = renderCashRegisterConditionText(draft.status);
-  const desktopPrinterState = state.desktopPrinting || createEmptyDesktopPrintingState();
-  const detectedPrinters = Array.isArray(desktopPrinterState.items) ? desktopPrinterState.items : [];
+  const desktopPrinterState =
+    state.desktopPrinting || createEmptyDesktopPrintingState();
+  const detectedPrinters = Array.isArray(desktopPrinterState.items)
+    ? desktopPrinterState.items
+    : [];
   const printerOptions = detectedPrinters.map((item) => ({
     value: String(item.name || ""),
-    label: item.isDefault ? `${item.displayName || item.name} (Predeterminada)` : item.displayName || item.name || "",
+    label: item.isDefault
+      ? `${item.displayName || item.name} (Predeterminada)`
+      : item.displayName || item.name || "",
   }));
   const printerStatusLabel = !desktopClientSupportsPrinting()
     ? "La deteccion directa de impresoras esta disponible en Rocky Maxx Cliente."
@@ -5243,12 +5734,16 @@ function renderCashRegistersWorkspace() {
             </button>
           </div>
 
-          ${isLocked ? `
+          ${
+            isLocked
+              ? `
             <div class="article-editor-note">
               <strong>Caja bloqueada</strong>
               <span>Esta caja ya fue cerrada y no admite nuevos ingresos ni modificaciones.</span>
             </div>
-          ` : ""}
+          `
+              : ""
+          }
 
           <div class="cash-register-header-panel">
             <label class="cash-register-field cash-register-field-serie">
@@ -5266,7 +5761,10 @@ function renderCashRegistersWorkspace() {
 
             <datalist id="cash-register-series">
               ${existingSeries
-                .map((item) => `<option value="${escapeHtml(item.serie || "")}">${escapeHtml(item.nombreImpresora || "")}</option>`)
+                .map(
+                  (item) =>
+                    `<option value="${escapeHtml(item.serie || "")}">${escapeHtml(item.nombreImpresora || "")}</option>`,
+                )
                 .join("")}
             </datalist>
 
@@ -5394,7 +5892,9 @@ function renderCashRegistersWorkspace() {
 }
 
 function renderCashRegistersTable() {
-  const items = Array.isArray(state.cashRegisters.items) ? state.cashRegisters.items : [];
+  const items = Array.isArray(state.cashRegisters.items)
+    ? state.cashRegisters.items
+    : [];
   const search = normalizeSearchText(state.cashRegisters.search);
   const visibleItems = search
     ? items.filter((item) =>
@@ -5431,7 +5931,8 @@ function renderCashRegistersTable() {
           ${visibleItems
             .map((item) => {
               const key = buildCashRegisterKey(item.serie, item.fecha);
-              const isSelected = String(state.cashRegisters.selectedKey || "") === key;
+              const isSelected =
+                String(state.cashRegisters.selectedKey || "") === key;
 
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
@@ -5496,7 +5997,9 @@ function renderCashRegisterConditionText(status) {
 }
 
 function getCloseableCashRegisters() {
-  const items = Array.isArray(state.cashRegisters.items) ? state.cashRegisters.items : [];
+  const items = Array.isArray(state.cashRegisters.items)
+    ? state.cashRegisters.items
+    : [];
   return items.filter((item) => Number(item?.status ?? 0) !== 2);
 }
 
@@ -5514,26 +6017,40 @@ function buildCashRegisterCloseDraft(item, previousDraft = null) {
     previousDraft?.originalSerie || previousDraft?.serie,
     previousDraft?.originalFecha || previousDraft?.fecha,
   );
-  const preservedCloseHour = itemKey === previousKey ? String(previousDraft?.horaCierre || "").trim() : "";
+  const preservedCloseHour =
+    itemKey === previousKey
+      ? String(previousDraft?.horaCierre || "").trim()
+      : "";
 
   return {
     ...nextDraft,
-    horaCierre: toInputValue(preservedCloseHour || nextDraft.horaCierre || getCurrentTimeInputValue()),
+    horaCierre: toInputValue(
+      preservedCloseHour || nextDraft.horaCierre || getCurrentTimeInputValue(),
+    ),
   };
 }
 
 function renderCashRegisterCloseWorkspace() {
   const closeableItems = getCloseableCashRegisters();
-  const currentDraft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  const currentDraft =
+    state.cashRegisters.draft ||
+    createEmptyCashRegisterDraft(state.cashRegisters.metadata);
   const selectedDraft =
     currentDraft.originalSerie && Number(currentDraft.status ?? 0) !== 2
       ? currentDraft
       : closeableItems.length
         ? buildCashRegisterCloseDraft(closeableItems[0], currentDraft)
         : createEmptyCashRegisterDraft(state.cashRegisters.metadata);
-  const isBusy = state.cashRegisters.loading || state.cashRegisters.loadingMetadata || state.cashRegisters.closing;
-  const hasSelection = Boolean(String(selectedDraft.originalSerie || selectedDraft.serie || "").trim());
-  const closeStatusLabel = renderCashRegisterConditionText(selectedDraft.status);
+  const isBusy =
+    state.cashRegisters.loading ||
+    state.cashRegisters.loadingMetadata ||
+    state.cashRegisters.closing;
+  const hasSelection = Boolean(
+    String(selectedDraft.originalSerie || selectedDraft.serie || "").trim(),
+  );
+  const closeStatusLabel = renderCashRegisterConditionText(
+    selectedDraft.status,
+  );
 
   return `
     <div class="modern-page transfer-register-page cash-register-page">
@@ -5664,7 +6181,9 @@ function renderCashRegisterCloseTable(items = getCloseableCashRegisters()) {
         <tbody>
           ${visibleItems
             .map((item) => {
-              const selected = buildCashRegisterKey(item.serie, item.fecha) === state.cashRegisters.selectedKey;
+              const selected =
+                buildCashRegisterKey(item.serie, item.fecha) ===
+                state.cashRegisters.selectedKey;
               return `
                 <tr${selected ? ' class="is-selected"' : ""}>
                   <td>${escapeHtml(item.serie || "")}</td>
@@ -5694,9 +6213,12 @@ function renderCashRegisterCloseTable(items = getCloseableCashRegisters()) {
   `;
 }
 function renderComprasWorkspace() {
-  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const draft =
+    state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
   const metadata = state.compras.metadata || {};
-  const proveedores = Array.isArray(metadata.proveedores) ? metadata.proveedores : [];
+  const proveedores = Array.isArray(metadata.proveedores)
+    ? metadata.proveedores
+    : [];
   const tiposPago = Array.isArray(metadata.tiposPago) ? metadata.tiposPago : [];
   const destinos = Array.isArray(metadata.destinos) ? metadata.destinos : [];
   const isSaving = state.compras.saving;
@@ -5923,7 +6445,8 @@ function renderCompraStatusBadge(status) {
 }
 
 function renderComprasItemsTable() {
-  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const draft =
+    state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
   const items = Array.isArray(draft.items) ? draft.items : [];
 
   if (!items.length) {
@@ -6039,7 +6562,8 @@ function renderComprasTable() {
           ${visibleItems
             .map((item) => {
               const key = buildCompraKey(item.documento, item.proveedor);
-              const isSelected = String(state.compras.selectedKey || "") === key;
+              const isSelected =
+                String(state.compras.selectedKey || "") === key;
 
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
@@ -6077,7 +6601,9 @@ function renderComprasArticleLookupModal() {
   }
 
   const items = Array.isArray(lookup.items) ? lookup.items : [];
-  const activeIndex = Number.isInteger(lookup.activeIndex) ? lookup.activeIndex : -1;
+  const activeIndex = Number.isInteger(lookup.activeIndex)
+    ? lookup.activeIndex
+    : -1;
 
   return `
     <div class="article-lookup-overlay compras-lookup-overlay">
@@ -6327,7 +6853,9 @@ function renderSucursalesWorkspace() {
 }
 
 function renderSucursalesTable() {
-  const items = Array.isArray(state.sucursales.items) ? state.sucursales.items : [];
+  const items = Array.isArray(state.sucursales.items)
+    ? state.sucursales.items
+    : [];
   const search = normalizeSearchText(state.sucursales.search);
   const visibleItems = search
     ? items.filter((item) =>
@@ -6362,7 +6890,9 @@ function renderSucursalesTable() {
         <tbody>
           ${visibleItems
             .map((item) => {
-              const isSelected = String(state.sucursales.selectedCodigo || "") === String(item.codigo || "");
+              const isSelected =
+                String(state.sucursales.selectedCodigo || "") ===
+                String(item.codigo || "");
 
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
@@ -6400,10 +6930,15 @@ function renderSucursalStatusBadge(status) {
 }
 
 function renderClientesWorkspace() {
-  const draft = state.clientes.draft || createEmptyClienteDraft(state.clientes.metadata);
+  const draft =
+    state.clientes.draft || createEmptyClienteDraft(state.clientes.metadata);
   const metadata = state.clientes.metadata || {};
-  const tiposCliente = Array.isArray(metadata.tiposCliente) ? metadata.tiposCliente : [];
-  const tiposContribuyente = Array.isArray(metadata.tiposContribuyente) ? metadata.tiposContribuyente : [];
+  const tiposCliente = Array.isArray(metadata.tiposCliente)
+    ? metadata.tiposCliente
+    : [];
+  const tiposContribuyente = Array.isArray(metadata.tiposContribuyente)
+    ? metadata.tiposContribuyente
+    : [];
   const isSaving = state.clientes.saving;
   const isDeleting = state.clientes.deleting;
   const isBusy = isSaving || isDeleting;
@@ -6501,7 +7036,10 @@ function renderClientesWorkspace() {
                 <select name="tipoContribuyente">
                   ${renderSelectOptions(
                     [
-                      { value: "", label: "Selecciona un tipo de contribuyente" },
+                      {
+                        value: "",
+                        label: "Selecciona un tipo de contribuyente",
+                      },
                       ...tiposContribuyente.map((item) => ({
                         value: String(item.codigo ?? ""),
                         label: `${item.codigo ?? ""} - ${item.nombre ?? item.codigo ?? ""}`,
@@ -6595,7 +7133,9 @@ function renderClientesTable() {
         <tbody>
           ${visibleItems
             .map((item) => {
-              const isSelected = String(state.clientes.selectedCodigo || "") === String(item.codigo || "");
+              const isSelected =
+                String(state.clientes.selectedCodigo || "") ===
+                String(item.codigo || "");
 
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
@@ -6633,9 +7173,13 @@ function renderClienteStatusBadge(status) {
 }
 
 function renderProveedoresWorkspace() {
-  const draft = state.proveedores.draft || createEmptyProveedorDraft(state.proveedores.metadata);
+  const draft =
+    state.proveedores.draft ||
+    createEmptyProveedorDraft(state.proveedores.metadata);
   const metadata = state.proveedores.metadata || {};
-  const tiposProveedor = Array.isArray(metadata.tiposProveedor) ? metadata.tiposProveedor : [];
+  const tiposProveedor = Array.isArray(metadata.tiposProveedor)
+    ? metadata.tiposProveedor
+    : [];
   const isSaving = state.proveedores.saving;
   const isDeleting = state.proveedores.deleting;
   const isBusy = isSaving || isDeleting;
@@ -6842,7 +7386,9 @@ function renderProveedoresWorkspace() {
 }
 
 function renderProveedoresTable() {
-  const items = Array.isArray(state.proveedores.items) ? state.proveedores.items : [];
+  const items = Array.isArray(state.proveedores.items)
+    ? state.proveedores.items
+    : [];
   const search = normalizeSearchText(state.proveedores.search);
   const visibleItems = search
     ? items.filter((item) =>
@@ -6878,7 +7424,9 @@ function renderProveedoresTable() {
         <tbody>
           ${visibleItems
             .map((item) => {
-              const isSelected = String(state.proveedores.selectedCodigo || "") === String(item.codigo || "");
+              const isSelected =
+                String(state.proveedores.selectedCodigo || "") ===
+                String(item.codigo || "");
 
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
@@ -6916,7 +7464,9 @@ function renderProveedorStatusBadge(status) {
   return `<span class="modern-chip">${numericStatus === 0 ? "Inactivo" : "Activo"}</span>`;
 }
 function renderTrabajadoresWorkspace() {
-  const draft = state.trabajadores.draft || createEmptyTrabajadorDraft(state.trabajadores.metadata);
+  const draft =
+    state.trabajadores.draft ||
+    createEmptyTrabajadorDraft(state.trabajadores.metadata);
   const metadata = state.trabajadores.metadata || {};
   const cargos = Array.isArray(metadata.cargos) ? metadata.cargos : [];
   const isSaving = state.trabajadores.saving;
@@ -7188,7 +7738,8 @@ function renderImpuestosWorkspace() {
 }
 
 function renderBancosWorkspace() {
-  const draft = state.bancos.draft || createEmptyBancoDraft(state.bancos.metadata);
+  const draft =
+    state.bancos.draft || createEmptyBancoDraft(state.bancos.metadata);
   const items = Array.isArray(state.bancos.items) ? state.bancos.items : [];
   const isSaving = state.bancos.saving;
   const isDeleting = state.bancos.deleting;
@@ -7294,7 +7845,11 @@ function renderBancosTable() {
   const items = Array.isArray(state.bancos.items) ? state.bancos.items : [];
   const search = normalizeSearchText(state.bancos.search);
   const visibleItems = search
-    ? items.filter((item) => normalizeSearchText(`${item.codigo || ""} ${item.nombre || ""}`).includes(search))
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.codigo || ""} ${item.nombre || ""}`,
+        ).includes(search),
+      )
     : items;
 
   if (!visibleItems.length) {
@@ -7320,7 +7875,9 @@ function renderBancosTable() {
         <tbody>
           ${visibleItems
             .map((item) => {
-              const isSelected = String(state.bancos.selectedCodigo || "") === String(item.codigo || "");
+              const isSelected =
+                String(state.bancos.selectedCodigo || "") ===
+                String(item.codigo || "");
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
                   <td><strong>${escapeHtml(item.codigo || "-")}</strong></td>
@@ -7355,8 +7912,11 @@ function renderBancoStatusBadge(status) {
 }
 
 function renderTiposPagoWorkspace() {
-  const draft = state.tiposPago.draft || createEmptyTipoPagoDraft(state.tiposPago.metadata);
-  const items = Array.isArray(state.tiposPago.items) ? state.tiposPago.items : [];
+  const draft =
+    state.tiposPago.draft || createEmptyTipoPagoDraft(state.tiposPago.metadata);
+  const items = Array.isArray(state.tiposPago.items)
+    ? state.tiposPago.items
+    : [];
   const isSaving = state.tiposPago.saving;
   const isDeleting = state.tiposPago.deleting;
   const isBusy = isSaving || isDeleting;
@@ -7459,10 +8019,16 @@ function renderTiposPagoWorkspace() {
 }
 
 function renderTiposPagoTable() {
-  const items = Array.isArray(state.tiposPago.items) ? state.tiposPago.items : [];
+  const items = Array.isArray(state.tiposPago.items)
+    ? state.tiposPago.items
+    : [];
   const search = normalizeSearchText(state.tiposPago.search);
   const visibleItems = search
-    ? items.filter((item) => normalizeSearchText(`${item.codigo || ""} ${item.nombre || ""}`).includes(search))
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.codigo || ""} ${item.nombre || ""}`,
+        ).includes(search),
+      )
     : items;
 
   if (!visibleItems.length) {
@@ -7488,7 +8054,9 @@ function renderTiposPagoTable() {
         <tbody>
           ${visibleItems
             .map((item) => {
-              const isSelected = String(state.tiposPago.selectedCodigo || "") === String(item.codigo || "");
+              const isSelected =
+                String(state.tiposPago.selectedCodigo || "") ===
+                String(item.codigo || "");
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
                   <td><strong>${escapeHtml(String(item.codigo || "-"))}</strong></td>
@@ -7522,20 +8090,28 @@ function renderTipoPagoStatusBadge(status) {
   return `<span class="modern-chip">${numericStatus === 0 ? "Inactivo" : "Activo"}</span>`;
 }
 function renderImpresorasWorkspace() {
-  const draft = state.impresoras.draft || createEmptyImpresoraDraft(state.impresoras.metadata);
-  const items = Array.isArray(state.impresoras.items) ? state.impresoras.items : [];
+  const draft =
+    state.impresoras.draft ||
+    createEmptyImpresoraDraft(state.impresoras.metadata);
+  const items = Array.isArray(state.impresoras.items)
+    ? state.impresoras.items
+    : [];
   const detectedPrinters = getDetectedDesktopPrinters();
   const detectedCount = detectedPrinters.length;
   const reportFormats = getImpresoraReportFormats(state.impresoras.metadata);
-  const selectedReportFormat = findImpresoraReportFormatById(draft.idProcesoImpresion, state.impresoras.metadata);
-  const isContingenciaPrinter = Number.parseInt(String(draft.status ?? "0"), 10) === 1;
+  const selectedReportFormat = findImpresoraReportFormatById(
+    draft.idProcesoImpresion,
+    state.impresoras.metadata,
+  );
+  const isContingenciaPrinter =
+    Number.parseInt(String(draft.status ?? "0"), 10) === 1;
   const isSaving = state.impresoras.saving;
   const isDeleting = state.impresoras.deleting;
   const isBusy = isSaving || isDeleting;
   const detectionMessage = desktopClientSupportsPrinting()
-    ? (detectedCount
-        ? `Se detectaron ${detectedCount} impresora(s) en este computador.`
-        : "No se detectaron impresoras en este computador.")
+    ? detectedCount
+      ? `Se detectaron ${detectedCount} impresora(s) en este computador.`
+      : "No se detectaron impresoras en este computador."
     : "La deteccion de impresoras solo esta disponible desde el ejecutable de Rocky Maxx.";
   const reportFormatMessage = reportFormats.length
     ? `${reportFormats.length} formato(s) de contingencia detectados en la carpeta de pruebas.`
@@ -7591,7 +8167,9 @@ function renderImpresorasWorkspace() {
                 </div>
               </fieldset>
 
-              ${isContingenciaPrinter ? `
+              ${
+                isContingenciaPrinter
+                  ? `
                 <label class="clients-field clients-field-wide">
                   <span>Formato contingencia</span>
                   <select name="idProcesoImpresion">
@@ -7608,7 +8186,9 @@ function renderImpresorasWorkspace() {
                   </div>
                   <small>${escapeHtml(selectedReportFormat?.label || "Selecciona uno de los formatos .rpt detectados.")}</small>
                 </div>
-              ` : ""}
+              `
+                  : ""
+              }
             </div>
             <div class="muted">${escapeHtml(`${detectionMessage} ${reportFormatMessage}`)}</div>
           </div>
@@ -7638,10 +8218,16 @@ function renderImpresorasWorkspace() {
   `;
 }
 function renderImpresorasTable() {
-  const items = Array.isArray(state.impresoras.items) ? state.impresoras.items : [];
+  const items = Array.isArray(state.impresoras.items)
+    ? state.impresoras.items
+    : [];
   const search = normalizeSearchText(state.impresoras.search);
   const visibleItems = search
-    ? items.filter((item) => normalizeSearchText(`${item.id || ""} ${item.nombreImpresora || ""}`).includes(search))
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.id || ""} ${item.nombreImpresora || ""}`,
+        ).includes(search),
+      )
     : items;
 
   if (!visibleItems.length) {
@@ -7669,10 +8255,16 @@ function renderImpresorasTable() {
         <tbody>
           ${visibleItems
             .map((item) => {
-              const isSelected = String(state.impresoras.selectedId || "") === String(item.id || "");
-              const formatLabel = Number(item.status ?? 0) === 1
-                ? renderImpresoraReportFormatLabel(item.idProcesoImpresion, state.impresoras.metadata)
-                : "No aplica";
+              const isSelected =
+                String(state.impresoras.selectedId || "") ===
+                String(item.id || "");
+              const formatLabel =
+                Number(item.status ?? 0) === 1
+                  ? renderImpresoraReportFormatLabel(
+                      item.idProcesoImpresion,
+                      state.impresoras.metadata,
+                    )
+                  : "No aplica";
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
                   <td><strong>${escapeHtml(String(item.id || "-"))}</strong></td>
@@ -7703,7 +8295,9 @@ function renderImpresoraDetectedBadge(nombreImpresora) {
 }
 
 function getImpresoraReportFormats(metadata) {
-  const rawFormats = Array.isArray(metadata?.reportFormats) ? metadata.reportFormats : [];
+  const rawFormats = Array.isArray(metadata?.reportFormats)
+    ? metadata.reportFormats
+    : [];
   return rawFormats
     .map((item) => ({
       id: Number.parseInt(String(item?.id ?? "").trim(), 10),
@@ -7719,7 +8313,10 @@ function findImpresoraReportFormatById(value, metadata) {
     return null;
   }
 
-  return getImpresoraReportFormats(metadata).find((item) => item.id === numericId) || null;
+  return (
+    getImpresoraReportFormats(metadata).find((item) => item.id === numericId) ||
+    null
+  );
 }
 
 function normalizeImpresoraReportFormatId(value, metadata, fallbackValue = "") {
@@ -7728,7 +8325,10 @@ function normalizeImpresoraReportFormatId(value, metadata, fallbackValue = "") {
     return String(matched.id);
   }
 
-  const fallback = findImpresoraReportFormatById(fallbackValue, metadata) || getImpresoraReportFormats(metadata)[0] || null;
+  const fallback =
+    findImpresoraReportFormatById(fallbackValue, metadata) ||
+    getImpresoraReportFormats(metadata)[0] ||
+    null;
   return fallback ? String(fallback.id) : "";
 }
 
@@ -7738,13 +8338,18 @@ function renderImpresoraReportFormatOptions(selectedValue, metadata) {
     return '<option value="">No se detectaron formatos .rpt</option>';
   }
 
-  const normalizedValue = normalizeImpresoraReportFormatId(selectedValue, metadata);
+  const normalizedValue = normalizeImpresoraReportFormatId(
+    selectedValue,
+    metadata,
+  );
   return formats
-    .map((item) => `
+    .map(
+      (item) => `
       <option value="${escapeHtml(String(item.id))}" ${String(item.id) === normalizedValue ? "selected" : ""}>
         ${escapeHtml(item.label)}
       </option>
-    `)
+    `,
+    )
     .join("");
 }
 
@@ -7753,17 +8358,19 @@ function renderImpresoraReportFormatLabel(value, metadata) {
 }
 function renderImpresoraDetectedOptions(selectedValue) {
   const printers = getDetectedDesktopPrinters();
-  const options = printers.map((item) => {
-    const name = String(item?.name || item?.displayName || "").trim();
-    if (!name) {
-      return null;
-    }
+  const options = printers
+    .map((item) => {
+      const name = String(item?.name || item?.displayName || "").trim();
+      if (!name) {
+        return null;
+      }
 
-    return {
-      value: name,
-      label: item?.isDefault ? `${name} (Predeterminada)` : name,
-    };
-  }).filter(Boolean);
+      return {
+        value: name,
+        label: item?.isDefault ? `${name} (Predeterminada)` : name,
+      };
+    })
+    .filter(Boolean);
 
   const normalizedSelected = String(selectedValue || "").trim();
   if (!options.length) {
@@ -7772,7 +8379,15 @@ function renderImpresoraDetectedOptions(selectedValue) {
       : `<option value="" selected>Sin impresoras detectadas</option>`;
   }
 
-  if (normalizedSelected && !options.some((item) => String(item.value || "").trim().toLowerCase() === normalizedSelected.toLowerCase())) {
+  if (
+    normalizedSelected &&
+    !options.some(
+      (item) =>
+        String(item.value || "")
+          .trim()
+          .toLowerCase() === normalizedSelected.toLowerCase(),
+    )
+  ) {
     options.unshift({
       value: normalizedSelected,
       label: `${normalizedSelected} (Guardada)`,
@@ -7783,14 +8398,20 @@ function renderImpresoraDetectedOptions(selectedValue) {
 }
 
 function isDetectedDesktopPrinter(nombreImpresora) {
-  const normalized = String(nombreImpresora || "").trim().toLowerCase();
+  const normalized = String(nombreImpresora || "")
+    .trim()
+    .toLowerCase();
   if (!normalized) {
     return false;
   }
 
   return getDetectedDesktopPrinters().some((item) => {
     const values = [item?.name, item?.displayName, item?.description]
-      .map((value) => String(value || "").trim().toLowerCase())
+      .map((value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase(),
+      )
       .filter(Boolean);
     return values.includes(normalized);
   });
@@ -7846,12 +8467,16 @@ function renderGeneralCloseReportsWorkspace() {
 }
 
 function renderExchangeRateRegisterWorkspace() {
-  const draft = state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
-  const updatedAt = String(state.exchangeRateRegister.updatedAt || draft.actualizadoEn || "").trim();
+  const draft =
+    state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
+  const updatedAt = String(
+    state.exchangeRateRegister.updatedAt || draft.actualizadoEn || "",
+  ).trim();
   const updatedAtLabel = updatedAt
     ? `Ultima actualizacion: ${escapeHtml(formatDateDisplay(updatedAt))}`
     : "Todavia no se ha registrado una tasa manual.";
-  const isBusy = state.exchangeRateRegister.loading || state.exchangeRateRegister.saving;
+  const isBusy =
+    state.exchangeRateRegister.loading || state.exchangeRateRegister.saving;
 
   return `
     <div class="modern-page exchange-rate-page">
@@ -8022,7 +8647,9 @@ function renderImpuestoLookupRow(item) {
 }
 
 function renderTrabajadoresTable() {
-  const items = Array.isArray(state.trabajadores.items) ? state.trabajadores.items : [];
+  const items = Array.isArray(state.trabajadores.items)
+    ? state.trabajadores.items
+    : [];
   const search = normalizeSearchText(state.trabajadores.search);
   const visibleItems = search
     ? items.filter((item) =>
@@ -8058,7 +8685,9 @@ function renderTrabajadoresTable() {
         <tbody>
           ${visibleItems
             .map((item) => {
-              const isSelected = String(state.trabajadores.selectedCedula || "") === String(item.cedula || "");
+              const isSelected =
+                String(state.trabajadores.selectedCedula || "") ===
+                String(item.cedula || "");
 
               return `
                 <tr class="${isSelected ? "is-selected-row" : ""}">
@@ -8238,7 +8867,17 @@ function getDesktopBreadcrumb(view) {
     return ["Sistema", "Panel principal"];
   }
 
-  if (["articulos", "existencia", "tallas", "colores", "fabricantes", "marcas", "categorias"].includes(view)) {
+  if (
+    [
+      "articulos",
+      "existencia",
+      "tallas",
+      "colores",
+      "fabricantes",
+      "marcas",
+      "categorias",
+    ].includes(view)
+  ) {
     return ["Archivos", "Inventario", getDesktopViewLabelV2(view)];
   }
 
@@ -8346,9 +8985,15 @@ function getDesktopViewLabelV2(view) {
 
 function getExecutiveCardItems() {
   const total = state.pagination.total || state.articles.length;
-  const activeCount = state.articles.filter((item) => item.general?.status?.nombre === "activo").length;
-  const promotionCount = state.articles.filter((item) => Boolean(item.precios?.promocion?.activa)).length;
-  const criticalCount = state.articles.filter((item) => isCriticalStockArticle(item)).length;
+  const activeCount = state.articles.filter(
+    (item) => item.general?.status?.nombre === "activo",
+  ).length;
+  const promotionCount = state.articles.filter((item) =>
+    Boolean(item.precios?.promocion?.activa),
+  ).length;
+  const criticalCount = state.articles.filter((item) =>
+    isCriticalStockArticle(item),
+  ).length;
 
   return [
     {
@@ -8411,7 +9056,11 @@ function countLoadedCatalogEntries() {
     catalogos.colores,
     catalogos.tallas,
     catalogos.impuestos,
-  ].reduce((total, collection) => total + (Array.isArray(collection) ? collection.length : 0), 0);
+  ].reduce(
+    (total, collection) =>
+      total + (Array.isArray(collection) ? collection.length : 0),
+    0,
+  );
 }
 
 function formatCompactMetric(value) {
@@ -8464,7 +9113,8 @@ function extractDateOnlyParts(value) {
     }
   }
 
-  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  const date =
+    value instanceof Date ? new Date(value.getTime()) : new Date(value);
   if (Number.isNaN(date.getTime())) {
     return null;
   }
@@ -8722,8 +9372,11 @@ function renderArticleEditor() {
   const promotionActive = Boolean(draft.precios.promocionActiva);
   const taxOptions = state.metadata?.catalogos?.impuestos || [];
   const brandOptions = state.metadata?.catalogos?.marcas || [];
-  const canDelete = state.formMode === "edit" && Boolean(state.activeArticleCode);
-  const isDeletingCurrent = Boolean(state.deletingCode) && state.deletingCode === state.activeArticleCode;
+  const canDelete =
+    state.formMode === "edit" && Boolean(state.activeArticleCode);
+  const isDeletingCurrent =
+    Boolean(state.deletingCode) &&
+    state.deletingCode === state.activeArticleCode;
   const canCreateArticles = userCanCreateArticlesInCurrentInstance();
   const creatingBlocked = state.formMode !== "edit" && !canCreateArticles;
 
@@ -8894,7 +9547,8 @@ function renderArticleLookupModal() {
 }
 
 function renderArticleLookupRow(article) {
-  const referencia = article.referencia || article.codigoBarraAnt || article.codigoBarra || "-";
+  const referencia =
+    article.referencia || article.codigoBarraAnt || article.codigoBarra || "-";
   const codigoMarca = article.general?.marca?.codigo || "-";
   const codigoFamilia = article.general?.familia || "-";
   const talla = article.tallasColores?.talla?.codigo || "-";
@@ -8926,7 +9580,9 @@ function renderTransferLookupModal() {
     return "";
   }
 
-  const items = Array.isArray(state.transferLookup.items) ? state.transferLookup.items : [];
+  const items = Array.isArray(state.transferLookup.items)
+    ? state.transferLookup.items
+    : [];
   const totalLabel = state.transferLookup.loading
     ? "Cargando registros..."
     : `Catalogo (${escapeHtml(String(items.length))} Registros)`;
@@ -8998,7 +9654,9 @@ function renderAdjustmentLookupModal() {
     return "";
   }
 
-  const items = Array.isArray(state.adjustmentLookup.items) ? state.adjustmentLookup.items : [];
+  const items = Array.isArray(state.adjustmentLookup.items)
+    ? state.adjustmentLookup.items
+    : [];
   const totalLabel = state.adjustmentLookup.loading
     ? "Cargando ajustes..."
     : `Catalogo (${escapeHtml(String(items.length))} Registros)`;
@@ -9135,9 +9793,17 @@ function getCatalogOptionLabels(items) {
   return labels;
 }
 
-function renderScrollableCatalogInput(fieldName, value, options, placeholder, required = false) {
+function renderScrollableCatalogInput(
+  fieldName,
+  value,
+  options,
+  placeholder,
+  required = false,
+) {
   const optionLabels = getCatalogOptionLabels(options);
-  const normalizedValue = String(value || "").trim().toUpperCase();
+  const normalizedValue = String(value || "")
+    .trim()
+    .toUpperCase();
 
   return `
     <div class="catalog-combobox" data-catalog-combobox="${fieldName}">
@@ -9467,8 +10133,12 @@ function bindLoginEvents() {
   }
 
   const passwordInput = form.elements.password;
-  const togglePasswordButton = form.querySelector("[data-action='toggle-password']");
-  const forgotPasswordButton = form.querySelector("[data-action='forgot-password']");
+  const togglePasswordButton = form.querySelector(
+    "[data-action='toggle-password']",
+  );
+  const forgotPasswordButton = form.querySelector(
+    "[data-action='forgot-password']",
+  );
 
   form.addEventListener("input", () => {
     state.loginDraft = readLoginDraft(form);
@@ -9482,12 +10152,21 @@ function bindLoginEvents() {
     const isVisible = passwordInput.type === "text";
     passwordInput.type = isVisible ? "password" : "text";
     togglePasswordButton.setAttribute("aria-pressed", String(!isVisible));
-    togglePasswordButton.setAttribute("aria-label", isVisible ? "Mostrar clave" : "Ocultar clave");
-    togglePasswordButton.classList.toggle("login-toggle-password-active", !isVisible);
+    togglePasswordButton.setAttribute(
+      "aria-label",
+      isVisible ? "Mostrar clave" : "Ocultar clave",
+    );
+    togglePasswordButton.classList.toggle(
+      "login-toggle-password-active",
+      !isVisible,
+    );
   });
 
   forgotPasswordButton?.addEventListener("click", () => {
-    setFlash("Solicita al administrador el reinicio o cambio de tu clave.", "info");
+    setFlash(
+      "Solicita al administrador el reinicio o cambio de tu clave.",
+      "info",
+    );
     render();
   });
 
@@ -9596,7 +10275,8 @@ function bindShellEvents() {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       const menu = button.getAttribute("data-menu") || "";
-      const shouldClose = state.navigation.openMenu === menu && state.navigation.menuPinned;
+      const shouldClose =
+        state.navigation.openMenu === menu && state.navigation.menuPinned;
 
       state.navigation.openMenu = shouldClose ? "" : menu;
       state.navigation.openSubmenu = "";
@@ -9613,8 +10293,10 @@ function bindShellEvents() {
         return;
       }
 
-      state.navigation.openMenu = button.getAttribute("data-submenu-owner") || "archivos";
-      state.navigation.openSubmenu = state.navigation.openSubmenu === submenu ? "" : submenu;
+      state.navigation.openMenu =
+        button.getAttribute("data-submenu-owner") || "archivos";
+      state.navigation.openSubmenu =
+        state.navigation.openSubmenu === submenu ? "" : submenu;
       state.navigation.menuPinned = true;
       render();
     });
@@ -9670,7 +10352,10 @@ function bindShellEvents() {
         return;
       }
 
-      if (nextView === "transferencias" || nextView === "registro-transferencia") {
+      if (
+        nextView === "transferencias" ||
+        nextView === "registro-transferencia"
+      ) {
         await loadTransfersMetadata();
         return;
       }
@@ -9794,22 +10479,28 @@ function bindShellEvents() {
     });
   });
 
-  document.querySelector("[data-refresh]")?.addEventListener("click", async () => {
-    await refreshDashboard();
-  });
+  document
+    .querySelector("[data-refresh]")
+    ?.addEventListener("click", async () => {
+      await refreshDashboard();
+    });
 
-  document.querySelector("[data-refresh-catalogs]")?.addEventListener("click", async () => {
-    if (isCatalogImportView(state.currentView)) {
-      await loadCatalogImportItems(state.currentView);
-      return;
-    }
+  document
+    .querySelector("[data-refresh-catalogs]")
+    ?.addEventListener("click", async () => {
+      if (isCatalogImportView(state.currentView)) {
+        await loadCatalogImportItems(state.currentView);
+        return;
+      }
 
-    await loadCreationMetadata();
-  });
+      await loadCreationMetadata();
+    });
 
-  document.querySelector("[data-refresh-role-access]")?.addEventListener("click", async () => {
-    await loadRoleAccess();
-  });
+  document
+    .querySelector("[data-refresh-role-access]")
+    ?.addEventListener("click", async () => {
+      await loadRoleAccess();
+    });
 
   bindArticleEvents();
   bindInventoryExistenceEvents();
@@ -9834,7 +10525,8 @@ function bindShellEvents() {
   document.querySelectorAll("[data-role-import-toggle]").forEach((button) => {
     button.addEventListener("click", async () => {
       const roleCode = button.getAttribute("data-role-import-toggle") || "";
-      const nextEnabled = button.getAttribute("data-role-import-enabled") === "true";
+      const nextEnabled =
+        button.getAttribute("data-role-import-enabled") === "true";
 
       if (!roleCode) {
         return;
@@ -9862,13 +10554,22 @@ function bindFacturacionEvents() {
         return;
       }
 
-      if (action === "nuevo" || action === "cancelar" || action === "cancelar-documento") {
+      if (
+        action === "nuevo" ||
+        action === "cancelar" ||
+        action === "cancelar-documento"
+      ) {
         const currentPriceList = getCurrentFacturacionPriceList();
-        state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentPriceList });
+        state.facturacion.draft = normalizeFacturacionDraft({
+          priceList: currentPriceList,
+        });
         state.facturacion.selectedLineIndex = -1;
-        state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
-        state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
-        state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+        state.facturacion.discountAuth =
+          createEmptyFacturacionDiscountAuthState();
+        state.facturacion.paymentModal =
+          createEmptyFacturacionPaymentModalState();
+        state.facturacion.paymentCedulaPrompt =
+          createEmptyFacturacionPaymentCedulaPromptState();
         clearFlash();
         render();
         return;
@@ -9907,22 +10608,37 @@ function bindFacturacionEvents() {
         const currentDraft = normalizeFacturacionDraft(state.facturacion.draft);
         const selectedLineIndex = getFacturacionSelectedLineIndex();
         if (selectedLineIndex < 0) {
-          setFlash("Selecciona primero una linea de la factura para cambiar su lista de precios.", "error");
+          setFlash(
+            "Selecciona primero una linea de la factura para cambiar su lista de precios.",
+            "error",
+          );
           render();
           return;
         }
 
         const selectedLine = currentDraft.items[selectedLineIndex];
         if (!selectedLine || !String(selectedLine.codigoBarra || "").trim()) {
-          setFlash("La linea seleccionada no tiene un articulo cargado.", "error");
+          setFlash(
+            "La linea seleccionada no tiene un articulo cargado.",
+            "error",
+          );
           render();
           return;
         }
 
-        const nextPriceList = getNextFacturacionPriceList(selectedLine.priceList);
-        state.facturacion.draft = recalculateFacturacionDraftLinePriceList(currentDraft, selectedLineIndex, nextPriceList);
+        const nextPriceList = getNextFacturacionPriceList(
+          selectedLine.priceList,
+        );
+        state.facturacion.draft = recalculateFacturacionDraftLinePriceList(
+          currentDraft,
+          selectedLineIndex,
+          nextPriceList,
+        );
         clearFlash();
-        setFlash(`Lista de precios del articulo ${selectedLineIndex + 1}: ${getFacturacionPriceListLabel(nextPriceList)}.`, "success");
+        setFlash(
+          `Lista de precios del articulo ${selectedLineIndex + 1}: ${getFacturacionPriceListLabel(nextPriceList)}.`,
+          "success",
+        );
         render();
         return;
       }
@@ -9937,192 +10653,266 @@ function bindFacturacionEvents() {
         "cancelar-documento": "Cancelar documento",
       };
 
-      setFlash(`${labels[action] || "Accion"} lista para conectar con la logica de facturacion.`, "info");
+      setFlash(
+        `${labels[action] || "Accion"} lista para conectar con la logica de facturacion.`,
+        "info",
+      );
       render();
     });
   });
 
-  document.querySelectorAll("[data-facturacion-discount-auth-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeFacturacionDiscountAuthModal();
-      render();
+  document
+    .querySelectorAll("[data-facturacion-discount-auth-close]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        closeFacturacionDiscountAuthModal();
+        render();
+      });
     });
-  });
 
-  document.querySelectorAll("[data-facturacion-payment-close], [data-facturacion-payment-cancel]").forEach((button) => {
-    button.addEventListener("click", () => {
+  document
+    .querySelectorAll(
+      "[data-facturacion-payment-close], [data-facturacion-payment-cancel]",
+    )
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        if (state.facturacion.savingSale) {
+          return;
+        }
+        closeFacturacionPaymentModal();
+        render();
+      });
+    });
+
+  document
+    .querySelector("[data-facturacion-payment-accept]")
+    ?.addEventListener("click", async () => {
       if (state.facturacion.savingSale) {
         return;
       }
-      closeFacturacionPaymentModal();
+
+      const draft = normalizeFacturacionDraft(state.facturacion.draft);
+      const summary = calculateFacturacionSummary(
+        draft.items,
+        getActiveFacturacionTax(),
+        state.facturacion.exchangeRate,
+        draft,
+      );
+      const validationMessage = validateFacturacionPaymentRows(
+        summary,
+        state.facturacion.paymentModal?.rows,
+      );
+      if (validationMessage) {
+        setFlash(validationMessage, "error");
+        render();
+        return;
+      }
+
+      state.facturacion.savingSale = true;
+      clearFlash();
       render();
-    });
-  });
-
-  document.querySelector("[data-facturacion-payment-accept]")?.addEventListener("click", async () => {
-    if (state.facturacion.savingSale) {
-      return;
-    }
-
-    const draft = normalizeFacturacionDraft(state.facturacion.draft);
-    const summary = calculateFacturacionSummary(
-      draft.items,
-      getActiveFacturacionTax(),
-      state.facturacion.exchangeRate,
-      draft,
-    );
-    const validationMessage = validateFacturacionPaymentRows(summary, state.facturacion.paymentModal?.rows);
-    if (validationMessage) {
-      setFlash(validationMessage, "error");
-      render();
-      return;
-    }
-
-    state.facturacion.savingSale = true;
-    clearFlash();
-    render();
-
-    try {
-      const paymentRowsSnapshot = normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows);
-      const payload = buildFacturacionSalePayload(draft, paymentRowsSnapshot, state.facturacion.exchangeRate);
-      const response = await apiFetch("/facturacion/sales", {
-        method: "POST",
-        body: payload,
-      });
-      const venta = response?.venta || {};
-      const currentPriceList = getCurrentFacturacionPriceList();
-      const preservedRate = normalizeFacturacionExchangeRateState(state.facturacion.exchangeRate);
-
-      state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentPriceList });
-      state.facturacion.exchangeRate = preservedRate;
-      state.facturacion.savingSale = false;
-      state.facturacion.selectedLineIndex = -1;
-      state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
-      state.facturacion.lookup = {
-        open: false,
-        loading: false,
-        type: "",
-        items: [],
-      };
-      state.facturacion.lineLookup = {
-        open: false,
-        loading: false,
-        lineIndex: -1,
-        search: "",
-        items: [],
-        activeIndex: -1,
-      };
-      state.facturacion.frozenLookup = createEmptyFacturacionFrozenLookupState();
-      state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
-      state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
-
-      let flashType = "success";
-      let successMessage = venta.emisionContingencia
-        ? `Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""} como emision de contingencia.`
-        : `Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""}.`;
 
       try {
-        const printDraft = normalizeFacturacionDraft({
-          ...draft,
-          emisionContingencia: Boolean(venta.emisionContingencia),
-        });
-        const printSummary = calculateFacturacionSummary(
-          printDraft.items,
-          getActiveFacturacionTax(),
-          state.facturacion.exchangeRate,
-          printDraft,
+        const paymentRowsSnapshot = normalizeFacturacionPaymentRows(
+          state.facturacion.paymentModal?.rows,
         );
-        const printResult = await printFacturacionInvoice(venta, printDraft, paymentRowsSnapshot, printSummary);
-        const printedOn = String(printResult?.printerName || "").trim();
-        if (printedOn) {
-          successMessage += ` Impresa en ${printedOn}.`;
+        const payload = buildFacturacionSalePayload(
+          draft,
+          paymentRowsSnapshot,
+          state.facturacion.exchangeRate,
+        );
+        const response = await apiFetch("/facturacion/sales", {
+          method: "POST",
+          body: payload,
+        });
+        const venta = response?.venta || {};
+        const currentPriceList = getCurrentFacturacionPriceList();
+        const preservedRate = normalizeFacturacionExchangeRateState(
+          state.facturacion.exchangeRate,
+        );
+
+        state.facturacion.draft = normalizeFacturacionDraft({
+          priceList: currentPriceList,
+        });
+        state.facturacion.exchangeRate = preservedRate;
+        state.facturacion.savingSale = false;
+        state.facturacion.selectedLineIndex = -1;
+        state.facturacion.discountAuth =
+          createEmptyFacturacionDiscountAuthState();
+        state.facturacion.lookup = {
+          open: false,
+          loading: false,
+          type: "",
+          items: [],
+        };
+        state.facturacion.lineLookup = {
+          open: false,
+          loading: false,
+          lineIndex: -1,
+          search: "",
+          items: [],
+          activeIndex: -1,
+        };
+        state.facturacion.frozenLookup =
+          createEmptyFacturacionFrozenLookupState();
+        state.facturacion.paymentModal =
+          createEmptyFacturacionPaymentModalState();
+        state.facturacion.paymentCedulaPrompt =
+          createEmptyFacturacionPaymentCedulaPromptState();
+
+        let flashType = "success";
+        let successMessage = venta.emisionContingencia
+          ? `Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""} como emision de contingencia.`
+          : `Factura ${venta.numeroFactura || ""} guardada correctamente en ${venta.serie || ""}.`;
+
+        try {
+          const printDraft = normalizeFacturacionDraft({
+            ...draft,
+            emisionContingencia: Boolean(venta.emisionContingencia),
+          });
+          const printSummary = calculateFacturacionSummary(
+            printDraft.items,
+            getActiveFacturacionTax(),
+            state.facturacion.exchangeRate,
+            printDraft,
+          );
+          const printResult = await printFacturacionInvoice(
+            venta,
+            printDraft,
+            paymentRowsSnapshot,
+            printSummary,
+          );
+          const printedOn = String(printResult?.printerName || "").trim();
+          if (printedOn) {
+            successMessage += ` Impresa en ${printedOn}.`;
+          }
+        } catch (printError) {
+          console.error(printError);
+          flashType = "error";
+          successMessage += ` La venta se guardo, pero no se pudo imprimir: ${extractErrorMessage(printError)}.`;
         }
-      } catch (printError) {
-        console.error(printError);
-        flashType = "error";
-        successMessage += ` La venta se guardo, pero no se pudo imprimir: ${extractErrorMessage(printError)}.`;
+
+        setFlash(successMessage, flashType);
+      } catch (error) {
+        console.error(error);
+        state.facturacion.savingSale = false;
+        setFlash(extractErrorMessage(error), "error");
       }
 
-      setFlash(successMessage, flashType);
-    } catch (error) {
-      console.error(error);
-      state.facturacion.savingSale = false;
-      setFlash(extractErrorMessage(error), "error");
-    }
-
-    render();
-  });
-
-  document.querySelectorAll("[data-facturacion-payment-field]").forEach((field) => {
-    const syncField = () => {
-      const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-row") || "", 10);
-      const fieldName = field.getAttribute("data-facturacion-payment-field") || "";
-      if (!Number.isInteger(rowIndex) || rowIndex < 0 || !fieldName || !("value" in field)) {
-        return;
-      }
-
-      updateFacturacionPaymentField(rowIndex, fieldName, field.value);
-    };
-
-    field.addEventListener("change", () => {
-      syncField();
       render();
     });
 
-    if (field instanceof HTMLInputElement) {
-      field.addEventListener("input", () => {
+  document
+    .querySelectorAll("[data-facturacion-payment-field]")
+    .forEach((field) => {
+      const syncField = () => {
+        const rowIndex = Number.parseInt(
+          field.getAttribute("data-facturacion-payment-row") || "",
+          10,
+        );
+        const fieldName =
+          field.getAttribute("data-facturacion-payment-field") || "";
+        if (
+          !Number.isInteger(rowIndex) ||
+          rowIndex < 0 ||
+          !fieldName ||
+          !("value" in field)
+        ) {
+          return;
+        }
+
+        updateFacturacionPaymentField(rowIndex, fieldName, field.value);
+      };
+
+      field.addEventListener("change", () => {
         syncField();
-        const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-row") || "", 10);
-        const fieldName = field.getAttribute("data-facturacion-payment-field") || "";
-        if (fieldName === "monto" && Number.isInteger(rowIndex) && rowIndex >= 0) {
-          rerenderFacturacionPaymentField(rowIndex, fieldName);
-        }
+        render();
       });
-    }
-  });
 
-  document.querySelectorAll("[data-facturacion-payment-cedula]").forEach((field) => {
-    field.addEventListener("click", () => {
-      const rowIndex = Number.parseInt(field.getAttribute("data-facturacion-payment-cedula") || "", 10);
-      if (!Number.isInteger(rowIndex) || rowIndex < 0) {
-        return;
+      if (field instanceof HTMLInputElement) {
+        field.addEventListener("input", () => {
+          syncField();
+          const rowIndex = Number.parseInt(
+            field.getAttribute("data-facturacion-payment-row") || "",
+            10,
+          );
+          const fieldName =
+            field.getAttribute("data-facturacion-payment-field") || "";
+          if (
+            fieldName === "monto" &&
+            Number.isInteger(rowIndex) &&
+            rowIndex >= 0
+          ) {
+            rerenderFacturacionPaymentField(rowIndex, fieldName);
+          }
+        });
       }
-
-      const currentRow = normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows)[rowIndex];
-      if (!facturacionPaymentMethodIsCard(currentRow?.formaPago) || String(currentRow?.cedula || "").trim()) {
-        return;
-      }
-
-      openFacturacionPaymentCedulaPrompt(rowIndex);
-      render();
     });
-  });
 
-  document.querySelectorAll("[data-facturacion-payment-cedula-close], [data-facturacion-payment-cedula-no]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const rowIndex = Number.isInteger(state.facturacion.paymentCedulaPrompt?.rowIndex)
+  document
+    .querySelectorAll("[data-facturacion-payment-cedula]")
+    .forEach((field) => {
+      field.addEventListener("click", () => {
+        const rowIndex = Number.parseInt(
+          field.getAttribute("data-facturacion-payment-cedula") || "",
+          10,
+        );
+        if (!Number.isInteger(rowIndex) || rowIndex < 0) {
+          return;
+        }
+
+        const currentRow = normalizeFacturacionPaymentRows(
+          state.facturacion.paymentModal?.rows,
+        )[rowIndex];
+        if (
+          !facturacionPaymentMethodIsCard(currentRow?.formaPago) ||
+          String(currentRow?.cedula || "").trim()
+        ) {
+          return;
+        }
+
+        openFacturacionPaymentCedulaPrompt(rowIndex);
+        render();
+      });
+    });
+
+  document
+    .querySelectorAll(
+      "[data-facturacion-payment-cedula-close], [data-facturacion-payment-cedula-no]",
+    )
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const rowIndex = Number.isInteger(
+          state.facturacion.paymentCedulaPrompt?.rowIndex,
+        )
+          ? state.facturacion.paymentCedulaPrompt.rowIndex
+          : -1;
+        closeFacturacionPaymentCedulaPrompt({ focusRowIndex: rowIndex });
+        render();
+      });
+    });
+
+  document
+    .querySelector("[data-facturacion-payment-cedula-yes]")
+    ?.addEventListener("click", () => {
+      const rowIndex = Number.isInteger(
+        state.facturacion.paymentCedulaPrompt?.rowIndex,
+      )
         ? state.facturacion.paymentCedulaPrompt.rowIndex
         : -1;
-      closeFacturacionPaymentCedulaPrompt({ focusRowIndex: rowIndex });
+      if (rowIndex < 0) {
+        closeFacturacionPaymentCedulaPrompt();
+        render();
+        return;
+      }
+
+      applyFacturacionPaymentClientCedula(rowIndex);
       render();
     });
-  });
 
-  document.querySelector("[data-facturacion-payment-cedula-yes]")?.addEventListener("click", () => {
-    const rowIndex = Number.isInteger(state.facturacion.paymentCedulaPrompt?.rowIndex)
-      ? state.facturacion.paymentCedulaPrompt.rowIndex
-      : -1;
-    if (rowIndex < 0) {
-      closeFacturacionPaymentCedulaPrompt();
-      render();
-      return;
-    }
-
-    applyFacturacionPaymentClientCedula(rowIndex);
-    render();
-  });
-
-  const facturacionDiscountAuthForm = document.getElementById("facturacion-discount-auth-form");
+  const facturacionDiscountAuthForm = document.getElementById(
+    "facturacion-discount-auth-form",
+  );
   if (facturacionDiscountAuthForm instanceof HTMLFormElement) {
     facturacionDiscountAuthForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -10131,32 +10921,42 @@ function bindFacturacionEvents() {
     });
   }
 
-  document.querySelectorAll("[data-facturacion-frozen-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeFacturacionFrozenLookupModal();
+  document
+    .querySelectorAll("[data-facturacion-frozen-close]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        closeFacturacionFrozenLookupModal();
+        render();
+      });
+    });
+
+  document
+    .querySelector("[data-facturacion-frozen-refresh]")
+    ?.addEventListener("click", () => {
+      openFacturacionFrozenLookupModal();
       render();
     });
-  });
 
-  document.querySelector("[data-facturacion-frozen-refresh]")?.addEventListener("click", () => {
-    openFacturacionFrozenLookupModal();
-    render();
-  });
+  document
+    .querySelectorAll("[data-facturacion-frozen-select]")
+    .forEach((row) => {
+      row.addEventListener("click", async () => {
+        const recordId =
+          row.getAttribute("data-facturacion-frozen-select") || "";
+        if (!recordId) {
+          return;
+        }
 
-  document.querySelectorAll("[data-facturacion-frozen-select]").forEach((row) => {
-    row.addEventListener("click", async () => {
-      const recordId = row.getAttribute("data-facturacion-frozen-select") || "";
-      if (!recordId) {
-        return;
-      }
-
-      await restoreFacturacionFrozenDraft(recordId);
+        await restoreFacturacionFrozenDraft(recordId);
+      });
     });
-  });
 
   document.querySelectorAll("[data-facturacion-select-line]").forEach((row) => {
     row.addEventListener("click", () => {
-      const rowNumber = Number.parseInt(row.getAttribute("data-facturacion-select-line") || "", 10);
+      const rowNumber = Number.parseInt(
+        row.getAttribute("data-facturacion-select-line") || "",
+        10,
+      );
       if (!Number.isInteger(rowNumber) || rowNumber < 1) {
         return;
       }
@@ -10166,90 +10966,117 @@ function bindFacturacionEvents() {
     });
   });
 
-  document.querySelector("[data-facturacion-cliente-codigo]")?.addEventListener("keydown", async (event) => {
-    if (event.key !== "Enter") {
-      return;
-    }
-
-    event.preventDefault();
-    await resolveFacturacionClienteFromField();
-  });
-
-  document.querySelector("[data-facturacion-vendedor-cedula]")?.addEventListener("keydown", async (event) => {
-    if (event.key !== "Enter") {
-      return;
-    }
-
-    event.preventDefault();
-    await resolveFacturacionTrabajadorFromField();
-  });
-
-  document.querySelector("[data-facturacion-contingencia]")?.addEventListener("change", () => {
-    captureFacturacionDraft();
-    clearFlash();
-    render();
-  });
-  document.querySelector("[data-facturacion-open-vendedor-lookup]")?.addEventListener("click", async () => {
-    captureFacturacionDraft();
-    await openFacturacionLookupModal("trabajadores");
-  });
-
-  document.querySelector("[data-facturacion-open-cliente-lookup]")?.addEventListener("click", async () => {
-    captureFacturacionDraft();
-    await openFacturacionClientEditor();
-  });
-
-  document.querySelectorAll("[data-facturacion-lookup-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeFacturacionLookupModal();
-      render();
-    });
-  });
-
-  document.querySelector("[data-facturacion-lookup-refresh]")?.addEventListener("click", async () => {
-    const type = state.facturacion.lookup?.type || "trabajadores";
-    await openFacturacionLookupModal(type);
-  });
-
-  document.querySelectorAll("[data-facturacion-lookup-select]").forEach((row) => {
-    row.addEventListener("click", async () => {
-      const recordId = row.getAttribute("data-facturacion-lookup-select") || "";
-      if (!recordId) {
+  document
+    .querySelector("[data-facturacion-cliente-codigo]")
+    ?.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") {
         return;
       }
 
-      const type = state.facturacion.lookup?.type;
-      if (type === "trabajadores") {
-        const selected = (state.facturacion.lookup.items || []).find((item) => String(item.cedula || "") === recordId);
-        if (selected) {
-          applyTrabajadorToFacturacionDraft(selected);
-        }
-      } else {
-        const selected = (state.facturacion.lookup.items || []).find((item) => String(item.codigo || "") === recordId);
-        if (selected) {
-          applyClienteToFacturacionDraft(selected);
-        }
+      event.preventDefault();
+      await resolveFacturacionClienteFromField();
+    });
+
+  document
+    .querySelector("[data-facturacion-vendedor-cedula]")
+    ?.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") {
+        return;
       }
 
-      closeFacturacionLookupModal();
+      event.preventDefault();
+      await resolveFacturacionTrabajadorFromField();
+    });
+
+  document
+    .querySelector("[data-facturacion-contingencia]")
+    ?.addEventListener("change", () => {
+      captureFacturacionDraft();
       clearFlash();
       render();
     });
-  });
-
-  document.querySelectorAll("[data-facturacion-client-editor-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeFacturacionClientEditor();
-      render();
+  document
+    .querySelector("[data-facturacion-open-vendedor-lookup]")
+    ?.addEventListener("click", async () => {
+      captureFacturacionDraft();
+      await openFacturacionLookupModal("trabajadores");
     });
-  });
 
-  document.querySelector("[data-facturacion-client-editor-edit]")?.addEventListener("click", async () => {
-    captureFacturacionClientEditorDraft();
-    await loadFacturacionClientEditorForEdit();
-  });
+  document
+    .querySelector("[data-facturacion-open-cliente-lookup]")
+    ?.addEventListener("click", async () => {
+      captureFacturacionDraft();
+      await openFacturacionClientEditor();
+    });
 
-  const facturacionClientEditorForm = document.getElementById("facturacion-client-editor-form");
+  document
+    .querySelectorAll("[data-facturacion-lookup-close]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        closeFacturacionLookupModal();
+        render();
+      });
+    });
+
+  document
+    .querySelector("[data-facturacion-lookup-refresh]")
+    ?.addEventListener("click", async () => {
+      const type = state.facturacion.lookup?.type || "trabajadores";
+      await openFacturacionLookupModal(type);
+    });
+
+  document
+    .querySelectorAll("[data-facturacion-lookup-select]")
+    .forEach((row) => {
+      row.addEventListener("click", async () => {
+        const recordId =
+          row.getAttribute("data-facturacion-lookup-select") || "";
+        if (!recordId) {
+          return;
+        }
+
+        const type = state.facturacion.lookup?.type;
+        if (type === "trabajadores") {
+          const selected = (state.facturacion.lookup.items || []).find(
+            (item) => String(item.cedula || "") === recordId,
+          );
+          if (selected) {
+            applyTrabajadorToFacturacionDraft(selected);
+          }
+        } else {
+          const selected = (state.facturacion.lookup.items || []).find(
+            (item) => String(item.codigo || "") === recordId,
+          );
+          if (selected) {
+            applyClienteToFacturacionDraft(selected);
+          }
+        }
+
+        closeFacturacionLookupModal();
+        clearFlash();
+        render();
+      });
+    });
+
+  document
+    .querySelectorAll("[data-facturacion-client-editor-close]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        closeFacturacionClientEditor();
+        render();
+      });
+    });
+
+  document
+    .querySelector("[data-facturacion-client-editor-edit]")
+    ?.addEventListener("click", async () => {
+      captureFacturacionClientEditorDraft();
+      await loadFacturacionClientEditorForEdit();
+    });
+
+  const facturacionClientEditorForm = document.getElementById(
+    "facturacion-client-editor-form",
+  );
   if (facturacionClientEditorForm instanceof HTMLFormElement) {
     facturacionClientEditorForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -10258,55 +11085,67 @@ function bindFacturacionEvents() {
     });
   }
 
-  document.querySelectorAll("[data-facturacion-line-codigo]").forEach((input) => {
-    input.addEventListener("input", () => {
-      captureFacturacionDraft();
-    });
+  document
+    .querySelectorAll("[data-facturacion-line-codigo]")
+    .forEach((input) => {
+      input.addEventListener("input", () => {
+        captureFacturacionDraft();
+      });
 
-    input.addEventListener("focus", () => {
-      const rowNumber = Number.parseInt(input.getAttribute("data-facturacion-line-codigo") || "0", 10);
-      if (!rowNumber) {
-        return;
-      }
+      input.addEventListener("focus", () => {
+        const rowNumber = Number.parseInt(
+          input.getAttribute("data-facturacion-line-codigo") || "0",
+          10,
+        );
+        if (!rowNumber) {
+          return;
+        }
 
-      selectFacturacionLine(rowNumber - 1);
-    });
+        selectFacturacionLine(rowNumber - 1);
+      });
 
-    input.addEventListener("keydown", async (event) => {
-      const rowNumber = Number.parseInt(input.getAttribute("data-facturacion-line-codigo") || "0", 10);
-      if (!rowNumber) {
-        return;
-      }
+      input.addEventListener("keydown", async (event) => {
+        const rowNumber = Number.parseInt(
+          input.getAttribute("data-facturacion-line-codigo") || "0",
+          10,
+        );
+        if (!rowNumber) {
+          return;
+        }
 
-      if (event.key === "ArrowDown") {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          focusFacturacionLineInput(rowNumber + 1);
+          return;
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          focusFacturacionLineInput(rowNumber - 1);
+          return;
+        }
+
+        if (event.key !== "Enter") {
+          return;
+        }
+
         event.preventDefault();
-        focusFacturacionLineInput(rowNumber + 1);
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        focusFacturacionLineInput(rowNumber - 1);
-        return;
-      }
-
-      if (event.key !== "Enter") {
-        return;
-      }
-
-      event.preventDefault();
-      await resolveFacturacionLineFromField(rowNumber - 1);
+        await resolveFacturacionLineFromField(rowNumber - 1);
+      });
     });
-  });
 
-  const facturacionGlobalDiscountInput = document.querySelector("[data-facturacion-global-discount]");
+  const facturacionGlobalDiscountInput = document.querySelector(
+    "[data-facturacion-global-discount]",
+  );
   if (facturacionGlobalDiscountInput instanceof HTMLInputElement) {
     facturacionGlobalDiscountInput.addEventListener("focus", () => {
       facturacionGlobalDiscountInput.select();
     });
 
     facturacionGlobalDiscountInput.addEventListener("change", () => {
-      applyFacturacionGlobalDiscountFromField(facturacionGlobalDiscountInput.value);
+      applyFacturacionGlobalDiscountFromField(
+        facturacionGlobalDiscountInput.value,
+      );
     });
 
     facturacionGlobalDiscountInput.addEventListener("keydown", (event) => {
@@ -10315,60 +11154,78 @@ function bindFacturacionEvents() {
       }
 
       event.preventDefault();
-      applyFacturacionGlobalDiscountFromField(facturacionGlobalDiscountInput.value);
+      applyFacturacionGlobalDiscountFromField(
+        facturacionGlobalDiscountInput.value,
+      );
     });
   }
 
-  document.querySelectorAll("[data-facturacion-line-lookup-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const { lineIndex } = state.facturacion.lineLookup || {};
-      closeFacturacionLineLookupModal();
-      if (typeof lineIndex === "number" && lineIndex >= 0) {
-        renderFacturacionAndFocusLine(lineIndex + 1);
-        return;
-      }
+  document
+    .querySelectorAll("[data-facturacion-line-lookup-close]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const { lineIndex } = state.facturacion.lineLookup || {};
+        closeFacturacionLineLookupModal();
+        if (typeof lineIndex === "number" && lineIndex >= 0) {
+          renderFacturacionAndFocusLine(lineIndex + 1);
+          return;
+        }
 
-      render();
-    });
-  });
-
-  document.querySelector("[data-facturacion-line-lookup-refresh]")?.addEventListener("click", async () => {
-    const { lineIndex } = state.facturacion.lineLookup || {};
-    if (typeof lineIndex !== "number" || lineIndex < 0) {
-      return;
-    }
-
-    await resolveFacturacionLineFromField(lineIndex);
-  });
-
-  document.querySelectorAll("[data-facturacion-line-lookup-select]").forEach((row) => {
-    row.addEventListener("click", () => {
-      const selectedIndex = Number.parseInt(row.getAttribute("data-facturacion-line-lookup-select") || "", 10);
-      if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
-        return;
-      }
-
-      const lookup = state.facturacion.lineLookup;
-      const selected = (lookup.items || [])[selectedIndex];
-      if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
-        return;
-      }
-
-      const validationMessage = getFacturacionArticleValidationMessage(selected);
-      if (validationMessage) {
-        setFlash(validationMessage, "error");
         render();
+      });
+    });
+
+  document
+    .querySelector("[data-facturacion-line-lookup-refresh]")
+    ?.addEventListener("click", async () => {
+      const { lineIndex } = state.facturacion.lineLookup || {};
+      if (typeof lineIndex !== "number" || lineIndex < 0) {
         return;
       }
 
-      fillFacturacionLineFromInventory(lookup.lineIndex, selected);
-      closeFacturacionLineLookupModal();
-      clearFlash();
-      renderFacturacionAndFocusLine(lookup.lineIndex + 1);
+      await resolveFacturacionLineFromField(lineIndex);
     });
-  });
 
-  const facturacionLineLookupDialog = document.querySelector("[data-facturacion-line-lookup-dialog]");
+  document
+    .querySelectorAll("[data-facturacion-line-lookup-select]")
+    .forEach((row) => {
+      row.addEventListener("click", () => {
+        const selectedIndex = Number.parseInt(
+          row.getAttribute("data-facturacion-line-lookup-select") || "",
+          10,
+        );
+        if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+          return;
+        }
+
+        const lookup = state.facturacion.lineLookup;
+        const selected = (lookup.items || [])[selectedIndex];
+        if (
+          !selected ||
+          typeof lookup.lineIndex !== "number" ||
+          lookup.lineIndex < 0
+        ) {
+          return;
+        }
+
+        const validationMessage =
+          getFacturacionArticleValidationMessage(selected);
+        if (validationMessage) {
+          setFlash(validationMessage, "error");
+          render();
+          return;
+        }
+
+        fillFacturacionLineFromInventory(lookup.lineIndex, selected);
+        closeFacturacionLineLookupModal();
+        clearFlash();
+        renderFacturacionAndFocusLine(lookup.lineIndex + 1);
+      });
+    });
+
+  const facturacionLineLookupDialog = document.querySelector(
+    "[data-facturacion-line-lookup-dialog]",
+  );
   if (facturacionLineLookupDialog instanceof HTMLElement) {
     queueMicrotask(() => {
       facturacionLineLookupDialog.focus();
@@ -10381,9 +11238,10 @@ function bindFacturacionEvents() {
         return;
       }
 
-      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0
-        ? lookup.activeIndex
-        : 0;
+      const currentIndex =
+        Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0
+          ? lookup.activeIndex
+          : 0;
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -10408,11 +11266,16 @@ function bindFacturacionEvents() {
       if (event.key === "Enter") {
         event.preventDefault();
         const selected = items[currentIndex];
-        if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+        if (
+          !selected ||
+          typeof lookup.lineIndex !== "number" ||
+          lookup.lineIndex < 0
+        ) {
           return;
         }
 
-        const validationMessage = getFacturacionArticleValidationMessage(selected);
+        const validationMessage =
+          getFacturacionArticleValidationMessage(selected);
         if (validationMessage) {
           setFlash(validationMessage, "error");
           render();
@@ -10430,43 +11293,59 @@ function bindFacturacionEvents() {
 }
 
 function bindComprasEvents() {
-  document.querySelector("[data-refresh-compras]")?.addEventListener("click", async () => {
-    await loadCompras();
-  });
+  document
+    .querySelector("[data-refresh-compras]")
+    ?.addEventListener("click", async () => {
+      await loadCompras();
+    });
 
-  document.querySelector("[data-new-compra]")?.addEventListener("click", async () => {
-    resetCompraDraft();
-    clearFlash();
-    render();
-    await openCompraArticleLookupModal("");
-  });
+  document
+    .querySelector("[data-new-compra]")
+    ?.addEventListener("click", async () => {
+      resetCompraDraft();
+      clearFlash();
+      render();
+      await openCompraArticleLookupModal("");
+    });
 
-  document.querySelector("[data-open-compra-lookup]")?.addEventListener("click", async () => {
-    await openCompraArticleLookupModal(state.compras.articleLookup?.search || "");
-  });
+  document
+    .querySelector("[data-open-compra-lookup]")
+    ?.addEventListener("click", async () => {
+      await openCompraArticleLookupModal(
+        state.compras.articleLookup?.search || "",
+      );
+    });
 
-  document.querySelector("[data-delete-compra-current]")?.addEventListener("click", async () => {
-    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
-    if (!draft.originalDocumento || !draft.originalProveedor) {
-      return;
-    }
+  document
+    .querySelector("[data-delete-compra-current]")
+    ?.addEventListener("click", async () => {
+      const draft =
+        state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+      if (!draft.originalDocumento || !draft.originalProveedor) {
+        return;
+      }
 
-    await deleteCompra(draft.originalDocumento, draft.originalProveedor);
-  });
+      await deleteCompra(draft.originalDocumento, draft.originalProveedor);
+    });
 
-  document.querySelector("[data-approve-compra-current]")?.addEventListener("click", async () => {
-    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
-    if (!draft.originalDocumento || !draft.originalProveedor) {
-      return;
-    }
+  document
+    .querySelector("[data-approve-compra-current]")
+    ?.addEventListener("click", async () => {
+      const draft =
+        state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+      if (!draft.originalDocumento || !draft.originalProveedor) {
+        return;
+      }
 
-    await approveCompra(draft.originalDocumento, draft.originalProveedor);
-  });
+      await approveCompra(draft.originalDocumento, draft.originalProveedor);
+    });
 
-  document.querySelector("[data-compra-search]")?.addEventListener("input", (event) => {
-    state.compras.search = event.target.value || "";
-    render();
-  });
+  document
+    .querySelector("[data-compra-search]")
+    ?.addEventListener("input", (event) => {
+      state.compras.search = event.target.value || "";
+      render();
+    });
 
   document.querySelectorAll("[data-compra-select]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -10482,7 +11361,10 @@ function bindComprasEvents() {
 
   document.querySelectorAll("[data-compra-remove-item]").forEach((button) => {
     button.addEventListener("click", () => {
-      const index = Number.parseInt(button.getAttribute("data-compra-remove-item") || "", 10);
+      const index = Number.parseInt(
+        button.getAttribute("data-compra-remove-item") || "",
+        10,
+      );
       if (!Number.isInteger(index) || index < 0) {
         return;
       }
@@ -10514,29 +11396,41 @@ function bindComprasEvents() {
     });
   });
 
-  document.querySelector("[data-compra-lookup-refresh]")?.addEventListener("click", async () => {
-    await loadCompraArticleLookup(state.compras.articleLookup?.search || "");
-  });
+  document
+    .querySelector("[data-compra-lookup-refresh]")
+    ?.addEventListener("click", async () => {
+      await loadCompraArticleLookup(state.compras.articleLookup?.search || "");
+    });
 
-  document.querySelector("[data-compra-lookup-form]")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
+  document
+    .querySelector("[data-compra-lookup-form]")
+    ?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      if (!(form instanceof HTMLFormElement)) {
+        return;
+      }
 
-    const search = readFormFieldValue(form, "buscar", state.compras.articleLookup?.search || "");
-    await loadCompraArticleLookup(search);
-  });
+      const search = readFormFieldValue(
+        form,
+        "buscar",
+        state.compras.articleLookup?.search || "",
+      );
+      await loadCompraArticleLookup(search);
+    });
 
   document.querySelectorAll("[data-compra-lookup-select]").forEach((row) => {
     row.addEventListener("click", () => {
-      const index = Number.parseInt(row.getAttribute("data-compra-lookup-select") || "", 10);
+      const index = Number.parseInt(
+        row.getAttribute("data-compra-lookup-select") || "",
+        10,
+      );
       if (!Number.isInteger(index) || index < 0) {
         return;
       }
 
-      const lookup = state.compras.articleLookup || createEmptyCompraArticleLookupState();
+      const lookup =
+        state.compras.articleLookup || createEmptyCompraArticleLookupState();
       const selected = (lookup.items || [])[index];
       if (!selected) {
         return;
@@ -10547,18 +11441,23 @@ function bindComprasEvents() {
     });
   });
 
-  const compraLookupDialog = document.querySelector("[data-compra-lookup-dialog]");
+  const compraLookupDialog = document.querySelector(
+    "[data-compra-lookup-dialog]",
+  );
   if (compraLookupDialog instanceof HTMLElement) {
     queueMicrotask(() => {
       compraLookupDialog.focus();
     });
 
     compraLookupDialog.addEventListener("keydown", (event) => {
-      const lookup = state.compras.articleLookup || createEmptyCompraArticleLookupState();
+      const lookup =
+        state.compras.articleLookup || createEmptyCompraArticleLookupState();
       const items = Array.isArray(lookup.items) ? lookup.items : [];
       const target = event.target;
       const typingTarget =
-        target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement;
 
       if (typingTarget && event.key !== "Escape") {
         return;
@@ -10573,7 +11472,10 @@ function bindComprasEvents() {
         return;
       }
 
-      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0 ? lookup.activeIndex : 0;
+      const currentIndex =
+        Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0
+          ? lookup.activeIndex
+          : 0;
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -10616,7 +11518,12 @@ function bindComprasEvents() {
   }
 
   document.onkeydown = async (event) => {
-    if (state.currentView !== "compras" || !event.ctrlKey || event.altKey || event.metaKey) {
+    if (
+      state.currentView !== "compras" ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -10627,7 +11534,11 @@ function bindComprasEvents() {
 
     event.preventDefault();
 
-    if (state.compras.saving || state.compras.deleting || state.compras.approving) {
+    if (
+      state.compras.saving ||
+      state.compras.deleting ||
+      state.compras.approving
+    ) {
       return;
     }
 
@@ -10644,7 +11555,8 @@ function bindComprasEvents() {
       return;
     }
 
-    const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+    const draft =
+      state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
     if (!draft.originalDocumento || !draft.originalProveedor) {
       return;
     }
@@ -10659,21 +11571,29 @@ function bindReportesEvents() {
     const currentState = state.reportes || createEmptyReportesState();
     state.reportes = {
       ...currentState,
-      fechaCierreGeneral: toDateInputValue(field?.value || currentState.fechaCierreGeneral || new Date()),
+      fechaCierreGeneral: toDateInputValue(
+        field?.value || currentState.fechaCierreGeneral || new Date(),
+      ),
     };
   };
 
-  document.querySelector("[data-reportes-general-date]")?.addEventListener("input", syncDraft);
-  document.querySelector("[data-reportes-general-date]")?.addEventListener("change", syncDraft);
+  document
+    .querySelector("[data-reportes-general-date]")
+    ?.addEventListener("input", syncDraft);
+  document
+    .querySelector("[data-reportes-general-date]")
+    ?.addEventListener("change", syncDraft);
 
-  document.querySelector("[data-reportes-general-exit]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-reportes-general-exit]")
+    ?.addEventListener("click", () => {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    });
 
   const submit = async (event) => {
     event?.preventDefault?.();
@@ -10681,59 +11601,81 @@ function bindReportesEvents() {
     await generateGeneralCloseReport();
   };
 
-  document.getElementById("reportes-general-form")?.addEventListener("submit", submit);
+  document
+    .getElementById("reportes-general-form")
+    ?.addEventListener("submit", submit);
 }
 
 function bindCashRegisterCloseEvents() {
-  document.querySelector("[data-refresh-cajas-close]")?.addEventListener("click", async () => {
-    await loadCashRegisters();
-  });
+  document
+    .querySelector("[data-refresh-cajas-close]")
+    ?.addEventListener("click", async () => {
+      await loadCashRegisters();
+    });
 
-  document.querySelector("[data-open-caja-close-lookup]")?.addEventListener("click", () => {
-    const searchField = document.querySelector("[data-caja-close-search]");
-    if (searchField && typeof searchField.focus === "function") {
-      searchField.focus();
-      searchField.select?.();
-    }
-  });
+  document
+    .querySelector("[data-open-caja-close-lookup]")
+    ?.addEventListener("click", () => {
+      const searchField = document.querySelector("[data-caja-close-search]");
+      if (searchField && typeof searchField.focus === "function") {
+        searchField.focus();
+        searchField.select?.();
+      }
+    });
 
-  document.querySelector("[data-caja-close-exit]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-caja-close-exit]")
+    ?.addEventListener("click", () => {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-caja-close-reset]")?.addEventListener("click", () => {
-    const firstOpenItem = getCloseableCashRegisters()[0] || null;
-    state.cashRegisters.selectedKey = firstOpenItem ? buildCashRegisterKey(firstOpenItem.serie, firstOpenItem.fecha) : "";
-    state.cashRegisters.draft = firstOpenItem
-      ? buildCashRegisterCloseDraft(firstOpenItem, state.cashRegisters.draft)
-      : createEmptyCashRegisterDraft(state.cashRegisters.metadata);
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-caja-close-reset]")
+    ?.addEventListener("click", () => {
+      const firstOpenItem = getCloseableCashRegisters()[0] || null;
+      state.cashRegisters.selectedKey = firstOpenItem
+        ? buildCashRegisterKey(firstOpenItem.serie, firstOpenItem.fecha)
+        : "";
+      state.cashRegisters.draft = firstOpenItem
+        ? buildCashRegisterCloseDraft(firstOpenItem, state.cashRegisters.draft)
+        : createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-caja-close-search]")?.addEventListener("input", (event) => {
-    state.cashRegisters.search = event.target.value || "";
-    render();
-  });
+  document
+    .querySelector("[data-caja-close-search]")
+    ?.addEventListener("input", (event) => {
+      state.cashRegisters.search = event.target.value || "";
+      render();
+    });
 
   document.querySelectorAll("[data-caja-close-select]").forEach((button) => {
     button.addEventListener("click", () => {
       const serie = button.getAttribute("data-caja-close-select") || "";
       const fecha = button.getAttribute("data-caja-close-fecha") || "";
       const item = getCloseableCashRegisters().find(
-        (entry) => buildCashRegisterKey(entry.serie, entry.fecha) === buildCashRegisterKey(serie, fecha),
+        (entry) =>
+          buildCashRegisterKey(entry.serie, entry.fecha) ===
+          buildCashRegisterKey(serie, fecha),
       );
       if (!item) {
         return;
       }
 
-      state.cashRegisters.selectedKey = buildCashRegisterKey(item.serie, item.fecha);
-      state.cashRegisters.draft = buildCashRegisterCloseDraft(item, state.cashRegisters.draft);
+      state.cashRegisters.selectedKey = buildCashRegisterKey(
+        item.serie,
+        item.fecha,
+      );
+      state.cashRegisters.draft = buildCashRegisterCloseDraft(
+        item,
+        state.cashRegisters.draft,
+      );
       clearFlash();
       render();
     });
@@ -10748,33 +11690,55 @@ function bindCashRegisterCloseEvents() {
 
     const draft = readCashRegisterDraft(form);
     state.cashRegisters.draft = draft;
-    await closeCashRegister(draft.originalSerie || draft.serie, draft.originalFecha || draft.fecha, draft.horaCierre);
+    await closeCashRegister(
+      draft.originalSerie || draft.serie,
+      draft.originalFecha || draft.fecha,
+      draft.horaCierre,
+    );
   };
 
-  document.querySelector("[data-close-caja]")?.addEventListener("click", submitClose);
-  document.getElementById("caja-close-form")?.addEventListener("submit", submitClose);
+  document
+    .querySelector("[data-close-caja]")
+    ?.addEventListener("click", submitClose);
+  document
+    .getElementById("caja-close-form")
+    ?.addEventListener("submit", submitClose);
 }
 function applyCashRegisterLockState() {
   if (state.currentView !== "cajas") {
     return;
   }
-  const draft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  const draft =
+    state.cashRegisters.draft ||
+    createEmptyCashRegisterDraft(state.cashRegisters.metadata);
   if (Number(draft.status ?? 0) !== 2) {
     return;
   }
-  const fieldNames = ["numeroCaja", "facturaInicial", "ultimaFactura", "horaApertura", "horaCierre", "nombreImpresora"];
+  const fieldNames = [
+    "numeroCaja",
+    "facturaInicial",
+    "ultimaFactura",
+    "horaApertura",
+    "horaCierre",
+    "nombreImpresora",
+  ];
   fieldNames.forEach((fieldName) => {
     const element = document.querySelector(`#caja-form [name="${fieldName}"]`);
-    if (element instanceof HTMLInputElement || element instanceof HTMLSelectElement) {
+    if (
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLSelectElement
+    ) {
       element.disabled = true;
     }
   });
 }
 function bindCashRegisterEvents() {
   applyCashRegisterLockState();
-  document.querySelector("[data-refresh-cajas]")?.addEventListener("click", async () => {
-    await loadCashRegisters();
-  });
+  document
+    .querySelector("[data-refresh-cajas]")
+    ?.addEventListener("click", async () => {
+      await loadCashRegisters();
+    });
 
   document.querySelector("[data-new-caja]")?.addEventListener("click", () => {
     resetCashRegisterDraft();
@@ -10782,13 +11746,15 @@ function bindCashRegisterEvents() {
     render();
   });
 
-  document.querySelector("[data-open-caja-lookup]")?.addEventListener("click", () => {
-    const searchField = document.querySelector("[data-caja-search]");
-    if (searchField && typeof searchField.focus === "function") {
-      searchField.focus();
-      searchField.select?.();
-    }
-  });
+  document
+    .querySelector("[data-open-caja-lookup]")
+    ?.addEventListener("click", () => {
+      const searchField = document.querySelector("[data-caja-search]");
+      if (searchField && typeof searchField.focus === "function") {
+        searchField.focus();
+        searchField.select?.();
+      }
+    });
 
   document.querySelectorAll("[data-delete-caja]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -10811,29 +11777,35 @@ function bindCashRegisterEvents() {
     render();
   });
 
-    document.querySelector("[data-caja-reset]")?.addEventListener("click", () => {
+  document.querySelector("[data-caja-reset]")?.addEventListener("click", () => {
     resetCashRegisterDraft();
     clearFlash();
     render();
   });
 
-  document.querySelector("[data-refresh-desktop-printers]")?.addEventListener("click", async () => {
-    await loadDesktopPrinters();
+  document
+    .querySelector("[data-refresh-desktop-printers]")
+    ?.addEventListener("click", async () => {
+      await loadDesktopPrinters();
 
-    const currentDraft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
-    if (!String(currentDraft.nombreImpresora || "").trim()) {
-      state.cashRegisters.draft = {
-        ...currentDraft,
-        nombreImpresora: getDefaultDesktopPrinterName(),
-      };
+      const currentDraft =
+        state.cashRegisters.draft ||
+        createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+      if (!String(currentDraft.nombreImpresora || "").trim()) {
+        state.cashRegisters.draft = {
+          ...currentDraft,
+          nombreImpresora: getDefaultDesktopPrinterName(),
+        };
+        render();
+      }
+    });
+
+  document
+    .querySelector("[data-caja-search]")
+    ?.addEventListener("input", (event) => {
+      state.cashRegisters.search = event.target.value || "";
       render();
-    }
-  });
-
-  document.querySelector("[data-caja-search]")?.addEventListener("input", (event) => {
-    state.cashRegisters.search = event.target.value || "";
-    render();
-  });
+    });
 
   document.querySelectorAll("[data-caja-select]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -10861,7 +11833,12 @@ function bindCashRegisterEvents() {
   }
 
   document.onkeydown = async (event) => {
-    if (state.currentView !== "cajas" || !event.ctrlKey || event.altKey || event.metaKey) {
+    if (
+      state.currentView !== "cajas" ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -10903,7 +11880,6 @@ function bindCashRegisterEvents() {
   };
 }
 
-
 function bindExchangeRateRegisterEvents() {
   const form = document.getElementById("exchange-rate-form");
   if (!(form instanceof HTMLFormElement)) {
@@ -10920,43 +11896,54 @@ function bindExchangeRateRegisterEvents() {
     await saveExchangeRateRegister();
   });
 
-  document.querySelector("[data-exchange-rate-cancel]")?.addEventListener("click", () => {
-    resetExchangeRateRegisterDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-exchange-rate-cancel]")
+    ?.addEventListener("click", () => {
+      resetExchangeRateRegisterDraft();
+      clearFlash();
+      render();
+    });
 }
 
 function bindInventoryExistenceEvents() {
-  document.querySelector("[data-existence-search-form]")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
+  document
+    .querySelector("[data-existence-search-form]")
+    ?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      if (!(form instanceof HTMLFormElement)) {
+        return;
+      }
 
-    state.inventoryExistence.search = {
-      buscar: readFormFieldValue(form, "buscar", ""),
-      status: readFormFieldValue(form, "status", ""),
-      tipo: readFormFieldValue(form, "tipo", ""),
-    };
-    state.inventoryExistence.pagination.limit = Number.parseInt(readFormFieldValue(form, "limit", "25"), 10) || 25;
-    await loadInventoryExistence(1);
-  });
+      state.inventoryExistence.search = {
+        buscar: readFormFieldValue(form, "buscar", ""),
+        status: readFormFieldValue(form, "status", ""),
+        tipo: readFormFieldValue(form, "tipo", ""),
+      };
+      state.inventoryExistence.pagination.limit =
+        Number.parseInt(readFormFieldValue(form, "limit", "25"), 10) || 25;
+      await loadInventoryExistence(1);
+    });
 
-  document.querySelector("[data-existence-clear]")?.addEventListener("click", async () => {
-    state.inventoryExistence.search = {
-      buscar: "",
-      status: "",
-      tipo: "",
-    };
-    state.inventoryExistence.pagination.limit = 25;
-    await loadInventoryExistence(1);
-  });
+  document
+    .querySelector("[data-existence-clear]")
+    ?.addEventListener("click", async () => {
+      state.inventoryExistence.search = {
+        buscar: "",
+        status: "",
+        tipo: "",
+      };
+      state.inventoryExistence.pagination.limit = 25;
+      await loadInventoryExistence(1);
+    });
 
-  document.querySelector("[data-existence-refresh]")?.addEventListener("click", async () => {
-    await loadInventoryExistence(state.inventoryExistence.pagination.page || 1);
-  });
+  document
+    .querySelector("[data-existence-refresh]")
+    ?.addEventListener("click", async () => {
+      await loadInventoryExistence(
+        state.inventoryExistence.pagination.page || 1,
+      );
+    });
 
   document.querySelectorAll("[data-existence-page]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -10976,10 +11963,14 @@ function bindInventoryExistenceEvents() {
 
 function bindArticleEvents() {
   const closeCatalogComboboxes = () => {
-    document.querySelectorAll("[data-catalog-combobox].catalog-combobox-open").forEach((element) => {
-      element.classList.remove("catalog-combobox-open");
-      element.querySelector("[data-catalog-input]")?.setAttribute("aria-expanded", "false");
-    });
+    document
+      .querySelectorAll("[data-catalog-combobox].catalog-combobox-open")
+      .forEach((element) => {
+        element.classList.remove("catalog-combobox-open");
+        element
+          .querySelector("[data-catalog-input]")
+          ?.setAttribute("aria-expanded", "false");
+      });
   };
 
   const openCatalogCombobox = (fieldName) => {
@@ -10987,14 +11978,18 @@ function bindArticleEvents() {
       return;
     }
 
-    const combobox = document.querySelector(`[data-catalog-combobox="${fieldName}"]`);
+    const combobox = document.querySelector(
+      `[data-catalog-combobox="${fieldName}"]`,
+    );
     if (!combobox) {
       return;
     }
 
     closeCatalogComboboxes();
     combobox.classList.add("catalog-combobox-open");
-    combobox.querySelector("[data-catalog-input]")?.setAttribute("aria-expanded", "true");
+    combobox
+      .querySelector("[data-catalog-input]")
+      ?.setAttribute("aria-expanded", "true");
   };
 
   document.querySelectorAll("[data-editor-tab]").forEach((button) => {
@@ -11020,20 +12015,23 @@ function bindArticleEvents() {
     });
   }
 
-  document.querySelector("[data-clear-search]")?.addEventListener("click", async () => {
-    state.search = {
-      buscar: "",
-      status: "",
-      tipo: "",
-    };
-    await loadArticles(1);
-  });
+  document
+    .querySelector("[data-clear-search]")
+    ?.addEventListener("click", async () => {
+      state.search = {
+        buscar: "",
+        status: "",
+        tipo: "",
+      };
+      await loadArticles(1);
+    });
 
   document.querySelectorAll("[data-page-direction]").forEach((button) => {
     button.addEventListener("click", async () => {
       const direction = button.getAttribute("data-page-direction");
       const currentPage = state.pagination.page || 1;
-      const targetPage = direction === "prev" ? currentPage - 1 : currentPage + 1;
+      const targetPage =
+        direction === "prev" ? currentPage - 1 : currentPage + 1;
       await loadArticles(targetPage);
     });
   });
@@ -11091,7 +12089,11 @@ function bindArticleEvents() {
       const kind = form.getAttribute("data-catalog-kind") || "";
       const fileInput = form.elements.namedItem("file");
 
-      if (!(fileInput instanceof HTMLInputElement) || !fileInput.files || fileInput.files.length === 0) {
+      if (
+        !(fileInput instanceof HTMLInputElement) ||
+        !fileInput.files ||
+        fileInput.files.length === 0
+      ) {
         setFlash("Selecciona un archivo Excel antes de importar.", "error");
         render();
         return;
@@ -11172,7 +12174,9 @@ function bindArticleEvents() {
       event.stopPropagation();
       const fieldName = button.getAttribute("data-catalog-option") || "";
       const nextValue = button.getAttribute("data-catalog-value") || "";
-      const input = document.querySelector(`[data-catalog-input="${fieldName}"]`);
+      const input = document.querySelector(
+        `[data-catalog-input="${fieldName}"]`,
+      );
 
       if (!(input instanceof HTMLInputElement)) {
         return;
@@ -11190,40 +12194,53 @@ function bindArticleEvents() {
     render();
   });
 
-  document.querySelector("[data-toolbar-new]")?.addEventListener("click", () => {
-    if (!userCanCreateArticlesInCurrentInstance()) {
-      setFlash("Solo la bodega principal puede crear articulos nuevos.", "error");
+  document
+    .querySelector("[data-toolbar-new]")
+    ?.addEventListener("click", () => {
+      if (!userCanCreateArticlesInCurrentInstance()) {
+        setFlash(
+          "Solo la bodega principal puede crear articulos nuevos.",
+          "error",
+        );
+        render();
+        return;
+      }
+
+      resetArticleForm();
       render();
-      return;
-    }
+    });
 
-    resetArticleForm();
-    render();
-  });
+  document
+    .querySelector("[data-toolbar-search]")
+    ?.addEventListener("click", async () => {
+      await openArticleLookupModal();
+    });
 
-  document.querySelector("[data-toolbar-search]")?.addEventListener("click", async () => {
-    await openArticleLookupModal();
-  });
+  document
+    .querySelector("[data-toolbar-print]")
+    ?.addEventListener("click", () => {
+      window.print();
+    });
 
-  document.querySelector("[data-toolbar-print]")?.addEventListener("click", () => {
-    window.print();
-  });
+  document
+    .querySelector("[data-toolbar-close]")
+    ?.addEventListener("click", () => {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-toolbar-close]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-delete-current]")?.addEventListener("click", async () => {
-    if (!state.activeArticleCode) {
-      return;
-    }
-    await deleteArticle(state.activeArticleCode);
-  });
+  document
+    .querySelector("[data-delete-current]")
+    ?.addEventListener("click", async () => {
+      if (!state.activeArticleCode) {
+        return;
+      }
+      await deleteArticle(state.activeArticleCode);
+    });
 
   document.querySelectorAll("[data-lookup-close]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -11232,9 +12249,11 @@ function bindArticleEvents() {
     });
   });
 
-  document.querySelector("[data-lookup-refresh]")?.addEventListener("click", async () => {
-    await openArticleLookupModal();
-  });
+  document
+    .querySelector("[data-lookup-refresh]")
+    ?.addEventListener("click", async () => {
+      await openArticleLookupModal();
+    });
 
   document.querySelectorAll("[data-lookup-select-code]").forEach((row) => {
     row.addEventListener("click", async () => {
@@ -11261,20 +12280,27 @@ function bindArticleEvents() {
     });
   });
 
-  document.querySelectorAll("[data-transfer-lookup-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeTransferLookupModal();
-      render();
+  document
+    .querySelectorAll("[data-transfer-lookup-close]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        closeTransferLookupModal();
+        render();
+      });
     });
-  });
 
-  document.querySelector("[data-transfer-lookup-refresh]")?.addEventListener("click", async () => {
-    await openTransferLookupModal();
-  });
+  document
+    .querySelector("[data-transfer-lookup-refresh]")
+    ?.addEventListener("click", async () => {
+      await openTransferLookupModal();
+    });
 
   document.querySelectorAll("[data-transfer-lookup-select]").forEach((row) => {
     row.addEventListener("click", async () => {
-      const numero = Number.parseInt(row.getAttribute("data-transfer-lookup-select") || "", 10);
+      const numero = Number.parseInt(
+        row.getAttribute("data-transfer-lookup-select") || "",
+        10,
+      );
       if (!numero) {
         return;
       }
@@ -11284,93 +12310,125 @@ function bindArticleEvents() {
     });
   });
 
-  document.querySelectorAll("[data-adjustment-lookup-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeAdjustmentLookupModal();
-      render();
+  document
+    .querySelectorAll("[data-adjustment-lookup-close]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        closeAdjustmentLookupModal();
+        render();
+      });
     });
-  });
 
-  document.querySelector("[data-adjustment-lookup-refresh]")?.addEventListener("click", async () => {
-    await openAdjustmentLookupModal();
-  });
+  document
+    .querySelector("[data-adjustment-lookup-refresh]")
+    ?.addEventListener("click", async () => {
+      await openAdjustmentLookupModal();
+    });
 
-  document.querySelectorAll("[data-adjustment-lookup-select]").forEach((row) => {
-    row.addEventListener("click", async () => {
-      const numero = Number.parseInt(row.getAttribute("data-adjustment-lookup-select") || "", 10);
-      if (!numero) {
+  document
+    .querySelectorAll("[data-adjustment-lookup-select]")
+    .forEach((row) => {
+      row.addEventListener("click", async () => {
+        const numero = Number.parseInt(
+          row.getAttribute("data-adjustment-lookup-select") || "",
+          10,
+        );
+        if (!numero) {
+          return;
+        }
+
+        closeAdjustmentLookupModal();
+        await loadAdjustmentForEdit(numero);
+      });
+    });
+
+  document
+    .querySelectorAll("[data-dev-return-lookup-close]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        closeDevReturnLookupModal();
+        render();
+      });
+    });
+
+  document
+    .querySelector("[data-dev-return-lookup-refresh]")
+    ?.addEventListener("click", async () => {
+      await openDevReturnLookupModal({
+        mode: state.devReturnLookup.mode || "drafts",
+      });
+    });
+
+  document
+    .querySelectorAll("[data-dev-return-lookup-select]")
+    .forEach((row) => {
+      row.addEventListener("click", async () => {
+        const numero = Number.parseInt(
+          row.getAttribute("data-dev-return-lookup-select") || "",
+          10,
+        );
+        if (!numero) {
+          return;
+        }
+
+        const lookupMode = state.devReturnLookup.mode;
+        closeDevReturnLookupModal();
+        if (lookupMode === "records") {
+          await loadDevReturnRecordDetail(numero);
+          return;
+        }
+
+        await loadDevReturnDraftForEdit(numero);
+      });
+    });
+
+  document
+    .querySelector(".desktop-shell")
+    ?.addEventListener("click", (event) => {
+      if (event.target.closest("[data-catalog-combobox]")) {
         return;
       }
 
-      closeAdjustmentLookupModal();
-      await loadAdjustmentForEdit(numero);
+      closeCatalogComboboxes();
     });
-  });
-
-  document.querySelectorAll("[data-dev-return-lookup-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeDevReturnLookupModal();
-      render();
-    });
-  });
-
-  document.querySelector("[data-dev-return-lookup-refresh]")?.addEventListener("click", async () => {
-    await openDevReturnLookupModal({ mode: state.devReturnLookup.mode || "drafts" });
-  });
-
-  document.querySelectorAll("[data-dev-return-lookup-select]").forEach((row) => {
-    row.addEventListener("click", async () => {
-      const numero = Number.parseInt(row.getAttribute("data-dev-return-lookup-select") || "", 10);
-      if (!numero) {
-        return;
-      }
-
-      const lookupMode = state.devReturnLookup.mode;
-      closeDevReturnLookupModal();
-      if (lookupMode === "records") {
-        await loadDevReturnRecordDetail(numero);
-        return;
-      }
-
-      await loadDevReturnDraftForEdit(numero);
-    });
-  });
-
-  document.querySelector(".desktop-shell")?.addEventListener("click", (event) => {
-    if (event.target.closest("[data-catalog-combobox]")) {
-      return;
-    }
-
-    closeCatalogComboboxes();
-  });
 }
 
 function bindTransferEvents() {
-  document.querySelector("[data-refresh-transfers]")?.addEventListener("click", async () => {
-    await loadTransfersModule();
-  });
+  document
+    .querySelector("[data-refresh-transfers]")
+    ?.addEventListener("click", async () => {
+      await loadTransfersModule();
+    });
 
-  document.querySelector("[data-open-load-transfer]")?.addEventListener("click", async () => {
-    await openTransferLookupModal();
-  });
+  document
+    .querySelector("[data-open-load-transfer]")
+    ?.addEventListener("click", async () => {
+      await openTransferLookupModal();
+    });
 
-  document.querySelector("[data-print-transfer]")?.addEventListener("click", () => {
-    window.print();
-  });
+  document
+    .querySelector("[data-print-transfer]")
+    ?.addEventListener("click", () => {
+      window.print();
+    });
 
-  document.querySelector("[data-transfer-exit]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-transfer-exit]")
+    ?.addEventListener("click", () => {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-clear-transfer-search]")?.addEventListener("click", async () => {
-    state.transfers.search = createEmptyTransferSearch();
-    await loadTransfers();
-  });
+  document
+    .querySelector("[data-clear-transfer-search]")
+    ?.addEventListener("click", async () => {
+      state.transfers.search = createEmptyTransferSearch();
+      await loadTransfers();
+    });
 
   const transferSearchForm = document.getElementById("transfer-search-form");
   if (transferSearchForm) {
@@ -11385,27 +12443,39 @@ function bindTransferEvents() {
     });
   }
 
-  document.querySelector("[data-new-transfer]")?.addEventListener("click", () => {
-    resetTransferDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-new-transfer]")
+    ?.addEventListener("click", () => {
+      resetTransferDraft();
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-transfer-reset]")?.addEventListener("click", () => {
-    resetTransferDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-transfer-reset]")
+    ?.addEventListener("click", () => {
+      resetTransferDraft();
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-transfer-add-line]")?.addEventListener("click", () => {
-    captureTransferDraft();
-    state.transfers.draft.items = [...state.transfers.draft.items, createEmptyTransferLineDraft()];
-    render();
-  });
+  document
+    .querySelector("[data-transfer-add-line]")
+    ?.addEventListener("click", () => {
+      captureTransferDraft();
+      state.transfers.draft.items = [
+        ...state.transfers.draft.items,
+        createEmptyTransferLineDraft(),
+      ];
+      render();
+    });
 
   document.querySelectorAll("[data-transfer-remove-line]").forEach((button) => {
     button.addEventListener("click", () => {
-      const index = Number.parseInt(button.getAttribute("data-transfer-remove-line") || "-1", 10);
+      const index = Number.parseInt(
+        button.getAttribute("data-transfer-remove-line") || "-1",
+        10,
+      );
       if (index < 0) {
         return;
       }
@@ -11414,74 +12484,105 @@ function bindTransferEvents() {
       if (state.transfers.draft.items.length <= 1) {
         state.transfers.draft.items = [createEmptyTransferLineDraft()];
       } else {
-        state.transfers.draft.items = state.transfers.draft.items.filter((_, currentIndex) => currentIndex !== index);
+        state.transfers.draft.items = state.transfers.draft.items.filter(
+          (_, currentIndex) => currentIndex !== index,
+        );
       }
       render();
     });
   });
 
-  document.querySelectorAll("[data-transfer-barcode-input]").forEach((input) => {
-    input.addEventListener("keydown", async (event) => {
-      if (event.key !== "Enter") {
-        return;
-      }
+  document
+    .querySelectorAll("[data-transfer-barcode-input]")
+    .forEach((input) => {
+      input.addEventListener("keydown", async (event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
 
-      event.preventDefault();
-      const index = Number.parseInt(input.getAttribute("data-transfer-barcode-input") || "-1", 10);
-      const codigoBarra = String(input.value || "").trim();
-      if (index < 0 || !codigoBarra) {
-        return;
-      }
+        event.preventDefault();
+        const index = Number.parseInt(
+          input.getAttribute("data-transfer-barcode-input") || "-1",
+          10,
+        );
+        const codigoBarra = String(input.value || "").trim();
+        if (index < 0 || !codigoBarra) {
+          return;
+        }
 
-      await fillTransferLineFromInventory(index, codigoBarra);
+        await fillTransferLineFromInventory(index, codigoBarra);
+      });
     });
-  });
 
-  document.querySelectorAll("[data-transfer-load-receipt]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const numero = Number.parseInt(button.getAttribute("data-transfer-load-receipt") || "", 10);
+  document
+    .querySelectorAll("[data-transfer-load-receipt]")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        const numero = Number.parseInt(
+          button.getAttribute("data-transfer-load-receipt") || "",
+          10,
+        );
+        if (!Number.isInteger(numero)) {
+          return;
+        }
+
+        await loadTransferForReceipt(numero);
+      });
+    });
+
+  document
+    .querySelector("[data-clear-loaded-transfer]")
+    ?.addEventListener("click", () => {
+      state.transfers.selectedNumero = null;
+      state.transfers.receiptNumero = null;
+      state.transfers.draft = createEmptyTransferDraft(
+        state.transfers.metadata,
+      );
+      clearFlash();
+      render();
+    });
+
+  document
+    .querySelector("[data-approve-transfer]")
+    ?.addEventListener("click", async () => {
+      const numero = Number.parseInt(
+        String(state.transfers.draft?.numero || ""),
+        10,
+      );
       if (!Number.isInteger(numero)) {
         return;
       }
 
-      await loadTransferForReceipt(numero);
+      await approveTransfer(numero);
     });
-  });
 
-  document.querySelector("[data-clear-loaded-transfer]")?.addEventListener("click", () => {
-    state.transfers.selectedNumero = null;
-    state.transfers.receiptNumero = null;
-    state.transfers.draft = createEmptyTransferDraft(state.transfers.metadata);
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-load-inbound-transfer]")
+    ?.addEventListener("click", async () => {
+      const numero = Number.parseInt(
+        String(state.transfers.draft?.numero || ""),
+        10,
+      );
+      if (!Number.isInteger(numero)) {
+        return;
+      }
 
-  document.querySelector("[data-approve-transfer]")?.addEventListener("click", async () => {
-    const numero = Number.parseInt(String(state.transfers.draft?.numero || ""), 10);
-    if (!Number.isInteger(numero)) {
-      return;
-    }
+      await loadInboundTransfer(numero);
+    });
 
-    await approveTransfer(numero);
-  });
+  document
+    .querySelector("[data-delete-transfer]")
+    ?.addEventListener("click", async () => {
+      const numero = Number.parseInt(
+        String(state.transfers.draft?.numero || ""),
+        10,
+      );
+      if (!Number.isInteger(numero)) {
+        return;
+      }
 
-  document.querySelector("[data-load-inbound-transfer]")?.addEventListener("click", async () => {
-    const numero = Number.parseInt(String(state.transfers.draft?.numero || ""), 10);
-    if (!Number.isInteger(numero)) {
-      return;
-    }
-
-    await loadInboundTransfer(numero);
-  });
-
-  document.querySelector("[data-delete-transfer]")?.addEventListener("click", async () => {
-    const numero = Number.parseInt(String(state.transfers.draft?.numero || ""), 10);
-    if (!Number.isInteger(numero)) {
-      return;
-    }
-
-    await deleteTransfer(numero);
-  });
+      await deleteTransfer(numero);
+    });
 
   const transferForm = document.getElementById("transfer-form");
   if (transferForm) {
@@ -11514,15 +12615,27 @@ function bindDevReturnEvents() {
     form.addEventListener("change", (event) => {
       captureDevReturnDraft();
       if (event?.target?.name === "codigoOrigen") {
-        const draft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
-        const destinos = Array.isArray(state.devReturns.metadata?.destinos) ? state.devReturns.metadata.destinos : [];
-        const currentOrigin = String(draft.codigoOrigen || "").trim().toUpperCase();
-        const currentDestination = String(draft.codigoDestino || "").trim().toUpperCase();
+        const draft =
+          state.devReturns.draft ||
+          createEmptyDevReturnDraft(state.devReturns.metadata);
+        const destinos = Array.isArray(state.devReturns.metadata?.destinos)
+          ? state.devReturns.metadata.destinos
+          : [];
+        const currentOrigin = String(draft.codigoOrigen || "")
+          .trim()
+          .toUpperCase();
+        const currentDestination = String(draft.codigoDestino || "")
+          .trim()
+          .toUpperCase();
         if (currentOrigin && currentOrigin === currentDestination) {
           const fallbackDestination = destinos.find(
-            (item) => String(item.codigo || "").trim().toUpperCase() !== currentOrigin,
+            (item) =>
+              String(item.codigo || "")
+                .trim()
+                .toUpperCase() !== currentOrigin,
           );
-          draft.codigoDestino = fallbackDestination?.codigo || draft.codigoDestino || "";
+          draft.codigoDestino =
+            fallbackDestination?.codigo || draft.codigoDestino || "";
           state.devReturns.draft = draft;
         }
         render();
@@ -11546,191 +12659,269 @@ function bindDevReturnEvents() {
       await saveDevReturn();
     });
 
-    document.querySelectorAll("[data-dev-return-barcode-input]").forEach((input) => {
-      input.addEventListener("keydown", async (event) => {
-        if (event.key !== "Enter") {
-          return;
-        }
+    document
+      .querySelectorAll("[data-dev-return-barcode-input]")
+      .forEach((input) => {
+        input.addEventListener("keydown", async (event) => {
+          if (event.key !== "Enter") {
+            return;
+          }
 
-        event.preventDefault();
-        const index = Number.parseInt(input.getAttribute("data-dev-return-barcode-input") || "-1", 10);
-        const codigoBarra = String(input.value || "").trim();
-        if (index >= 0 && codigoBarra) {
-          await fillDevReturnLineFromInventory(index, codigoBarra);
-        }
-      });
+          event.preventDefault();
+          const index = Number.parseInt(
+            input.getAttribute("data-dev-return-barcode-input") || "-1",
+            10,
+          );
+          const codigoBarra = String(input.value || "").trim();
+          if (index >= 0 && codigoBarra) {
+            await fillDevReturnLineFromInventory(index, codigoBarra);
+          }
+        });
 
-      input.addEventListener("blur", async () => {
-        const index = Number.parseInt(input.getAttribute("data-dev-return-barcode-input") || "-1", 10);
-        const codigoBarra = String(input.value || "").trim();
-        const row = input.closest("[data-dev-return-line-row]");
-        const currentName = row?.querySelector('[name="nombre"]')?.value || "";
-        if (index >= 0 && codigoBarra && !currentName) {
-          await fillDevReturnLineFromInventory(index, codigoBarra);
-        }
+        input.addEventListener("blur", async () => {
+          const index = Number.parseInt(
+            input.getAttribute("data-dev-return-barcode-input") || "-1",
+            10,
+          );
+          const codigoBarra = String(input.value || "").trim();
+          const row = input.closest("[data-dev-return-line-row]");
+          const currentName =
+            row?.querySelector('[name="nombre"]')?.value || "";
+          if (index >= 0 && codigoBarra && !currentName) {
+            await fillDevReturnLineFromInventory(index, codigoBarra);
+          }
+        });
       });
-    });
   }
 
-  document.querySelector("[data-dev-return-new]")?.addEventListener("click", () => {
-    resetDevReturnDraft();
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-dev-return-open-lookup]")?.addEventListener("click", async () => {
-    await openDevReturnLookupModal();
-  });
-
-  document.querySelector("[data-dev-return-exit]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-dev-return-export]")?.addEventListener("click", async () => {
-    captureDevReturnDraft();
-    const numero = Number.parseInt(String(state.devReturns.draft?.numero || ""), 10);
-    if (!Number.isInteger(numero)) {
-      setFlash("Guarda el borrador antes de exportarlo.", "error");
+  document
+    .querySelector("[data-dev-return-new]")
+    ?.addEventListener("click", () => {
+      resetDevReturnDraft();
+      clearFlash();
       render();
-      return;
-    }
+    });
 
-    await exportDevReturn(numero);
-  });
+  document
+    .querySelector("[data-dev-return-open-lookup]")
+    ?.addEventListener("click", async () => {
+      await openDevReturnLookupModal();
+    });
 
-  document.querySelector("[data-dev-return-refresh-board]")?.addEventListener("click", async () => {
-    await loadDevReturnsModule();
-  });
+  document
+    .querySelector("[data-dev-return-exit]")
+    ?.addEventListener("click", () => {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    });
 
-  document.querySelectorAll("[data-dev-return-open-draft]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const numero = Number.parseInt(button.getAttribute("data-dev-return-open-draft") || "", 10);
+  document
+    .querySelector("[data-dev-return-export]")
+    ?.addEventListener("click", async () => {
+      captureDevReturnDraft();
+      const numero = Number.parseInt(
+        String(state.devReturns.draft?.numero || ""),
+        10,
+      );
       if (!Number.isInteger(numero)) {
+        setFlash("Guarda el borrador antes de exportarlo.", "error");
+        render();
         return;
       }
 
-      await loadDevReturnDraftForEdit(numero);
+      await exportDevReturn(numero);
     });
-  });
 
-  document.querySelectorAll("[data-dev-return-open-inbound]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const globalId = button.getAttribute("data-dev-return-open-inbound") || "";
+  document
+    .querySelector("[data-dev-return-refresh-board]")
+    ?.addEventListener("click", async () => {
+      await loadDevReturnsModule();
+    });
+
+  document
+    .querySelectorAll("[data-dev-return-open-draft]")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        const numero = Number.parseInt(
+          button.getAttribute("data-dev-return-open-draft") || "",
+          10,
+        );
+        if (!Number.isInteger(numero)) {
+          return;
+        }
+
+        await loadDevReturnDraftForEdit(numero);
+      });
+    });
+
+  document
+    .querySelectorAll("[data-dev-return-open-inbound]")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        const globalId =
+          button.getAttribute("data-dev-return-open-inbound") || "";
+        if (!globalId) {
+          return;
+        }
+
+        await loadInboundDevReturnDraftDetail(globalId);
+      });
+    });
+
+  document
+    .querySelector("[data-dev-return-close-inbound-detail]")
+    ?.addEventListener("click", () => {
+      state.devReturns.selectedInboundGlobalId = "";
+      state.devReturns.inboundDetail = null;
+      clearFlash();
+      render();
+    });
+
+  document
+    .querySelector("[data-dev-return-approve-inbound]")
+    ?.addEventListener("click", async () => {
+      const globalId =
+        state.devReturns.selectedInboundGlobalId ||
+        state.devReturns.inboundDetail?.globalId ||
+        "";
       if (!globalId) {
         return;
       }
 
-      await loadInboundDevReturnDraftDetail(globalId);
+      await approveInboundDevReturnDraft(globalId);
     });
-  });
 
-  document.querySelector("[data-dev-return-close-inbound-detail]")?.addEventListener("click", () => {
-    state.devReturns.selectedInboundGlobalId = "";
-    state.devReturns.inboundDetail = null;
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-dev-return-record-refresh]")
+    ?.addEventListener("click", async () => {
+      await loadDevReturnRecords();
+    });
 
-  document.querySelector("[data-dev-return-approve-inbound]")?.addEventListener("click", async () => {
-    const globalId = state.devReturns.selectedInboundGlobalId || state.devReturns.inboundDetail?.globalId || "";
-    if (!globalId) {
-      return;
-    }
-
-    await approveInboundDevReturnDraft(globalId);
-  });
-
-  document.querySelector("[data-dev-return-record-refresh]")?.addEventListener("click", async () => {
-    await loadDevReturnRecords();
-  });
-
-  document.querySelector("[data-dev-return-record-new]")?.addEventListener("click", () => {
-    state.devReturnRecords.detail = null;
-    state.devReturnRecords.selectedNumero = null;
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-dev-return-record-search]")?.addEventListener("click", async () => {
-    await openDevReturnLookupModal({ mode: "records" });
-  });
-
-  document.querySelector("[data-dev-return-record-export]")?.addEventListener("click", async () => {
-    const numero = Number.parseInt(String(state.devReturnRecords.detail?.numero || ""), 10);
-    if (!Number.isInteger(numero)) {
-      setFlash("Busca primero un borrador aprobado para exportar su registro.", "error");
+  document
+    .querySelector("[data-dev-return-record-new]")
+    ?.addEventListener("click", () => {
+      state.devReturnRecords.detail = null;
+      state.devReturnRecords.selectedNumero = null;
+      clearFlash();
       render();
-      return;
-    }
+    });
 
-    await exportDevReturnRecord(numero);
-  });
+  document
+    .querySelector("[data-dev-return-record-search]")
+    ?.addEventListener("click", async () => {
+      await openDevReturnLookupModal({ mode: "records" });
+    });
 
-  document.querySelector("[data-dev-return-record-exit]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-dev-return-record-export]")
+    ?.addEventListener("click", async () => {
+      const numero = Number.parseInt(
+        String(state.devReturnRecords.detail?.numero || ""),
+        10,
+      );
+      if (!Number.isInteger(numero)) {
+        setFlash(
+          "Busca primero un borrador aprobado para exportar su registro.",
+          "error",
+        );
+        render();
+        return;
+      }
 
-  document.querySelector("[data-dev-return-record-back]")?.addEventListener("click", () => {
-    state.devReturnRecords.detail = null;
-    state.devReturnRecords.selectedNumero = null;
-    clearFlash();
-    render();
-  });
+      await exportDevReturnRecord(numero);
+    });
 
-  document.querySelectorAll("[data-dev-return-record-open]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const numero = Number.parseInt(button.getAttribute("data-dev-return-record-open") || "", 10);
+  document
+    .querySelector("[data-dev-return-record-exit]")
+    ?.addEventListener("click", () => {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    });
+
+  document
+    .querySelector("[data-dev-return-record-back]")
+    ?.addEventListener("click", () => {
+      state.devReturnRecords.detail = null;
+      state.devReturnRecords.selectedNumero = null;
+      clearFlash();
+      render();
+    });
+
+  document
+    .querySelectorAll("[data-dev-return-record-open]")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        const numero = Number.parseInt(
+          button.getAttribute("data-dev-return-record-open") || "",
+          10,
+        );
+        if (!Number.isInteger(numero)) {
+          return;
+        }
+
+        await loadDevReturnRecordDetail(numero);
+      });
+    });
+
+  document
+    .querySelector("[data-dev-return-inbound-refresh]")
+    ?.addEventListener("click", async () => {
+      await loadInboundDevReturns();
+    });
+
+  document
+    .querySelector("[data-dev-return-inbound-back]")
+    ?.addEventListener("click", () => {
+      state.devReturnInbound.detail = null;
+      state.devReturnInbound.selectedNumero = null;
+      state.devReturnInbound.selectedCodigoEnvia = "";
+      clearFlash();
+      render();
+    });
+
+  document
+    .querySelectorAll("[data-dev-return-inbound-open]")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        const numero = Number.parseInt(
+          button.getAttribute("data-dev-return-inbound-open") || "",
+          10,
+        );
+        const codigoEnvia =
+          button.getAttribute("data-dev-return-inbound-source") || "";
+        if (!Number.isInteger(numero)) {
+          return;
+        }
+
+        await loadInboundDevReturnDetail(numero, codigoEnvia);
+      });
+    });
+
+  document
+    .querySelector("[data-dev-return-inbound-approve]")
+    ?.addEventListener("click", async () => {
+      const numero = Number.parseInt(
+        String(state.devReturnInbound.detail?.numero || ""),
+        10,
+      );
+      const codigoEnvia =
+        state.devReturnInbound.detail?.codigoEnvia ||
+        state.devReturnInbound.selectedCodigoEnvia ||
+        "";
       if (!Number.isInteger(numero)) {
         return;
       }
 
-      await loadDevReturnRecordDetail(numero);
+      await approveInboundDevReturn(numero, codigoEnvia);
     });
-  });
-
-  document.querySelector("[data-dev-return-inbound-refresh]")?.addEventListener("click", async () => {
-    await loadInboundDevReturns();
-  });
-
-  document.querySelector("[data-dev-return-inbound-back]")?.addEventListener("click", () => {
-    state.devReturnInbound.detail = null;
-    state.devReturnInbound.selectedNumero = null;
-    state.devReturnInbound.selectedCodigoEnvia = "";
-    clearFlash();
-    render();
-  });
-
-  document.querySelectorAll("[data-dev-return-inbound-open]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const numero = Number.parseInt(button.getAttribute("data-dev-return-inbound-open") || "", 10);
-      const codigoEnvia = button.getAttribute("data-dev-return-inbound-source") || "";
-      if (!Number.isInteger(numero)) {
-        return;
-      }
-
-      await loadInboundDevReturnDetail(numero, codigoEnvia);
-    });
-  });
-
-  document.querySelector("[data-dev-return-inbound-approve]")?.addEventListener("click", async () => {
-    const numero = Number.parseInt(String(state.devReturnInbound.detail?.numero || ""), 10);
-    const codigoEnvia = state.devReturnInbound.detail?.codigoEnvia || state.devReturnInbound.selectedCodigoEnvia || "";
-    if (!Number.isInteger(numero)) {
-      return;
-    }
-
-    await approveInboundDevReturn(numero, codigoEnvia);
-  });
 }
 
 function bindAdjustmentEvents() {
@@ -11753,73 +12944,93 @@ function bindAdjustmentEvents() {
     await saveAdjustment();
   });
 
-  document.querySelector("[data-adjustment-new]")?.addEventListener("click", () => {
-    resetAdjustmentDraft();
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-adjustment-open-lookup]")?.addEventListener("click", async () => {
-    await openAdjustmentLookupModal();
-  });
-
-  document.querySelector("[data-adjustment-exit]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-adjustment-approve]")?.addEventListener("click", async () => {
-    captureAdjustmentDraft();
-    const numero = state.adjustments.draft?.numero;
-    if (!numero) {
-      setFlash("Guarda el ajuste antes de aprobarlo.", "error");
+  document
+    .querySelector("[data-adjustment-new]")
+    ?.addEventListener("click", () => {
+      resetAdjustmentDraft();
+      clearFlash();
       render();
-      return;
-    }
+    });
 
-    await approveAdjustment(numero);
-  });
+  document
+    .querySelector("[data-adjustment-open-lookup]")
+    ?.addEventListener("click", async () => {
+      await openAdjustmentLookupModal();
+    });
 
-  document.querySelectorAll("[data-adjustment-barcode-input]").forEach((input) => {
-    input.addEventListener("keydown", async (event) => {
-      if (event.key !== "Enter") {
+  document
+    .querySelector("[data-adjustment-exit]")
+    ?.addEventListener("click", () => {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    });
+
+  document
+    .querySelector("[data-adjustment-approve]")
+    ?.addEventListener("click", async () => {
+      captureAdjustmentDraft();
+      const numero = state.adjustments.draft?.numero;
+      if (!numero) {
+        setFlash("Guarda el ajuste antes de aprobarlo.", "error");
+        render();
         return;
       }
 
-      event.preventDefault();
-      const index = Number.parseInt(input.getAttribute("data-adjustment-barcode-input") || "-1", 10);
-      const codigoBarra = String(input.value || "").trim();
-      if (index >= 0 && codigoBarra) {
-        await fillAdjustmentLineFromInventory(index, codigoBarra);
-      }
+      await approveAdjustment(numero);
     });
 
-    input.addEventListener("blur", async () => {
-      const index = Number.parseInt(input.getAttribute("data-adjustment-barcode-input") || "-1", 10);
-      const codigoBarra = String(input.value || "").trim();
-      const row = input.closest("[data-adjustment-line-row]");
-      const currentName = row?.querySelector('[name="nombre"]')?.value || "";
-      if (index >= 0 && codigoBarra && !currentName) {
-        await fillAdjustmentLineFromInventory(index, codigoBarra);
-      }
+  document
+    .querySelectorAll("[data-adjustment-barcode-input]")
+    .forEach((input) => {
+      input.addEventListener("keydown", async (event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
+
+        event.preventDefault();
+        const index = Number.parseInt(
+          input.getAttribute("data-adjustment-barcode-input") || "-1",
+          10,
+        );
+        const codigoBarra = String(input.value || "").trim();
+        if (index >= 0 && codigoBarra) {
+          await fillAdjustmentLineFromInventory(index, codigoBarra);
+        }
+      });
+
+      input.addEventListener("blur", async () => {
+        const index = Number.parseInt(
+          input.getAttribute("data-adjustment-barcode-input") || "-1",
+          10,
+        );
+        const codigoBarra = String(input.value || "").trim();
+        const row = input.closest("[data-adjustment-line-row]");
+        const currentName = row?.querySelector('[name="nombre"]')?.value || "";
+        if (index >= 0 && codigoBarra && !currentName) {
+          await fillAdjustmentLineFromInventory(index, codigoBarra);
+        }
+      });
     });
-  });
 }
 
 function bindSucursalEvents() {
-  document.querySelector("[data-refresh-sucursales]")?.addEventListener("click", async () => {
-    await loadSucursales();
-  });
+  document
+    .querySelector("[data-refresh-sucursales]")
+    ?.addEventListener("click", async () => {
+      await loadSucursales();
+    });
 
-  document.querySelector("[data-new-sucursal]")?.addEventListener("click", () => {
-    resetSucursalDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-new-sucursal]")
+    ?.addEventListener("click", () => {
+      resetSucursalDraft();
+      clearFlash();
+      render();
+    });
 
   document.querySelectorAll("[data-delete-sucursal]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -11832,25 +13043,31 @@ function bindSucursalEvents() {
     });
   });
 
-  document.querySelector("[data-sucursal-exit]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-sucursal-exit]")
+    ?.addEventListener("click", () => {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-sucursal-reset]")?.addEventListener("click", () => {
-    resetSucursalDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-sucursal-reset]")
+    ?.addEventListener("click", () => {
+      resetSucursalDraft();
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-sucursal-search]")?.addEventListener("input", (event) => {
-    state.sucursales.search = event.target.value || "";
-    render();
-  });
+  document
+    .querySelector("[data-sucursal-search]")
+    ?.addEventListener("input", (event) => {
+      state.sucursales.search = event.target.value || "";
+      render();
+    });
 
   document.querySelectorAll("[data-sucursal-select]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -11877,7 +13094,12 @@ function bindSucursalEvents() {
   }
 
   document.onkeydown = async (event) => {
-    if (state.currentView !== "sucursales" || !event.ctrlKey || event.altKey || event.metaKey) {
+    if (
+      state.currentView !== "sucursales" ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -11920,34 +13142,44 @@ function bindSucursalEvents() {
 }
 
 function bindTrabajadorEvents() {
-  document.querySelector("[data-refresh-trabajadores]")?.addEventListener("click", async () => {
-    await loadTrabajadores();
-  });
+  document
+    .querySelector("[data-refresh-trabajadores]")
+    ?.addEventListener("click", async () => {
+      await loadTrabajadores();
+    });
 
-  document.querySelector("[data-new-trabajador]")?.addEventListener("click", () => {
-    resetTrabajadorDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-new-trabajador]")
+    ?.addEventListener("click", () => {
+      resetTrabajadorDraft();
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-open-trabajador-lookup]")?.addEventListener("click", () => {
-    const searchField = document.querySelector("[data-trabajador-search]");
-    if (searchField && typeof searchField.focus === "function") {
-      searchField.focus();
-      searchField.select?.();
-    }
-  });
+  document
+    .querySelector("[data-open-trabajador-lookup]")
+    ?.addEventListener("click", () => {
+      const searchField = document.querySelector("[data-trabajador-search]");
+      if (searchField && typeof searchField.focus === "function") {
+        searchField.focus();
+        searchField.select?.();
+      }
+    });
 
-  document.querySelector("[data-trabajador-reset]")?.addEventListener("click", () => {
-    resetTrabajadorDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-trabajador-reset]")
+    ?.addEventListener("click", () => {
+      resetTrabajadorDraft();
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-trabajador-search]")?.addEventListener("input", (event) => {
-    state.trabajadores.search = event.target.value || "";
-    render();
-  });
+  document
+    .querySelector("[data-trabajador-search]")
+    ?.addEventListener("input", (event) => {
+      state.trabajadores.search = event.target.value || "";
+      render();
+    });
 
   document.querySelectorAll("[data-trabajador-select]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -11985,7 +13217,12 @@ function bindTrabajadorEvents() {
   }
 
   document.onkeydown = async (event) => {
-    if (!["trabajadores", "personal"].includes(state.currentView) || !event.ctrlKey || event.altKey || event.metaKey) {
+    if (
+      !["trabajadores", "personal"].includes(state.currentView) ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -12022,34 +13259,44 @@ function bindTrabajadorEvents() {
 }
 
 function bindClienteEvents() {
-  document.querySelector("[data-refresh-clientes]")?.addEventListener("click", async () => {
-    await loadClientes();
-  });
+  document
+    .querySelector("[data-refresh-clientes]")
+    ?.addEventListener("click", async () => {
+      await loadClientes();
+    });
 
-  document.querySelector("[data-new-cliente]")?.addEventListener("click", () => {
-    resetClienteDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-new-cliente]")
+    ?.addEventListener("click", () => {
+      resetClienteDraft();
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-open-cliente-lookup]")?.addEventListener("click", () => {
-    const searchField = document.querySelector("[data-cliente-search]");
-    if (searchField && typeof searchField.focus === "function") {
-      searchField.focus();
-      searchField.select?.();
-    }
-  });
+  document
+    .querySelector("[data-open-cliente-lookup]")
+    ?.addEventListener("click", () => {
+      const searchField = document.querySelector("[data-cliente-search]");
+      if (searchField && typeof searchField.focus === "function") {
+        searchField.focus();
+        searchField.select?.();
+      }
+    });
 
-  document.querySelector("[data-cliente-reset]")?.addEventListener("click", () => {
-    resetClienteDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-cliente-reset]")
+    ?.addEventListener("click", () => {
+      resetClienteDraft();
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-cliente-search]")?.addEventListener("input", (event) => {
-    state.clientes.search = event.target.value || "";
-    render();
-  });
+  document
+    .querySelector("[data-cliente-search]")
+    ?.addEventListener("input", (event) => {
+      state.clientes.search = event.target.value || "";
+      render();
+    });
 
   document.querySelectorAll("[data-cliente-select]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -12087,7 +13334,12 @@ function bindClienteEvents() {
   }
 
   document.onkeydown = async (event) => {
-    if (state.currentView !== "clientes" || !event.ctrlKey || event.altKey || event.metaKey) {
+    if (
+      state.currentView !== "clientes" ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -12124,34 +13376,44 @@ function bindClienteEvents() {
 }
 
 function bindProveedoresEvents() {
-  document.querySelector("[data-refresh-proveedores]")?.addEventListener("click", async () => {
-    await loadProveedores();
-  });
+  document
+    .querySelector("[data-refresh-proveedores]")
+    ?.addEventListener("click", async () => {
+      await loadProveedores();
+    });
 
-  document.querySelector("[data-new-proveedor]")?.addEventListener("click", () => {
-    resetProveedorDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-new-proveedor]")
+    ?.addEventListener("click", () => {
+      resetProveedorDraft();
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-open-proveedor-lookup]")?.addEventListener("click", () => {
-    const searchField = document.querySelector("[data-proveedor-search]");
-    if (searchField && typeof searchField.focus === "function") {
-      searchField.focus();
-      searchField.select?.();
-    }
-  });
+  document
+    .querySelector("[data-open-proveedor-lookup]")
+    ?.addEventListener("click", () => {
+      const searchField = document.querySelector("[data-proveedor-search]");
+      if (searchField && typeof searchField.focus === "function") {
+        searchField.focus();
+        searchField.select?.();
+      }
+    });
 
-  document.querySelector("[data-proveedor-reset]")?.addEventListener("click", () => {
-    resetProveedorDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-proveedor-reset]")
+    ?.addEventListener("click", () => {
+      resetProveedorDraft();
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-proveedor-search]")?.addEventListener("input", (event) => {
-    state.proveedores.search = event.target.value || "";
-    render();
-  });
+  document
+    .querySelector("[data-proveedor-search]")
+    ?.addEventListener("input", (event) => {
+      state.proveedores.search = event.target.value || "";
+      render();
+    });
 
   document.querySelectorAll("[data-proveedor-select]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -12189,7 +13451,12 @@ function bindProveedoresEvents() {
   }
 
   document.onkeydown = async (event) => {
-    if (state.currentView !== "proveedores" || !event.ctrlKey || event.altKey || event.metaKey) {
+    if (
+      state.currentView !== "proveedores" ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -12225,39 +13492,52 @@ function bindProveedoresEvents() {
   };
 }
 function bindImpuestoEvents() {
-  document.querySelector("[data-new-impuesto]")?.addEventListener("click", () => {
-    resetImpuestoDraft();
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-open-impuesto-lookup]")?.addEventListener("click", async () => {
-    if (!Array.isArray(state.impuestos.items) || !state.impuestos.items.length) {
-      await loadImpuestos({ renderAfter: false });
-    }
-
-    openImpuestoLookupModal();
-    clearFlash();
-    render();
-  });
-
-  document.querySelectorAll("[data-impuesto-lookup-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeImpuestoLookupModal();
+  document
+    .querySelector("[data-new-impuesto]")
+    ?.addEventListener("click", () => {
+      resetImpuestoDraft();
+      clearFlash();
       render();
     });
-  });
 
-  document.querySelector("[data-impuesto-lookup-refresh]")?.addEventListener("click", async () => {
-    await loadImpuestos({ renderAfter: false });
-    openImpuestoLookupModal();
-    render();
-  });
+  document
+    .querySelector("[data-open-impuesto-lookup]")
+    ?.addEventListener("click", async () => {
+      if (
+        !Array.isArray(state.impuestos.items) ||
+        !state.impuestos.items.length
+      ) {
+        await loadImpuestos({ renderAfter: false });
+      }
+
+      openImpuestoLookupModal();
+      clearFlash();
+      render();
+    });
+
+  document
+    .querySelectorAll("[data-impuesto-lookup-close]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        closeImpuestoLookupModal();
+        render();
+      });
+    });
+
+  document
+    .querySelector("[data-impuesto-lookup-refresh]")
+    ?.addEventListener("click", async () => {
+      await loadImpuestos({ renderAfter: false });
+      openImpuestoLookupModal();
+      render();
+    });
 
   document.querySelectorAll("[data-impuesto-lookup-select]").forEach((row) => {
     row.addEventListener("click", () => {
       const codigo = row.getAttribute("data-impuesto-lookup-select") || "";
-      const selected = (state.impuestos.items || []).find((item) => String(item.codigo || "") === codigo);
+      const selected = (state.impuestos.items || []).find(
+        (item) => String(item.codigo || "") === codigo,
+      );
       if (!selected) {
         return;
       }
@@ -12270,14 +13550,16 @@ function bindImpuestoEvents() {
     });
   });
 
-  document.querySelector("[data-impuesto-exit]")?.addEventListener("click", () => {
-    state.currentView = "desktop";
-    state.navigation.openMenu = "";
-    state.navigation.openSubmenu = "";
-    state.navigation.menuPinned = false;
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-impuesto-exit]")
+    ?.addEventListener("click", () => {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    });
 
   const impuestoForm = document.getElementById("impuesto-form");
   if (impuestoForm instanceof HTMLFormElement) {
@@ -12293,7 +13575,12 @@ function bindImpuestoEvents() {
   }
 
   document.onkeydown = async (event) => {
-    if (state.currentView !== "impuestos" || !event.ctrlKey || event.altKey || event.metaKey) {
+    if (
+      state.currentView !== "impuestos" ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -12322,7 +13609,10 @@ function bindImpuestoEvents() {
     }
 
     if (key === "b") {
-      if (!Array.isArray(state.impuestos.items) || !state.impuestos.items.length) {
+      if (
+        !Array.isArray(state.impuestos.items) ||
+        !state.impuestos.items.length
+      ) {
         await loadImpuestos({ renderAfter: false });
       }
 
@@ -12342,9 +13632,11 @@ function bindImpuestoEvents() {
 }
 
 function bindBancoEvents() {
-  document.querySelector("[data-refresh-bancos]")?.addEventListener("click", async () => {
-    await loadBancos();
-  });
+  document
+    .querySelector("[data-refresh-bancos]")
+    ?.addEventListener("click", async () => {
+      await loadBancos();
+    });
 
   document.querySelector("[data-new-banco]")?.addEventListener("click", () => {
     resetBancoDraft();
@@ -12352,26 +13644,33 @@ function bindBancoEvents() {
     render();
   });
 
-  document.querySelector("[data-delete-current-banco]")?.addEventListener("click", async () => {
-    const codigo = state.bancos.draft?.originalCodigo || state.bancos.selectedCodigo;
-    if (!codigo) {
-      return;
-    }
+  document
+    .querySelector("[data-delete-current-banco]")
+    ?.addEventListener("click", async () => {
+      const codigo =
+        state.bancos.draft?.originalCodigo || state.bancos.selectedCodigo;
+      if (!codigo) {
+        return;
+      }
 
-    await deleteBanco(codigo);
-  });
+      await deleteBanco(codigo);
+    });
 
-  document.querySelector("[data-banco-search]")?.addEventListener("input", (event) => {
-    state.bancos.search = event.target.value || "";
-    render();
-  });
+  document
+    .querySelector("[data-banco-search]")
+    ?.addEventListener("input", (event) => {
+      state.bancos.search = event.target.value || "";
+      render();
+    });
 
-  document.querySelector("[data-banco-reset]")?.addEventListener("click", () => {
-    state.bancos.search = "";
-    resetBancoDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-banco-reset]")
+    ?.addEventListener("click", () => {
+      state.bancos.search = "";
+      resetBancoDraft();
+      clearFlash();
+      render();
+    });
 
   document.querySelectorAll("[data-banco-select]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -12409,7 +13708,12 @@ function bindBancoEvents() {
   }
 
   document.onkeydown = async (event) => {
-    if (state.currentView !== "bancos" || !event.ctrlKey || event.altKey || event.metaKey) {
+    if (
+      state.currentView !== "bancos" ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -12446,36 +13750,47 @@ function bindBancoEvents() {
 }
 
 function bindTiposPagoEvents() {
-  document.querySelector("[data-refresh-tipos-pago]")?.addEventListener("click", async () => {
-    await loadTiposPago();
-  });
+  document
+    .querySelector("[data-refresh-tipos-pago]")
+    ?.addEventListener("click", async () => {
+      await loadTiposPago();
+    });
 
-  document.querySelector("[data-new-tipo-pago]")?.addEventListener("click", () => {
-    resetTipoPagoDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-new-tipo-pago]")
+    ?.addEventListener("click", () => {
+      resetTipoPagoDraft();
+      clearFlash();
+      render();
+    });
 
-  document.querySelector("[data-delete-current-tipo-pago]")?.addEventListener("click", async () => {
-    const codigo = state.tiposPago.draft?.originalCodigo || state.tiposPago.selectedCodigo;
-    if (!codigo) {
-      return;
-    }
+  document
+    .querySelector("[data-delete-current-tipo-pago]")
+    ?.addEventListener("click", async () => {
+      const codigo =
+        state.tiposPago.draft?.originalCodigo || state.tiposPago.selectedCodigo;
+      if (!codigo) {
+        return;
+      }
 
-    await deleteTipoPago(codigo);
-  });
+      await deleteTipoPago(codigo);
+    });
 
-  document.querySelector("[data-tipo-pago-search]")?.addEventListener("input", (event) => {
-    state.tiposPago.search = event.target.value || "";
-    render();
-  });
+  document
+    .querySelector("[data-tipo-pago-search]")
+    ?.addEventListener("input", (event) => {
+      state.tiposPago.search = event.target.value || "";
+      render();
+    });
 
-  document.querySelector("[data-tipo-pago-reset]")?.addEventListener("click", () => {
-    state.tiposPago.search = "";
-    resetTipoPagoDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-tipo-pago-reset]")
+    ?.addEventListener("click", () => {
+      state.tiposPago.search = "";
+      resetTipoPagoDraft();
+      clearFlash();
+      render();
+    });
 
   document.querySelectorAll("[data-tipo-pago-select]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -12513,7 +13828,12 @@ function bindTiposPagoEvents() {
   }
 
   document.onkeydown = async (event) => {
-    if (state.currentView !== "tipos-pago" || !event.ctrlKey || event.altKey || event.metaKey) {
+    if (
+      state.currentView !== "tipos-pago" ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -12549,59 +13869,74 @@ function bindTiposPagoEvents() {
   };
 }
 function bindImpresorasEvents() {
-  document.querySelector("[data-refresh-impresoras]")?.addEventListener("click", async () => {
-    await loadImpresoras();
-  });
+  document
+    .querySelector("[data-refresh-impresoras]")
+    ?.addEventListener("click", async () => {
+      await loadImpresoras();
+    });
 
-  document.querySelector("[data-new-impresora]")?.addEventListener("click", () => {
-    resetImpresoraDraft();
-    clearFlash();
-    render();
-  });
-
-  document.querySelector("[data-delete-current-impresora]")?.addEventListener("click", async () => {
-    const id = state.impresoras.draft?.originalId || state.impresoras.selectedId;
-    if (!id) {
-      return;
-    }
-
-    await deleteImpresora(id);
-  });
-
-  document.querySelector("[data-preview-impresora-formato]")?.addEventListener("click", () => {
-    try {
-      captureImpresoraDraft();
-      previewImpresoraFormatoContingencia();
+  document
+    .querySelector("[data-new-impresora]")
+    ?.addEventListener("click", () => {
+      resetImpresoraDraft();
       clearFlash();
-    } catch (error) {
-      console.error(error);
-      setFlash(extractErrorMessage(error), "error");
       render();
-    }
-  });
+    });
 
-  document.querySelector("[data-print-impresora-formato]")?.addEventListener("click", async () => {
-    try {
-      captureImpresoraDraft();
-      await printImpresoraFormatoContingencia();
-    } catch (error) {
-      console.error(error);
-      setFlash(extractErrorMessage(error), "error");
+  document
+    .querySelector("[data-delete-current-impresora]")
+    ?.addEventListener("click", async () => {
+      const id =
+        state.impresoras.draft?.originalId || state.impresoras.selectedId;
+      if (!id) {
+        return;
+      }
+
+      await deleteImpresora(id);
+    });
+
+  document
+    .querySelector("[data-preview-impresora-formato]")
+    ?.addEventListener("click", () => {
+      try {
+        captureImpresoraDraft();
+        previewImpresoraFormatoContingencia();
+        clearFlash();
+      } catch (error) {
+        console.error(error);
+        setFlash(extractErrorMessage(error), "error");
+        render();
+      }
+    });
+
+  document
+    .querySelector("[data-print-impresora-formato]")
+    ?.addEventListener("click", async () => {
+      try {
+        captureImpresoraDraft();
+        await printImpresoraFormatoContingencia();
+      } catch (error) {
+        console.error(error);
+        setFlash(extractErrorMessage(error), "error");
+        render();
+      }
+    });
+
+  document
+    .querySelector("[data-impresora-search]")
+    ?.addEventListener("input", (event) => {
+      state.impresoras.search = event.target.value || "";
       render();
-    }
-  });
+    });
 
-  document.querySelector("[data-impresora-search]")?.addEventListener("input", (event) => {
-    state.impresoras.search = event.target.value || "";
-    render();
-  });
-
-  document.querySelector("[data-impresora-reset]")?.addEventListener("click", () => {
-    state.impresoras.search = "";
-    resetImpresoraDraft();
-    clearFlash();
-    render();
-  });
+  document
+    .querySelector("[data-impresora-reset]")
+    ?.addEventListener("click", () => {
+      state.impresoras.search = "";
+      resetImpresoraDraft();
+      clearFlash();
+      render();
+    });
 
   document.querySelectorAll("[data-impresora-select]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -12644,7 +13979,12 @@ function bindImpresorasEvents() {
   }
 
   document.onkeydown = async (event) => {
-    if (state.currentView !== "impresoras" || !event.ctrlKey || event.altKey || event.metaKey) {
+    if (
+      state.currentView !== "impresoras" ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -12688,10 +14028,7 @@ async function loadImpresoras(options = {}) {
   }
 
   try {
-    const loaders = [
-      apiFetch("/impresoras/metadata"),
-      apiFetch("/impresoras"),
-    ];
+    const loaders = [apiFetch("/impresoras/metadata"), apiFetch("/impresoras")];
 
     if (desktopClientSupportsPrinting()) {
       loaders.push(loadDesktopPrinters({ renderAfter: false, silent: true }));
@@ -12700,7 +14037,9 @@ async function loadImpresoras(options = {}) {
     const [metadata, response] = await Promise.all(loaders);
 
     state.impresoras.metadata = metadata;
-    state.impresoras.items = Array.isArray(response.impresoras) ? response.impresoras : [];
+    state.impresoras.items = Array.isArray(response.impresoras)
+      ? response.impresoras
+      : [];
     if (!state.impresoras.draft?.originalId) {
       state.impresoras.draft = createEmptyImpresoraDraft(metadata);
       if (!String(state.impresoras.draft?.nombreImpresora || "").trim()) {
@@ -12709,7 +14048,10 @@ async function loadImpresoras(options = {}) {
     }
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudieron cargar las impresoras: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudieron cargar las impresoras: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.impresoras.loading = false;
     state.impresoras.loadingMetadata = false;
@@ -12728,13 +14070,21 @@ async function loadImpresoraForEdit(id) {
   render();
 
   try {
-    const response = await apiFetch(`/impresoras/${encodeURIComponent(String(id))}`);
+    const response = await apiFetch(
+      `/impresoras/${encodeURIComponent(String(id))}`,
+    );
     state.impresoras.selectedId = String(response.impresora?.id ?? id);
-    state.impresoras.draft = impresoraToDraft(response.impresora, state.impresoras.metadata);
+    state.impresoras.draft = impresoraToDraft(
+      response.impresora,
+      state.impresoras.metadata,
+    );
     clearFlash();
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar la impresora: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo cargar la impresora: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.impresoras.loading = false;
     render();
@@ -12742,9 +14092,13 @@ async function loadImpresoraForEdit(id) {
 }
 
 async function saveImpresora() {
-  const draft = state.impresoras.draft || createEmptyImpresoraDraft(state.impresoras.metadata);
+  const draft =
+    state.impresoras.draft ||
+    createEmptyImpresoraDraft(state.impresoras.metadata);
   const validationMessage = validateImpresoraDraft(draft);
-  const isEditing = Boolean(draft.originalId || draft.originalId === 0 || draft.originalId === "0");
+  const isEditing = Boolean(
+    draft.originalId || draft.originalId === 0 || draft.originalId === "0",
+  );
   if (validationMessage) {
     setFlash(validationMessage, "error");
     render();
@@ -12757,21 +14111,30 @@ async function saveImpresora() {
 
   try {
     const payload = buildImpresoraPayload(draft);
-    const response = draft.originalId || draft.originalId === 0 || draft.originalId === "0"
-      ? await apiFetch(`/impresoras/${encodeURIComponent(String(draft.originalId))}`, {
-          method: "PATCH",
-          body: payload,
-        })
-      : await apiFetch("/impresoras", {
-          method: "POST",
-          body: payload,
-        });
+    const response =
+      draft.originalId || draft.originalId === 0 || draft.originalId === "0"
+        ? await apiFetch(
+            `/impresoras/${encodeURIComponent(String(draft.originalId))}`,
+            {
+              method: "PATCH",
+              body: payload,
+            },
+          )
+        : await apiFetch("/impresoras", {
+            method: "POST",
+            body: payload,
+          });
 
-    state.impresoras.selectedId = String(response.impresora?.id ?? draft.originalId ?? draft.id ?? "");
+    state.impresoras.selectedId = String(
+      response.impresora?.id ?? draft.originalId ?? draft.id ?? "",
+    );
     await loadImpresoras({ renderAfter: false });
 
     if (isEditing) {
-      state.impresoras.draft = impresoraToDraft(response.impresora, state.impresoras.metadata);
+      state.impresoras.draft = impresoraToDraft(
+        response.impresora,
+        state.impresoras.metadata,
+      );
       setFlash("Impresora actualizada correctamente.", "success");
     } else {
       resetImpresoraDraft();
@@ -12823,7 +14186,8 @@ async function deleteImpresora(id) {
 }
 async function loadFacturacionExchangeRate(options = {}) {
   const { renderAfter = true, silent = false } = options;
-  const previous = state.facturacion.exchangeRate || createEmptyFacturacionExchangeRateState();
+  const previous =
+    state.facturacion.exchangeRate || createEmptyFacturacionExchangeRateState();
 
   state.facturacion.exchangeRate = {
     ...previous,
@@ -12847,7 +14211,10 @@ async function loadFacturacionExchangeRate(options = {}) {
     };
 
     if (!silent) {
-      setFlash(`No se pudo consultar la tasa manual de cambio: ${extractErrorMessage(error)}`, "error");
+      setFlash(
+        `No se pudo consultar la tasa manual de cambio: ${extractErrorMessage(error)}`,
+        "error",
+      );
     }
   } finally {
     if (renderAfter) {
@@ -12870,14 +14237,21 @@ async function loadExchangeRateRegister(options = {}) {
 
     state.exchangeRateRegister.draft = nextDraft;
     state.exchangeRateRegister.savedDraft = nextDraft;
-    state.exchangeRateRegister.updatedAt = String(item.actualizadoEn || "").trim();
+    state.exchangeRateRegister.updatedAt = String(
+      item.actualizadoEn || "",
+    ).trim();
     applyManualRateToFacturacionState(item);
     applyManualRateToArticleState(item);
-    state.formDraft = applyArticleDollarRatesToDraft(state.formDraft || createEmptyDraft());
+    state.formDraft = applyArticleDollarRatesToDraft(
+      state.formDraft || createEmptyDraft(),
+    );
   } catch (error) {
     console.error(error);
     if (!silent) {
-      setFlash(`No se pudo cargar la tasa de cambio: ${extractErrorMessage(error)}`, "error");
+      setFlash(
+        `No se pudo cargar la tasa de cambio: ${extractErrorMessage(error)}`,
+        "error",
+      );
     }
   } finally {
     state.exchangeRateRegister.loading = false;
@@ -12888,7 +14262,8 @@ async function loadExchangeRateRegister(options = {}) {
 }
 
 async function saveExchangeRateRegister() {
-  const draft = state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
+  const draft =
+    state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
   const validationMessage = validateExchangeRateRegisterDraft(draft);
   if (validationMessage) {
     setFlash(validationMessage, "error");
@@ -12910,10 +14285,14 @@ async function saveExchangeRateRegister() {
     const nextDraft = exchangeRateItemToDraft(item);
     state.exchangeRateRegister.draft = nextDraft;
     state.exchangeRateRegister.savedDraft = nextDraft;
-    state.exchangeRateRegister.updatedAt = String(item.actualizadoEn || "").trim();
+    state.exchangeRateRegister.updatedAt = String(
+      item.actualizadoEn || "",
+    ).trim();
     applyManualRateToFacturacionState(item);
     applyManualRateToArticleState(item);
-    state.formDraft = applyArticleDollarRatesToDraft(state.formDraft || createEmptyDraft());
+    state.formDraft = applyArticleDollarRatesToDraft(
+      state.formDraft || createEmptyDraft(),
+    );
     setFlash("Tasa de cambio actualizada correctamente.", "success");
   } catch (error) {
     console.error(error);
@@ -12933,11 +14312,16 @@ async function loadCreationMetadata(options = {}) {
 
   try {
     state.metadata = await apiFetch("/inventory/creation-metadata");
-    state.formDraft = applyArticleDollarRatesToDraft(state.formDraft || createEmptyDraft());
+    state.formDraft = applyArticleDollarRatesToDraft(
+      state.formDraft || createEmptyDraft(),
+    );
   } catch (error) {
     console.error(error);
     if (!silent) {
-      setFlash(`No se pudieron cargar los catalogos del articulo: ${extractErrorMessage(error)}`, "error");
+      setFlash(
+        `No se pudieron cargar los catalogos del articulo: ${extractErrorMessage(error)}`,
+        "error",
+      );
     }
   } finally {
     state.loadingMetadata = false;
@@ -12988,7 +14372,9 @@ async function loadInventoryExistence(page = 1, options = {}) {
     }
 
     const response = await apiFetch(`/inventory?${params.toString()}`);
-    state.inventoryExistence.items = Array.isArray(response.data) ? response.data : [];
+    state.inventoryExistence.items = Array.isArray(response.data)
+      ? response.data
+      : [];
     state.inventoryExistence.pagination = response.pagination || {
       page: 1,
       limit,
@@ -12998,7 +14384,10 @@ async function loadInventoryExistence(page = 1, options = {}) {
     state.inventoryExistence.lastUpdatedAt = new Date().toISOString();
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo consultar la existencia del inventario: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo consultar la existencia del inventario: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.inventoryExistence.loading = false;
     state.inventoryExistence.refreshing = false;
@@ -13023,7 +14412,9 @@ async function loadCashRegisters(options = {}) {
     ]);
 
     state.cashRegisters.metadata = metadata;
-    state.cashRegisters.items = Array.isArray(response.cajas) ? response.cajas : [];
+    state.cashRegisters.items = Array.isArray(response.cajas)
+      ? response.cajas
+      : [];
 
     if (desktopClientSupportsPrinting() && !state.desktopPrinting.loading) {
       await loadDesktopPrinters({ renderAfter: false, silent: true });
@@ -13031,15 +14422,28 @@ async function loadCashRegisters(options = {}) {
 
     if (state.currentView === "cierre-caja") {
       const closeableItems = getCloseableCashRegisters();
-      const currentDraft = state.cashRegisters.draft || createEmptyCashRegisterDraft(metadata);
-      const selectedKey = state.cashRegisters.selectedKey
-        || buildCashRegisterKey(currentDraft.originalSerie || currentDraft.serie, currentDraft.originalFecha || currentDraft.fecha);
-      const selectedItem = closeableItems.find((item) => buildCashRegisterKey(item.serie, item.fecha) === selectedKey);
+      const currentDraft =
+        state.cashRegisters.draft || createEmptyCashRegisterDraft(metadata);
+      const selectedKey =
+        state.cashRegisters.selectedKey ||
+        buildCashRegisterKey(
+          currentDraft.originalSerie || currentDraft.serie,
+          currentDraft.originalFecha || currentDraft.fecha,
+        );
+      const selectedItem = closeableItems.find(
+        (item) => buildCashRegisterKey(item.serie, item.fecha) === selectedKey,
+      );
       const nextItem = selectedItem || closeableItems[0] || null;
 
       if (nextItem) {
-        state.cashRegisters.selectedKey = buildCashRegisterKey(nextItem.serie, nextItem.fecha);
-        state.cashRegisters.draft = buildCashRegisterCloseDraft(nextItem, currentDraft);
+        state.cashRegisters.selectedKey = buildCashRegisterKey(
+          nextItem.serie,
+          nextItem.fecha,
+        );
+        state.cashRegisters.draft = buildCashRegisterCloseDraft(
+          nextItem,
+          currentDraft,
+        );
       } else {
         state.cashRegisters.selectedKey = "";
         state.cashRegisters.draft = createEmptyCashRegisterDraft(metadata);
@@ -13049,7 +14453,10 @@ async function loadCashRegisters(options = {}) {
     }
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar la informacion de cajas: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo cargar la informacion de cajas: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.cashRegisters.loading = false;
     state.cashRegisters.loadingMetadata = false;
@@ -13069,12 +14476,17 @@ async function loadCashRegisterForEdit(serie, fecha) {
       await loadCashRegisters({ renderAfter: false });
     }
 
-    const response = await apiFetch(`/cajas/${encodeURIComponent(serie)}/${encodeURIComponent(fecha)}`);
+    const response = await apiFetch(
+      `/cajas/${encodeURIComponent(serie)}/${encodeURIComponent(fecha)}`,
+    );
     state.cashRegisters.selectedKey = buildCashRegisterKey(serie, fecha);
     state.cashRegisters.draft = cashRegisterToDraft(response.caja);
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar la caja ${serie} ${fecha}: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo cargar la caja ${serie} ${fecha}: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.cashRegisters.loading = false;
     render();
@@ -13082,7 +14494,9 @@ async function loadCashRegisterForEdit(serie, fecha) {
 }
 
 async function saveCashRegister() {
-  const draft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  const draft =
+    state.cashRegisters.draft ||
+    createEmptyCashRegisterDraft(state.cashRegisters.metadata);
   const validationMessage = validateCashRegisterDraft(draft);
   if (validationMessage) {
     setFlash(validationMessage, "error");
@@ -13097,16 +14511,22 @@ async function saveCashRegister() {
   try {
     const payload = buildCashRegisterPayload(draft);
     const response = draft.originalSerie
-      ? await apiFetch(`/cajas/${encodeURIComponent(draft.originalSerie)}/${encodeURIComponent(draft.originalFecha)}`, {
-          method: "PATCH",
-          body: payload,
-        })
+      ? await apiFetch(
+          `/cajas/${encodeURIComponent(draft.originalSerie)}/${encodeURIComponent(draft.originalFecha)}`,
+          {
+            method: "PATCH",
+            body: payload,
+          },
+        )
       : await apiFetch("/cajas", {
           method: "POST",
           body: payload,
         });
 
-    state.cashRegisters.selectedKey = buildCashRegisterKey(response.caja?.serie, response.caja?.fecha);
+    state.cashRegisters.selectedKey = buildCashRegisterKey(
+      response.caja?.serie,
+      response.caja?.fecha,
+    );
     state.cashRegisters.draft = cashRegisterToDraft(response.caja);
     await loadCashRegisters({ renderAfter: false });
     setFlash(
@@ -13126,7 +14546,11 @@ async function saveCashRegister() {
 
 function downloadCashRegisterCloseReport(report) {
   const base64 = String(report?.pdfBase64 || "").trim();
-  if (!base64 || typeof window.atob !== "function" || typeof Blob === "undefined") {
+  if (
+    !base64 ||
+    typeof window.atob !== "function" ||
+    typeof Blob === "undefined"
+  ) {
     return false;
   }
 
@@ -13141,7 +14565,8 @@ function downloadCashRegisterCloseReport(report) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = String(report?.fileName || "cierre-caja.pdf").trim() || "cierre-caja.pdf";
+    anchor.download =
+      String(report?.fileName || "cierre-caja.pdf").trim() || "cierre-caja.pdf";
     anchor.style.display = "none";
     document.body.appendChild(anchor);
     anchor.click();
@@ -13157,10 +14582,15 @@ function downloadCashRegisterCloseReport(report) {
 }
 async function generateGeneralCloseReport() {
   const currentState = state.reportes || createEmptyReportesState();
-  const normalizedFecha = toDateInputValue(currentState.fechaCierreGeneral || new Date());
+  const normalizedFecha = toDateInputValue(
+    currentState.fechaCierreGeneral || new Date(),
+  );
 
   if (!normalizedFecha) {
-    setFlash("Debes seleccionar una fecha valida para generar el cierre general.", "error");
+    setFlash(
+      "Debes seleccionar una fecha valida para generar el cierre general.",
+      "error",
+    );
     render();
     return;
   }
@@ -13174,7 +14604,9 @@ async function generateGeneralCloseReport() {
   render();
 
   try {
-    const response = await apiFetch(`/cajas/reports/general/${encodeURIComponent(normalizedFecha)}`);
+    const response = await apiFetch(
+      `/cajas/reports/general/${encodeURIComponent(normalizedFecha)}`,
+    );
     const downloadedReport = downloadCashRegisterCloseReport(response.reporte);
     setFlash(
       downloadedReport
@@ -13195,17 +14627,26 @@ async function generateGeneralCloseReport() {
   }
 }
 
-async function closeCashRegister(serie, fecha, horaCierre) {  const normalizedSerie = String(serie || "").trim().toUpperCase();
+async function closeCashRegister(serie, fecha, horaCierre) {
+  const normalizedSerie = String(serie || "")
+    .trim()
+    .toUpperCase();
   const normalizedFecha = toDateInputValue(fecha);
-  const normalizedHoraCierre = String(horaCierre || "").trim() || getCurrentTimeInputValue();
+  const normalizedHoraCierre =
+    String(horaCierre || "").trim() || getCurrentTimeInputValue();
 
   if (!normalizedSerie || !normalizedFecha) {
-    setFlash("Debes seleccionar una caja abierta para poder cerrarla.", "error");
+    setFlash(
+      "Debes seleccionar una caja abierta para poder cerrarla.",
+      "error",
+    );
     render();
     return;
   }
 
-  const confirmed = window.confirm(`Se cerrara la caja ${normalizedSerie} del ${formatDateOnlyDisplay(normalizedFecha)}. Deseas continuar?`);
+  const confirmed = window.confirm(
+    `Se cerrara la caja ${normalizedSerie} del ${formatDateOnlyDisplay(normalizedFecha)}. Deseas continuar?`,
+  );
   if (!confirmed) {
     return;
   }
@@ -13215,22 +14656,28 @@ async function closeCashRegister(serie, fecha, horaCierre) {  const normalizedSe
   render();
 
   try {
-    const response = await apiFetch(`/cajas/${encodeURIComponent(normalizedSerie)}/${encodeURIComponent(normalizedFecha)}/close`, {
-      method: "PATCH",
-      body: {
-        horaCierre: normalizedHoraCierre,
+    const response = await apiFetch(
+      `/cajas/${encodeURIComponent(normalizedSerie)}/${encodeURIComponent(normalizedFecha)}/close`,
+      {
+        method: "PATCH",
+        body: {
+          horaCierre: normalizedHoraCierre,
+        },
       },
-    });
+    );
 
     const downloadedReport = downloadCashRegisterCloseReport(response.reporte);
     state.cashRegisters.selectedKey = "";
-    state.cashRegisters.draft = createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+    state.cashRegisters.draft = createEmptyCashRegisterDraft(
+      state.cashRegisters.metadata,
+    );
     await loadCashRegisters({ renderAfter: false });
     setFlash(
       downloadedReport
         ? `Caja ${response.caja?.serie || normalizedSerie} cerrada correctamente. Se descargo el PDF del balance diario.`
-        : `Caja ${response.caja?.serie || normalizedSerie} cerrada correctamente.`
-      , "success");
+        : `Caja ${response.caja?.serie || normalizedSerie} cerrada correctamente.`,
+      "success",
+    );
   } catch (error) {
     console.error(error);
     setFlash(extractErrorMessage(error), "error");
@@ -13244,7 +14691,9 @@ async function deleteCashRegister(serie, fecha) {
     return;
   }
 
-  const confirmed = window.confirm(`Se eliminara la caja ${serie} del ${fecha}. Deseas continuar?`);
+  const confirmed = window.confirm(
+    `Se eliminara la caja ${serie} del ${fecha}. Deseas continuar?`,
+  );
   if (!confirmed) {
     return;
   }
@@ -13254,9 +14703,12 @@ async function deleteCashRegister(serie, fecha) {
   render();
 
   try {
-    await apiFetch(`/cajas/${encodeURIComponent(serie)}/${encodeURIComponent(fecha)}`, {
-      method: "DELETE",
-    });
+    await apiFetch(
+      `/cajas/${encodeURIComponent(serie)}/${encodeURIComponent(fecha)}`,
+      {
+        method: "DELETE",
+      },
+    );
 
     resetCashRegisterDraft();
     await loadCashRegisters({ renderAfter: false });
@@ -13288,14 +14740,19 @@ async function loadCompras(options = {}) {
     ]);
 
     state.compras.metadata = metadata;
-    state.compras.items = Array.isArray(response.compras) ? response.compras : [];
+    state.compras.items = Array.isArray(response.compras)
+      ? response.compras
+      : [];
 
     if (!state.compras.draft?.originalDocumento) {
       state.compras.draft = createEmptyCompraDraft(metadata);
     }
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar la informacion de compras: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo cargar la informacion de compras: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.compras.loading = false;
     state.compras.loadingMetadata = false;
@@ -13319,12 +14776,20 @@ async function loadCompraForEdit(documento, proveedor) {
       await loadCompras({ renderAfter: false });
     }
 
-    const response = await apiFetch(`/compras/${encodeURIComponent(documento)}/${encodeURIComponent(proveedor)}`);
+    const response = await apiFetch(
+      `/compras/${encodeURIComponent(documento)}/${encodeURIComponent(proveedor)}`,
+    );
     state.compras.selectedKey = buildCompraKey(documento, proveedor);
-    state.compras.draft = compraToDraft(response.compra, state.compras.metadata);
+    state.compras.draft = compraToDraft(
+      response.compra,
+      state.compras.metadata,
+    );
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar la compra ${documento}: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo cargar la compra ${documento}: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.compras.loading = false;
     render();
@@ -13332,7 +14797,8 @@ async function loadCompraForEdit(documento, proveedor) {
 }
 
 async function saveCompra() {
-  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const draft =
+    state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
   const isEditing = Boolean(draft.originalDocumento && draft.originalProveedor);
   const validationMessage = validateCompraDraft(draft);
   if (validationMessage) {
@@ -13348,10 +14814,13 @@ async function saveCompra() {
   try {
     const payload = buildCompraPayload(draft);
     const response = isEditing
-      ? await apiFetch(`/compras/${encodeURIComponent(draft.originalDocumento)}/${encodeURIComponent(draft.originalProveedor)}`, {
-          method: "PATCH",
-          body: payload,
-        })
+      ? await apiFetch(
+          `/compras/${encodeURIComponent(draft.originalDocumento)}/${encodeURIComponent(draft.originalProveedor)}`,
+          {
+            method: "PATCH",
+            body: payload,
+          },
+        )
       : await apiFetch("/compras", {
           method: "POST",
           body: payload,
@@ -13360,8 +14829,14 @@ async function saveCompra() {
     await loadCompras({ renderAfter: false });
 
     if (isEditing) {
-      state.compras.selectedKey = buildCompraKey(response.compra?.documento, response.compra?.proveedor);
-      state.compras.draft = compraToDraft(response.compra, state.compras.metadata);
+      state.compras.selectedKey = buildCompraKey(
+        response.compra?.documento,
+        response.compra?.proveedor,
+      );
+      state.compras.draft = compraToDraft(
+        response.compra,
+        state.compras.metadata,
+      );
     } else {
       resetCompraDraft();
     }
@@ -13391,15 +14866,27 @@ async function approveCompra(documento, proveedor) {
   render();
 
   try {
-    const response = await apiFetch(`/compras/${encodeURIComponent(documento)}/${encodeURIComponent(proveedor)}/approve`, {
-      method: "PATCH",
-      body: {},
-    });
+    const response = await apiFetch(
+      `/compras/${encodeURIComponent(documento)}/${encodeURIComponent(proveedor)}/approve`,
+      {
+        method: "PATCH",
+        body: {},
+      },
+    );
 
-    state.compras.selectedKey = buildCompraKey(response.compra?.documento, response.compra?.proveedor);
-    state.compras.draft = compraToDraft(response.compra, state.compras.metadata);
+    state.compras.selectedKey = buildCompraKey(
+      response.compra?.documento,
+      response.compra?.proveedor,
+    );
+    state.compras.draft = compraToDraft(
+      response.compra,
+      state.compras.metadata,
+    );
     await loadCompras({ renderAfter: false });
-    setFlash(`Compra ${response.compra?.documento || documento} aprobada correctamente.`, "success");
+    setFlash(
+      `Compra ${response.compra?.documento || documento} aprobada correctamente.`,
+      "success",
+    );
   } catch (error) {
     console.error(error);
     setFlash(extractErrorMessage(error), "error");
@@ -13426,9 +14913,12 @@ async function deleteCompra(documento, proveedor) {
   render();
 
   try {
-    await apiFetch(`/compras/${encodeURIComponent(documento)}/${encodeURIComponent(proveedor)}`, {
-      method: "DELETE",
-    });
+    await apiFetch(
+      `/compras/${encodeURIComponent(documento)}/${encodeURIComponent(proveedor)}`,
+      {
+        method: "DELETE",
+      },
+    );
 
     resetCompraDraft();
     await loadCompras({ renderAfter: false });
@@ -13485,7 +14975,10 @@ async function loadCompraArticleLookup(search = "") {
       items: [],
       activeIndex: -1,
     };
-    setFlash(`No se pudo consultar el inventario: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo consultar el inventario: ${extractErrorMessage(error)}`,
+      "error",
+    );
   }
 
   render();
@@ -13496,20 +14989,29 @@ function closeCompraArticleLookupModal() {
 }
 
 function addArticleToCompraDraft(article) {
-  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
-  const codigoBarra = String(article?.codigoBarra || "").trim().toUpperCase();
+  const draft =
+    state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const codigoBarra = String(article?.codigoBarra || "")
+    .trim()
+    .toUpperCase();
   if (!codigoBarra) {
     return;
   }
 
   const existingItems = Array.isArray(draft.items) ? [...draft.items] : [];
   const alreadyAdded = existingItems.some(
-    (item) => String(item?.codigoBarra || "").trim().toUpperCase() === codigoBarra,
+    (item) =>
+      String(item?.codigoBarra || "")
+        .trim()
+        .toUpperCase() === codigoBarra,
   );
 
   if (alreadyAdded) {
     closeCompraArticleLookupModal();
-    setFlash(`El articulo ${codigoBarra} ya esta agregado en la compra actual.`, "info");
+    setFlash(
+      `El articulo ${codigoBarra} ya esta agregado en la compra actual.`,
+      "info",
+    );
     return;
   }
 
@@ -13517,7 +15019,8 @@ function addArticleToCompraDraft(article) {
     ...createEmptyCompraDraftItem({
       codigoBarra: article.codigoBarra || codigoBarra,
       referencia: article.referencia || "",
-      marca: article.general?.marca?.nombre || article.general?.marca?.codigo || "",
+      marca:
+        article.general?.marca?.nombre || article.general?.marca?.codigo || "",
       nombre: article.general?.nombre || article.nombre || "",
       costoUnitario: article.inventario?.costos?.dolar || "0.00",
     }),
@@ -13526,7 +15029,9 @@ function addArticleToCompraDraft(article) {
   state.compras.draft = {
     ...draft,
     items: existingItems,
-    totalMercancia: formatCompraAmountInput(computeCompraDraftTotal(existingItems)),
+    totalMercancia: formatCompraAmountInput(
+      computeCompraDraftTotal(existingItems),
+    ),
   };
 
   closeCompraArticleLookupModal();
@@ -13534,7 +15039,8 @@ function addArticleToCompraDraft(article) {
 }
 
 function removeCompraDraftItem(index) {
-  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const draft =
+    state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
   const items = Array.isArray(draft.items) ? [...draft.items] : [];
   if (!Number.isInteger(index) || index < 0 || index >= items.length) {
     return;
@@ -13609,13 +15115,18 @@ async function resolveFacturacionClienteFromField() {
     let cliente = null;
 
     try {
-      const response = await apiFetch(`/clientes/${encodeURIComponent(codigo)}`);
+      const response = await apiFetch(
+        `/clientes/${encodeURIComponent(codigo)}`,
+      );
       cliente = response.cliente || null;
     } catch (_error) {
       const searchValue = normalizeIdentityComparable(codigo) || codigo;
-      const response = await apiFetch(`/clientes?buscar=${encodeURIComponent(searchValue)}&limit=100`);
+      const response = await apiFetch(
+        `/clientes?buscar=${encodeURIComponent(searchValue)}&limit=100`,
+      );
       const items = Array.isArray(response.clientes) ? response.clientes : [];
-      cliente = items.find((item) => identityValuesMatch(codigo, item.codigo)) || null;
+      cliente =
+        items.find((item) => identityValuesMatch(codigo, item.codigo)) || null;
     }
 
     if (!cliente) {
@@ -13627,7 +15138,10 @@ async function resolveFacturacionClienteFromField() {
   } catch (error) {
     console.error(error);
     clearFacturacionCliente();
-    setFlash(`No se encontro un cliente registrado con la cedula o RIF ${codigo}.`, "error");
+    setFlash(
+      `No se encontro un cliente registrado con la cedula o RIF ${codigo}.`,
+      "error",
+    );
   }
 
   render();
@@ -13647,13 +15161,20 @@ async function resolveFacturacionTrabajadorFromField() {
     let trabajador = null;
 
     try {
-      const response = await apiFetch(`/trabajadores/${encodeURIComponent(cedula)}`);
+      const response = await apiFetch(
+        `/trabajadores/${encodeURIComponent(cedula)}`,
+      );
       trabajador = response.trabajador || null;
     } catch (_error) {
       const searchValue = normalizeIdentityComparable(cedula) || cedula;
-      const response = await apiFetch(`/trabajadores?buscar=${encodeURIComponent(searchValue)}&limit=100`);
-      const items = Array.isArray(response.trabajadores) ? response.trabajadores : [];
-      trabajador = items.find((item) => identityValuesMatch(cedula, item.cedula)) || null;
+      const response = await apiFetch(
+        `/trabajadores?buscar=${encodeURIComponent(searchValue)}&limit=100`,
+      );
+      const items = Array.isArray(response.trabajadores)
+        ? response.trabajadores
+        : [];
+      trabajador =
+        items.find((item) => identityValuesMatch(cedula, item.cedula)) || null;
     }
 
     if (!trabajador) {
@@ -13665,14 +15186,20 @@ async function resolveFacturacionTrabajadorFromField() {
   } catch (error) {
     console.error(error);
     clearFacturacionTrabajador();
-    setFlash(`No se encontro un trabajador registrado con la cedula ${cedula}.`, "error");
+    setFlash(
+      `No se encontro un trabajador registrado con la cedula ${cedula}.`,
+      "error",
+    );
   }
 
   render();
 }
 
 async function ensureClientesMetadataLoaded() {
-  if (state.clientes.metadata?.tiposCliente && state.clientes.metadata?.tiposContribuyente) {
+  if (
+    state.clientes.metadata?.tiposCliente &&
+    state.clientes.metadata?.tiposContribuyente
+  ) {
     return;
   }
 
@@ -13688,12 +15215,17 @@ async function openFacturacionClientEditor() {
 
   try {
     await ensureClientesMetadataLoaded();
-    const prefillCode = String(state.facturacion.draft?.clienteCodigo || "").trim().toUpperCase();
+    const prefillCode = String(state.facturacion.draft?.clienteCodigo || "")
+      .trim()
+      .toUpperCase();
     resetFacturacionClientEditorDraft(prefillCode);
     clearFlash();
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo abrir el formulario del cliente: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo abrir el formulario del cliente: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.facturacion.clientEditor.loading = false;
     render();
@@ -13710,11 +15242,16 @@ function closeFacturacionClientEditor() {
 }
 
 async function loadFacturacionClientEditorForEdit() {
-  const draft = state.facturacion.clientEditor.draft || createEmptyClienteDraft(state.clientes.metadata);
+  const draft =
+    state.facturacion.clientEditor.draft ||
+    createEmptyClienteDraft(state.clientes.metadata);
   const codigo = String(draft.codigo || "").trim();
 
   if (!codigo) {
-    setFlash("Debes indicar la cedula o RIF del cliente para editarlo.", "error");
+    setFlash(
+      "Debes indicar la cedula o RIF del cliente para editarlo.",
+      "error",
+    );
     render();
     return;
   }
@@ -13726,24 +15263,35 @@ async function loadFacturacionClientEditorForEdit() {
     let cliente = null;
 
     try {
-      const response = await apiFetch(`/clientes/${encodeURIComponent(codigo)}`);
+      const response = await apiFetch(
+        `/clientes/${encodeURIComponent(codigo)}`,
+      );
       cliente = response.cliente || null;
     } catch (_error) {
       const searchValue = normalizeIdentityComparable(codigo) || codigo;
-      const response = await apiFetch(`/clientes?buscar=${encodeURIComponent(searchValue)}&limit=100`);
+      const response = await apiFetch(
+        `/clientes?buscar=${encodeURIComponent(searchValue)}&limit=100`,
+      );
       const items = Array.isArray(response.clientes) ? response.clientes : [];
-      cliente = items.find((item) => identityValuesMatch(codigo, item.codigo)) || null;
+      cliente =
+        items.find((item) => identityValuesMatch(codigo, item.codigo)) || null;
     }
 
     if (!cliente) {
       throw new Error("CLIENTE_NOT_FOUND");
     }
 
-    state.facturacion.clientEditor.draft = clienteToDraft(cliente, state.clientes.metadata);
+    state.facturacion.clientEditor.draft = clienteToDraft(
+      cliente,
+      state.clientes.metadata,
+    );
     clearFlash();
   } catch (error) {
     console.error(error);
-    setFlash(`No se encontro un cliente registrado con la cedula o RIF ${codigo}.`, "error");
+    setFlash(
+      `No se encontro un cliente registrado con la cedula o RIF ${codigo}.`,
+      "error",
+    );
   } finally {
     state.facturacion.clientEditor.loading = false;
     render();
@@ -13751,7 +15299,9 @@ async function loadFacturacionClientEditorForEdit() {
 }
 
 async function saveFacturacionClientEditor() {
-  const draft = state.facturacion.clientEditor.draft || createEmptyClienteDraft(state.clientes.metadata);
+  const draft =
+    state.facturacion.clientEditor.draft ||
+    createEmptyClienteDraft(state.clientes.metadata);
   const validationMessage = validateClienteDraft(draft);
   if (validationMessage) {
     setFlash(validationMessage, "error");
@@ -13766,10 +15316,13 @@ async function saveFacturacionClientEditor() {
   try {
     const payload = buildClientePayload(draft);
     const response = draft.originalCodigo
-      ? await apiFetch(`/clientes/${encodeURIComponent(draft.originalCodigo)}`, {
-          method: "PATCH",
-          body: payload,
-        })
+      ? await apiFetch(
+          `/clientes/${encodeURIComponent(draft.originalCodigo)}`,
+          {
+            method: "PATCH",
+            body: payload,
+          },
+        )
       : await apiFetch("/clientes", {
           method: "POST",
           body: payload,
@@ -13778,7 +15331,10 @@ async function saveFacturacionClientEditor() {
     const cliente = response.cliente;
     applyClienteToFacturacionDraft(cliente);
     closeFacturacionClientEditor();
-    setFlash(`Cliente ${cliente?.codigo || ""} guardado correctamente.`, "success");
+    setFlash(
+      `Cliente ${cliente?.codigo || ""} guardado correctamente.`,
+      "success",
+    );
   } catch (error) {
     console.error(error);
     setFlash(extractErrorMessage(error), "error");
@@ -13791,7 +15347,10 @@ async function saveFacturacionClientEditor() {
 async function resolveFacturacionLineFromField(index) {
   captureFacturacionDraft();
   const draft = state.facturacion.draft || createEmptyFacturacionDraft();
-  const items = Array.isArray(draft.items) && draft.items.length ? draft.items : createEmptyFacturacionItems();
+  const items =
+    Array.isArray(draft.items) && draft.items.length
+      ? draft.items
+      : createEmptyFacturacionItems();
   const line = items[index] || createEmptyFacturacionLineDraft();
   const searchValue = String(line.codigoBarra || "").trim();
 
@@ -13811,7 +15370,10 @@ async function resolveFacturacionLineFromField(index) {
     const itemsFound = Array.isArray(response.data) ? response.data : [];
     const normalizedSearch = String(searchValue).trim().toUpperCase();
     const exactBarcodeMatch = itemsFound.find(
-      (item) => String(item.codigoBarra || "").trim().toUpperCase() === normalizedSearch,
+      (item) =>
+        String(item.codigoBarra || "")
+          .trim()
+          .toUpperCase() === normalizedSearch,
     );
 
     if (!itemsFound.length) {
@@ -13819,7 +15381,8 @@ async function resolveFacturacionLineFromField(index) {
     }
 
     if (exactBarcodeMatch) {
-      const validationMessage = getFacturacionArticleValidationMessage(exactBarcodeMatch);
+      const validationMessage =
+        getFacturacionArticleValidationMessage(exactBarcodeMatch);
       if (validationMessage) {
         clearFacturacionLine(index, searchValue);
         closeFacturacionLineLookupModal();
@@ -13836,7 +15399,9 @@ async function resolveFacturacionLineFromField(index) {
     }
 
     if (itemsFound.length === 1) {
-      const validationMessage = getFacturacionArticleValidationMessage(itemsFound[0]);
+      const validationMessage = getFacturacionArticleValidationMessage(
+        itemsFound[0],
+      );
       if (validationMessage) {
         clearFacturacionLine(index, searchValue);
         closeFacturacionLineLookupModal();
@@ -13866,6 +15431,203 @@ async function resolveFacturacionLineFromField(index) {
   render();
 }
 
+async function loadTrabajadores(options = {}) {
+  const { renderAfter = true } = options;
+  state.trabajadores.loading = true;
+  state.trabajadores.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const params = new URLSearchParams();
+    const searchValue = String(state.trabajadores.search || "").trim();
+    if (searchValue) {
+      params.set("buscar", searchValue);
+    }
+    params.set("limit", "100");
+
+    const [metadataResponse, listResponse] = await Promise.all([
+      apiFetch("/trabajadores/metadata"),
+      apiFetch(`/trabajadores?${params.toString()}`),
+    ]);
+
+    state.trabajadores.metadata = metadataResponse || {
+      defaults: {},
+      cargos: [],
+    };
+    state.trabajadores.items = Array.isArray(listResponse?.trabajadores)
+      ? listResponse.trabajadores
+      : [];
+
+    if (state.trabajadores.selectedCedula) {
+      const selected = state.trabajadores.items.find(
+        (item) =>
+          String(item?.cedula || "")
+            .trim()
+            .toUpperCase() ===
+          String(state.trabajadores.selectedCedula || "")
+            .trim()
+            .toUpperCase(),
+      );
+      if (selected) {
+        state.trabajadores.draft = trabajadorToDraft(
+          selected,
+          state.trabajadores.metadata,
+        );
+      }
+    } else if (!state.trabajadores.draft?.originalCedula) {
+      state.trabajadores.draft = createEmptyTrabajadorDraft(
+        state.trabajadores.metadata,
+      );
+    }
+  } catch (error) {
+    console.error(error);
+    state.trabajadores.items = [];
+    state.trabajadores.metadata = state.trabajadores.metadata || {
+      defaults: {},
+      cargos: [],
+    };
+    setFlash(
+      `No se pudo cargar el catalogo de trabajadores: ${extractErrorMessage(error)}`,
+      "error",
+    );
+  } finally {
+    state.trabajadores.loading = false;
+    state.trabajadores.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadTrabajadorForEdit(cedula) {
+  const normalizedCedula = String(cedula || "").trim();
+  if (!normalizedCedula) {
+    return;
+  }
+
+  state.trabajadores.loading = true;
+  clearFlash();
+  render();
+
+  try {
+    if (!state.trabajadores.metadata) {
+      state.trabajadores.metadata = await apiFetch("/trabajadores/metadata");
+    }
+
+    const response = await apiFetch(
+      `/trabajadores/${encodeURIComponent(normalizedCedula)}`,
+    );
+    const trabajador = response?.trabajador || null;
+    if (!trabajador) {
+      throw new Error("Trabajador no encontrado.");
+    }
+
+    state.trabajadores.selectedCedula = trabajador.cedula || normalizedCedula;
+    state.trabajadores.draft = trabajadorToDraft(
+      trabajador,
+      state.trabajadores.metadata,
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.trabajadores.loading = false;
+    render();
+  }
+}
+
+async function saveTrabajador() {
+  const draft =
+    state.trabajadores.draft ||
+    createEmptyTrabajadorDraft(state.trabajadores.metadata);
+  const validationMessage = validateTrabajadorDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.trabajadores.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildTrabajadorPayload(draft);
+    const response = draft.originalCedula
+      ? await apiFetch(
+          `/trabajadores/${encodeURIComponent(draft.originalCedula)}`,
+          {
+            method: "PATCH",
+            body: payload,
+          },
+        )
+      : await apiFetch("/trabajadores", {
+          method: "POST",
+          body: payload,
+        });
+
+    const trabajador = response?.trabajador || null;
+    state.trabajadores.selectedCedula =
+      trabajador?.cedula || payload.cedula || "";
+    state.trabajadores.draft = trabajadorToDraft(
+      trabajador,
+      state.trabajadores.metadata,
+    );
+    await loadTrabajadores({ renderAfter: false });
+    setFlash(
+      draft.originalCedula
+        ? `Trabajador ${trabajador?.cedula || draft.originalCedula} actualizado correctamente.`
+        : `Trabajador ${trabajador?.cedula || payload.cedula || ""} guardado correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.trabajadores.saving = false;
+    render();
+  }
+}
+
+async function deleteTrabajador(cedula) {
+  const normalizedCedula = String(cedula || "").trim();
+  if (!normalizedCedula) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Se eliminara el trabajador ${normalizedCedula}. Deseas continuar?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  state.trabajadores.deleting = true;
+  clearFlash();
+  render();
+
+  try {
+    await apiFetch(`/trabajadores/${encodeURIComponent(normalizedCedula)}`, {
+      method: "DELETE",
+    });
+
+    resetTrabajadorDraft();
+    await loadTrabajadores({ renderAfter: false });
+    setFlash(
+      `Trabajador ${normalizedCedula} eliminado correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.trabajadores.deleting = false;
+    render();
+  }
+}
+
 async function saveSucursal() {
   const draft = state.sucursales.draft || createEmptySucursalDraft();
   state.sucursales.saving = true;
@@ -13875,16 +15637,20 @@ async function saveSucursal() {
   try {
     const payload = buildSucursalPayload(draft);
     const response = draft.originalCodigo
-      ? await apiFetch(`/sucursales/${encodeURIComponent(draft.originalCodigo)}`, {
-          method: "PATCH",
-          body: payload,
-        })
+      ? await apiFetch(
+          `/sucursales/${encodeURIComponent(draft.originalCodigo)}`,
+          {
+            method: "PATCH",
+            body: payload,
+          },
+        )
       : await apiFetch("/sucursales", {
           method: "POST",
           body: payload,
         });
 
-    state.sucursales.selectedCodigo = response.sucursal?.codigo || draft.codigo || "";
+    state.sucursales.selectedCodigo =
+      response.sucursal?.codigo || draft.codigo || "";
     state.sucursales.draft = sucursalToDraft(response.sucursal);
     await loadSucursales({ renderAfter: false });
     setFlash(
@@ -13908,7 +15674,9 @@ async function deleteSucursal(codigo) {
     return;
   }
 
-  const confirmed = window.confirm(`Se eliminara la sucursal ${normalizedCode}. Deseas continuar?`);
+  const confirmed = window.confirm(
+    `Se eliminara la sucursal ${normalizedCode}. Deseas continuar?`,
+  );
   if (!confirmed) {
     return;
   }
@@ -13966,7 +15734,10 @@ async function loadArticles(page = 1, options = {}) {
     };
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo consultar el archivo de articulos: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo consultar el archivo de articulos: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.loadingArticles = false;
     if (renderAfter) {
@@ -13989,7 +15760,10 @@ async function loadArticleForEdit(code) {
     state.formDraft = articleToDraft(response.mercancia);
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar el articulo ${code}: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo cargar el articulo ${code}: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.loadingForm = false;
     render();
@@ -13999,7 +15773,8 @@ async function loadArticleForEdit(code) {
 async function saveArticle() {
   const draft = withDraftDefaults(state.formDraft || createEmptyDraft());
   const validationMessage = validateDraft(draft);
-  const isEditing = state.formMode === "edit" && Boolean(state.activeArticleCode);
+  const isEditing =
+    state.formMode === "edit" && Boolean(state.activeArticleCode);
 
   if (validationMessage) {
     setFlash(validationMessage, "error");
@@ -14020,10 +15795,13 @@ async function saveArticle() {
   try {
     const payload = buildArticlePayload(draft, !isEditing);
     const response = isEditing
-      ? await apiFetch(`/inventory/${encodeURIComponent(state.activeArticleCode)}`, {
-          method: "PATCH",
-          body: payload,
-        })
+      ? await apiFetch(
+          `/inventory/${encodeURIComponent(state.activeArticleCode)}`,
+          {
+            method: "PATCH",
+            body: payload,
+          },
+        )
       : await apiFetch("/inventory", {
           method: "POST",
           body: payload,
@@ -14039,7 +15817,9 @@ async function saveArticle() {
       state.formDraft = articleToDraft(savedArticle);
     }
 
-    await loadArticles(isEditing ? state.pagination.page || 1 : 1, { renderAfter: false });
+    await loadArticles(isEditing ? state.pagination.page || 1 : 1, {
+      renderAfter: false,
+    });
 
     if (isEditing) {
       setFlash(`Articulo ${savedCode} actualizado correctamente.`, "success");
@@ -14068,7 +15848,9 @@ async function saveArticle() {
 }
 
 async function deleteArticle(code) {
-  const confirmed = window.confirm(`Se eliminara el articulo ${code}. Deseas continuar?`);
+  const confirmed = window.confirm(
+    `Se eliminara el articulo ${code}. Deseas continuar?`,
+  );
   if (!confirmed) {
     return;
   }
@@ -14113,7 +15895,10 @@ async function openArticleLookupModal() {
     state.articleLookup.items = await fetchAllArticlesForLookup();
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar el buscador de articulos: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo cargar el buscador de articulos: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.articleLookup.loading = false;
     render();
@@ -14134,10 +15919,15 @@ async function openAdjustmentLookupModal() {
 
   try {
     const response = await apiFetch("/adjustments?limit=50");
-    state.adjustmentLookup.items = Array.isArray(response.items) ? response.items : [];
+    state.adjustmentLookup.items = Array.isArray(response.items)
+      ? response.items
+      : [];
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar el catalogo de ajustes: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo cargar el catalogo de ajustes: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.adjustmentLookup.loading = false;
     render();
@@ -14157,12 +15947,20 @@ async function openTransferLookupModal() {
   render();
 
   try {
-    const endpoint = state.currentView === "cargar-transferencia" ? "/transfers/inbound" : "/transfers";
+    const endpoint =
+      state.currentView === "cargar-transferencia"
+        ? "/transfers/inbound"
+        : "/transfers";
     const response = await apiFetch(`${endpoint}?limit=100`);
-    state.transferLookup.items = Array.isArray(response.items) ? response.items : [];
+    state.transferLookup.items = Array.isArray(response.items)
+      ? response.items
+      : [];
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar el catalogo de transferencias: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo cargar el catalogo de transferencias: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.transferLookup.loading = false;
     render();
@@ -14184,11 +15982,19 @@ async function loadAdjustmentForEdit(numero) {
       await loadAdjustmentsMetadata({ renderAfter: false });
     }
 
-    const response = await apiFetch(`/adjustments/${encodeURIComponent(numero)}`);
-    state.adjustments.draft = adjustmentToDraft(response.ajuste, state.adjustments.metadata);
+    const response = await apiFetch(
+      `/adjustments/${encodeURIComponent(numero)}`,
+    );
+    state.adjustments.draft = adjustmentToDraft(
+      response.ajuste,
+      state.adjustments.metadata,
+    );
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar el ajuste ${numero}: ${extractErrorMessage(error)}`, "error");
+    setFlash(
+      `No se pudo cargar el ajuste ${numero}: ${extractErrorMessage(error)}`,
+      "error",
+    );
   } finally {
     state.loadingForm = false;
     render();
@@ -14283,7 +16089,8 @@ function captureTransferDraft() {
 }
 
 function readTransferDraft(form) {
-  const currentDraft = state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
+  const currentDraft =
+    state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
   const rows = Array.from(form.querySelectorAll("[data-transfer-line-row]"));
   const items = rows
     .map((row) => ({
@@ -14291,22 +16098,52 @@ function readTransferDraft(form) {
       referencia: readRowFieldValue(row, "referencia", ""),
       cantidad: readRowFieldValue(row, "cantidad", "1"),
       numeroCaja: readRowFieldValue(row, "numeroCaja", "0"),
-      articuloNombre: String(row.querySelector("[data-transfer-item-name]")?.textContent || "").trim(),
-      existenciaActual: String(row.querySelector("[data-transfer-line-existence]")?.textContent || "").trim(),
+      articuloNombre: String(
+        row.querySelector("[data-transfer-item-name]")?.textContent || "",
+      ).trim(),
+      existenciaActual: String(
+        row.querySelector("[data-transfer-line-existence]")?.textContent || "",
+      ).trim(),
     }))
-    .filter((item) => item.codigoBarra || item.referencia || item.cantidad || item.articuloNombre);
+    .filter(
+      (item) =>
+        item.codigoBarra ||
+        item.referencia ||
+        item.cantidad ||
+        item.articuloNombre,
+    );
 
   return {
     numero: currentDraft.numero,
     fecha: currentDraft.fecha,
     fechaEmision: currentDraft.fechaEmision,
-    codigoEnvia: readFormFieldValue(form, "codigoEnvia", currentDraft.codigoEnvia),
-    codigoRecibe: readFormFieldValue(form, "codigoRecibe", currentDraft.codigoRecibe),
-    documentoOrigen: readFormFieldValue(form, "documentoOrigen", currentDraft.documentoOrigen),
-    observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
+    codigoEnvia: readFormFieldValue(
+      form,
+      "codigoEnvia",
+      currentDraft.codigoEnvia,
+    ),
+    codigoRecibe: readFormFieldValue(
+      form,
+      "codigoRecibe",
+      currentDraft.codigoRecibe,
+    ),
+    documentoOrigen: readFormFieldValue(
+      form,
+      "documentoOrigen",
+      currentDraft.documentoOrigen,
+    ),
+    observacion: readFormFieldValue(
+      form,
+      "observacion",
+      currentDraft.observacion,
+    ),
     idDespacho: readFormFieldValue(form, "idDespacho", currentDraft.idDespacho),
     zona: readFormFieldValue(form, "zona", currentDraft.zona),
-    correccion: readFormCheckboxValue(form, "transferenciaCorreccion", currentDraft.correccion),
+    correccion: readFormCheckboxValue(
+      form,
+      "transferenciaCorreccion",
+      currentDraft.correccion,
+    ),
     status: currentDraft.status,
     items: items.length ? items : [createEmptyTransferLineDraft()],
   };
@@ -14322,14 +16159,20 @@ function readRowFieldValue(row, name, fallback = "") {
 }
 
 function validateTransferDraft(draft) {
-  const codigoEnvia = String(draft.codigoEnvia || "").trim().toUpperCase();
-  const codigoRecibe = String(draft.codigoRecibe || "").trim().toUpperCase();
+  const codigoEnvia = String(draft.codigoEnvia || "")
+    .trim()
+    .toUpperCase();
+  const codigoRecibe = String(draft.codigoRecibe || "")
+    .trim()
+    .toUpperCase();
 
   if (codigoEnvia && codigoRecibe && codigoEnvia === codigoRecibe) {
     return "El origen y el destino no pueden ser iguales.";
   }
 
-  const validLines = (draft.items || []).filter((item) => String(item.codigoBarra || "").trim());
+  const validLines = (draft.items || []).filter((item) =>
+    String(item.codigoBarra || "").trim(),
+  );
 
   for (const item of validLines) {
     const cantidad = Number(item.cantidad || 0);
@@ -14343,8 +16186,14 @@ function validateTransferDraft(draft) {
 
 function buildTransferPayload(draft) {
   return {
-    codigoEnvia: String(draft.codigoEnvia || "").trim().toUpperCase() || undefined,
-    codigoRecibe: String(draft.codigoRecibe || "").trim().toUpperCase() || undefined,
+    codigoEnvia:
+      String(draft.codigoEnvia || "")
+        .trim()
+        .toUpperCase() || undefined,
+    codigoRecibe:
+      String(draft.codigoRecibe || "")
+        .trim()
+        .toUpperCase() || undefined,
     documentoOrigen: String(draft.documentoOrigen || "").trim() || undefined,
     observacion: String(draft.observacion || "").trim() || undefined,
     idDespacho: Number.parseInt(String(draft.idDespacho || "0"), 10),
@@ -14353,8 +16202,12 @@ function buildTransferPayload(draft) {
     items: (draft.items || [])
       .filter((item) => String(item.codigoBarra || "").trim())
       .map((item) => ({
-        codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
-        referencia: String(item.referencia || "").trim().toUpperCase(),
+        codigoBarra: String(item.codigoBarra || "")
+          .trim()
+          .toUpperCase(),
+        referencia: String(item.referencia || "")
+          .trim()
+          .toUpperCase(),
         cantidad: String(item.cantidad || "").trim(),
         numeroCaja: Number.parseInt(String(item.numeroCaja || "0"), 10) || 0,
       })),
@@ -14365,32 +16218,40 @@ function transferToDraft(transfer, metadata = state.transfers?.metadata) {
   return {
     numero: transfer?.numero ?? null,
     fecha: transfer?.fecha || new Date().toISOString(),
-    fechaEmision: Number(transfer?.status ?? 0) === 1 ? transfer?.fechaEmision || transfer?.fechaAprobacion || null : null,
+    fechaEmision:
+      Number(transfer?.status ?? 0) === 1
+        ? transfer?.fechaEmision || transfer?.fechaAprobacion || null
+        : null,
     codigoEnvia: transfer?.codigoEnvia || "",
-    codigoEnviaNombre: transfer?.codigoEnviaInfo?.nombre || transfer?.codigoEnvia || "",
+    codigoEnviaNombre:
+      transfer?.codigoEnviaInfo?.nombre || transfer?.codigoEnvia || "",
     codigoRecibe: transfer?.codigoRecibe || "",
-    codigoRecibeNombre: transfer?.codigoRecibeInfo?.nombre || transfer?.codigoRecibe || "",
+    codigoRecibeNombre:
+      transfer?.codigoRecibeInfo?.nombre || transfer?.codigoRecibe || "",
     documentoOrigen: transfer?.documentoOrigen || "",
     observacion: transfer?.observacion || "",
-    idDespacho: String(transfer?.idDespacho ?? metadata?.defaults?.idDespacho ?? "0"),
+    idDespacho: String(
+      transfer?.idDespacho ?? metadata?.defaults?.idDespacho ?? "0",
+    ),
     zona: transfer?.zona || "",
     correccion: Boolean(transfer?.correccion),
     status: Number(transfer?.status ?? 0),
     syncStatus: transfer?.syncStatus || "",
     cargada: Boolean(transfer?.cargada),
     fechaCarga: transfer?.fechaCarga || null,
-    items: Array.isArray(transfer?.items) && transfer.items.length > 0
-      ? transfer.items.map((item) => ({
-          codigoBarra: item.codigoBarra || "",
-          referencia: item.articulo?.referencia || item.referencia || "",
-          cantidad: toInputValue(item.cantidad),
-          valor: toInputValue(item.valor),
-          numeroCaja: toInputValue(item.numeroCaja),
-          articuloNombre: item.articulo?.nombre || "",
-          existenciaActual: item.articulo?.existenciaActual || "",
-          existenciaLote: item.articulo?.existenciaActual || "",
-        }))
-      : [createEmptyTransferLineDraft()],
+    items:
+      Array.isArray(transfer?.items) && transfer.items.length > 0
+        ? transfer.items.map((item) => ({
+            codigoBarra: item.codigoBarra || "",
+            referencia: item.articulo?.referencia || item.referencia || "",
+            cantidad: toInputValue(item.cantidad),
+            valor: toInputValue(item.valor),
+            numeroCaja: toInputValue(item.numeroCaja),
+            articuloNombre: item.articulo?.nombre || "",
+            existenciaActual: item.articulo?.existenciaActual || "",
+            existenciaLote: item.articulo?.existenciaActual || "",
+          }))
+        : [createEmptyTransferLineDraft()],
   };
 }
 
@@ -14433,8 +16294,17 @@ function createEmptyDevReturnDraft(metadata) {
   return {
     numero: null,
     fecha: toDateInputValue(new Date()),
-    codigoOrigen: String(metadata?.defaults?.codigoOrigen || metadata?.origenes?.[0]?.codigo || metadata?.contexto?.sucursalCodigo || "ORIGEN"),
-    codigoDestino: String(metadata?.defaults?.codigoDestino || metadata?.destinos?.[0]?.codigo || "ORIGEN"),
+    codigoOrigen: String(
+      metadata?.defaults?.codigoOrigen ||
+        metadata?.origenes?.[0]?.codigo ||
+        metadata?.contexto?.sucursalCodigo ||
+        "ORIGEN",
+    ),
+    codigoDestino: String(
+      metadata?.defaults?.codigoDestino ||
+        metadata?.destinos?.[0]?.codigo ||
+        "ORIGEN",
+    ),
     observacion: "",
     status: 0,
     items: [createEmptyDevReturnLineDraft()],
@@ -14462,7 +16332,9 @@ function captureDevReturnDraft() {
 }
 
 function readDevReturnDraft(form) {
-  const currentDraft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
+  const currentDraft =
+    state.devReturns.draft ||
+    createEmptyDevReturnDraft(state.devReturns.metadata);
   const rows = Array.from(form.querySelectorAll("[data-dev-return-line-row]"));
   const items = rows
     .map((row) => ({
@@ -14473,26 +16345,45 @@ function readDevReturnDraft(form) {
       numeroCaja: readRowFieldValue(row, "numeroCaja", "0"),
       costo: readRowFieldValue(row, "costo", ""),
     }))
-    .filter((item) => item.codigoBarra || item.referencia || item.nombre || item.cantidad);
+    .filter(
+      (item) =>
+        item.codigoBarra || item.referencia || item.nombre || item.cantidad,
+    );
 
   return {
     numero: currentDraft.numero,
     fecha: readFormFieldValue(form, "fecha", currentDraft.fecha),
-    codigoOrigen: readFormFieldValue(form, "codigoOrigen", currentDraft.codigoOrigen),
-    codigoDestino: readFormFieldValue(form, "codigoDestino", currentDraft.codigoDestino),
-    observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
+    codigoOrigen: readFormFieldValue(
+      form,
+      "codigoOrigen",
+      currentDraft.codigoOrigen,
+    ),
+    codigoDestino: readFormFieldValue(
+      form,
+      "codigoDestino",
+      currentDraft.codigoDestino,
+    ),
+    observacion: readFormFieldValue(
+      form,
+      "observacion",
+      currentDraft.observacion,
+    ),
     status: currentDraft.status,
     items: items.length ? items : [createEmptyDevReturnLineDraft()],
   };
 }
 
 function validateDevReturnDraft(draft) {
-  const codigoOrigen = String(draft.codigoOrigen || "").trim().toUpperCase();
+  const codigoOrigen = String(draft.codigoOrigen || "")
+    .trim()
+    .toUpperCase();
   if (!codigoOrigen) {
     return "Debes indicar la bodega origen.";
   }
 
-  const codigoDestino = String(draft.codigoDestino || "").trim().toUpperCase();
+  const codigoDestino = String(draft.codigoDestino || "")
+    .trim()
+    .toUpperCase();
   if (!codigoDestino) {
     return "Debes indicar la bodega destino.";
   }
@@ -14501,7 +16392,9 @@ function validateDevReturnDraft(draft) {
     return "El origen y el destino del borrador no pueden ser iguales.";
   }
 
-  const validLines = (draft.items || []).filter((item) => String(item.codigoBarra || "").trim());
+  const validLines = (draft.items || []).filter((item) =>
+    String(item.codigoBarra || "").trim(),
+  );
   if (!validLines.length) {
     return "El borrador de devolucion debe tener al menos un renglon.";
   }
@@ -14519,13 +16412,21 @@ function validateDevReturnDraft(draft) {
 function buildDevReturnPayload(draft) {
   return {
     fecha: toApiDateTime(draft.fecha),
-    codigoOrigen: String(draft.codigoOrigen || "").trim().toUpperCase() || undefined,
-    codigoDestino: String(draft.codigoDestino || "").trim().toUpperCase() || undefined,
+    codigoOrigen:
+      String(draft.codigoOrigen || "")
+        .trim()
+        .toUpperCase() || undefined,
+    codigoDestino:
+      String(draft.codigoDestino || "")
+        .trim()
+        .toUpperCase() || undefined,
     observacion: String(draft.observacion || "").trim() || undefined,
     items: (draft.items || [])
       .filter((item) => String(item.codigoBarra || "").trim())
       .map((item) => ({
-        codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
+        codigoBarra: String(item.codigoBarra || "")
+          .trim()
+          .toUpperCase(),
         cantidad: String(item.cantidad || "").trim(),
         numeroCaja: Number.parseInt(String(item.numeroCaja || "0"), 10) || 0,
         costo: String(item.costo || "").trim() || undefined,
@@ -14537,20 +16438,30 @@ function devReturnToDraft(draft, metadata = state.devReturns?.metadata) {
   return {
     numero: draft?.numero ?? null,
     fecha: toDateInputValue(draft?.fecha),
-    codigoOrigen: draft?.codigoOrigen || metadata?.defaults?.codigoOrigen || metadata?.origenes?.[0]?.codigo || metadata?.contexto?.sucursalCodigo || "ORIGEN",
-    codigoDestino: draft?.codigoDestino || metadata?.defaults?.codigoDestino || metadata?.destinos?.[0]?.codigo || "ORIGEN",
+    codigoOrigen:
+      draft?.codigoOrigen ||
+      metadata?.defaults?.codigoOrigen ||
+      metadata?.origenes?.[0]?.codigo ||
+      metadata?.contexto?.sucursalCodigo ||
+      "ORIGEN",
+    codigoDestino:
+      draft?.codigoDestino ||
+      metadata?.defaults?.codigoDestino ||
+      metadata?.destinos?.[0]?.codigo ||
+      "ORIGEN",
     observacion: draft?.observacion || "",
     status: Number(draft?.status ?? 0),
-    items: Array.isArray(draft?.items) && draft.items.length > 0
-      ? draft.items.map((item) => ({
-          codigoBarra: item.codigoBarra || "",
-          referencia: item.articulo?.referencia || item.referencia || "",
-          nombre: item.articulo?.nombre || item.nombre || "",
-          cantidad: toInputValue(item.cantidad),
-          numeroCaja: toInputValue(item.numeroCaja),
-          costo: toInputValue(item.costo),
-        }))
-      : [createEmptyDevReturnLineDraft()],
+    items:
+      Array.isArray(draft?.items) && draft.items.length > 0
+        ? draft.items.map((item) => ({
+            codigoBarra: item.codigoBarra || "",
+            referencia: item.articulo?.referencia || item.referencia || "",
+            nombre: item.articulo?.nombre || item.nombre || "",
+            cantidad: toInputValue(item.cantidad),
+            numeroCaja: toInputValue(item.numeroCaja),
+            costo: toInputValue(item.costo),
+          }))
+        : [createEmptyDevReturnLineDraft()],
   };
 }
 
@@ -14574,7 +16485,9 @@ function computeDevReturnDraftQuantity(draft) {
 }
 
 function resetAdjustmentDraft() {
-  state.adjustments.draft = createEmptyAdjustmentDraft(state.adjustments.metadata);
+  state.adjustments.draft = createEmptyAdjustmentDraft(
+    state.adjustments.metadata,
+  );
 }
 
 function createEmptyAdjustmentDraft(metadata) {
@@ -14611,7 +16524,9 @@ function captureAdjustmentDraft() {
 }
 
 function readAdjustmentDraft(form) {
-  const currentDraft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
+  const currentDraft =
+    state.adjustments.draft ||
+    createEmptyAdjustmentDraft(state.adjustments.metadata);
   const rows = Array.from(form.querySelectorAll("[data-adjustment-line-row]"));
   const items = rows
     .map((row) => ({
@@ -14621,22 +16536,33 @@ function readAdjustmentDraft(form) {
       cantidad: readRowFieldValue(row, "cantidad", ""),
       costo: readRowFieldValue(row, "costo", ""),
     }))
-    .filter((item) => item.codigoBarra || item.referencia || item.nombre || item.cantidad);
+    .filter(
+      (item) =>
+        item.codigoBarra || item.referencia || item.nombre || item.cantidad,
+    );
 
   return {
     numero: currentDraft.numero,
     fecha: readFormFieldValue(form, "fecha", currentDraft.fecha),
     tipo: readFormFieldValue(form, "tipo", currentDraft.tipo || "positivo"),
-    tipoAjuste: resolveAdjustmentTypeId(readFormFieldValue(form, "tipo", currentDraft.tipo || "positivo")),
+    tipoAjuste: resolveAdjustmentTypeId(
+      readFormFieldValue(form, "tipo", currentDraft.tipo || "positivo"),
+    ),
     idLote: readFormFieldValue(form, "idLote", currentDraft.idLote),
-    observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
+    observacion: readFormFieldValue(
+      form,
+      "observacion",
+      currentDraft.observacion,
+    ),
     status: currentDraft.status,
     items: items.length ? items : [createEmptyAdjustmentLineDraft()],
   };
 }
 
 function validateAdjustmentDraft(draft) {
-  const validLines = (draft.items || []).filter((item) => String(item.codigoBarra || "").trim());
+  const validLines = (draft.items || []).filter((item) =>
+    String(item.codigoBarra || "").trim(),
+  );
 
   if (!validLines.length) {
     return "El ajuste debe tener al menos un renglon.";
@@ -14665,7 +16591,9 @@ function buildAdjustmentPayload(draft) {
     items: (draft.items || [])
       .filter((item) => String(item.codigoBarra || "").trim())
       .map((item) => ({
-        codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
+        codigoBarra: String(item.codigoBarra || "")
+          .trim()
+          .toUpperCase(),
         cantidad: String(item.cantidad || "").trim(),
         costo: String(item.costo || "").trim() || undefined,
       })),
@@ -14673,7 +16601,9 @@ function buildAdjustmentPayload(draft) {
 }
 
 function adjustmentToDraft(adjustment, metadata = state.adjustments?.metadata) {
-  const tipo = adjustment?.tipo || (Number(adjustment?.signo || 1) === -1 ? "negativo" : "positivo");
+  const tipo =
+    adjustment?.tipo ||
+    (Number(adjustment?.signo || 1) === -1 ? "negativo" : "positivo");
 
   return {
     numero: adjustment?.numero ?? null,
@@ -14683,16 +16613,17 @@ function adjustmentToDraft(adjustment, metadata = state.adjustments?.metadata) {
     idLote: String(adjustment?.idLote ?? metadata?.defaults?.idLote ?? ""),
     observacion: adjustment?.observacion || "",
     status: Number(adjustment?.status ?? 0),
-    items: Array.isArray(adjustment?.items) && adjustment.items.length > 0
-      ? adjustment.items.map((item) => ({
-          codigoBarra: item.codigoBarra || "",
-          referencia: item.referencia || "",
-          nombre: item.nombre || "",
-          cantidad: toInputValue(item.cantidad),
-          costo: toInputValue(item.costo),
-          existenciaActual: toInputValue(item.existenciaActual),
-        }))
-      : [createEmptyAdjustmentLineDraft()],
+    items:
+      Array.isArray(adjustment?.items) && adjustment.items.length > 0
+        ? adjustment.items.map((item) => ({
+            codigoBarra: item.codigoBarra || "",
+            referencia: item.referencia || "",
+            nombre: item.nombre || "",
+            cantidad: toInputValue(item.cantidad),
+            costo: toInputValue(item.costo),
+            existenciaActual: toInputValue(item.existenciaActual),
+          }))
+        : [createEmptyAdjustmentLineDraft()],
   };
 }
 
@@ -14759,12 +16690,16 @@ function readSucursalDraft(form) {
 
 function buildSucursalPayload(draft) {
   return {
-    codigo: String(draft.codigo || "").trim().toUpperCase() || undefined,
+    codigo:
+      String(draft.codigo || "")
+        .trim()
+        .toUpperCase() || undefined,
     nombre: String(draft.nombre || "").trim() || undefined,
     direccion: String(draft.direccion || "").trim() || undefined,
     telefono: String(draft.telefono || "").trim() || undefined,
     status: Number.parseInt(String(draft.status ?? "1"), 10),
-    porcentajeDeRedondeo: String(draft.porcentajeDeRedondeo || "").trim() || undefined,
+    porcentajeDeRedondeo:
+      String(draft.porcentajeDeRedondeo || "").trim() || undefined,
   };
 }
 
@@ -14782,7 +16717,9 @@ function sucursalToDraft(sucursal) {
 
 function resetTrabajadorDraft() {
   state.trabajadores.selectedCedula = "";
-  state.trabajadores.draft = createEmptyTrabajadorDraft(state.trabajadores.metadata);
+  state.trabajadores.draft = createEmptyTrabajadorDraft(
+    state.trabajadores.metadata,
+  );
 }
 
 function resetClienteDraft() {
@@ -14796,12 +16733,16 @@ function createEmptyClienteDraft(metadata) {
     originalCodigo: "",
     codigo: defaults.codigo || "",
     nombre: "",
-    fechaIngreso: defaults.fechaIngreso ? toDateInputValue(defaults.fechaIngreso) : toDateInputValue(new Date()),
+    fechaIngreso: defaults.fechaIngreso
+      ? toDateInputValue(defaults.fechaIngreso)
+      : toDateInputValue(new Date()),
     telefono: "",
     direccion: "",
     status: defaults.status ?? 1,
     tipo: defaults.tipo ? String(defaults.tipo) : "",
-    tipoContribuyente: defaults.tipoContribuyente ? String(defaults.tipoContribuyente) : "",
+    tipoContribuyente: defaults.tipoContribuyente
+      ? String(defaults.tipoContribuyente)
+      : "",
   };
 }
 
@@ -14815,17 +16756,30 @@ function captureClienteDraft() {
 }
 
 function readClienteDraft(form) {
-  const currentDraft = state.clientes.draft || createEmptyClienteDraft(state.clientes.metadata);
+  const currentDraft =
+    state.clientes.draft || createEmptyClienteDraft(state.clientes.metadata);
   return {
     originalCodigo: currentDraft.originalCodigo || "",
     codigo: readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
     nombre: readFormFieldValue(form, "nombre", ""),
-    fechaIngreso: readFormFieldValue(form, "fechaIngreso", toDateInputValue(new Date())),
+    fechaIngreso: readFormFieldValue(
+      form,
+      "fechaIngreso",
+      toDateInputValue(new Date()),
+    ),
     telefono: readFormFieldValue(form, "telefono", ""),
     direccion: readFormFieldValue(form, "direccion", ""),
-    status: Number.parseInt(readFormFieldValue(form, "status", String(currentDraft.status ?? 1)), 10) || 1,
+    status:
+      Number.parseInt(
+        readFormFieldValue(form, "status", String(currentDraft.status ?? 1)),
+        10,
+      ) || 1,
     tipo: readFormFieldValue(form, "tipo", currentDraft.tipo || ""),
-    tipoContribuyente: readFormFieldValue(form, "tipoContribuyente", currentDraft.tipoContribuyente || ""),
+    tipoContribuyente: readFormFieldValue(
+      form,
+      "tipoContribuyente",
+      currentDraft.tipoContribuyente || "",
+    ),
   };
 }
 
@@ -14862,7 +16816,10 @@ function buildClientePayload(draft) {
     direccion: String(draft.direccion || "").trim(),
     status: Number.parseInt(String(draft.status ?? 1), 10) || 1,
     tipo: Number.parseInt(String(draft.tipo || ""), 10),
-    tipoContribuyente: Number.parseInt(String(draft.tipoContribuyente || ""), 10),
+    tipoContribuyente: Number.parseInt(
+      String(draft.tipoContribuyente || ""),
+      10,
+    ),
   };
 }
 
@@ -14879,9 +16836,12 @@ function clienteToDraft(item, metadata = state.clientes?.metadata) {
     telefono: item.telefono || "",
     direccion: item.direccion || "",
     status: item.status ?? 1,
-    tipo: item.tipo !== null && item.tipo !== undefined ? String(item.tipo) : "",
+    tipo:
+      item.tipo !== null && item.tipo !== undefined ? String(item.tipo) : "",
     tipoContribuyente:
-      item.tipoContribuyente !== null && item.tipoContribuyente !== undefined ? String(item.tipoContribuyente) : "",
+      item.tipoContribuyente !== null && item.tipoContribuyente !== undefined
+        ? String(item.tipoContribuyente)
+        : "",
   };
 }
 
@@ -14920,7 +16880,9 @@ function createEmptyProveedorDraft(metadata) {
     tipo: defaults.tipo ? String(defaults.tipo) : "",
     nombre: "",
     contacto: "",
-    fechaIngreso: defaults.fechaIngreso ? toDateInputValue(defaults.fechaIngreso) : toDateInputValue(new Date()),
+    fechaIngreso: defaults.fechaIngreso
+      ? toDateInputValue(defaults.fechaIngreso)
+      : toDateInputValue(new Date()),
     codigoPostal: "",
     telefono: "",
     fax: "",
@@ -14942,18 +16904,34 @@ function captureProveedorDraft() {
 }
 
 function readProveedorDraft(form) {
-  const currentDraft = state.proveedores.draft || createEmptyProveedorDraft(state.proveedores.metadata);
+  const currentDraft =
+    state.proveedores.draft ||
+    createEmptyProveedorDraft(state.proveedores.metadata);
   return {
     originalCodigo: currentDraft.originalCodigo || "",
-    codigo: currentDraft.originalCodigo || readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
+    codigo:
+      currentDraft.originalCodigo ||
+      readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
     tipo: readFormFieldValue(form, "tipo", currentDraft.tipo || ""),
     nombre: readFormFieldValue(form, "nombre", currentDraft.nombre || ""),
     contacto: readFormFieldValue(form, "contacto", currentDraft.contacto || ""),
-    fechaIngreso: readFormFieldValue(form, "fechaIngreso", currentDraft.fechaIngreso || toDateInputValue(new Date())),
-    codigoPostal: readFormFieldValue(form, "codigoPostal", currentDraft.codigoPostal || ""),
+    fechaIngreso: readFormFieldValue(
+      form,
+      "fechaIngreso",
+      currentDraft.fechaIngreso || toDateInputValue(new Date()),
+    ),
+    codigoPostal: readFormFieldValue(
+      form,
+      "codigoPostal",
+      currentDraft.codigoPostal || "",
+    ),
     telefono: readFormFieldValue(form, "telefono", currentDraft.telefono || ""),
     fax: readFormFieldValue(form, "fax", currentDraft.fax || ""),
-    direccion: readFormFieldValue(form, "direccion", currentDraft.direccion || ""),
+    direccion: readFormFieldValue(
+      form,
+      "direccion",
+      currentDraft.direccion || "",
+    ),
     pais: readFormFieldValue(form, "pais", currentDraft.pais || ""),
     estado: readFormFieldValue(form, "estado", currentDraft.estado || ""),
     ciudad: readFormFieldValue(form, "ciudad", currentDraft.ciudad || ""),
@@ -14983,7 +16961,9 @@ function validateProveedorDraft(draft) {
 
 function buildProveedorPayload(draft) {
   return {
-    codigo: String(draft.codigo || "").trim().toUpperCase(),
+    codigo: String(draft.codigo || "")
+      .trim()
+      .toUpperCase(),
     tipo: Number.parseInt(String(draft.tipo || ""), 10),
     nombre: String(draft.nombre || "").trim(),
     contacto: String(draft.contacto || "").trim(),
@@ -15007,10 +16987,13 @@ function proveedorToDraft(item, metadata = state.proveedores?.metadata) {
   return {
     originalCodigo: item.codigo || "",
     codigo: item.codigo || "",
-    tipo: item.tipo !== null && item.tipo !== undefined ? String(item.tipo) : "",
+    tipo:
+      item.tipo !== null && item.tipo !== undefined ? String(item.tipo) : "",
     nombre: item.nombre || "",
     contacto: item.contacto || "",
-    fechaIngreso: toDateInputValue(item.fechaIngreso || metadata?.defaults?.fechaIngreso || new Date()),
+    fechaIngreso: toDateInputValue(
+      item.fechaIngreso || metadata?.defaults?.fechaIngreso || new Date(),
+    ),
     codigoPostal: item.codigoPostal || "",
     telefono: item.telefono || "",
     fax: item.fax || "",
@@ -15030,7 +17013,9 @@ function createEmptyTrabajadorDraft(metadata) {
     nombre: "",
     cargo: "",
     fechaIngreso: toDateInputValue(defaults.fechaIngreso || new Date()),
-    fechaNacimiento: toDateInputValue(defaults.fechaNacimiento || defaults.fechaIngreso || new Date()),
+    fechaNacimiento: toDateInputValue(
+      defaults.fechaNacimiento || defaults.fechaIngreso || new Date(),
+    ),
     direccion: "",
     telefono: "",
     celular: "",
@@ -15048,16 +17033,28 @@ function captureTrabajadorDraft() {
 }
 
 function readTrabajadorDraft(form) {
-  const currentDraft = state.trabajadores.draft || createEmptyTrabajadorDraft(state.trabajadores.metadata);
+  const currentDraft =
+    state.trabajadores.draft ||
+    createEmptyTrabajadorDraft(state.trabajadores.metadata);
 
   return {
     originalCedula: currentDraft.originalCedula || "",
-    cedula: currentDraft.originalCedula || readFormFieldValue(form, "cedula", currentDraft.cedula),
+    cedula:
+      currentDraft.originalCedula ||
+      readFormFieldValue(form, "cedula", currentDraft.cedula),
     codigo: readFormFieldValue(form, "codigo", currentDraft.codigo),
     nombre: readFormFieldValue(form, "nombre", currentDraft.nombre),
     cargo: readFormFieldValue(form, "cargo", currentDraft.cargo),
-    fechaIngreso: readFormFieldValue(form, "fechaIngreso", currentDraft.fechaIngreso),
-    fechaNacimiento: readFormFieldValue(form, "fechaNacimiento", currentDraft.fechaNacimiento),
+    fechaIngreso: readFormFieldValue(
+      form,
+      "fechaIngreso",
+      currentDraft.fechaIngreso,
+    ),
+    fechaNacimiento: readFormFieldValue(
+      form,
+      "fechaNacimiento",
+      currentDraft.fechaNacimiento,
+    ),
     direccion: readFormFieldValue(form, "direccion", currentDraft.direccion),
     telefono: readFormFieldValue(form, "telefono", currentDraft.telefono),
     celular: readFormFieldValue(form, "celular", currentDraft.celular),
@@ -15092,12 +17089,19 @@ function validateTrabajadorDraft(draft) {
 
 function buildTrabajadorPayload(draft) {
   return {
-    cedula: String(draft.cedula || "").trim().toUpperCase(),
+    cedula: String(draft.cedula || "")
+      .trim()
+      .toUpperCase(),
     codigo: Number.parseInt(String(draft.codigo || "0"), 10),
     nombre: String(draft.nombre || "").trim() || undefined,
-    cargo: String(draft.cargo || "").trim().toUpperCase() || undefined,
+    cargo:
+      String(draft.cargo || "")
+        .trim()
+        .toUpperCase() || undefined,
     fechaIngreso: toApiDateTime(draft.fechaIngreso),
-    fechaNacimiento: String(draft.fechaNacimiento || "").trim() ? toApiDateTime(draft.fechaNacimiento) : undefined,
+    fechaNacimiento: String(draft.fechaNacimiento || "").trim()
+      ? toApiDateTime(draft.fechaNacimiento)
+      : undefined,
     direccion: String(draft.direccion || "").trim() || undefined,
     telefono: String(draft.telefono || "").trim() || undefined,
     celular: String(draft.celular || "").trim() || undefined,
@@ -15112,7 +17116,9 @@ function trabajadorToDraft(item, metadata = state.trabajadores?.metadata) {
     codigo: toInputValue(item?.codigo ?? metadata?.defaults?.codigo ?? ""),
     nombre: item?.nombre || "",
     cargo: item?.cargo || "",
-    fechaIngreso: toDateInputValue(item?.fechaIngreso || metadata?.defaults?.fechaIngreso || new Date()),
+    fechaIngreso: toDateInputValue(
+      item?.fechaIngreso || metadata?.defaults?.fechaIngreso || new Date(),
+    ),
     fechaNacimiento: toDateInputValue(item?.fechaNacimiento),
     direccion: item?.direccion || "",
     telefono: item?.telefono || "",
@@ -15145,11 +17151,16 @@ function captureImpuestoDraft() {
 }
 
 function readImpuestoDraft(form) {
-  const currentDraft = state.impuestos.draft || createEmptyImpuestoDraft(state.impuestos.items);
+  const currentDraft =
+    state.impuestos.draft || createEmptyImpuestoDraft(state.impuestos.items);
   return {
     codigo: readFormFieldValue(form, "codigo", currentDraft.codigo),
     nombre: readFormFieldValue(form, "nombre", currentDraft.nombre),
-    porcentajeImpuesto: readFormFieldValue(form, "porcentajeImpuesto", currentDraft.porcentajeImpuesto),
+    porcentajeImpuesto: readFormFieldValue(
+      form,
+      "porcentajeImpuesto",
+      currentDraft.porcentajeImpuesto,
+    ),
     status: readRadioValue(form, "status", currentDraft.status || "1"),
   };
 }
@@ -15164,7 +17175,11 @@ function validateImpuestoDraft(draft) {
     return "Debes indicar el nombre del impuesto.";
   }
 
-  const porcentaje = Number(String(draft.porcentajeImpuesto || "").trim().replace(",", "."));
+  const porcentaje = Number(
+    String(draft.porcentajeImpuesto || "")
+      .trim()
+      .replace(",", "."),
+  );
   if (!Number.isFinite(porcentaje) || porcentaje < 0) {
     return "Debes indicar un porcentaje vÃ¡lido para el impuesto.";
   }
@@ -15176,7 +17191,9 @@ function buildImpuestoPayload(draft) {
   return {
     codigo: String(draft.codigo || "").trim(),
     nombre: String(draft.nombre || "").trim(),
-    porcentajeImpuesto: String(draft.porcentajeImpuesto || "0").trim().replace(",", "."),
+    porcentajeImpuesto: String(draft.porcentajeImpuesto || "0")
+      .trim()
+      .replace(",", "."),
     status: Number.parseInt(String(draft.status || "1"), 10) === 0 ? 0 : 1,
   };
 }
@@ -15189,7 +17206,8 @@ function impuestoToDraft(item) {
   return {
     codigo: String(item.codigo || ""),
     nombre: item.nombre || "",
-    porcentajeImpuesto: item.porcentajeImpuesto == null ? "0" : String(item.porcentajeImpuesto),
+    porcentajeImpuesto:
+      item.porcentajeImpuesto == null ? "0" : String(item.porcentajeImpuesto),
     status: String(item.status ?? 1) === "0" ? "0" : "1",
   };
 }
@@ -15240,10 +17258,13 @@ function captureBancoDraft() {
 }
 
 function readBancoDraft(form) {
-  const currentDraft = state.bancos.draft || createEmptyBancoDraft(state.bancos.metadata);
+  const currentDraft =
+    state.bancos.draft || createEmptyBancoDraft(state.bancos.metadata);
   return {
     originalCodigo: currentDraft.originalCodigo || "",
-    codigo: currentDraft.originalCodigo || readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
+    codigo:
+      currentDraft.originalCodigo ||
+      readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
     nombre: readFormFieldValue(form, "nombre", currentDraft.nombre || ""),
     status: readRadioValue(form, "status", String(currentDraft.status ?? 1)),
   };
@@ -15263,7 +17284,9 @@ function validateBancoDraft(draft) {
 
 function buildBancoPayload(draft) {
   return {
-    codigo: String(draft.codigo || "").trim().toUpperCase(),
+    codigo: String(draft.codigo || "")
+      .trim()
+      .toUpperCase(),
     nombre: String(draft.nombre || "").trim(),
     status: Number.parseInt(String(draft.status || "1"), 10) === 0 ? 0 : 1,
   };
@@ -15307,7 +17330,8 @@ function captureTipoPagoDraft() {
 }
 
 function readTipoPagoDraft(form) {
-  const currentDraft = state.tiposPago.draft || createEmptyTipoPagoDraft(state.tiposPago.metadata);
+  const currentDraft =
+    state.tiposPago.draft || createEmptyTipoPagoDraft(state.tiposPago.metadata);
   return {
     originalCodigo: String(currentDraft.originalCodigo || ""),
     codigo: currentDraft.originalCodigo
@@ -15365,7 +17389,11 @@ function createEmptyImpresoraDraft(metadata) {
     id: toInputValue(defaults.id ?? ""),
     nombreImpresora: "",
     status: String(defaults.status ?? 0),
-    idProcesoImpresion: normalizeImpresoraReportFormatId(defaults.idProcesoImpresion ?? "", metadata, defaults.idProcesoImpresion ?? ""),
+    idProcesoImpresion: normalizeImpresoraReportFormatId(
+      defaults.idProcesoImpresion ?? "",
+      metadata,
+      defaults.idProcesoImpresion ?? "",
+    ),
   };
 }
 
@@ -15379,16 +17407,27 @@ function captureImpresoraDraft() {
 }
 
 function readImpresoraDraft(form) {
-  const currentDraft = state.impresoras.draft || createEmptyImpresoraDraft(state.impresoras.metadata);
+  const currentDraft =
+    state.impresoras.draft ||
+    createEmptyImpresoraDraft(state.impresoras.metadata);
   return {
     originalId: String(currentDraft.originalId || ""),
-    id: currentDraft.originalId || currentDraft.originalId === 0
-      ? String(currentDraft.originalId)
-      : readFormFieldValue(form, "id", currentDraft.id || ""),
-    nombreImpresora: readFormFieldValue(form, "nombreImpresora", currentDraft.nombreImpresora || ""),
+    id:
+      currentDraft.originalId || currentDraft.originalId === 0
+        ? String(currentDraft.originalId)
+        : readFormFieldValue(form, "id", currentDraft.id || ""),
+    nombreImpresora: readFormFieldValue(
+      form,
+      "nombreImpresora",
+      currentDraft.nombreImpresora || "",
+    ),
     status: readRadioValue(form, "status", String(currentDraft.status ?? 0)),
     idProcesoImpresion: normalizeImpresoraReportFormatId(
-      readFormFieldValue(form, "idProcesoImpresion", currentDraft.idProcesoImpresion || ""),
+      readFormFieldValue(
+        form,
+        "idProcesoImpresion",
+        currentDraft.idProcesoImpresion || "",
+      ),
       state.impresoras.metadata,
       currentDraft.idProcesoImpresion || "",
     ),
@@ -15411,7 +17450,12 @@ function validateImpresoraDraft(draft) {
       return "No se detectaron formatos .rpt para la impresora de contingencia.";
     }
 
-    if (!findImpresoraReportFormatById(draft.idProcesoImpresion, state.impresoras.metadata)) {
+    if (
+      !findImpresoraReportFormatById(
+        draft.idProcesoImpresion,
+        state.impresoras.metadata,
+      )
+    ) {
       return "Debes seleccionar el formato de factura para la impresora de contingencia.";
     }
   }
@@ -15420,7 +17464,10 @@ function validateImpresoraDraft(draft) {
 }
 
 function buildImpresoraPayload(draft) {
-  const reportFormat = findImpresoraReportFormatById(draft.idProcesoImpresion, state.impresoras.metadata);
+  const reportFormat = findImpresoraReportFormatById(
+    draft.idProcesoImpresion,
+    state.impresoras.metadata,
+  );
   return {
     id: Number.parseInt(String(draft.id || "0").trim(), 10),
     nombreImpresora: String(draft.nombreImpresora || "").trim(),
@@ -15473,13 +17520,27 @@ function captureExchangeRateRegisterDraft() {
 }
 
 function readExchangeRateRegisterDraft(form) {
-  const currentDraft = state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
+  const currentDraft =
+    state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
   return {
-    valorCambio: readFormFieldValue(form, "valorCambio", currentDraft.valorCambio),
-    confirmarValorCambio: readFormFieldValue(form, "confirmarValorCambio", currentDraft.confirmarValorCambio),
+    valorCambio: readFormFieldValue(
+      form,
+      "valorCambio",
+      currentDraft.valorCambio,
+    ),
+    confirmarValorCambio: readFormFieldValue(
+      form,
+      "confirmarValorCambio",
+      currentDraft.confirmarValorCambio,
+    ),
     valorMayor: readFormFieldValue(form, "valorMayor", currentDraft.valorMayor),
-    confirmarValorMayor: readFormFieldValue(form, "confirmarValorMayor", currentDraft.confirmarValorMayor),
-    actualizadoEn: currentDraft.actualizadoEn || state.exchangeRateRegister.updatedAt || "",
+    confirmarValorMayor: readFormFieldValue(
+      form,
+      "confirmarValorMayor",
+      currentDraft.confirmarValorMayor,
+    ),
+    actualizadoEn:
+      currentDraft.actualizadoEn || state.exchangeRateRegister.updatedAt || "",
   };
 }
 
@@ -15529,7 +17590,9 @@ function buildExchangeRateRegisterPayload(draft) {
 function exchangeRateItemToDraft(item) {
   const updatedAt = String(item?.actualizadoEn || "").trim();
   return {
-    valorCambio: updatedAt ? formatExchangeRateDraftValue(item?.valorCambio) : "",
+    valorCambio: updatedAt
+      ? formatExchangeRateDraftValue(item?.valorCambio)
+      : "",
     confirmarValorCambio: "",
     valorMayor: updatedAt ? formatExchangeRateDraftValue(item?.valorMayor) : "",
     confirmarValorMayor: "",
@@ -15544,7 +17607,9 @@ function exchangeRateValuesMatch(leftValue, rightValue) {
 }
 
 function parseExchangeRateNumber(value) {
-  const sanitized = String(value ?? "").trim().replace(/\s+/g, "");
+  const sanitized = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, "");
   if (!sanitized) {
     return null;
   }
@@ -15554,7 +17619,10 @@ function parseExchangeRateNumber(value) {
   let normalized = sanitized;
 
   if (commaIndex >= 0 && dotIndex >= 0) {
-    normalized = commaIndex > dotIndex ? sanitized.replace(/\./g, "").replace(",", ".") : sanitized.replace(/,/g, "");
+    normalized =
+      commaIndex > dotIndex
+        ? sanitized.replace(/\./g, "").replace(",", ".")
+        : sanitized.replace(/,/g, "");
   } else if (commaIndex >= 0) {
     normalized = sanitized.replace(/\./g, "").replace(",", ".");
   } else {
@@ -15576,7 +17644,9 @@ function formatExchangeRateDraftValue(value) {
 }
 
 function resetExchangeRateRegisterDraft() {
-  const savedDraft = state.exchangeRateRegister.savedDraft || createEmptyExchangeRateRegisterDraft();
+  const savedDraft =
+    state.exchangeRateRegister.savedDraft ||
+    createEmptyExchangeRateRegisterDraft();
   state.exchangeRateRegister.draft = {
     ...savedDraft,
     confirmarValorCambio: "",
@@ -15590,7 +17660,9 @@ function applyManualRateToFacturacionState(item) {
     loaded: true,
     rateBsPerUsd: toFacturacionNumber(item?.valorCambio),
     rateMayor: toFacturacionNumber(item?.valorMayor),
-    effectiveDate: String(item?.actualizadoEn || "").trim().slice(0, 10),
+    effectiveDate: String(item?.actualizadoEn || "")
+      .trim()
+      .slice(0, 10),
     fetchedAt: String(item?.actualizadoEn || "").trim(),
     provider: "Registro manual",
     providerUrl: "",
@@ -15620,7 +17692,9 @@ function applyManualRateToArticleState(item) {
     loaded: true,
     rateBsPerUsd: toFacturacionNumber(item?.valorCambio),
     rateMayor: toFacturacionNumber(item?.valorMayor),
-    effectiveDate: String(item?.actualizadoEn || "").trim().slice(0, 10),
+    effectiveDate: String(item?.actualizadoEn || "")
+      .trim()
+      .slice(0, 10),
     fetchedAt: String(item?.actualizadoEn || "").trim(),
     provider: "Registro manual",
     providerUrl: "",
@@ -15630,8 +17704,12 @@ function applyManualRateToArticleState(item) {
 }
 
 function normalizeFacturacionPriceList(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-  return FACTURACION_PRICE_LIST_ORDER.includes(normalized) ? normalized : "detal";
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  return FACTURACION_PRICE_LIST_ORDER.includes(normalized)
+    ? normalized
+    : "detal";
 }
 
 function getFacturacionPriceListShortLabel(value) {
@@ -15667,12 +17745,16 @@ function getFacturacionSelectedLineIndex() {
 
 function getFacturacionSelectedLine() {
   const selectedIndex = getFacturacionSelectedLineIndex();
-  const items = Array.isArray(state.facturacion?.draft?.items) ? state.facturacion.draft.items : [];
+  const items = Array.isArray(state.facturacion?.draft?.items)
+    ? state.facturacion.draft.items
+    : [];
   return selectedIndex >= 0 ? items[selectedIndex] || null : null;
 }
 
 function getFacturacionLinePriceList(lineIndex) {
-  const items = Array.isArray(state.facturacion?.draft?.items) ? state.facturacion.draft.items : [];
+  const items = Array.isArray(state.facturacion?.draft?.items)
+    ? state.facturacion.draft.items
+    : [];
   if (Number.isInteger(lineIndex) && lineIndex >= 0 && items[lineIndex]) {
     return normalizeFacturacionPriceList(items[lineIndex].priceList);
   }
@@ -15682,7 +17764,9 @@ function getFacturacionLinePriceList(lineIndex) {
 
 function getFacturacionSelectedLinePriceList() {
   const selectedLine = getFacturacionSelectedLine();
-  return selectedLine ? normalizeFacturacionPriceList(selectedLine.priceList) : getCurrentFacturacionPriceList();
+  return selectedLine
+    ? normalizeFacturacionPriceList(selectedLine.priceList)
+    : getCurrentFacturacionPriceList();
 }
 
 function getFacturacionDraftPriceListSummaryLabel(draft) {
@@ -15706,7 +17790,10 @@ function getFacturacionDraftPriceListSummaryLabel(draft) {
 function getFacturacionDiscountPercentInputValue(draft, summary) {
   const normalizedDraft = normalizeFacturacionDraft(draft);
   if (normalizedDraft.overrideDiscountAuthorized) {
-    return normalizedDraft.overrideDiscountPercent || summary.descuentoPorcentajeDisplay;
+    return (
+      normalizedDraft.overrideDiscountPercent ||
+      summary.descuentoPorcentajeDisplay
+    );
   }
 
   return summary.descuentoPorcentajeDisplay;
@@ -15714,29 +17801,44 @@ function getFacturacionDiscountPercentInputValue(draft, summary) {
 
 function resolveFacturacionDiscountOverride(draft) {
   const normalizedDraft = normalizeFacturacionDraft(draft);
-  const rawPercent = String(normalizedDraft.overrideDiscountPercent || "").trim();
+  const rawPercent = String(
+    normalizedDraft.overrideDiscountPercent || "",
+  ).trim();
   const percent = toFacturacionNumber(rawPercent);
 
   return {
     authorized: Boolean(normalizedDraft.overrideDiscountAuthorized),
-    active: Boolean(normalizedDraft.overrideDiscountActive) && rawPercent !== "",
+    active:
+      Boolean(normalizedDraft.overrideDiscountActive) && rawPercent !== "",
     percent: percent >= 0 ? percent : 0,
   };
 }
 
 function canAuthorizeFacturacionGlobalDiscount(user) {
   const groupCodes = Array.isArray(user?.grupos)
-    ? user.grupos.map((group) => normalizeGroupCode(group.codigo || group.nombre || ""))
+    ? user.grupos.map((group) =>
+        normalizeGroupCode(group.codigo || group.nombre || ""),
+      )
     : [];
-  const userCode = String(user?.codUsuario || "").trim().toUpperCase();
+  const userCode = String(user?.codUsuario || "")
+    .trim()
+    .toUpperCase();
 
-  return groupCodes.includes("ADMI") || groupCodes.includes("SISTEMA") || userCode === "ADMIN" || userCode === "SISTEMA";
+  return (
+    groupCodes.includes("ADMI") ||
+    groupCodes.includes("SISTEMA") ||
+    userCode === "ADMIN" ||
+    userCode === "SISTEMA"
+  );
 }
 
 function getNextFacturacionPriceList(currentValue) {
   const current = normalizeFacturacionPriceList(currentValue);
   const currentIndex = FACTURACION_PRICE_LIST_ORDER.indexOf(current);
-  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % FACTURACION_PRICE_LIST_ORDER.length : 0;
+  const nextIndex =
+    currentIndex >= 0
+      ? (currentIndex + 1) % FACTURACION_PRICE_LIST_ORDER.length
+      : 0;
   return FACTURACION_PRICE_LIST_ORDER[nextIndex];
 }
 
@@ -15793,7 +17895,9 @@ function normalizeFacturacionExchangeRateState(source) {
     ...base,
     ...(source || {}),
     loading: Boolean(source?.loading),
-    loaded: Boolean(source?.loaded || toFacturacionNumber(source?.rateBsPerUsd) > 0),
+    loaded: Boolean(
+      source?.loaded || toFacturacionNumber(source?.rateBsPerUsd) > 0,
+    ),
     rateBsPerUsd: toFacturacionNumber(source?.rateBsPerUsd),
     rateMayor: toFacturacionNumber(source?.rateMayor),
     effectiveDate: String(source?.effectiveDate || "").trim(),
@@ -15859,18 +17963,26 @@ function buildFacturacionSalePayload(draft, paymentRows, exchangeRate) {
     clienteCodigo: String(normalizedDraft.clienteCodigo || "").trim(),
     vendedorCedula: String(normalizedDraft.vendedorCedula || "").trim(),
     emisionContingencia: Boolean(normalizedDraft.emisionContingencia),
-    overrideDiscountAuthorized: Boolean(normalizedDraft.overrideDiscountAuthorized),
+    overrideDiscountAuthorized: Boolean(
+      normalizedDraft.overrideDiscountAuthorized,
+    ),
     overrideDiscountActive: Boolean(normalizedDraft.overrideDiscountActive),
-    overrideDiscountPercent: toInputValue(normalizedDraft.overrideDiscountPercent),
-    tasaCambio: exchangeRate?.rateBsPerUsd > 0 ? String(exchangeRate.rateBsPerUsd) : "",
-    tasaCambioMayor: exchangeRate?.rateMayor > 0 ? String(exchangeRate.rateMayor) : "",
+    overrideDiscountPercent: toInputValue(
+      normalizedDraft.overrideDiscountPercent,
+    ),
+    tasaCambio:
+      exchangeRate?.rateBsPerUsd > 0 ? String(exchangeRate.rateBsPerUsd) : "",
+    tasaCambioMayor:
+      exchangeRate?.rateMayor > 0 ? String(exchangeRate.rateMayor) : "",
     items: rows,
     pagos: payments,
   };
 }
 
 function normalizeFacturacionPaymentMethod(method) {
-  return String(method || "").trim().toUpperCase();
+  return String(method || "")
+    .trim()
+    .toUpperCase();
 }
 
 function facturacionPaymentMethodIsCash(method) {
@@ -15880,17 +17992,26 @@ function facturacionPaymentMethodIsCash(method) {
 
 function facturacionPaymentMethodIsCard(method) {
   const normalized = normalizeFacturacionPaymentMethod(method);
-  return normalized === "TARJETA DE DEBITO" || normalized === "TARJETA DE CREDITO";
+  return (
+    normalized === "TARJETA DE DEBITO" || normalized === "TARJETA DE CREDITO"
+  );
 }
 
 function facturacionPaymentMethodUsesPointOfSale(method) {
   const normalized = normalizeFacturacionPaymentMethod(method);
-  return facturacionPaymentMethodIsCard(normalized) || normalized === "BIOPAGOMONEDERO";
+  return (
+    facturacionPaymentMethodIsCard(normalized) ||
+    normalized === "BIOPAGOMONEDERO"
+  );
 }
 
 function facturacionPaymentMethodRequiresBank(method) {
   const normalized = normalizeFacturacionPaymentMethod(method);
-  return facturacionPaymentMethodIsCard(normalized) || normalized === "CHEQUE" || normalized === "BIOPAGOMONEDERO";
+  return (
+    facturacionPaymentMethodIsCard(normalized) ||
+    normalized === "CHEQUE" ||
+    normalized === "BIOPAGOMONEDERO"
+  );
 }
 
 function applyFacturacionPaymentMethodRules(row = {}) {
@@ -15928,7 +18049,9 @@ function applyFacturacionPaymentMethodRules(row = {}) {
 function createEmptyFacturacionPaymentModalState() {
   return {
     open: false,
-    rows: Array.from({ length: 7 }, (_value, index) => createEmptyFacturacionPaymentRow(index)),
+    rows: Array.from({ length: 7 }, (_value, index) =>
+      createEmptyFacturacionPaymentRow(index),
+    ),
   };
 }
 
@@ -15948,7 +18071,11 @@ function normalizeFacturacionPaymentRow(row = {}, index = 0) {
 }
 
 function normalizeFacturacionPaymentRows(rows) {
-  const normalized = Array.isArray(rows) ? rows.slice(0, 7).map((row, index) => normalizeFacturacionPaymentRow(row, index)) : [];
+  const normalized = Array.isArray(rows)
+    ? rows
+        .slice(0, 7)
+        .map((row, index) => normalizeFacturacionPaymentRow(row, index))
+    : [];
   while (normalized.length < 7) {
     normalized.push(createEmptyFacturacionPaymentRow(normalized.length));
   }
@@ -15999,7 +18126,9 @@ function normalizeFacturacionLineDraft(line = {}) {
 }
 
 function normalizeFacturacionItems(items) {
-  const normalized = Array.isArray(items) ? items.slice(0, 11).map((item) => normalizeFacturacionLineDraft(item)) : [];
+  const normalized = Array.isArray(items)
+    ? items.slice(0, 11).map((item) => normalizeFacturacionLineDraft(item))
+    : [];
   while (normalized.length < 11) {
     normalized.push(createEmptyFacturacionLineDraft());
   }
@@ -16037,23 +18166,41 @@ function captureFacturacionDraft() {
 }
 
 function readFacturacionDraft() {
-  const currentDraft = normalizeFacturacionDraft(state.facturacion.draft || createEmptyFacturacionDraft());
-  const clienteCodigo = document.querySelector("[data-facturacion-cliente-codigo]");
-  const clienteNombre = document.querySelector("[data-facturacion-cliente-nombre]");
+  const currentDraft = normalizeFacturacionDraft(
+    state.facturacion.draft || createEmptyFacturacionDraft(),
+  );
+  const clienteCodigo = document.querySelector(
+    "[data-facturacion-cliente-codigo]",
+  );
+  const clienteNombre = document.querySelector(
+    "[data-facturacion-cliente-nombre]",
+  );
   const clienteInfo = document.querySelector("[data-facturacion-cliente-info]");
-  const vendedorCedula = document.querySelector("[data-facturacion-vendedor-cedula]");
-  const vendedorNombre = document.querySelector("[data-facturacion-vendedor-nombre]");
-  const vendedorInfo = document.querySelector("[data-facturacion-vendedor-info]");
-  const contingencia = document.querySelector("[data-facturacion-contingencia]");
-  const lineInputs = Array.from(document.querySelectorAll("[data-facturacion-line-codigo]"));
-  const currentItems = Array.isArray(currentDraft.items) && currentDraft.items.length
-    ? currentDraft.items
-    : createEmptyFacturacionItems();
+  const vendedorCedula = document.querySelector(
+    "[data-facturacion-vendedor-cedula]",
+  );
+  const vendedorNombre = document.querySelector(
+    "[data-facturacion-vendedor-nombre]",
+  );
+  const vendedorInfo = document.querySelector(
+    "[data-facturacion-vendedor-info]",
+  );
+  const contingencia = document.querySelector(
+    "[data-facturacion-contingencia]",
+  );
+  const lineInputs = Array.from(
+    document.querySelectorAll("[data-facturacion-line-codigo]"),
+  );
+  const currentItems =
+    Array.isArray(currentDraft.items) && currentDraft.items.length
+      ? currentDraft.items
+      : createEmptyFacturacionItems();
   const items = currentItems.map((item, index) => {
     const input = lineInputs[index];
     return {
       ...item,
-      codigoBarra: input instanceof HTMLInputElement ? input.value : item.codigoBarra,
+      codigoBarra:
+        input instanceof HTMLInputElement ? input.value : item.codigoBarra,
     };
   });
 
@@ -16063,16 +18210,37 @@ function readFacturacionDraft() {
     overrideDiscountAuthorized: currentDraft.overrideDiscountAuthorized,
     overrideDiscountActive: currentDraft.overrideDiscountActive,
     overrideDiscountPercent: currentDraft.overrideDiscountPercent,
-    clienteCodigo: clienteCodigo instanceof HTMLInputElement ? clienteCodigo.value : currentDraft.clienteCodigo,
-    clienteNombre: clienteNombre instanceof HTMLInputElement ? clienteNombre.value : currentDraft.clienteNombre,
-    clienteInfo: clienteInfo instanceof HTMLInputElement ? clienteInfo.value : currentDraft.clienteInfo,
+    clienteCodigo:
+      clienteCodigo instanceof HTMLInputElement
+        ? clienteCodigo.value
+        : currentDraft.clienteCodigo,
+    clienteNombre:
+      clienteNombre instanceof HTMLInputElement
+        ? clienteNombre.value
+        : currentDraft.clienteNombre,
+    clienteInfo:
+      clienteInfo instanceof HTMLInputElement
+        ? clienteInfo.value
+        : currentDraft.clienteInfo,
     clienteTelefono: currentDraft.clienteTelefono,
     clienteDireccion: currentDraft.clienteDireccion,
 
-    vendedorCedula: vendedorCedula instanceof HTMLInputElement ? vendedorCedula.value : currentDraft.vendedorCedula,
-    vendedorNombre: vendedorNombre instanceof HTMLInputElement ? vendedorNombre.value : currentDraft.vendedorNombre,
-    vendedorInfo: vendedorInfo instanceof HTMLInputElement ? vendedorInfo.value : currentDraft.vendedorInfo,
-    emisionContingencia: contingencia instanceof HTMLInputElement ? contingencia.checked : currentDraft.emisionContingencia,
+    vendedorCedula:
+      vendedorCedula instanceof HTMLInputElement
+        ? vendedorCedula.value
+        : currentDraft.vendedorCedula,
+    vendedorNombre:
+      vendedorNombre instanceof HTMLInputElement
+        ? vendedorNombre.value
+        : currentDraft.vendedorNombre,
+    vendedorInfo:
+      vendedorInfo instanceof HTMLInputElement
+        ? vendedorInfo.value
+        : currentDraft.vendedorInfo,
+    emisionContingencia:
+      contingencia instanceof HTMLInputElement
+        ? contingencia.checked
+        : currentDraft.emisionContingencia,
     items,
   };
 }
@@ -16083,7 +18251,7 @@ function applyClienteToFacturacionDraft(cliente) {
     ...currentDraft,
     clienteCodigo: cliente?.codigo || currentDraft.clienteCodigo,
     clienteNombre: cliente?.nombre || "",
-    clienteInfo: cliente ? (cliente.tipoNombre || cliente.telefono || "") : "",
+    clienteInfo: cliente ? cliente.tipoNombre || cliente.telefono || "" : "",
     clienteTelefono: cliente?.telefono || "",
     clienteDireccion: cliente?.direccion || "",
   };
@@ -16098,7 +18266,6 @@ function clearFacturacionCliente() {
     clienteTelefono: "",
     clienteDireccion: "",
   };
-
 }
 
 function applyTrabajadorToFacturacionDraft(trabajador) {
@@ -16107,7 +18274,9 @@ function applyTrabajadorToFacturacionDraft(trabajador) {
     ...currentDraft,
     vendedorCedula: trabajador?.cedula || "",
     vendedorNombre: trabajador?.nombre || "",
-    vendedorInfo: trabajador ? (trabajador.cargoNombre || trabajador.cargo || "") : "",
+    vendedorInfo: trabajador
+      ? trabajador.cargoNombre || trabajador.cargo || ""
+      : "",
   };
 }
 
@@ -16121,13 +18290,22 @@ function clearFacturacionTrabajador() {
 }
 
 function fillFacturacionLineFromInventory(index, article) {
-  const currentDraft = normalizeFacturacionDraft(state.facturacion.draft || createEmptyFacturacionDraft());
-  const items = Array.isArray(currentDraft.items) && currentDraft.items.length
-    ? [...currentDraft.items]
-    : createEmptyFacturacionItems();
+  const currentDraft = normalizeFacturacionDraft(
+    state.facturacion.draft || createEmptyFacturacionDraft(),
+  );
+  const items =
+    Array.isArray(currentDraft.items) && currentDraft.items.length
+      ? [...currentDraft.items]
+      : createEmptyFacturacionItems();
   const currentLine = items[index] || createEmptyFacturacionLineDraft();
-  const linePriceList = normalizeFacturacionPriceList(currentLine.priceList || currentDraft.priceList);
-  items[index] = buildFacturacionLineFromInventory(currentLine, article, linePriceList);
+  const linePriceList = normalizeFacturacionPriceList(
+    currentLine.priceList || currentDraft.priceList,
+  );
+  items[index] = buildFacturacionLineFromInventory(
+    currentLine,
+    article,
+    linePriceList,
+  );
 
   state.facturacion.draft = {
     ...currentDraft,
@@ -16137,20 +18315,31 @@ function fillFacturacionLineFromInventory(index, article) {
 
 function getFacturacionArticleExistence(article) {
   return toFacturacionNumber(
-    article?.inventario?.existenciaActual ?? article?.inventario?.existencia ?? article?.existenciaActual ?? article?.existencia ?? "0",
+    article?.inventario?.existenciaActual ??
+      article?.inventario?.existencia ??
+      article?.existenciaActual ??
+      article?.existencia ??
+      "0",
   );
 }
 
 function facturacionArticleHasConfiguredCosts(article) {
-  const costoInicial = toFacturacionNumber(article?.inventario?.costos?.inicial ?? article?.costoInicial ?? "0");
-  const costoPromedio = toFacturacionNumber(article?.inventario?.costos?.promedio ?? article?.costoPromedio ?? "0");
-  const ultimoCosto = toFacturacionNumber(article?.inventario?.costos?.ultimo ?? article?.ultimoCosto ?? "0");
+  const costoInicial = toFacturacionNumber(
+    article?.inventario?.costos?.inicial ?? article?.costoInicial ?? "0",
+  );
+  const costoPromedio = toFacturacionNumber(
+    article?.inventario?.costos?.promedio ?? article?.costoPromedio ?? "0",
+  );
+  const ultimoCosto = toFacturacionNumber(
+    article?.inventario?.costos?.ultimo ?? article?.ultimoCosto ?? "0",
+  );
 
   return costoInicial > 0 || costoPromedio > 0 || ultimoCosto > 0;
 }
 
 function getFacturacionArticleValidationMessage(article) {
-  const codigoBarra = String(article?.codigoBarra || "").trim() || "seleccionado";
+  const codigoBarra =
+    String(article?.codigoBarra || "").trim() || "seleccionado";
 
   if (getFacturacionArticleExistence(article) <= 0) {
     return `El articulo ${codigoBarra} no se puede facturar porque no tiene existencia.`;
@@ -16164,14 +18353,19 @@ function getFacturacionArticleValidationMessage(article) {
 }
 
 function clearFacturacionLine(index, keepCode = "") {
-  const currentDraft = normalizeFacturacionDraft(state.facturacion.draft || createEmptyFacturacionDraft());
-  const items = Array.isArray(currentDraft.items) && currentDraft.items.length
-    ? [...currentDraft.items]
-    : createEmptyFacturacionItems();
+  const currentDraft = normalizeFacturacionDraft(
+    state.facturacion.draft || createEmptyFacturacionDraft(),
+  );
+  const items =
+    Array.isArray(currentDraft.items) && currentDraft.items.length
+      ? [...currentDraft.items]
+      : createEmptyFacturacionItems();
 
   items[index] = {
     ...createEmptyFacturacionLineDraft(),
-    priceList: normalizeFacturacionPriceList(items[index]?.priceList || currentDraft.priceList),
+    priceList: normalizeFacturacionPriceList(
+      items[index]?.priceList || currentDraft.priceList,
+    ),
     codigoBarra: keepCode,
   };
 
@@ -16190,7 +18384,9 @@ function resolveFacturacionPriceForList(source, priceList) {
   }
 
   if (normalizedPriceList === "afiliado") {
-    return toFacturacionNumber(prices.afiliado ?? source?.precioAfiliado ?? "0");
+    return toFacturacionNumber(
+      prices.afiliado ?? source?.precioAfiliado ?? "0",
+    );
   }
 
   return toFacturacionNumber(prices.detal ?? source?.precioDetal ?? "0");
@@ -16198,12 +18394,17 @@ function resolveFacturacionPriceForList(source, priceList) {
 
 function resolveFacturacionPromotionPercentage(source) {
   return toFacturacionNumber(
-    source?.precios?.promocion?.porcentajeDescuento ?? source?.porcentajeDescuento ?? source?.descuentoPorcentaje ?? "0",
+    source?.precios?.promocion?.porcentajeDescuento ??
+      source?.porcentajeDescuento ??
+      source?.descuentoPorcentaje ??
+      "0",
   );
 }
 
 function resolveFacturacionPromotionActive(source) {
-  return Boolean(source?.precios?.promocion?.activa ?? source?.promocionActiva ?? false);
+  return Boolean(
+    source?.precios?.promocion?.activa ?? source?.promocionActiva ?? false,
+  );
 }
 
 function resolveFacturacionPromotionPercentageForPriceList(source, priceList) {
@@ -16223,15 +18424,22 @@ function buildFacturacionLineFromInventory(currentLine, article, priceList) {
   const precioDetal = resolveFacturacionPriceForList(article, "detal");
   const precioMayor = resolveFacturacionPriceForList(article, "mayor");
   const precioAfiliado = resolveFacturacionPriceForList(article, "afiliado");
-  const precioBase = resolveFacturacionPriceForList(article, normalizedPriceList);
-  const descuentoPorcentaje = resolveFacturacionPromotionPercentageForPriceList(article, normalizedPriceList);
+  const precioBase = resolveFacturacionPriceForList(
+    article,
+    normalizedPriceList,
+  );
+  const descuentoPorcentaje = resolveFacturacionPromotionPercentageForPriceList(
+    article,
+    normalizedPriceList,
+  );
   const descuentoMonto = precioBase * (descuentoPorcentaje / 100);
 
   return {
     ...normalizeFacturacionLineDraft(currentLine),
     priceList: normalizedPriceList,
     codigoBarra: article.codigoBarra || currentLine.codigoBarra || "",
-    nombre: article.general?.nombre || article.nombre || currentLine.nombre || "",
+    nombre:
+      article.general?.nombre || article.nombre || currentLine.nombre || "",
     precio: formatTransferAmount(precioBase),
     cantidad: "1",
     subtotal: formatTransferAmount(precioBase),
@@ -16240,7 +18448,11 @@ function buildFacturacionLineFromInventory(currentLine, article, priceList) {
     precioDetal: formatTransferAmount(precioDetal),
     precioMayor: formatTransferAmount(precioMayor),
     precioAfiliado: formatTransferAmount(precioAfiliado),
-    precioPromocion: formatTransferAmount(toFacturacionNumber(article?.precios?.promocion?.precio ?? article?.precioPromocion ?? "0")),
+    precioPromocion: formatTransferAmount(
+      toFacturacionNumber(
+        article?.precios?.promocion?.precio ?? article?.precioPromocion ?? "0",
+      ),
+    ),
     promocionActiva: resolveFacturacionPromotionActive(article),
   };
 }
@@ -16251,16 +18463,21 @@ function recalculateFacturacionLineForPriceList(line, priceList) {
     return normalizedLine;
   }
 
-  const hasPriceSource = [normalizedLine.precioDetal, normalizedLine.precioMayor, normalizedLine.precioAfiliado].some(
-    (value) => String(value || "").trim(),
-  );
+  const hasPriceSource = [
+    normalizedLine.precioDetal,
+    normalizedLine.precioMayor,
+    normalizedLine.precioAfiliado,
+  ].some((value) => String(value || "").trim());
 
   if (!hasPriceSource) {
     return normalizedLine;
   }
 
   const precioBase = resolveFacturacionPriceForList(normalizedLine, priceList);
-  const descuentoPorcentaje = resolveFacturacionPromotionPercentageForPriceList(normalizedLine, priceList);
+  const descuentoPorcentaje = resolveFacturacionPromotionPercentageForPriceList(
+    normalizedLine,
+    priceList,
+  );
   const descuentoMonto = precioBase * (descuentoPorcentaje / 100);
 
   return {
@@ -16281,7 +18498,9 @@ function recalculateFacturacionDraftForPriceList(draft, priceList) {
 
   return {
     ...normalizedDraft,
-    items: normalizedDraft.items.map((line) => recalculateFacturacionLineForPriceList(line, normalizedDraft.priceList)),
+    items: normalizedDraft.items.map((line) =>
+      recalculateFacturacionLineForPriceList(line, normalizedDraft.priceList),
+    ),
   };
 }
 
@@ -16292,10 +18511,13 @@ function recalculateFacturacionDraftLinePriceList(draft, lineIndex, priceList) {
       return line;
     }
 
-    return recalculateFacturacionLineForPriceList({
-      ...line,
-      priceList: normalizeFacturacionPriceList(priceList),
-    }, priceList);
+    return recalculateFacturacionLineForPriceList(
+      {
+        ...line,
+        priceList: normalizeFacturacionPriceList(priceList),
+      },
+      priceList,
+    );
   });
 
   return {
@@ -16315,12 +18537,25 @@ function resolveFacturacionUsdRate(rows, exchangeRate) {
   return mayorRate;
 }
 
-function calculateFacturacionSummary(items, activeTax = null, exchangeRate = null, draft = null) {
+function calculateFacturacionSummary(
+  items,
+  activeTax = null,
+  exchangeRate = null,
+  draft = null,
+) {
   const rows = Array.isArray(items) ? items : [];
-  const valorMercancia = rows.reduce((sum, item) => sum + toFacturacionNumber(item?.subtotal), 0);
-  const lineDiscountMonto = rows.reduce((sum, item) => sum + toFacturacionNumber(item?.descuentoMonto), 0);
+  const valorMercancia = rows.reduce(
+    (sum, item) => sum + toFacturacionNumber(item?.subtotal),
+    0,
+  );
+  const lineDiscountMonto = rows.reduce(
+    (sum, item) => sum + toFacturacionNumber(item?.descuentoMonto),
+    0,
+  );
   const discountOverride = resolveFacturacionDiscountOverride(draft);
-  const descuentoMonto = discountOverride.active ? valorMercancia * (discountOverride.percent / 100) : lineDiscountMonto;
+  const descuentoMonto = discountOverride.active
+    ? valorMercancia * (discountOverride.percent / 100)
+    : lineDiscountMonto;
   const subtotal = Math.max(valorMercancia - descuentoMonto, 0);
   const impuestoPorcentaje = toFacturacionNumber(activeTax?.porcentajeImpuesto);
   const impuestoMonto = subtotal * (impuestoPorcentaje / 100);
@@ -16332,7 +18567,8 @@ function calculateFacturacionSummary(items, activeTax = null, exchangeRate = nul
     ? discountOverride.percent
     : getFacturacionLoadedArticleDiscountPercentage(rows);
   const totalVenta = subtotal + impuestoMonto;
-  const totalUsd = rateBsPerUsd > 0 ? roundToTwoDecimals(totalVenta / rateBsPerUsd) : 0;
+  const totalUsd =
+    rateBsPerUsd > 0 ? roundToTwoDecimals(totalVenta / rateBsPerUsd) : 0;
 
   return {
     valorMercancia,
@@ -16373,7 +18609,10 @@ function getFacturacionLoadedArticleDiscountPercentage(items) {
 }
 
 function buildFacturacionFrozenStorageKey() {
-  const userCode = String(state.user?.codUsuario || "anon").trim().toUpperCase() || "ANON";
+  const userCode =
+    String(state.user?.codUsuario || "anon")
+      .trim()
+      .toUpperCase() || "ANON";
   return `${FACTURACION_FROZEN_STORAGE_KEY}.${userCode}`;
 }
 
@@ -16383,12 +18622,19 @@ function generateFacturacionFrozenId() {
 
 function facturacionDraftHasContent(draft) {
   const normalizedDraft = normalizeFacturacionDraft(draft);
-  if (normalizedDraft.clienteCodigo || normalizedDraft.clienteNombre || normalizedDraft.vendedorCedula || normalizedDraft.vendedorNombre) {
+  if (
+    normalizedDraft.clienteCodigo ||
+    normalizedDraft.clienteNombre ||
+    normalizedDraft.vendedorCedula ||
+    normalizedDraft.vendedorNombre
+  ) {
     return true;
   }
 
   return normalizedDraft.items.some((item) => {
-    return [item.codigoBarra, item.nombre, item.precio].some((value) => String(value || "").trim());
+    return [item.codigoBarra, item.nombre, item.precio].some((value) =>
+      String(value || "").trim(),
+    );
   });
 }
 
@@ -16411,7 +18657,10 @@ function readStoredFacturacionFrozenDrafts() {
         draft: normalizeFacturacionDraft(item?.draft),
         exchangeRate: normalizeFacturacionExchangeRateState(item?.exchangeRate),
       }))
-      .sort((left, right) => new Date(right.savedAt).getTime() - new Date(left.savedAt).getTime());
+      .sort(
+        (left, right) =>
+          new Date(right.savedAt).getTime() - new Date(left.savedAt).getTime(),
+      );
   } catch (error) {
     console.error(error);
     return [];
@@ -16420,7 +18669,10 @@ function readStoredFacturacionFrozenDrafts() {
 
 function writeStoredFacturacionFrozenDrafts(records) {
   try {
-    window.localStorage.setItem(buildFacturacionFrozenStorageKey(), JSON.stringify(Array.isArray(records) ? records : []));
+    window.localStorage.setItem(
+      buildFacturacionFrozenStorageKey(),
+      JSON.stringify(Array.isArray(records) ? records : []),
+    );
   } catch (error) {
     console.error(error);
   }
@@ -16447,8 +18699,16 @@ function captureFacturacionDiscountAuthDraft() {
 
   state.facturacion.discountAuth = {
     ...state.facturacion.discountAuth,
-    usuario: readFormFieldValue(form, "usuario", state.facturacion.discountAuth.usuario),
-    password: readFormFieldValue(form, "password", state.facturacion.discountAuth.password),
+    usuario: readFormFieldValue(
+      form,
+      "usuario",
+      state.facturacion.discountAuth.usuario,
+    ),
+    password: readFormFieldValue(
+      form,
+      "password",
+      state.facturacion.discountAuth.password,
+    ),
   };
 }
 
@@ -16466,7 +18726,8 @@ function focusFacturacionGlobalDiscountInput() {
 }
 
 async function authorizeFacturacionGlobalDiscount() {
-  const authDraft = state.facturacion.discountAuth || createEmptyFacturacionDiscountAuthState();
+  const authDraft =
+    state.facturacion.discountAuth || createEmptyFacturacionDiscountAuthState();
   const usuario = String(authDraft.usuario || "").trim();
   const password = String(authDraft.password || "").trim();
 
@@ -16495,7 +18756,9 @@ async function authorizeFacturacionGlobalDiscount() {
 
     const authorizedUser = response?.usuario || null;
     if (!canAuthorizeFacturacionGlobalDiscount(authorizedUser)) {
-      throw new Error("Debes usar un usuario administrador para autorizar el descuento global.");
+      throw new Error(
+        "Debes usar un usuario administrador para autorizar el descuento global.",
+      );
     }
 
     const currentDraft = normalizeFacturacionDraft(state.facturacion.draft);
@@ -16509,11 +18772,16 @@ async function authorizeFacturacionGlobalDiscount() {
     state.facturacion.draft = {
       ...currentDraft,
       overrideDiscountAuthorized: true,
-      overrideDiscountPercent: currentDraft.overrideDiscountPercent || currentSummary.descuentoPorcentajeDisplay,
+      overrideDiscountPercent:
+        currentDraft.overrideDiscountPercent ||
+        currentSummary.descuentoPorcentajeDisplay,
     };
 
     closeFacturacionDiscountAuthModal();
-    setFlash(`Descuento global autorizado por ${authorizedUser?.codUsuario || usuario}.`, "success");
+    setFlash(
+      `Descuento global autorizado por ${authorizedUser?.codUsuario || usuario}.`,
+      "success",
+    );
     focusFacturacionGlobalDiscountInput();
   } catch (error) {
     console.error(error);
@@ -16545,7 +18813,11 @@ function applyFacturacionGlobalDiscountFromField(value) {
   }
 
   const discountPercent = toFacturacionNumber(rawValue);
-  if (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100) {
+  if (
+    !Number.isFinite(discountPercent) ||
+    discountPercent < 0 ||
+    discountPercent > 100
+  ) {
     setFlash("El descuento global debe estar entre 0 y 100.", "error");
     render();
     return;
@@ -16578,7 +18850,8 @@ function openFacturacionPaymentModal() {
     open: true,
     rows: normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows),
   };
-  state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+  state.facturacion.paymentCedulaPrompt =
+    createEmptyFacturacionPaymentCedulaPromptState();
 }
 
 function closeFacturacionPaymentModal() {
@@ -16587,21 +18860,28 @@ function closeFacturacionPaymentModal() {
     rows: normalizeFacturacionPaymentRows(state.facturacion.paymentModal?.rows),
     open: false,
   };
-  state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+  state.facturacion.paymentCedulaPrompt =
+    createEmptyFacturacionPaymentCedulaPromptState();
 }
 
 function updateFacturacionPaymentField(rowIndex, fieldName, value) {
-  const current = state.facturacion.paymentModal || createEmptyFacturacionPaymentModalState();
-  const rows = normalizeFacturacionPaymentRows(current.rows).map((row, index) => {
-    if (index !== rowIndex) {
-      return row;
-    }
+  const current =
+    state.facturacion.paymentModal || createEmptyFacturacionPaymentModalState();
+  const rows = normalizeFacturacionPaymentRows(current.rows).map(
+    (row, index) => {
+      if (index !== rowIndex) {
+        return row;
+      }
 
-    return normalizeFacturacionPaymentRow({
-      ...row,
-      [fieldName]: value,
-    }, index);
-  });
+      return normalizeFacturacionPaymentRow(
+        {
+          ...row,
+          [fieldName]: value,
+        },
+        index,
+      );
+    },
+  );
 
   state.facturacion.paymentModal = {
     ...current,
@@ -16636,11 +18916,14 @@ function openFacturacionPaymentCedulaPrompt(rowIndex) {
 
 function closeFacturacionPaymentCedulaPrompt(options = {}) {
   const { focusRowIndex = null } = options;
-  state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+  state.facturacion.paymentCedulaPrompt =
+    createEmptyFacturacionPaymentCedulaPromptState();
 
   if (Number.isInteger(focusRowIndex) && focusRowIndex >= 0) {
     window.setTimeout(() => {
-      const field = document.querySelector(`[data-facturacion-payment-cedula="${focusRowIndex}"]`);
+      const field = document.querySelector(
+        `[data-facturacion-payment-cedula="${focusRowIndex}"]`,
+      );
       if (field instanceof HTMLInputElement) {
         field.focus();
         field.select();
@@ -16650,10 +18933,15 @@ function closeFacturacionPaymentCedulaPrompt(options = {}) {
 }
 
 function applyFacturacionPaymentClientCedula(rowIndex) {
-  const clientCedula = String(state.facturacion.draft?.clienteCodigo || "").trim();
+  const clientCedula = String(
+    state.facturacion.draft?.clienteCodigo || "",
+  ).trim();
   if (!clientCedula) {
     closeFacturacionPaymentCedulaPrompt({ focusRowIndex: rowIndex });
-    setFlash("Primero debes cargar la cedula del cliente en la factura.", "error");
+    setFlash(
+      "Primero debes cargar la cedula del cliente en la factura.",
+      "error",
+    );
     render();
     return;
   }
@@ -16696,26 +18984,37 @@ function facturacionPaymentMethodAppliesIgtf(method) {
 
 function validateFacturacionPaymentRows(summary, rows) {
   const paymentRows = normalizeFacturacionPaymentRows(rows);
-  const hasAnyAmount = paymentRows.some((row) => parseFacturacionPaymentAmount(row?.monto) > 0);
+  const hasAnyAmount = paymentRows.some(
+    (row) => parseFacturacionPaymentAmount(row?.monto) > 0,
+  );
   if (!hasAnyAmount) {
     return "Debes indicar al menos un monto en la forma de pago.";
   }
 
   const hasUsdPayment = paymentRows.some((row) => {
-    return facturacionPaymentMethodUsesUsdAmount(row?.formaPago) && parseFacturacionPaymentAmount(row?.monto) > 0;
+    return (
+      facturacionPaymentMethodUsesUsdAmount(row?.formaPago) &&
+      parseFacturacionPaymentAmount(row?.monto) > 0
+    );
   });
   if (hasUsdPayment && toFacturacionNumber(summary?.rateBsPerUsd) <= 0) {
     return "No hay una tasa de cambio vigente para convertir el efectivo en dolares.";
   }
 
   const amountWithoutMethod = paymentRows.find((row) => {
-    return parseFacturacionPaymentAmount(row?.monto) > 0 && !normalizeFacturacionPaymentMethod(row?.formaPago);
+    return (
+      parseFacturacionPaymentAmount(row?.monto) > 0 &&
+      !normalizeFacturacionPaymentMethod(row?.formaPago)
+    );
   });
   if (amountWithoutMethod) {
     return "Cada monto cargado debe tener una forma de pago seleccionada.";
   }
 
-  const paymentSummary = calculateFacturacionPaymentSummary(summary, paymentRows);
+  const paymentSummary = calculateFacturacionPaymentSummary(
+    summary,
+    paymentRows,
+  );
   if (paymentSummary.saldo > 0.009) {
     return "Los pagos cargados aun no cubren el total de la venta.";
   }
@@ -16724,7 +19023,9 @@ function validateFacturacionPaymentRows(summary, rows) {
 }
 
 function freezeCurrentFacturacionDraft() {
-  const currentDraft = normalizeFacturacionDraft(state.facturacion.draft || createEmptyFacturacionDraft());
+  const currentDraft = normalizeFacturacionDraft(
+    state.facturacion.draft || createEmptyFacturacionDraft(),
+  );
   if (!facturacionDraftHasContent(currentDraft)) {
     setFlash("No hay una factura en curso para congelar.", "error");
     render();
@@ -16740,13 +19041,19 @@ function freezeCurrentFacturacionDraft() {
       ...currentDraft,
       frozenId,
     }),
-    exchangeRate: normalizeFacturacionExchangeRateState(state.facturacion.exchangeRate),
+    exchangeRate: normalizeFacturacionExchangeRateState(
+      state.facturacion.exchangeRate,
+    ),
   };
 
-  const existing = readStoredFacturacionFrozenDrafts().filter((item) => item.id !== frozenId);
+  const existing = readStoredFacturacionFrozenDrafts().filter(
+    (item) => item.id !== frozenId,
+  );
   writeStoredFacturacionFrozenDrafts([record, ...existing]);
 
-  state.facturacion.draft = normalizeFacturacionDraft({ priceList: currentDraft.priceList });
+  state.facturacion.draft = normalizeFacturacionDraft({
+    priceList: currentDraft.priceList,
+  });
   state.facturacion.selectedLineIndex = -1;
   state.facturacion.discountAuth = createEmptyFacturacionDiscountAuthState();
   state.facturacion.lookup = {
@@ -16756,11 +19063,15 @@ function freezeCurrentFacturacionDraft() {
     items: [],
   };
   state.facturacion.paymentModal = createEmptyFacturacionPaymentModalState();
-  state.facturacion.paymentCedulaPrompt = createEmptyFacturacionPaymentCedulaPromptState();
+  state.facturacion.paymentCedulaPrompt =
+    createEmptyFacturacionPaymentCedulaPromptState();
   closeFacturacionLineLookupModal();
   closeFacturacionFrozenLookupModal();
   closeFacturacionClientEditor();
-  setFlash(`Factura congelada correctamente (${formatDateDisplay(savedAt)}).`, "success");
+  setFlash(
+    `Factura congelada correctamente (${formatDateDisplay(savedAt)}).`,
+    "success",
+  );
   render();
 }
 
@@ -16786,8 +19097,12 @@ async function restoreFacturacionFrozenDraft(recordId) {
     return;
   }
 
-  const storedExchangeRate = normalizeFacturacionExchangeRateState(selected.exchangeRate);
-  writeStoredFacturacionFrozenDrafts(records.filter((item) => item.id !== recordId));
+  const storedExchangeRate = normalizeFacturacionExchangeRateState(
+    selected.exchangeRate,
+  );
+  writeStoredFacturacionFrozenDrafts(
+    records.filter((item) => item.id !== recordId),
+  );
   state.facturacion.draft = normalizeFacturacionDraft(selected.draft);
   state.facturacion.exchangeRate = storedExchangeRate;
   state.facturacion.selectedLineIndex = -1;
@@ -16799,13 +19114,16 @@ async function restoreFacturacionFrozenDraft(recordId) {
     state.facturacion.exchangeRate = storedExchangeRate;
   }
 
-  const currentRate = toFacturacionNumber(state.facturacion.exchangeRate?.rateBsPerUsd);
+  const currentRate = toFacturacionNumber(
+    state.facturacion.exchangeRate?.rateBsPerUsd,
+  );
   const storedRate = toFacturacionNumber(storedExchangeRate?.rateBsPerUsd);
-  const rateMessage = currentRate > 0 && currentRate !== storedRate
-    ? ` Se aplico la nueva tasa ${formatExchangeRateAmount(currentRate)}.`
-    : currentRate > 0
-      ? ` Se aplico la tasa actual ${formatExchangeRateAmount(currentRate)}.`
-      : "";
+  const rateMessage =
+    currentRate > 0 && currentRate !== storedRate
+      ? ` Se aplico la nueva tasa ${formatExchangeRateAmount(currentRate)}.`
+      : currentRate > 0
+        ? ` Se aplico la tasa actual ${formatExchangeRateAmount(currentRate)}.`
+        : "";
 
   setFlash(`Factura descongelada correctamente.${rateMessage}`, "success");
   renderFacturacionAndFocusLine(getFacturacionResumeFocusRow(selected.draft));
@@ -16827,9 +19145,11 @@ function formatFacturacionExchangeRateLabel(exchangeRate) {
   }
 
   const effectiveDate = formatSimpleDateDisplay(exchangeRate?.effectiveDate);
-  const manualMayorLabel = rateMayor > 0 ? ` | Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
+  const manualMayorLabel =
+    rateMayor > 0 ? ` | Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
   return `Tasa manual: ${formatExchangeRateAmount(rate)} | Vigente ${effectiveDate}${manualMayorLabel}`;
-  const mayorLabel = rateMayor > 0 ? ` Â· Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
+  const mayorLabel =
+    rateMayor > 0 ? ` Â· Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
   return `Tasa manual: ${formatExchangeRateAmount(rate)} Â· Vigente ${effectiveDate}${mayorLabel}`;
   const provider = String(exchangeRate?.provider || "API externa").trim();
   return `Tasa BCV USD: ${formatExchangeRateAmount(rate)} Bs/USD Â· Vigente ${effectiveDate} Â· Fuente ${provider}`;
@@ -16858,8 +19178,12 @@ function formatExchangeRateAmount(value) {
 }
 
 function getActiveFacturacionTax() {
-  const impuestos = Array.isArray(state.metadata?.catalogos?.impuestos) ? state.metadata.catalogos.impuestos : [];
-  const defaultCodigo = String(state.metadata?.defaults?.precios?.impuesto || "");
+  const impuestos = Array.isArray(state.metadata?.catalogos?.impuestos)
+    ? state.metadata.catalogos.impuestos
+    : [];
+  const defaultCodigo = String(
+    state.metadata?.defaults?.precios?.impuesto || "",
+  );
   return (
     impuestos.find((item) => Number(item?.status ?? 0) === 1) ??
     impuestos.find((item) => String(item?.codigo ?? "") === defaultCodigo) ??
@@ -16873,7 +19197,9 @@ function toFacturacionNumber(value) {
     return Number.isFinite(value) ? value : 0;
   }
 
-  const sanitized = String(value ?? "").trim().replace(/\s+/g, "");
+  const sanitized = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, "");
   if (!sanitized) {
     return 0;
   }
@@ -16883,7 +19209,10 @@ function toFacturacionNumber(value) {
   let normalized = sanitized;
 
   if (commaIndex >= 0 && dotIndex >= 0) {
-    normalized = commaIndex > dotIndex ? sanitized.replace(/\./g, "").replace(",", ".") : sanitized.replace(/,/g, "");
+    normalized =
+      commaIndex > dotIndex
+        ? sanitized.replace(/\./g, "").replace(",", ".")
+        : sanitized.replace(/,/g, "");
   } else if (commaIndex >= 0) {
     normalized = sanitized.replace(/\./g, "").replace(",", ".");
   } else {
@@ -16909,7 +19238,9 @@ function focusFacturacionLineInput(rowNumber) {
   }
 
   selectFacturacionLine(rowNumber - 1);
-  const target = document.querySelector(`[data-facturacion-line-codigo="${rowNumber}"]`);
+  const target = document.querySelector(
+    `[data-facturacion-line-codigo="${rowNumber}"]`,
+  );
   if (!(target instanceof HTMLInputElement)) {
     return;
   }
@@ -16981,7 +19312,9 @@ function resetFacturacionState() {
 }
 
 function normalizeIdentityComparable(value) {
-  const normalized = String(value || "").trim().toUpperCase();
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
   if (!normalized) {
     return "";
   }
@@ -16993,14 +19326,19 @@ function identityValuesMatch(inputValue, recordValue) {
   const normalizedInput = normalizeIdentityComparable(inputValue);
   const normalizedRecord = normalizeIdentityComparable(recordValue);
 
-  return Boolean(normalizedInput && normalizedRecord && normalizedInput === normalizedRecord);
+  return Boolean(
+    normalizedInput && normalizedRecord && normalizedInput === normalizedRecord,
+  );
 }
 
 function resetFacturacionClientEditorDraft(prefillCode = "") {
   const baseDraft = createEmptyClienteDraft(state.clientes.metadata);
   state.facturacion.clientEditor.draft = {
     ...baseDraft,
-    codigo: String(prefillCode || "").trim().toUpperCase() || baseDraft.codigo,
+    codigo:
+      String(prefillCode || "")
+        .trim()
+        .toUpperCase() || baseDraft.codigo,
   };
 }
 
@@ -17010,23 +19348,43 @@ function captureFacturacionClientEditorDraft() {
     return;
   }
 
-  const currentDraft = state.facturacion.clientEditor.draft || createEmptyClienteDraft(state.clientes.metadata);
+  const currentDraft =
+    state.facturacion.clientEditor.draft ||
+    createEmptyClienteDraft(state.clientes.metadata);
   state.facturacion.clientEditor.draft = {
     originalCodigo: currentDraft.originalCodigo || "",
     codigo: readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
     nombre: readFormFieldValue(form, "nombre", currentDraft.nombre || ""),
-    fechaIngreso: readFormFieldValue(form, "fechaIngreso", toDateInputValue(new Date())),
+    fechaIngreso: readFormFieldValue(
+      form,
+      "fechaIngreso",
+      toDateInputValue(new Date()),
+    ),
     telefono: readFormFieldValue(form, "telefono", currentDraft.telefono || ""),
-    direccion: readFormFieldValue(form, "direccion", currentDraft.direccion || ""),
-    status: Number.parseInt(readFormFieldValue(form, "status", String(currentDraft.status ?? 1)), 10) || 1,
+    direccion: readFormFieldValue(
+      form,
+      "direccion",
+      currentDraft.direccion || "",
+    ),
+    status:
+      Number.parseInt(
+        readFormFieldValue(form, "status", String(currentDraft.status ?? 1)),
+        10,
+      ) || 1,
     tipo: readFormFieldValue(form, "tipo", currentDraft.tipo || ""),
-    tipoContribuyente: readFormFieldValue(form, "tipoContribuyente", currentDraft.tipoContribuyente || ""),
+    tipoContribuyente: readFormFieldValue(
+      form,
+      "tipoContribuyente",
+      currentDraft.tipoContribuyente || "",
+    ),
   };
 }
 
 function resetCashRegisterDraft() {
   state.cashRegisters.selectedKey = "";
-  state.cashRegisters.draft = createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  state.cashRegisters.draft = createEmptyCashRegisterDraft(
+    state.cashRegisters.metadata,
+  );
 }
 
 function normalizeCashRegisterPrinterDraftValue(value) {
@@ -17046,7 +19404,9 @@ function createEmptyCashRegisterDraft(metadata) {
     ultimaFactura: toInputValue(defaults.ultimaFactura ?? "0"),
     horaApertura: toInputValue(defaults.horaApertura || ""),
     horaCierre: toInputValue(defaults.horaCierre || ""),
-    nombreImpresora: normalizeCashRegisterPrinterDraftValue(defaults.nombreImpresora || ""),
+    nombreImpresora: normalizeCashRegisterPrinterDraftValue(
+      defaults.nombreImpresora || "",
+    ),
     status: String(defaults.status ?? 0),
   };
 }
@@ -17061,25 +19421,53 @@ function captureCashRegisterDraft() {
 }
 
 function readCashRegisterDraft(form) {
-  const currentDraft = state.cashRegisters.draft || createEmptyCashRegisterDraft(state.cashRegisters.metadata);
+  const currentDraft =
+    state.cashRegisters.draft ||
+    createEmptyCashRegisterDraft(state.cashRegisters.metadata);
 
   return {
     originalSerie: currentDraft.originalSerie || "",
     originalFecha: currentDraft.originalFecha || "",
-    serie: currentDraft.originalSerie || readFormFieldValue(form, "serie", currentDraft.serie),
-    fecha: currentDraft.originalFecha || readFormFieldValue(form, "fecha", currentDraft.fecha),
-    numeroCaja: readFormFieldValue(form, "numeroCaja", currentDraft.numeroCaja || "1"),
-    facturaInicial: readFormFieldValue(form, "facturaInicial", currentDraft.facturaInicial || "1"),
-    ultimaFactura: readFormFieldValue(form, "ultimaFactura", currentDraft.ultimaFactura || "0"),
-    horaApertura: readFormFieldValue(form, "horaApertura", currentDraft.horaApertura),
+    serie:
+      currentDraft.originalSerie ||
+      readFormFieldValue(form, "serie", currentDraft.serie),
+    fecha:
+      currentDraft.originalFecha ||
+      readFormFieldValue(form, "fecha", currentDraft.fecha),
+    numeroCaja: readFormFieldValue(
+      form,
+      "numeroCaja",
+      currentDraft.numeroCaja || "1",
+    ),
+    facturaInicial: readFormFieldValue(
+      form,
+      "facturaInicial",
+      currentDraft.facturaInicial || "1",
+    ),
+    ultimaFactura: readFormFieldValue(
+      form,
+      "ultimaFactura",
+      currentDraft.ultimaFactura || "0",
+    ),
+    horaApertura: readFormFieldValue(
+      form,
+      "horaApertura",
+      currentDraft.horaApertura,
+    ),
     horaCierre: readFormFieldValue(form, "horaCierre", currentDraft.horaCierre),
-    nombreImpresora: readFormFieldValue(form, "nombreImpresora", currentDraft.nombreImpresora || ""),
+    nombreImpresora: readFormFieldValue(
+      form,
+      "nombreImpresora",
+      currentDraft.nombreImpresora || "",
+    ),
     status: readFormFieldValue(form, "status", currentDraft.status || "0"),
   };
 }
 
 function validateCashRegisterDraft(draft) {
-  const serie = String(draft.serie || "").trim().toUpperCase();
+  const serie = String(draft.serie || "")
+    .trim()
+    .toUpperCase();
   if (!serie) {
     return "Debes indicar la serie de la caja.";
   }
@@ -17111,14 +19499,18 @@ function validateCashRegisterDraft(draft) {
 
 function buildCashRegisterPayload(draft) {
   return {
-    serie: String(draft.serie || "").trim().toUpperCase(),
+    serie: String(draft.serie || "")
+      .trim()
+      .toUpperCase(),
     fecha: toApiDateTime(draft.fecha),
     numeroCaja: Number.parseInt(String(draft.numeroCaja || "0"), 10),
     facturaInicial: String(draft.facturaInicial || "").trim() || undefined,
     ultimaFactura: String(draft.ultimaFactura || "").trim() || undefined,
     horaApertura: String(draft.horaApertura || "").trim() || undefined,
     horaCierre: String(draft.horaCierre || "").trim() || undefined,
-    nombreImpresora: normalizeCashRegisterPrinterDraftValue(draft.nombreImpresora) || "NO APLICA",
+    nombreImpresora:
+      normalizeCashRegisterPrinterDraftValue(draft.nombreImpresora) ||
+      "NO APLICA",
   };
 }
 
@@ -17133,13 +19525,17 @@ function cashRegisterToDraft(item) {
     ultimaFactura: toInputValue(item?.ultimaFactura ?? "0"),
     horaApertura: toInputValue(item?.horaApertura || ""),
     horaCierre: toInputValue(item?.horaCierre || ""),
-    nombreImpresora: normalizeCashRegisterPrinterDraftValue(item?.nombreImpresora || ""),
+    nombreImpresora: normalizeCashRegisterPrinterDraftValue(
+      item?.nombreImpresora || "",
+    ),
     status: String(item?.status ?? 0),
   };
 }
 
 function buildCashRegisterKey(serie, fecha) {
-  return `${String(serie || "").trim().toUpperCase()}::${toDateInputValue(fecha)}`;
+  return `${String(serie || "")
+    .trim()
+    .toUpperCase()}::${toDateInputValue(fecha)}`;
 }
 
 function createEmptyCompraArticleLookupState() {
@@ -17159,7 +19555,9 @@ function createEmptyCompraDraftItem(source = {}) {
     marca: source.marca || "",
     nombre: source.nombre || "",
     cantidad: toInputValue(source.cantidad || "1"),
-    costoUnitario: toInputValue(source.costoUnitario || source.costoDolar || "0.00"),
+    costoUnitario: toInputValue(
+      source.costoUnitario || source.costoDolar || "0.00",
+    ),
     subtotal: "",
   };
 
@@ -17206,14 +19604,20 @@ function captureCompraDraft() {
 }
 
 function readCompraDraft(form) {
-  const currentDraft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const currentDraft =
+    state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
   const rows = Array.from(form.querySelectorAll("[data-compra-item-row]"));
   const items = rows
     .map((row, index) => {
-      const currentItem = currentDraft.items?.[index] || createEmptyCompraDraftItem();
+      const currentItem =
+        currentDraft.items?.[index] || createEmptyCompraDraftItem();
       const nextItem = {
         ...currentItem,
-        cantidad: readRowFieldValue(row, "cantidad", currentItem.cantidad || "1"),
+        cantidad: readRowFieldValue(
+          row,
+          "cantidad",
+          currentItem.cantidad || "1",
+        ),
       };
 
       return {
@@ -17222,16 +19626,26 @@ function readCompraDraft(form) {
       };
     })
     .filter((item) => String(item.codigoBarra || "").trim());
-  const totalMercancia = formatCompraAmountInput(computeCompraDraftTotal(items));
+  const totalMercancia = formatCompraAmountInput(
+    computeCompraDraftTotal(items),
+  );
 
   return {
     ...currentDraft,
     documento: readFormFieldValue(form, "documento", currentDraft.documento),
     proveedor: readFormFieldValue(form, "proveedor", currentDraft.proveedor),
     fecha: readFormFieldValue(form, "fecha", currentDraft.fecha),
-    fechaFactura: readFormFieldValue(form, "fechaFactura", currentDraft.fechaFactura),
+    fechaFactura: readFormFieldValue(
+      form,
+      "fechaFactura",
+      currentDraft.fechaFactura,
+    ),
     tipoPago: readFormFieldValue(form, "tipoPago", currentDraft.tipoPago),
-    observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
+    observacion: readFormFieldValue(
+      form,
+      "observacion",
+      currentDraft.observacion,
+    ),
     totalMercancia,
     tasaCambio: readFormFieldValue(form, "tasaCambio", currentDraft.tasaCambio),
     usuario: readFormFieldValue(form, "usuario", currentDraft.usuario),
@@ -17252,7 +19666,9 @@ function validateCompraDraft(draft) {
     return "Debes indicar el tipo de pago.";
   }
 
-  const destino = String(draft.destino || "").trim().toUpperCase();
+  const destino = String(draft.destino || "")
+    .trim()
+    .toUpperCase();
   if (!destino) {
     return "Debes indicar el destino de la compra.";
   }
@@ -17267,7 +19683,9 @@ function validateCompraDraft(draft) {
     return "La tasa de cambio indicada no es valida.";
   }
 
-  const validItems = (draft.items || []).filter((item) => String(item?.codigoBarra || "").trim());
+  const validItems = (draft.items || []).filter((item) =>
+    String(item?.codigoBarra || "").trim(),
+  );
   if (!validItems.length) {
     return "Debes seleccionar al menos un articulo para la compra.";
   }
@@ -17287,18 +19705,26 @@ function buildCompraPayload(draft) {
   const idLote = Number.parseInt(String(draft.idLote || ""), 10);
 
   return {
-    documento: String(draft.documento || "").trim().toUpperCase() || undefined,
+    documento:
+      String(draft.documento || "")
+        .trim()
+        .toUpperCase() || undefined,
     proveedor: String(draft.proveedor || "").trim() || undefined,
     tipoPago: Number.isInteger(tipoPago) ? tipoPago : undefined,
     observacion: String(draft.observacion || "").trim() || undefined,
     totalMercancia: String(draft.totalMercancia || "").trim() || undefined,
     tasaCambio: String(draft.tasaCambio || "").trim() || undefined,
-    destino: String(draft.destino || "").trim().toUpperCase() || undefined,
+    destino:
+      String(draft.destino || "")
+        .trim()
+        .toUpperCase() || undefined,
     idLote: Number.isInteger(idLote) ? idLote : undefined,
     items: (draft.items || [])
       .filter((item) => String(item?.codigoBarra || "").trim())
       .map((item) => ({
-        codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
+        codigoBarra: String(item.codigoBarra || "")
+          .trim()
+          .toUpperCase(),
         cantidad: String(item.cantidad || "").trim() || undefined,
         costoUnitario: String(item.costoUnitario || "").trim() || undefined,
       })),
@@ -17316,10 +19742,16 @@ function compraToDraft(compra, metadata = state.compras.metadata) {
     fecha: toDateInputValue(compra?.fecha || defaults.fecha || new Date()),
     fechaFactura: toDateInputValue(compra?.fechaFactura || ""),
     tipoPago: toInputValue(compra?.tipoPago ?? defaults.tipoPago ?? ""),
-    observacion: toInputValue(compra?.observacion || defaults.observacion || ""),
-    totalMercancia: toInputValue(compra?.totalMercancia ?? defaults.totalMercancia ?? "0.00"),
+    observacion: toInputValue(
+      compra?.observacion || defaults.observacion || "",
+    ),
+    totalMercancia: toInputValue(
+      compra?.totalMercancia ?? defaults.totalMercancia ?? "0.00",
+    ),
     tasaCambio: toInputValue(compra?.tasaCambio ?? defaults.tasaCambio ?? ""),
-    usuario: toInputValue(compra?.usuario || defaults.usuario || state.user?.codUsuario || ""),
+    usuario: toInputValue(
+      compra?.usuario || defaults.usuario || state.user?.codUsuario || "",
+    ),
     status: String(compra?.status ?? defaults.status ?? 0),
     destino: toInputValue(compra?.destino || defaults.destino || ""),
     idLote: toInputValue(compra?.idLote ?? defaults.idLote ?? ""),
@@ -17332,13 +19764,18 @@ function compraToDraft(compra, metadata = state.compras.metadata) {
             nombre: item.nombre || "",
             cantidad: item.cantidad || "1",
             costoUnitario: item.costoUnitario || "0.00",
-          }))
+          }),
+        )
       : [],
   };
 }
 
 function buildCompraKey(documento, proveedor) {
-  return `${String(documento || "").trim().toUpperCase()}::${String(proveedor || "").trim().toUpperCase()}`;
+  return `${String(documento || "")
+    .trim()
+    .toUpperCase()}::${String(proveedor || "")
+    .trim()
+    .toUpperCase()}`;
 }
 
 function computeCompraItemSubtotal(item) {
@@ -17362,14 +19799,17 @@ function syncCompraComputedFields(form) {
     return;
   }
 
-  const draft = state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
+  const draft =
+    state.compras.draft || createEmptyCompraDraft(state.compras.metadata);
   const items = Array.isArray(draft.items) ? draft.items : [];
   const rows = Array.from(form.querySelectorAll("[data-compra-item-row]"));
 
   rows.forEach((row, index) => {
     const subtotalField = row.querySelector('[name="subtotal"]');
     if (subtotalField && "value" in subtotalField) {
-      subtotalField.value = formatCompraAmountInput(computeCompraItemSubtotal(items[index]));
+      subtotalField.value = formatCompraAmountInput(
+        computeCompraItemSubtotal(items[index]),
+      );
     }
   });
 
@@ -17493,9 +19933,18 @@ function applyArticleDollarRatesToDraft(draft) {
     costos: { ...currentDraft.costos },
   };
 
-  const detailPrice = resolveArticlePriceFromDollarCost(nextDraft.costos.costoInicial, state.articlePricingRates?.rateBsPerUsd);
-  const mayorPrice = resolveArticlePriceFromDollarCost(nextDraft.costos.costoPromedio, state.articlePricingRates?.rateMayor);
-  const afiliadoPrice = resolveArticlePriceFromDollarCost(nextDraft.costos.ultimoCosto, state.articlePricingRates?.rateBsPerUsd);
+  const detailPrice = resolveArticlePriceFromDollarCost(
+    nextDraft.costos.costoInicial,
+    state.articlePricingRates?.rateBsPerUsd,
+  );
+  const mayorPrice = resolveArticlePriceFromDollarCost(
+    nextDraft.costos.costoPromedio,
+    state.articlePricingRates?.rateMayor,
+  );
+  const afiliadoPrice = resolveArticlePriceFromDollarCost(
+    nextDraft.costos.ultimoCosto,
+    state.articlePricingRates?.rateBsPerUsd,
+  );
 
   if (detailPrice !== null) {
     nextDraft.precios.detal = detailPrice;
@@ -17513,7 +19962,9 @@ function applyArticleDollarRatesToDraft(draft) {
 }
 
 function withDraftDefaults(draft) {
-  const defaultTaxCode = String(state.metadata?.defaults?.precios?.impuesto || 1);
+  const defaultTaxCode = String(
+    state.metadata?.defaults?.precios?.impuesto || 1,
+  );
   return {
     codigoBarra: draft?.codigoBarra || "",
     referencia: draft?.referencia || "",
@@ -17587,7 +20038,9 @@ function parseArticlePromotionNumber(value) {
   let normalized = compact;
   if (lastComma !== -1 && lastDot !== -1) {
     normalized =
-      lastComma > lastDot ? compact.replace(/\./g, "").replace(",", ".") : compact.replace(/,/g, "");
+      lastComma > lastDot
+        ? compact.replace(/\./g, "").replace(",", ".")
+        : compact.replace(/,/g, "");
   } else if (lastComma !== -1) {
     normalized = compact.replace(/\./g, "").replace(",", ".");
   } else {
@@ -17611,7 +20064,9 @@ function clampArticlePromotionPercent(value) {
 }
 
 function clampArticlePromotionPrice(value, detailPrice) {
-  const safeDetail = Number.isFinite(detailPrice) ? Math.max(0, detailPrice) : 0;
+  const safeDetail = Number.isFinite(detailPrice)
+    ? Math.max(0, detailPrice)
+    : 0;
   return Math.min(safeDetail, Math.max(0, value));
 }
 
@@ -17629,7 +20084,10 @@ function syncArticlePromotionFields(form, triggerFieldName = "") {
     return;
   }
 
-  if (triggerFieldName === "descuento" || triggerFieldName === "precioPromocion") {
+  if (
+    triggerFieldName === "descuento" ||
+    triggerFieldName === "precioPromocion"
+  ) {
     articlePromotionLastEditedField = triggerFieldName;
   }
 
@@ -17653,17 +20111,30 @@ function syncArticlePromotionFields(form, triggerFieldName = "") {
       return;
     }
 
-    const normalizedDiscount = clampArticlePromotionPercent(discountPercent ?? 0);
+    const normalizedDiscount = clampArticlePromotionPercent(
+      discountPercent ?? 0,
+    );
     const calculatedPromoPrice = clampArticlePromotionPrice(
       detailPrice - detailPrice * (normalizedDiscount / 100),
       detailPrice,
     );
 
-    if (triggerFieldName === "descuento" && normalizedDiscount !== discountPercent) {
-      setArticlePromotionFieldValue(form, "descuento", formatArticlePromotionNumber(normalizedDiscount));
+    if (
+      triggerFieldName === "descuento" &&
+      normalizedDiscount !== discountPercent
+    ) {
+      setArticlePromotionFieldValue(
+        form,
+        "descuento",
+        formatArticlePromotionNumber(normalizedDiscount),
+      );
     }
 
-    setArticlePromotionFieldValue(form, "precioPromocion", formatArticlePromotionNumber(calculatedPromoPrice));
+    setArticlePromotionFieldValue(
+      form,
+      "precioPromocion",
+      formatArticlePromotionNumber(calculatedPromoPrice),
+    );
   };
 
   const syncFromPromoPrice = () => {
@@ -17674,15 +20145,33 @@ function syncArticlePromotionFields(form, triggerFieldName = "") {
       return;
     }
 
-    const normalizedPromoPrice = clampArticlePromotionPrice(promoPrice ?? 0, detailPrice);
+    const normalizedPromoPrice = clampArticlePromotionPrice(
+      promoPrice ?? 0,
+      detailPrice,
+    );
     const calculatedDiscount =
-      detailPrice <= 0 ? 0 : clampArticlePromotionPercent(((detailPrice - normalizedPromoPrice) / detailPrice) * 100);
+      detailPrice <= 0
+        ? 0
+        : clampArticlePromotionPercent(
+            ((detailPrice - normalizedPromoPrice) / detailPrice) * 100,
+          );
 
-    if (triggerFieldName === "precioPromocion" && normalizedPromoPrice !== promoPrice) {
-      setArticlePromotionFieldValue(form, "precioPromocion", formatArticlePromotionNumber(normalizedPromoPrice));
+    if (
+      triggerFieldName === "precioPromocion" &&
+      normalizedPromoPrice !== promoPrice
+    ) {
+      setArticlePromotionFieldValue(
+        form,
+        "precioPromocion",
+        formatArticlePromotionNumber(normalizedPromoPrice),
+      );
     }
 
-    setArticlePromotionFieldValue(form, "descuento", formatArticlePromotionNumber(calculatedDiscount));
+    setArticlePromotionFieldValue(
+      form,
+      "descuento",
+      formatArticlePromotionNumber(calculatedDiscount),
+    );
   };
 
   if (triggerFieldName === "descuento") {
@@ -17696,7 +20185,10 @@ function syncArticlePromotionFields(form, triggerFieldName = "") {
   }
 
   if (triggerFieldName === "detal") {
-    if (articlePromotionLastEditedField === "precioPromocion" && promoPriceValue.trim()) {
+    if (
+      articlePromotionLastEditedField === "precioPromocion" &&
+      promoPriceValue.trim()
+    ) {
       syncFromPromoPrice();
       return;
     }
@@ -17708,7 +20200,10 @@ function syncArticlePromotionFields(form, triggerFieldName = "") {
   }
 
   if (triggerFieldName === "promocionActiva") {
-    if (articlePromotionLastEditedField === "precioPromocion" && promoPriceValue.trim()) {
+    if (
+      articlePromotionLastEditedField === "precioPromocion" &&
+      promoPriceValue.trim()
+    ) {
       syncFromPromoPrice();
       return;
     }
@@ -17724,7 +20219,10 @@ function syncArticlePromotionFields(form, triggerFieldName = "") {
     return;
   }
 
-  if (articlePromotionLastEditedField === "precioPromocion" && promoPriceValue.trim()) {
+  if (
+    articlePromotionLastEditedField === "precioPromocion" &&
+    promoPriceValue.trim()
+  ) {
     syncFromPromoPrice();
     return;
   }
@@ -17756,9 +20254,18 @@ function articleToDraft(article) {
     referencia: article?.referencia || article?.codigoBarraAnt || "",
     serializado: Boolean(article?.inventario?.serializado),
     general: {
-      categoria: article?.general?.categoria?.nombre || article?.general?.categoria?.codigo || "",
-      fabricante: article?.general?.fabricante?.nombre || article?.general?.fabricante?.codigo || "",
-      marca: article?.general?.marca?.nombre || article?.general?.marca?.codigo || "",
+      categoria:
+        article?.general?.categoria?.nombre ||
+        article?.general?.categoria?.codigo ||
+        "",
+      fabricante:
+        article?.general?.fabricante?.nombre ||
+        article?.general?.fabricante?.codigo ||
+        "",
+      marca:
+        article?.general?.marca?.nombre ||
+        article?.general?.marca?.codigo ||
+        "",
       nombre: article?.general?.nombre || "",
       puntoRecorte: toInputValue(article?.general?.puntoRecorte),
       familia: article?.general?.familia || "",
@@ -17768,11 +20275,15 @@ function articleToDraft(article) {
     },
     tallasColores: {
       talla: article?.tallasColores?.talla?.codigo || "",
-      colores: article?.tallasColores?.colores?.nombre || article?.tallasColores?.colores?.codigo || "",
+      colores:
+        article?.tallasColores?.colores?.nombre ||
+        article?.tallasColores?.colores?.codigo ||
+        "",
     },
     precios: {
       impuestoCodigo:
-        article?.precios?.impuesto?.codigo === 0 || article?.precios?.impuesto?.codigo
+        article?.precios?.impuesto?.codigo === 0 ||
+        article?.precios?.impuesto?.codigo
           ? String(article.precios.impuesto.codigo)
           : "",
       detal: toInputValue(article?.precios?.detal),
@@ -17889,7 +20400,10 @@ function validateDraft(draft) {
     return `Completa los siguientes campos antes de guardar: ${missing.join(", ")}.`;
   }
 
-  if (draft.precios.impuestoCodigo && Number.isNaN(Number.parseInt(draft.precios.impuestoCodigo, 10))) {
+  if (
+    draft.precios.impuestoCodigo &&
+    Number.isNaN(Number.parseInt(draft.precios.impuestoCodigo, 10))
+  ) {
     return "El impuesto debe tener un codigo numerico valido.";
   }
 
@@ -17964,7 +20478,8 @@ function toApiDateTime(value, boundary = "start") {
     return `${year}-${month}-${day}T00:00:00.000`;
   }
 
-  const parsed = value instanceof Date ? new Date(value.getTime()) : new Date(raw);
+  const parsed =
+    value instanceof Date ? new Date(value.getTime()) : new Date(raw);
   if (Number.isNaN(parsed.getTime())) {
     return undefined;
   }
@@ -17976,40 +20491,116 @@ function readArticleDraft(form) {
   const currentDraft = withDraftDefaults(state.formDraft || createEmptyDraft());
 
   return applyArticleDollarRatesToDraft({
-    codigoBarra: readFormFieldValue(form, "codigoBarra", currentDraft.codigoBarra),
+    codigoBarra: readFormFieldValue(
+      form,
+      "codigoBarra",
+      currentDraft.codigoBarra,
+    ),
     referencia: readFormFieldValue(form, "referencia", currentDraft.referencia),
-    serializado: readFormCheckboxValue(form, "serializado", currentDraft.serializado),
+    serializado: readFormCheckboxValue(
+      form,
+      "serializado",
+      currentDraft.serializado,
+    ),
     general: {
-      categoria: readFormFieldValue(form, "categoria", currentDraft.general.categoria),
-      fabricante: readFormFieldValue(form, "fabricante", currentDraft.general.fabricante),
+      categoria: readFormFieldValue(
+        form,
+        "categoria",
+        currentDraft.general.categoria,
+      ),
+      fabricante: readFormFieldValue(
+        form,
+        "fabricante",
+        currentDraft.general.fabricante,
+      ),
       marca: readFormFieldValue(form, "marca", currentDraft.general.marca),
       nombre: readFormFieldValue(form, "nombre", currentDraft.general.nombre),
-      puntoRecorte: readFormFieldValue(form, "puntoRecorte", currentDraft.general.puntoRecorte),
-      familia: readFormFieldValue(form, "familia", currentDraft.general.familia),
+      puntoRecorte: readFormFieldValue(
+        form,
+        "puntoRecorte",
+        currentDraft.general.puntoRecorte,
+      ),
+      familia: readFormFieldValue(
+        form,
+        "familia",
+        currentDraft.general.familia,
+      ),
       nota: readFormFieldValue(form, "nota", currentDraft.general.nota),
       tipo: readFormFieldValue(form, "tipo", currentDraft.general.tipo),
       status: readFormFieldValue(form, "status", currentDraft.general.status),
     },
     tallasColores: {
-      talla: readFormFieldValue(form, "talla", currentDraft.tallasColores.talla),
-      colores: readFormFieldValue(form, "colores", currentDraft.tallasColores.colores),
+      talla: readFormFieldValue(
+        form,
+        "talla",
+        currentDraft.tallasColores.talla,
+      ),
+      colores: readFormFieldValue(
+        form,
+        "colores",
+        currentDraft.tallasColores.colores,
+      ),
     },
     precios: {
-      impuestoCodigo: readFormFieldValue(form, "impuestoCodigo", currentDraft.precios.impuestoCodigo),
+      impuestoCodigo: readFormFieldValue(
+        form,
+        "impuestoCodigo",
+        currentDraft.precios.impuestoCodigo,
+      ),
       detal: readFormFieldValue(form, "detal", currentDraft.precios.detal),
       mayor: readFormFieldValue(form, "mayor", currentDraft.precios.mayor),
-      afiliado: readFormFieldValue(form, "afiliado", currentDraft.precios.afiliado),
-      promocionActiva: readFormCheckboxValue(form, "promocionActiva", currentDraft.precios.promocionActiva),
-      descuento: readFormFieldValue(form, "descuento", currentDraft.precios.descuento),
-      precio: readFormFieldValue(form, "precioPromocion", currentDraft.precios.precio),
-      desde: readFormFieldValue(form, "promocionDesde", currentDraft.precios.desde),
-      hasta: readFormFieldValue(form, "promocionHasta", currentDraft.precios.hasta),
+      afiliado: readFormFieldValue(
+        form,
+        "afiliado",
+        currentDraft.precios.afiliado,
+      ),
+      promocionActiva: readFormCheckboxValue(
+        form,
+        "promocionActiva",
+        currentDraft.precios.promocionActiva,
+      ),
+      descuento: readFormFieldValue(
+        form,
+        "descuento",
+        currentDraft.precios.descuento,
+      ),
+      precio: readFormFieldValue(
+        form,
+        "precioPromocion",
+        currentDraft.precios.precio,
+      ),
+      desde: readFormFieldValue(
+        form,
+        "promocionDesde",
+        currentDraft.precios.desde,
+      ),
+      hasta: readFormFieldValue(
+        form,
+        "promocionHasta",
+        currentDraft.precios.hasta,
+      ),
     },
     costos: {
-      costoInicial: readFormFieldValue(form, "costoInicial", currentDraft.costos.costoInicial),
-      costoPromedio: readFormFieldValue(form, "costoPromedio", currentDraft.costos.costoPromedio),
-      ultimoCosto: readFormFieldValue(form, "ultimoCosto", currentDraft.costos.ultimoCosto),
-      costoDolar: readFormFieldValue(form, "costoDolar", currentDraft.costos.costoDolar),
+      costoInicial: readFormFieldValue(
+        form,
+        "costoInicial",
+        currentDraft.costos.costoInicial,
+      ),
+      costoPromedio: readFormFieldValue(
+        form,
+        "costoPromedio",
+        currentDraft.costos.costoPromedio,
+      ),
+      ultimoCosto: readFormFieldValue(
+        form,
+        "ultimoCosto",
+        currentDraft.costos.ultimoCosto,
+      ),
+      costoDolar: readFormFieldValue(
+        form,
+        "costoDolar",
+        currentDraft.costos.costoDolar,
+      ),
     },
   });
 }
@@ -18024,7 +20615,9 @@ function readFormFieldValue(form, fieldName, fallback = "") {
 }
 
 function readRadioValue(form, fieldName, fallback = "") {
-  const checkedField = form?.querySelector?.(`input[name="${fieldName}"]:checked`);
+  const checkedField = form?.querySelector?.(
+    `input[name="${fieldName}"]:checked`,
+  );
   if (checkedField && "value" in checkedField) {
     return checkedField.value;
   }
@@ -18047,7 +20640,9 @@ function readFormCheckboxValue(form, fieldName, fallback = false) {
 
 function createCatalogManualDraft(kind) {
   const config = getCatalogImportConfig(kind);
-  const supportsStatus = config?.columns?.some((column) => column.key === "status");
+  const supportsStatus = config?.columns?.some(
+    (column) => column.key === "status",
+  );
 
   return {
     codigo: "",
@@ -18072,7 +20667,9 @@ function getCatalogManualDraft(kind) {
 
 function readCatalogManualDraft(form, kind) {
   const config = getCatalogImportConfig(kind);
-  const supportsStatus = config?.columns?.some((column) => column.key === "status");
+  const supportsStatus = config?.columns?.some(
+    (column) => column.key === "status",
+  );
 
   return {
     codigo: readFormFieldValue(form, "codigo", ""),
@@ -18104,7 +20701,12 @@ function validateCatalogManualDraft(kind, draft) {
     return `El codigo de ${catalogLabel} no puede tener mas de ${config.maxCodeLength} caracteres.`;
   }
 
-  if (supportsName && nombre && config.maxNameLength && nombre.length > config.maxNameLength) {
+  if (
+    supportsName &&
+    nombre &&
+    config.maxNameLength &&
+    nombre.length > config.maxNameLength
+  ) {
     return `El nombre de ${catalogLabel} no puede tener mas de ${config.maxNameLength} caracteres.`;
   }
 
@@ -18113,17 +20715,25 @@ function validateCatalogManualDraft(kind, draft) {
 
 function buildCatalogManualPayload(kind, draft) {
   const config = getCatalogImportConfig(kind);
-  const supportsStatus = config?.columns?.some((column) => column.key === "status");
+  const supportsStatus = config?.columns?.some(
+    (column) => column.key === "status",
+  );
 
   return {
     codigo: String(draft.codigo || "").trim() || undefined,
     nombre: String(draft.nombre || "").trim() || undefined,
-    status: supportsStatus ? Number.parseInt(String(draft.status || "1"), 10) : undefined,
+    status: supportsStatus
+      ? Number.parseInt(String(draft.status || "1"), 10)
+      : undefined,
   };
 }
 
 function getCatalogSingularLabel(singular) {
-  if (["categoria", "marca", "talla"].includes(String(singular || "").toLowerCase())) {
+  if (
+    ["categoria", "marca", "talla"].includes(
+      String(singular || "").toLowerCase(),
+    )
+  ) {
     return `la ${singular}`;
   }
 
@@ -18150,13 +20760,19 @@ function syncExistenceAutoRefresh() {
       return;
     }
 
-    if (state.inventoryExistence.loading || state.inventoryExistence.refreshing) {
+    if (
+      state.inventoryExistence.loading ||
+      state.inventoryExistence.refreshing
+    ) {
       return;
     }
 
-    await loadInventoryExistence(state.inventoryExistence.pagination.page || 1, {
-      background: true,
-    });
+    await loadInventoryExistence(
+      state.inventoryExistence.pagination.page || 1,
+      {
+        background: true,
+      },
+    );
   }, EXISTENCE_AUTO_REFRESH_MS);
 }
 
@@ -18197,11 +20813,17 @@ async function preloadAuthenticatedDesktopData() {
 }
 
 function isCatalogImportView(view) {
-  return ["categorias", "marcas", "tallas", "colores", "fabricantes"].includes(view);
+  return ["categorias", "marcas", "tallas", "colores", "fabricantes"].includes(
+    view,
+  );
 }
 
 function buildCatalogEntryDeleteKey(kind, code) {
-  return `${String(kind || "").trim().toLowerCase()}:${String(code || "").trim().toUpperCase()}`;
+  return `${String(kind || "")
+    .trim()
+    .toLowerCase()}:${String(code || "")
+    .trim()
+    .toUpperCase()}`;
 }
 
 function normalizeSearchText(value) {
@@ -18220,7 +20842,9 @@ function normalizeGroupCode(value) {
     CAJE: "CAJA",
     CAJA: "CAJA",
   };
-  const normalized = String(value || "").trim().toUpperCase();
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
   return aliases[normalized] || normalized;
 }
 
@@ -18229,7 +20853,9 @@ function getCurrentUserGroupCodes() {
     return [];
   }
 
-  return state.user.grupos.map((group) => normalizeGroupCode(group.codigo || group.nombre || ""));
+  return state.user.grupos.map((group) =>
+    normalizeGroupCode(group.codigo || group.nombre || ""),
+  );
 }
 
 function getCurrentUserPermissionCodes() {
@@ -18238,7 +20864,11 @@ function getCurrentUserPermissionCodes() {
   }
 
   return state.user.permisos
-    .map((permission) => String(permission || "").trim().toUpperCase())
+    .map((permission) =>
+      String(permission || "")
+        .trim()
+        .toUpperCase(),
+    )
     .filter(Boolean);
 }
 
@@ -18265,26 +20895,38 @@ function userIsSystemOperator() {
 }
 
 function userCanAccessView(view) {
-  const normalizedView = String(view || "desktop").trim().toLowerCase();
+  const normalizedView = String(view || "desktop")
+    .trim()
+    .toLowerCase();
 
   if (userCanManageAllModules()) {
     return true;
   }
 
   if (userIsCashierOperator()) {
-    return ["desktop", "facturacion", "cajas", "cierre-caja", "ayuda"].includes(normalizedView);
+    return ["desktop", "facturacion", "cajas", "cierre-caja", "ayuda"].includes(
+      normalizedView,
+    );
   }
 
   return true;
 }
 
 function userCanImportCatalogsFromExcel() {
-  return getCurrentUserPermissionCodes().includes(CATALOG_IMPORT_EXCEL_PERMISSION_CODE);
+  return getCurrentUserPermissionCodes().includes(
+    CATALOG_IMPORT_EXCEL_PERMISSION_CODE,
+  );
 }
 
 function roleHasCatalogImportPermission(role) {
-  return Array.isArray(role?.permisos)
-    && role.permisos.some((permission) => String(permission?.codigo || "").toUpperCase() === CATALOG_IMPORT_EXCEL_PERMISSION_CODE);
+  return (
+    Array.isArray(role?.permisos) &&
+    role.permisos.some(
+      (permission) =>
+        String(permission?.codigo || "").toUpperCase() ===
+        CATALOG_IMPORT_EXCEL_PERMISSION_CODE,
+    )
+  );
 }
 
 function renderFlash() {
@@ -18357,7 +20999,8 @@ function renderTaxOptions(options, selectedValue) {
 
 async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
-  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
   headers.set("Accept", "application/json");
 
   if (options.body !== undefined && !isFormData) {
@@ -18382,7 +21025,9 @@ async function apiFetch(path, options = {}) {
   const payload = await readResponsePayload(response);
 
   if (!response.ok) {
-    const error = new Error(extractMessageFromPayload(payload) || `Error ${response.status}`);
+    const error = new Error(
+      extractMessageFromPayload(payload) || `Error ${response.status}`,
+    );
     error.status = response.status;
     error.payload = payload;
 
@@ -18449,7 +21094,10 @@ function extractArticleConflictMessage(error) {
     return "Ya existe un articulo con ese codigo de barra.";
   }
 
-  if (message.toLowerCase().includes("misma referencia") || message.toLowerCase().includes("referencia")) {
+  if (
+    message.toLowerCase().includes("misma referencia") ||
+    message.toLowerCase().includes("referencia")
+  ) {
     return "Ya existe un articulo con esa referencia dentro de la misma marca.";
   }
 
@@ -18491,7 +21139,9 @@ function scheduleFlashAutoDismiss() {
 
 function persistSession() {
   const persistent = shouldPersistSession();
-  const targetStorage = persistent ? window.localStorage : window.sessionStorage;
+  const targetStorage = persistent
+    ? window.localStorage
+    : window.sessionStorage;
   const staleStorage = persistent ? window.sessionStorage : window.localStorage;
 
   targetStorage.setItem(TOKEN_STORAGE_KEY, state.token);
@@ -18656,7 +21306,8 @@ function shouldPersistSession() {
 }
 
 function readStoredJson(key) {
-  const value = window.sessionStorage.getItem(key) || window.localStorage.getItem(key);
+  const value =
+    window.sessionStorage.getItem(key) || window.localStorage.getItem(key);
   if (!value) {
     return null;
   }
@@ -18670,7 +21321,11 @@ function readStoredJson(key) {
 }
 
 function readStoredToken() {
-  return window.sessionStorage.getItem(TOKEN_STORAGE_KEY) || window.localStorage.getItem(TOKEN_STORAGE_KEY) || "";
+  return (
+    window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ||
+    window.localStorage.getItem(TOKEN_STORAGE_KEY) ||
+    ""
+  );
 }
 
 function readStoredUser() {
@@ -18682,34 +21337,7 @@ function hasPersistentSession() {
 }
 
 function getSessionStorage() {
-  return shouldPersistSession() || hasPersistentSession() ? window.localStorage : window.sessionStorage;
+  return shouldPersistSession() || hasPersistentSession()
+    ? window.localStorage
+    : window.sessionStorage;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

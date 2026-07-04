@@ -19,6 +19,12 @@ contextBridge.exposeInMainWorld("rockyClient", {
   printHtml(payload) {
     return ipcRenderer.invoke("client-printers:print-html", payload);
   },
+  exportHtmlPdf(payload) {
+    return ipcRenderer.invoke("client-printers:export-html-pdf", payload);
+  },
+  printHtmlViaPdf(payload) {
+    return ipcRenderer.invoke("client-printers:print-html-via-pdf", payload);
+  },
   onState(handler) {
     const listener = (_event, payload) => {
       handler(payload);

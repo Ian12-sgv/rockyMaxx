@@ -21,7 +21,9 @@ const MIRROR_SYNC_EVENT_RATE_UPSERT = "RATE_UPSERT";
 const MIRROR_SYNC_EVENT_SALE_UPSERT = "SALE_UPSERT";
 const DEFAULT_MIRROR_SYNC_RETRY_INTERVAL_MS = 30_000;
 const DEFAULT_MIRROR_SYNC_RETRY_STARTUP_DELAY_MS = 5_000;
-const DEFAULT_MIRROR_SYNC_RETRY_LIMIT = 25;
+const DEFAULT_MIRROR_SYNC_RETRY_LIMIT = 200;
+const DEFAULT_MIRROR_SYNC_RETRY_MAX_BATCHES = 25;
+const MIRROR_SYNC_AUTH_REFRESH_BUFFER_MS = 30_000;
 
 type MirrorSyncTransactionClient = Prisma.TransactionClient;
 type MirrorCatalogType = "categorias" | "marcas" | "tallas" | "colores" | "fabricantes" | "impuestos";
@@ -67,6 +69,12 @@ type MirrorSyncInboxRow = {
   AppliedAt: Date | null;
   Attempts: number;
   LastError: string | null;
+};
+
+type MirrorSyncAuthCacheEntry = {
+  baseUrl: string;
+  token: string;
+  expiresAt: number | null;
 };
 
 type MirrorSyncCatalogPayload = {
@@ -296,6 +304,7 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
   private mirrorSyncRetryTimer: ReturnType<typeof setInterval> | null = null;
   private mirrorSyncRetryStartupTimer: ReturnType<typeof setTimeout> | null = null;
   private mirrorSyncRetryInProgress = false;
+  private mirrorSyncAuthCache: MirrorSyncAuthCacheEntry | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -588,11 +597,14 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    const remaining = await this.countPendingOutboxRows();
+
     return {
       enabled: true,
       processed: rows.length,
       sent,
       pending,
+      remaining,
     };
   }
 
@@ -744,10 +756,38 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
 
     this.mirrorSyncRetryInProgress = true;
     try {
-      const summary = await this.pushPendingMirrorSync({ limit: this.getMirrorSyncRetryLimit() });
-      if (summary.processed > 0) {
+      const limit = this.getMirrorSyncRetryLimit();
+      const maxBatches = this.getMirrorSyncRetryMaxBatches();
+      let processed = 0;
+      let sent = 0;
+      let pending = 0;
+      let remaining = 0;
+      let batches = 0;
+
+      while (batches < maxBatches) {
+        const summary = await this.pushPendingMirrorSync({ limit });
+        processed += summary.processed;
+        sent += summary.sent;
+        pending += summary.pending;
+        remaining = summary.remaining ?? 0;
+        batches += 1;
+
+        if (summary.processed === 0 || remaining === 0) {
+          break;
+        }
+
+        if (summary.sent === 0 && summary.pending > 0) {
+          break;
+        }
+
+        if (summary.processed < limit) {
+          break;
+        }
+      }
+
+      if (processed > 0) {
         this.logger.log(
-          `Replica espejo (${reason}): procesados=${summary.processed}, enviados=${summary.sent}, pendientes=${summary.pending}.`,
+          `Replica espejo (${reason}): lotes=${batches}, procesados=${processed}, enviados=${sent}, reintentados=${pending}, restantes=${remaining}.`,
         );
       }
     } catch (error) {
@@ -1105,6 +1145,20 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       MIRROR_SYNC_STATUS_PENDING,
       limit,
     );
+  }
+
+  private async countPendingOutboxRows() {
+    const rows = await this.prisma.$queryRawUnsafe<Array<{ total: bigint | number }>>(
+      `
+        select count(*)::bigint as total
+        from dbo."MIRROR_SYNC_OUTBOX"
+        where "Status" = $1
+      `,
+      MIRROR_SYNC_STATUS_PENDING,
+    );
+
+    const raw = rows[0]?.total ?? 0;
+    return typeof raw === "bigint" ? Number(raw) : Number(raw || 0);
   }
 
   private async pushOutboxRow(remoteApiUrl: string, row: MirrorSyncOutboxRow) {
@@ -1814,15 +1868,14 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async postMirrorSyncPackage(baseUrl: string, payload: MirrorSyncEnvelope) {
-    const token = await this.loginRemoteMirrorNode(baseUrl);
-    const response = await fetch(`${baseUrl}/api/mirror-sync/import`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    let token = await this.getRemoteMirrorAuthToken(baseUrl);
+    let response = await this.sendMirrorSyncPackage(baseUrl, token, payload);
+
+    if (response.status === 401 || response.status === 403) {
+      this.clearRemoteMirrorAuthToken(baseUrl);
+      token = await this.getRemoteMirrorAuthToken(baseUrl, true);
+      response = await this.sendMirrorSyncPackage(baseUrl, token, payload);
+    }
 
     if (!response.ok) {
       const body = await this.readResponseBody(response);
@@ -1830,6 +1883,67 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     }
 
     return response.json().catch(() => null);
+  }
+
+  private async sendMirrorSyncPackage(baseUrl: string, token: string, payload: MirrorSyncEnvelope) {
+    return fetch(`${baseUrl}/api/mirror-sync/import`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  private async getRemoteMirrorAuthToken(baseUrl: string, forceRefresh = false) {
+    const normalizedBaseUrl = String(baseUrl || "").trim().replace(/\/+$/, "");
+    if (!forceRefresh && this.mirrorSyncAuthCache?.baseUrl === normalizedBaseUrl) {
+      const expiresAt = this.mirrorSyncAuthCache.expiresAt;
+      if (!expiresAt || expiresAt - MIRROR_SYNC_AUTH_REFRESH_BUFFER_MS > Date.now()) {
+        return this.mirrorSyncAuthCache.token;
+      }
+    }
+
+    const token = await this.loginRemoteMirrorNode(normalizedBaseUrl);
+    this.mirrorSyncAuthCache = {
+      baseUrl: normalizedBaseUrl,
+      token,
+      expiresAt: this.getJwtExpiration(token),
+    };
+    return token;
+  }
+
+  private clearRemoteMirrorAuthToken(baseUrl?: string) {
+    if (!this.mirrorSyncAuthCache) {
+      return;
+    }
+
+    if (!baseUrl) {
+      this.mirrorSyncAuthCache = null;
+      return;
+    }
+
+    const normalizedBaseUrl = String(baseUrl || "").trim().replace(/\/+$/, "");
+    if (this.mirrorSyncAuthCache.baseUrl === normalizedBaseUrl) {
+      this.mirrorSyncAuthCache = null;
+    }
+  }
+
+  private getJwtExpiration(token: string) {
+    try {
+      const [, payloadSegment] = String(token || "").split(".");
+      if (!payloadSegment) {
+        return null;
+      }
+
+      const normalized = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
+      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+      const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+      return typeof payload.exp === "number" ? payload.exp * 1000 : null;
+    } catch {
+      return null;
+    }
   }
 
   private async loginRemoteMirrorNode(baseUrl: string) {
@@ -2442,7 +2556,14 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   private getMirrorSyncRetryLimit() {
-    return this.readIntegerConfig("MIRROR_SYNC_AUTO_RETRY_LIMIT", DEFAULT_MIRROR_SYNC_RETRY_LIMIT);
+    return Math.max(
+      this.readIntegerConfig("MIRROR_SYNC_AUTO_RETRY_LIMIT", DEFAULT_MIRROR_SYNC_RETRY_LIMIT),
+      DEFAULT_MIRROR_SYNC_RETRY_LIMIT,
+    );
+  }
+
+  private getMirrorSyncRetryMaxBatches() {
+    return this.readIntegerConfig("MIRROR_SYNC_AUTO_RETRY_MAX_BATCHES", DEFAULT_MIRROR_SYNC_RETRY_MAX_BATCHES);
   }
 
   private readBooleanConfig(key: string, fallback: boolean) {

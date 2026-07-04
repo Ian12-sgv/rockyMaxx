@@ -74,6 +74,22 @@ export class InventoryController {
     return this.inventoryService.importCatalogFromExcel(catalogType, file);
   }
 
+  @Post("import/articles")
+  @RequireGroups()
+  @RequirePermissions(CATALOG_IMPORT_EXCEL_PERMISSION_CODE)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: {
+        fileSize: 10 * 1024 * 1024,
+      },
+    }),
+  )
+  async importArticlesFromExcel(
+    @UploadedFile() file: { buffer?: Buffer; originalname?: string; mimetype?: string } | undefined,
+  ) {
+    return this.inventoryService.importArticlesFromExcel(file);
+  }
+
   @Get()
   @RequireGroups("admin", "caja")
   async findAll(@Query() findMerchandiseDto: FindMerchandiseDto) {

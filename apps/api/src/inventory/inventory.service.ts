@@ -120,6 +120,32 @@ type CatalogImportRow = {
   rowNumber: number;
 };
 
+type ArticleImportRow = {
+  codigoBarra?: string;
+  referencia?: string;
+  nombre?: string;
+  categoria?: string;
+  marca?: string;
+  sexo?: string;
+  talla?: string;
+  costoInicial?: string;
+  costoPromedio?: string;
+  ultimoCosto?: string;
+  costoDolar?: string;
+  rowNumber: number;
+};
+
+type ArticleImportRateSnapshot = {
+  rateBsPerUsd: number;
+  rateMayor: number;
+};
+
+type ManualRateRow = {
+  ID: number;
+  Fecha: Date | string;
+  Valor: unknown;
+};
+
 type NormalizedMerchandisePayload = {
   codigoBarra?: string;
   referencia?: string;
@@ -314,6 +340,64 @@ export class InventoryService {
     return {
       tipo: resolvedType,
       archivo: file.originalname ?? "catalogo.xlsx",
+      hoja: firstSheetName,
+      resumen: summary,
+    };
+  }
+
+  async importArticlesFromExcel(
+    file: { buffer?: Buffer; originalname?: string; mimetype?: string } | undefined,
+  ) {
+    this.assertCanCreateArticles();
+
+    if (!file?.buffer || file.buffer.length === 0) {
+      throw new BadRequestException("Debe adjuntar un archivo Excel valido");
+    }
+
+    let workbook: XLSX.WorkBook;
+    try {
+      workbook = XLSX.read(file.buffer, { type: "buffer", cellDates: false });
+    } catch {
+      throw new BadRequestException("No se pudo leer el archivo Excel");
+    }
+
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) {
+      throw new BadRequestException("El archivo Excel no contiene hojas");
+    }
+
+    const sheet = workbook.Sheets[firstSheetName];
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: "",
+      raw: false,
+    });
+
+    if (rawRows.length === 0) {
+      throw new BadRequestException("El archivo Excel no contiene filas para importar");
+    }
+
+    const rows = rawRows
+      .map((row, index) => this.parseArticleImportRow(row, index + 2))
+      .filter((row): row is ArticleImportRow => row !== null);
+
+    if (rows.length === 0) {
+      throw new BadRequestException(
+        "El archivo Excel no contiene filas validas. Usa columnas como CodigoBarra, Referencia, Nombre, Categoria, Marca, Sexo, Talla, CostoInicial, CostoPromedio, UltimoCosto y CostoDolar.",
+      );
+    }
+
+    const rates = await this.getArticleImportRateSnapshot();
+    const result = await this.persistArticleImportRows(rows, rates);
+
+    if (result.codigosSincronizados.length > 0) {
+      await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+    }
+
+    const { codigosSincronizados, ...summary } = result;
+
+    return {
+      tipo: "articulos",
+      archivo: file.originalname ?? "articulos.xlsx",
       hoja: firstSheetName,
       resumen: summary,
     };
@@ -2213,6 +2297,382 @@ export class InventoryService {
     }
 
     return normalizedInput === normalizedFallbackName || normalizedInput.toUpperCase() === normalizedFallbackCode;
+  }
+
+  private parseArticleImportRow(row: Record<string, unknown>, rowNumber: number): ArticleImportRow | null {
+    const codigoBarra = this.normalizeOptionalUpper(
+      this.extractImportRowValue(row, ["codigobarra", "codigo", "barra", "codbarra"]),
+    );
+    const referencia = this.normalizeOptionalName(
+      this.extractImportRowValue(row, ["referencia", "refer", "ref"]),
+    ) ?? undefined;
+    const nombre = this.normalizeOptionalName(
+      this.extractImportRowValue(row, ["nombre", "articulo", "descripcion", "detalle"]),
+    ) ?? undefined;
+    const categoria = this.normalizeOptionalName(
+      this.extractImportRowValue(row, ["categoria", "categorias"]),
+    ) ?? undefined;
+    const marca = this.normalizeOptionalName(this.extractImportRowValue(row, ["marca", "marcas"])) ?? undefined;
+    const sexo = this.normalizeOptionalName(this.extractImportRowValue(row, ["sexo", "genero", "familia"])) ?? undefined;
+    const talla = this.normalizeOptionalUpper(this.extractImportRowValue(row, ["talla", "tallas"]));
+    const costoInicial = this.normalizeOptionalNumericString(
+      this.extractImportRowValue(row, ["costoinicial", "costo", "costodetal", "costod"]),
+    ) ?? undefined;
+    const costoPromedio = this.normalizeOptionalNumericString(
+      this.extractImportRowValue(row, ["costopromedio", "costomayor", "promedio"]),
+    ) ?? undefined;
+    const ultimoCosto = this.normalizeOptionalNumericString(
+      this.extractImportRowValue(row, ["ultimocosto", "costoafiliado", "afiliado"]),
+    ) ?? undefined;
+    const costoDolar = this.normalizeOptionalNumericString(
+      this.extractImportRowValue(row, ["costodolar", "dolar", "costousd", "usd"]),
+    ) ?? undefined;
+
+    if (
+      !codigoBarra &&
+      !referencia &&
+      !nombre &&
+      !categoria &&
+      !marca &&
+      !sexo &&
+      !talla &&
+      !costoInicial &&
+      !costoPromedio &&
+      !ultimoCosto &&
+      !costoDolar
+    ) {
+      return null;
+    }
+
+    return {
+      codigoBarra,
+      referencia,
+      nombre,
+      categoria,
+      marca,
+      sexo,
+      talla: talla ?? undefined,
+      costoInicial,
+      costoPromedio,
+      ultimoCosto,
+      costoDolar,
+      rowNumber,
+    };
+  }
+
+  private async getArticleImportRateSnapshot(): Promise<ArticleImportRateSnapshot> {
+    const [detalle, mayor] = await Promise.all([
+      this.getLatestManualRateRow("TASA_CAMBIO"),
+      this.getLatestManualRateRow("TASA_CAMBIO_M"),
+    ]);
+
+    const rateBsPerUsd = this.toFiniteImportNumber(detalle?.Valor);
+    const rateMayor = this.toFiniteImportNumber(mayor?.Valor);
+
+    if (rateBsPerUsd <= 0) {
+      throw new BadRequestException("Debes registrar la tasa manual de cambio antes de importar articulos.");
+    }
+
+    if (rateMayor <= 0) {
+      throw new BadRequestException("Debes registrar la tasa manual del mayor antes de importar articulos.");
+    }
+
+    return {
+      rateBsPerUsd,
+      rateMayor,
+    };
+  }
+
+  private async getLatestManualRateRow(tableName: "TASA_CAMBIO" | "TASA_CAMBIO_M") {
+    const rows = await this.prisma.$queryRawUnsafe<ManualRateRow[]>(
+      `
+        SELECT "ID", "Fecha", "Valor"
+        FROM dbo."${tableName}"
+        ORDER BY "ID" DESC
+        LIMIT 1
+      `,
+    );
+
+    return rows[0] ?? null;
+  }
+
+  private async persistArticleImportRows(rows: ArticleImportRow[], rates: ArticleImportRateSnapshot) {
+    let creados = 0;
+    let actualizados = 0;
+    let omitidos = 0;
+    const detalleErrores: string[] = [];
+    const codigosSincronizados = new Set<string>();
+    const firstRowByBarcode = new Map<string, number>();
+    const duplicateRowsByBarcode = new Map<string, number[]>();
+
+    for (const row of rows) {
+      const normalizedBarcode = this.normalizeOptionalUpper(row.codigoBarra);
+      if (!normalizedBarcode) {
+        continue;
+      }
+
+      const firstRow = firstRowByBarcode.get(normalizedBarcode);
+      if (typeof firstRow === "number") {
+        if (!duplicateRowsByBarcode.has(normalizedBarcode)) {
+          duplicateRowsByBarcode.set(normalizedBarcode, [firstRow]);
+        }
+
+        duplicateRowsByBarcode.get(normalizedBarcode)?.push(row.rowNumber);
+        continue;
+      }
+
+      firstRowByBarcode.set(normalizedBarcode, row.rowNumber);
+    }
+
+    const blockedBarcodes = new Set<string>();
+    for (const [codigoBarra, duplicateRows] of duplicateRowsByBarcode.entries()) {
+      blockedBarcodes.add(codigoBarra);
+      detalleErrores.push(
+        `Codigo de barra ${codigoBarra} repetido en filas ${duplicateRows.join(", ")}. Se omitieron todas sus filas.`,
+      );
+    }
+
+    for (const row of rows) {
+      const normalizedBarcode = this.normalizeOptionalUpper(row.codigoBarra);
+      if (normalizedBarcode && blockedBarcodes.has(normalizedBarcode)) {
+        omitidos += 1;
+        continue;
+      }
+
+      try {
+        const outcome = await this.createArticleImportRow(row, rates);
+
+        if (outcome.result === "created") {
+          creados += 1;
+          if (outcome.codigo) {
+            codigosSincronizados.add(outcome.codigo);
+          }
+          continue;
+        }
+
+        if (outcome.result === "updated") {
+          actualizados += 1;
+          if (outcome.codigo) {
+            codigosSincronizados.add(outcome.codigo);
+          }
+          continue;
+        }
+
+        omitidos += 1;
+      } catch (error) {
+        detalleErrores.push(`Fila ${row.rowNumber}: ${this.extractImportErrorMessage(error)}`);
+      }
+    }
+
+    return {
+      procesados: rows.length,
+      creados,
+      actualizados,
+      omitidos,
+      errores: detalleErrores.length,
+      detalleErrores: detalleErrores.slice(0, 10),
+      codigosSincronizados: Array.from(codigosSincronizados),
+    };
+  }
+
+  private async createArticleImportRow(row: ArticleImportRow, rates: ArticleImportRateSnapshot) {
+    const importPayload = this.buildArticleImportPayload(row, rates);
+    const normalized = this.normalizeMerchandisePayload(importPayload);
+    const codigoBarra = this.requireString(normalized.codigoBarra, "Debe indicar el codigo de barra");
+
+    const existing = await this.prisma.inventario.findUnique({
+      where: { CodigoBarra: codigoBarra },
+      include: inventoryInclude,
+    });
+
+    if (existing) {
+      const merged = this.mergeWithExisting(normalized, existing);
+      const resolvedCatalogs = await this.resolveCatalogs(merged);
+
+      const updated = await this.prisma.$transaction(async (tx) => {
+        await this.ensureCatalogs(tx, resolvedCatalogs);
+        await this.ensureUniqueBarcode(tx, merged.codigoBarra, codigoBarra);
+        await this.ensureUniqueReferencePerBrand(
+          tx,
+          merged.referencia,
+          resolvedCatalogs.marca.codigo,
+          codigoBarra,
+        );
+
+        const updatedItem = await tx.inventario.update({
+          where: { CodigoBarra: codigoBarra },
+          data: {
+            CodigoBarra: merged.codigoBarra,
+            CodigoBarraAnt: merged.codigoBarraAnt,
+            Referencia: merged.referencia,
+            CodigoMarca: resolvedCatalogs.marca.codigo,
+            Nombre: merged.nombre,
+            Talla: resolvedCatalogs.talla.codigo,
+            CodigoColor: resolvedCatalogs.color.codigo,
+            Fabricante: resolvedCatalogs.fabricante.codigo,
+            Categoria: resolvedCatalogs.categoria.codigo,
+            Nota: merged.nota,
+            TipoImpuesto: resolvedCatalogs.impuesto.codigo,
+            PrecioDetal: merged.precioDetal,
+            PrecioMayor: merged.precioMayor,
+            PrecioAfiliado: merged.precioAfiliado,
+            PrecioPromocion: merged.precioPromocion,
+            Promocion: merged.promocionActiva,
+            FechaInicial: new Date(merged.fechaInicial),
+            FechaFinal: new Date(merged.fechaFinal),
+            CostoInicial: merged.costoInicial,
+            CostoPromedio: merged.costoPromedio,
+            UltimoCosto: merged.ultimoCosto,
+            CostoDolar: merged.costoDolar,
+            ExistenciaInicial: merged.existenciaInicial,
+            Existencia: merged.existencia,
+            PuntoReorden: merged.puntoRecorte,
+            UltimaActualizacion: new Date(),
+            Tipo: merged.tipo,
+            Status: merged.status,
+            Serializado: merged.serializado,
+          },
+          include: inventoryInclude,
+        });
+
+        if (updatedItem.CodigoBarra !== codigoBarra) {
+          await this.mirrorSyncService.enqueueInventoryDeleteTx(tx, codigoBarra);
+        }
+
+        await this.mirrorSyncService.enqueueInventorySnapshotsTx(tx, [updatedItem.CodigoBarra]);
+        return updatedItem;
+      });
+
+      return {
+        result: "updated" as const,
+        codigo: updated.CodigoBarra,
+      };
+    }
+
+    const referencia = this.requireString(normalized.referencia, "Debe indicar la referencia del articulo");
+    const familia = this.requireString(normalized.familia, "Debe indicar la familia del articulo");
+    const marcaSeed = normalized.marca.codigo ?? normalized.marca.nombre ?? familia;
+    const siblingValues = await this.getSiblingValues(
+      referencia,
+      this.buildCodeCandidate(marcaSeed),
+      codigoBarra,
+    );
+
+    const completePayload = this.completeCreatePayload(normalized, siblingValues);
+    const resolvedCatalogs = await this.resolveCatalogs(completePayload);
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      await this.ensureCatalogs(tx, resolvedCatalogs);
+      await this.ensureUniqueBarcode(tx, completePayload.codigoBarra);
+      await this.ensureUniqueReferencePerBrand(tx, completePayload.referencia, resolvedCatalogs.marca.codigo);
+
+      const now = new Date();
+      const createdItem = await tx.inventario.create({
+        data: {
+          CodigoBarra: completePayload.codigoBarra,
+          CodigoBarraAnt: completePayload.codigoBarraAnt,
+          Referencia: completePayload.referencia,
+          CodigoMarca: resolvedCatalogs.marca.codigo,
+          Nombre: completePayload.nombre,
+          Talla: resolvedCatalogs.talla.codigo,
+          CodigoColor: resolvedCatalogs.color.codigo,
+          Fabricante: resolvedCatalogs.fabricante.codigo,
+          Categoria: resolvedCatalogs.categoria.codigo,
+          Nota: completePayload.nota,
+          TipoImpuesto: resolvedCatalogs.impuesto.codigo,
+          PrecioDetal: completePayload.precioDetal,
+          PrecioMayor: completePayload.precioMayor,
+          PrecioAfiliado: completePayload.precioAfiliado,
+          PrecioPromocion: completePayload.precioPromocion,
+          Promocion: completePayload.promocionActiva,
+          FechaInicial: new Date(completePayload.fechaInicial),
+          FechaFinal: new Date(completePayload.fechaFinal),
+          CostoInicial: completePayload.costoInicial,
+          CostoPromedio: completePayload.costoPromedio,
+          UltimoCosto: completePayload.ultimoCosto,
+          CostoDolar: completePayload.costoDolar,
+          ExistenciaInicial: completePayload.existenciaInicial,
+          Existencia: completePayload.existencia,
+          PuntoReorden: completePayload.puntoRecorte,
+          FechaPrimerMovimiento: now,
+          UltimaActualizacion: now,
+          Tipo: completePayload.tipo,
+          Status: completePayload.status,
+          Serializado: completePayload.serializado,
+        },
+        include: inventoryInclude,
+      });
+
+      await this.mirrorSyncService.enqueueInventorySnapshotsTx(tx, [createdItem.CodigoBarra]);
+      return createdItem;
+    });
+
+    return {
+      result: "created" as const,
+      codigo: created.CodigoBarra,
+    };
+  }
+
+  private buildArticleImportPayload(row: ArticleImportRow, rates: ArticleImportRateSnapshot): CreateMerchandiseDto {
+    const codigoBarra = this.requireString(row.codigoBarra, "Debe indicar el codigo de barra");
+    const referencia = this.requireString(row.referencia, "Debe indicar la referencia del articulo");
+    const nombre = this.requireString(row.nombre, "Debe indicar el nombre del articulo");
+    const talla = this.requireString(row.talla, "Debe indicar la talla del articulo");
+    const sexo = this.normalizeOptionalName(row.sexo) ?? DEFAULT_CATEGORY_NAME;
+    const marca = this.normalizeOptionalName(row.marca) ?? DEFAULT_BRAND_NAME;
+    const categoria = this.normalizeOptionalName(row.categoria) ?? DEFAULT_CATEGORY_NAME;
+    const costoInicial = row.costoInicial ?? "0";
+    const costoPromedio = row.costoPromedio?.trim() ? row.costoPromedio : "0";
+    const ultimoCosto = row.ultimoCosto ?? "0";
+    const costoDolar = row.costoDolar ?? costoInicial;
+
+    return {
+      codigoBarra,
+      referencia,
+      serializado: 0,
+      general: {
+        categoria,
+        fabricante: marca,
+        marca,
+        nombre,
+        puntoRecorte: "0",
+        familia: sexo,
+        nota: "",
+        tipo: "articulo",
+        status: "activo",
+      },
+      tallasColores: {
+        talla,
+        colores: "SIN COLOR",
+      },
+      precios: {
+        detal: this.calculateArticleImportPrice(costoInicial, rates.rateBsPerUsd),
+        mayor: this.calculateArticleImportPrice(costoPromedio, rates.rateMayor),
+        afiliado: this.calculateArticleImportPrice(ultimoCosto, rates.rateBsPerUsd),
+        promocion: {
+          activa: false,
+        },
+      },
+      costoInicial,
+      costoPromedio,
+      ultimoCosto,
+      costoDolar,
+    } as CreateMerchandiseDto;
+  }
+
+  private calculateArticleImportPrice(costValue: string | undefined, rate: number) {
+    const cost = this.toFiniteImportNumber(costValue);
+    if (cost <= 0 || rate <= 0) {
+      return "0.00";
+    }
+
+    return (Math.round(cost * rate * 100) / 100).toFixed(2);
+  }
+
+  private toFiniteImportNumber(value: unknown) {
+    const normalized = typeof value === "string" ? this.normalizeOptionalNumericString(value) ?? value : value;
+    const parsed = Number(normalized ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   private resolveCatalogImportKind(catalogType: string): CatalogImportKind {

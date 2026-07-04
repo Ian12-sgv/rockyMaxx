@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-/home/deploy/apps/rockyMaxx}"
@@ -125,7 +125,8 @@ MIRROR_SYNC_USERNAME="sistema"
 MIRROR_SYNC_PASSWORD="456789"
 MIRROR_SYNC_AUTO_RETRY_INTERVAL_MS=30000
 MIRROR_SYNC_AUTO_RETRY_STARTUP_DELAY_MS=5000
-MIRROR_SYNC_AUTO_RETRY_LIMIT=25
+MIRROR_SYNC_AUTO_RETRY_LIMIT=200
+MIRROR_SYNC_AUTO_RETRY_MAX_BATCHES=25
 EOF
 
   chown "$DEPLOY_USER:$DEPLOY_GROUP" "$env_path"
@@ -261,3 +262,4 @@ for spec in "${NODE_SPECS[@]}"; do
   assert_route_health "http://68.183.105.135${route_path%/}" "$api_port"
   echo "OK ${node_label}: http://68.183.105.135${route_path%/}"
 done
+

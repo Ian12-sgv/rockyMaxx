@@ -1,5 +1,6 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+﻿import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type DiarioCaja, type Inventario } from "@prisma/client";
+import { ConfigService } from "@nestjs/config";
 
 import {
   createEmptyCashRegisterPaymentSummary,
@@ -16,6 +17,11 @@ import { CreateFacturacionSaleDto, FacturacionPaymentRowDto, FacturacionSaleItem
 const ZERO = new Prisma.Decimal(0);
 const ONE = new Prisma.Decimal(1);
 const HUNDRED = new Prisma.Decimal(100);
+const DEFAULT_FACTURACION_COMPANY_NAME = "ROCKY MAXX";
+const DEFAULT_FACTURACION_COMPANY_DESCRIPTION = "Venta de ropa intima y deportiva para dama y caballeros, niÃ±os y niÃ±as y otro tipo de mercancia.";
+const DEFAULT_FACTURACION_COMPANY_TAX_LABEL = "RIF";
+const DEFAULT_FACTURACION_COMPANY_TAX_ID = "J-308460281";
+const DEFAULT_FACTURACION_STORE_CODE = "ORIGEN";
 
 type FacturacionTransactionClient = Prisma.TransactionClient;
 
@@ -52,10 +58,18 @@ type PaymentCatalogRow = {
   Status: number | null;
 };
 
+type CompanyPrintProfile = {
+  companyName: string;
+  companyDescription: string;
+  companyTaxIdLabel: string;
+  companyTaxId: string;
+};
+
 @Injectable()
 export class FacturacionService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     private readonly mirrorSyncService: MirrorSyncService,
   ) {}
 
@@ -164,6 +178,7 @@ export class FacturacionService {
           contingenciaActiva,
           cajaActiva.caja?.NombreImpresora ?? "",
         );
+        const companyProfile = await this.resolveCompanyPrintProfile(tx);
 
         await tx.ventas.create({
           data: {
@@ -275,6 +290,10 @@ export class FacturacionService {
           clienteNombre: cliente.Nombre,
           clienteTelefono: cliente.Telefono ?? "",
           clienteDireccion: cliente.Direccion ?? "",
+          companyName: companyProfile.companyName,
+          companyDescription: companyProfile.companyDescription,
+          companyTaxIdLabel: companyProfile.companyTaxIdLabel,
+          companyTaxId: companyProfile.companyTaxId,
           vendedor: vendedor.Cedula,
           vendedorNombre: vendedor.Nombre,
           numeroCaja: cajaActiva.caja?.Numero ?? 0,
@@ -375,6 +394,89 @@ export class FacturacionService {
       formatoContingenciaId: selectedFormat?.id ?? 0,
       formatoContingenciaArchivo: selectedFormat?.fileName ?? "",
     };
+  }
+  private async resolveCompanyPrintProfile(
+    tx: FacturacionTransactionClient,
+  ): Promise<CompanyPrintProfile> {
+    const parametros = await tx.parametros.findFirst({
+      orderBy: {
+        IDPARAMETROS: "asc",
+      },
+    });
+    const currentStore = this.getCurrentStoreContext();
+    const sucursal = await tx.sucursales.findUnique({
+      where: {
+        Codigo: currentStore.sucursalCodigo,
+      },
+    }).catch(() => null);
+
+    const parametrosName = this.normalizeOptionalTicketText(parametros?.Nombre);
+    const sucursalName = this.normalizeOptionalTicketText(sucursal?.Nombre);
+    const shouldUseCommercialFallback = currentStore.isCentralDatabase;
+    const rawStoreName = parametrosName
+      || (shouldUseCommercialFallback ? null : sucursalName)
+      || currentStore.fallbackName
+      || DEFAULT_FACTURACION_COMPANY_NAME;
+
+    return {
+      companyName: this.formatCompanyNameForTicket(rawStoreName),
+      companyDescription: DEFAULT_FACTURACION_COMPANY_DESCRIPTION,
+      companyTaxIdLabel: this.normalizeOptionalTicketText(parametros?.NombreIdFiscal) || DEFAULT_FACTURACION_COMPANY_TAX_LABEL,
+      companyTaxId: this.normalizeOptionalTicketText(parametros?.IDEmpresa)
+        || this.normalizeOptionalTicketText(parametros?.Codigo)
+        || DEFAULT_FACTURACION_COMPANY_TAX_ID,
+    };
+  }
+
+  private getCurrentStoreContext() {
+    const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "");
+    const databaseNameMatch = databaseUrl.match(/\/([^/?]+)(\?|$)/);
+    const databaseName = String(databaseNameMatch?.[1] || "").trim();
+    const storeMatch = databaseName.match(/rocky_tienda_(\d+)/i);
+    const warehouseMatch = databaseName.match(/rocky_bodega_(\d+)/i);
+    const normalizedDatabaseName = databaseName.toLowerCase();
+    const isCentralDatabase = normalizedDatabaseName === "rocky_maxx"
+      || normalizedDatabaseName === "rocky_sync_central";
+
+    if (storeMatch) {
+      const code = storeMatch[1].padStart(3, "0");
+      return {
+        databaseName,
+        sucursalCodigo: code,
+        fallbackName: `Tienda ${code}`,
+        isCentralDatabase: false,
+      };
+    }
+
+    if (warehouseMatch) {
+      const code = warehouseMatch[1].padStart(3, "0");
+      return {
+        databaseName,
+        sucursalCodigo: `B${code}`,
+        fallbackName: `Bodega ${code}`,
+        isCentralDatabase: false,
+      };
+    }
+
+    return {
+      databaseName,
+      sucursalCodigo: DEFAULT_FACTURACION_STORE_CODE,
+      fallbackName: DEFAULT_FACTURACION_COMPANY_NAME,
+      isCentralDatabase,
+    };
+  }
+
+  private formatCompanyNameForTicket(value: string | null | undefined) {
+    const normalized = this.normalizeOptionalTicketText(value) || DEFAULT_FACTURACION_COMPANY_NAME;
+    if (/\b(C\.?\s*A\.?|S\.?\s*A\.?)\b/i.test(normalized)) {
+      return normalized;
+    }
+
+    return `${normalized}, C.A.`;
+  }
+
+  private normalizeOptionalTicketText(value: string | null | undefined) {
+    return String(value || "").trim();
   }
   private async resolveTrabajador(tx: FacturacionTransactionClient, cedula: string) {
     const normalizedCedula = String(cedula || "").trim();
@@ -883,6 +985,7 @@ export class FacturacionService {
     return { start, end };
   }
 }
+
 
 
 
