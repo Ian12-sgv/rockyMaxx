@@ -183,6 +183,7 @@ const state = {
     open: false,
     loading: false,
     items: [],
+    downloadingKey: "",
   },
   devReturnLookup: {
     open: false,
@@ -672,6 +673,7 @@ async function hydrateAuthenticatedState() {
     open: false,
     loading: false,
     items: [],
+    downloadingKey: "",
   };
   state.devReturnLookup = {
     open: false,
@@ -1148,7 +1150,7 @@ function renderDesktopArchivoMenu() {
       <div class="modern-mega-column">
         <button class="modern-mega-head" type="button" data-menu-view="desktop">
           <span>Inventario</span>
-          <span>â€º</span>
+          <span>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Âº</span>
         </button>
         <button class="modern-dropdown-link" type="button" data-menu-view="clientes">Clientes</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="proveedores">Proveedores</button>
@@ -1158,14 +1160,14 @@ function renderDesktopArchivoMenu() {
       </div>
       <div class="modern-mega-column">
         <button class="modern-mega-head" type="button" data-menu-view="articulos">
-          <span>ArtÃ­culos</span>
-          <span>â€º</span>
+          <span>ArtÃƒÆ’Ã‚Â­culos</span>
+          <span>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Âº</span>
         </button>
         <button class="modern-dropdown-link" type="button" data-menu-view="tallas">Tallas</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="colores">Colores</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="fabricantes">Fabricantes</button>
         <button class="modern-dropdown-link" type="button" data-menu-view="marcas">Marcas</button>
-        <button class="modern-dropdown-link" type="button" data-menu-view="categorias">CategorÃ­as</button>
+        <button class="modern-dropdown-link" type="button" data-menu-view="categorias">CategorÃƒÆ’Ã‚Â­as</button>
       </div>
     </div>
   `;
@@ -1305,16 +1307,16 @@ function renderDesktopArticlesWorkspace() {
     <div class="modern-page">
       <div class="modern-breadcrumb">
         <span>Archivos</span>
-        <span>â€º</span>
+        <span>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Âº</span>
         <span>Inventario</span>
-        <span>â€º</span>
-        <strong>ArtÃ­culos</strong>
+        <span>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Âº</span>
+        <strong>ArtÃƒÆ’Ã‚Â­culos</strong>
       </div>
 
       <div class="modern-page-header">
         <div>
-          <h1>ArtÃ­culos</h1>
-          <p>CatÃ¡logo completo de productos y configuraciÃ³n del mÃ³dulo.</p>
+          <h1>ArtÃƒÆ’Ã‚Â­culos</h1>
+          <p>CatÃƒÆ’Ã‚Â¡logo completo de productos y configuraciÃƒÆ’Ã‚Â³n del mÃƒÆ’Ã‚Â³dulo.</p>
         </div>
 
 
@@ -1332,11 +1334,11 @@ function renderDesktopArticlesWorkspace() {
         <section class="modern-card modern-card-list">
           <div class="modern-card-head">
             <div>
-              <h2>ArtÃ­culos</h2>
+              <h2>ArtÃƒÆ’Ã‚Â­culos</h2>
               <p>Total registrados: ${escapeHtml(String(state.pagination.total || 0))}</p>
             </div>
             <div class="modern-chip">
-              ${state.loadingMetadata ? "CatÃ¡logos cargando" : "CatÃ¡logos listos"}
+              ${state.loadingMetadata ? "CatÃƒÆ’Ã‚Â¡logos cargando" : "CatÃƒÆ’Ã‚Â¡logos listos"}
             </div>
           </div>
           <div class="modern-search-wrap">
@@ -1359,7 +1361,7 @@ function renderDesktopPlaceholderWindow(title, description) {
     <div class="modern-page">
       <div class="modern-breadcrumb">
         <span>Sistema</span>
-        <span>â€º</span>
+        <span>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Âº</span>
         <strong>${escapeHtml(title)}</strong>
       </div>
       <div class="modern-card modern-card-placeholder">
@@ -1373,12 +1375,12 @@ function renderDesktopPlaceholderWindow(title, description) {
 function getDesktopViewLabel(view) {
   const labels = {
     desktop: "Panel principal",
-    articulos: "ArtÃ­culos",
+    articulos: "ArtÃƒÆ’Ã‚Â­culos",
     tallas: "Tallas",
     colores: "Colores",
     fabricantes: "Fabricantes",
     marcas: "Marcas",
-    categorias: "CategorÃ­as",
+    categorias: "CategorÃƒÆ’Ã‚Â­as",
     clientes: "Clientes",
     proveedores: "Proveedores",
     sucursales: "Sucursales",
@@ -2261,8 +2263,8 @@ function renderDevReturnsWorkspace() {
             <section class="modern-card dev-return-inbound-detail-card">
               <div class="panel-heading">
                 <div>
-                  <h2>RevisiÃ³n de borrador recibido</h2>
-                  <p>Valida el borrador recibido desde la sucursal y apruÃ©balo para disparar el registro en origen.</p>
+                  <h2>RevisiÃƒÆ’Ã‚Â³n de borrador recibido</h2>
+                  <p>Valida el borrador recibido desde la sucursal y apruÃƒÆ’Ã‚Â©balo para disparar el registro en origen.</p>
                 </div>
                 <div class="dev-return-inline-actions">
                   <button class="button button-ghost" type="button" data-dev-return-close-inbound-detail ${isBusy ? "disabled" : ""}>
@@ -2288,7 +2290,7 @@ function renderDevReturnsWorkspace() {
         <div class="panel-heading">
           <div>
             <h2>Bandejas</h2>
-            <p>Consulta lo que ya saliÃ³ hacia la bodega y lo que llegÃ³ pendiente por revisar.</p>
+            <p>Consulta lo que ya saliÃƒÆ’Ã‚Â³ hacia la bodega y lo que llegÃƒÆ’Ã‚Â³ pendiente por revisar.</p>
           </div>
         </div>
         <div class="dev-return-board-grid">
@@ -2745,7 +2747,7 @@ function renderDevReturnSentDraftsTable(items) {
     return `
       <div class="empty-state dev-return-mini-empty">
         <h3>Sin enviados</h3>
-        <p>TodavÃ­a no has exportado borradores desde esta instancia.</p>
+        <p>TodavÃƒÆ’Ã‚Â­a no has exportado borradores desde esta instancia.</p>
       </div>
     `;
   }
@@ -2761,7 +2763,7 @@ function renderDevReturnSentDraftsTable(items) {
             <th>Destino</th>
             <th>Status</th>
             <th>Total</th>
-            <th>AcciÃ³n</th>
+            <th>AcciÃƒÆ’Ã‚Â³n</th>
           </tr>
         </thead>
         <tbody>
@@ -2810,7 +2812,7 @@ function renderDevReturnReceivedDraftsTable(items) {
             <th>Fecha</th>
             <th>Status</th>
             <th>Total</th>
-            <th>AcciÃ³n</th>
+            <th>AcciÃƒÆ’Ã‚Â³n</th>
           </tr>
         </thead>
         <tbody>
@@ -2908,7 +2910,7 @@ function renderDevReturnLookupModal() {
     ? "Registro de devoluciones"
     : "Borradores";
   const description = isRecordLookup
-    ? "Haz clic sobre una devoluciÃ³n ya registrada para cargar su detalle."
+    ? "Haz clic sobre una devoluciÃƒÆ’Ã‚Â³n ya registrada para cargar su detalle."
     : "Haz clic sobre un borrador guardado o exportado para cargarlo en el formulario.";
   const loadingTitle = isRecordLookup
     ? "Cargando devoluciones"
@@ -3078,7 +3080,7 @@ function renderDevReturnRecordsTable(items) {
     return `
       <div class="empty-state dev-return-mini-empty">
         <h3>Sin registros</h3>
-        <p>Las devoluciones aprobadas en origen aparecerÃ¡n aquÃ­.</p>
+        <p>Las devoluciones aprobadas en origen aparecerÃƒÆ’Ã‚Â¡n aquÃƒÆ’Ã‚Â­.</p>
       </div>
     `;
   }
@@ -3094,7 +3096,7 @@ function renderDevReturnRecordsTable(items) {
             <th>Recibe</th>
             <th>Status</th>
             <th>Total</th>
-            <th>AcciÃ³n</th>
+            <th>AcciÃƒÆ’Ã‚Â³n</th>
           </tr>
         </thead>
         <tbody>
@@ -3317,7 +3319,7 @@ function renderLoadDevReturnsWorkspace() {
         <div class="modern-page-header">
           <div>
             <h1>Carga de devoluciones</h1>
-            <p>Aprueba la devoluciÃ³n recibida para sumar inventario en el destino.</p>
+            <p>Aprueba la devoluciÃƒÆ’Ã‚Â³n recibida para sumar inventario en el destino.</p>
           </div>
           <div class="dev-return-inline-actions">
             <button class="button button-ghost" type="button" data-dev-return-inbound-back ${state.devReturnInbound.approving ? "disabled" : ""}>
@@ -3329,7 +3331,7 @@ function renderLoadDevReturnsWorkspace() {
               data-dev-return-inbound-approve
               ${Number(detail.status || 0) === 0 && !state.devReturnInbound.approving ? "" : "disabled"}
             >
-              ${state.devReturnInbound.approving ? "Aprobando..." : "Aprobar devoluciÃ³n"}
+              ${state.devReturnInbound.approving ? "Aprobando..." : "Aprobar devoluciÃƒÆ’Ã‚Â³n"}
             </button>
           </div>
         </div>
@@ -3354,14 +3356,14 @@ function renderLoadDevReturnsWorkspace() {
       <div class="modern-page-header">
         <div>
           <h1>Carga de devoluciones</h1>
-          <p>Estas devoluciones ya fueron registradas en origen y esperan aprobaciÃ³n del destino.</p>
+          <p>Estas devoluciones ya fueron registradas en origen y esperan aprobaciÃƒÆ’Ã‚Â³n del destino.</p>
         </div>
       </div>
       <section class="modern-card dev-return-board-card">
         <div class="panel-heading">
           <div>
             <h2>Pendientes del destino</h2>
-            <p>${escapeHtml(String((state.devReturnInbound.items || []).length))} devoluciÃ³n(es) visibles.</p>
+            <p>${escapeHtml(String((state.devReturnInbound.items || []).length))} devoluciÃƒÆ’Ã‚Â³n(es) visibles.</p>
           </div>
           <button class="button button-ghost" type="button" data-dev-return-inbound-refresh ${state.devReturnInbound.loading ? "disabled" : ""}>
             ${state.devReturnInbound.loading ? "Actualizando..." : "Actualizar"}
@@ -3378,7 +3380,7 @@ function renderInboundDevReturnTable(items) {
     return `
       <div class="empty-state dev-return-mini-empty">
         <h3>Sin devoluciones por cargar</h3>
-        <p>Cuando el origen registre una devoluciÃ³n aprobada, aparecerÃ¡ aquÃ­.</p>
+        <p>Cuando el origen registre una devoluciÃƒÆ’Ã‚Â³n aprobada, aparecerÃƒÆ’Ã‚Â¡ aquÃƒÆ’Ã‚Â­.</p>
       </div>
     `;
   }
@@ -3393,7 +3395,7 @@ function renderInboundDevReturnTable(items) {
             <th>Envia</th>
             <th>Status</th>
             <th>Total</th>
-            <th>AcciÃ³n</th>
+            <th>AcciÃƒÆ’Ã‚Â³n</th>
           </tr>
         </thead>
         <tbody>
@@ -4123,6 +4125,9 @@ function renderFacturacionWorkspace() {
       const rowNumber = index + 1;
       const normalizedLine = normalizeFacturacionLineDraft(item);
       const isSelected = index === selectedLineIndex;
+      const hasLoadedArticle = Boolean(
+        String(normalizedLine.codigoBarra || "").trim(),
+      );
       const priceListCode = String(normalizedLine.codigoBarra || "").trim()
         ? getFacturacionPriceListShortLabel(normalizedLine.priceList)
         : "";
@@ -4130,10 +4135,10 @@ function renderFacturacionWorkspace() {
       <tr class="${isSelected ? "facturacion-line-selected" : ""}" data-facturacion-select-line="${rowNumber}">
         <td class="facturacion-row-number">${rowNumber}</td>
         <td class="facturacion-price-list-cell">${escapeHtml(priceListCode)}</td>
-        <td><input type="text" data-facturacion-line-codigo="${rowNumber}" value="${escapeHtml(toInputValue(normalizedLine.codigoBarra))}" /></td>
+        <td><input type="text" data-facturacion-line-codigo="${rowNumber}" value="${escapeHtml(toInputValue(normalizedLine.codigoBarra))}" ${hasLoadedArticle ? "readonly" : ""} /></td>
         <td><input type="text" value="${escapeHtml(toInputValue(normalizedLine.nombre))}" readonly /></td>
         <td><input type="text" value="${escapeHtml(toInputValue(normalizedLine.precio))}" class="facturacion-cell-right" readonly /></td>
-        <td><input type="text" value="${escapeHtml(toInputValue(normalizedLine.cantidad))}" class="facturacion-cell-right" readonly /></td>
+        <td><input type="text" data-facturacion-line-cantidad="${rowNumber}" value="${escapeHtml(toInputValue(normalizedLine.cantidad))}" class="facturacion-cell-right" ${hasLoadedArticle ? "" : "readonly"} /></td>
         <td><input type="text" value="${escapeHtml(toInputValue(normalizedLine.subtotal))}" class="facturacion-cell-right" readonly /></td>
       </tr>
     `;
@@ -4996,7 +5001,7 @@ function renderFacturacionPaymentCedulaPromptModal() {
           <div class="article-lookup-header-copy">
             <p class="eyebrow">Forma de pago</p>
             <h3 id="facturacion-payment-cedula-title">Usar misma cedula</h3>
-            <p>Â¿Quieres usar la misma cedula del cliente para este pago con tarjeta?</p>
+            <p>Ãƒâ€šÃ‚Â¿Quieres usar la misma cedula del cliente para este pago con tarjeta?</p>
           </div>
           <div class="article-lookup-header-actions">
             <button class="article-command-button" type="button" data-facturacion-payment-cedula-close>
@@ -7696,7 +7701,7 @@ function renderImpuestosWorkspace() {
 
           <div class="taxes-panel">
             <label class="taxes-field taxes-field-code">
-              <span>CÃ³digo</span>
+              <span>CÃƒÆ’Ã‚Â³digo</span>
               <input
                 type="number"
                 name="codigo"
@@ -8642,7 +8647,7 @@ function renderImpuestosLookupModal() {
                   <table class="data-table article-lookup-table taxes-lookup-table">
                     <thead>
                       <tr>
-                        <th>CÃ³digo</th>
+                        <th>CÃƒÆ’Ã‚Â³digo</th>
                         <th>Nombre</th>
                         <th>Porcentaje</th>
                       </tr>
@@ -9657,6 +9662,7 @@ function renderTransferLookupModal() {
                         <th>Fecha</th>
                         <th>Nombre</th>
                         <th>Observacion</th>
+                        <th>PDF</th>
                         <th>Status</th>
                       </tr>
                     </thead>
@@ -9764,9 +9770,16 @@ function renderAdjustmentLookupStatusBadge(status) {
   return `<span class="modern-chip">${Number(status || 0) === 1 ? "Aprobada" : "Pendiente"}</span>`;
 }
 
+function buildTransferLookupPdfDownloadKey(numero, inbound = false) {
+  return `${inbound ? "inbound" : "transfer"}:${String(numero || "").trim()}`;
+}
+
 function renderTransferLookupRow(item) {
   const nombre = item.codigoRecibeInfo?.nombre || item.codigoRecibe || "-";
   const isApproved = Number(item.status || 0) === 1;
+  const inbound = Boolean(item.inbound);
+  const downloadKey = buildTransferLookupPdfDownloadKey(item.numero, inbound);
+  const isDownloadingPdf = state.transferLookup.downloadingKey === downloadKey;
 
   return `
     <tr class="transfer-lookup-row ${isApproved ? "transfer-lookup-row-approved" : "transfer-lookup-row-pending"}" data-transfer-lookup-select="${escapeHtml(String(item.numero || ""))}">
@@ -9774,6 +9787,11 @@ function renderTransferLookupRow(item) {
       <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
       <td>${escapeHtml(nombre)}</td>
       <td>${escapeHtml(item.observacion || "-")}</td>
+      <td>
+        ${isApproved
+          ? `<button class="button button-ghost" type="button" data-transfer-lookup-pdf="${escapeHtml(String(item.numero || ""))}" data-transfer-lookup-pdf-inbound="${inbound ? "1" : "0"}" ${isDownloadingPdf ? "disabled" : ""}>${isDownloadingPdf ? "Generando..." : "PDF"}</button>`
+          : `<span class="muted-text">-</span>`}
+      </td>
       <td>${renderTransferStatusBadge(item.status)}</td>
     </tr>
   `;
@@ -11157,6 +11175,70 @@ function bindFacturacionEvents() {
       });
     });
 
+  document
+    .querySelectorAll("[data-facturacion-line-cantidad]")
+    .forEach((input) => {
+      const resolveRowNumber = () =>
+        Number.parseInt(
+          input.getAttribute("data-facturacion-line-cantidad") || "0",
+          10,
+        );
+
+      input.addEventListener("focus", () => {
+        const rowNumber = resolveRowNumber();
+        if (!rowNumber) {
+          return;
+        }
+
+        selectFacturacionLine(rowNumber - 1);
+      });
+
+      input.addEventListener("input", () => {
+        const rowNumber = resolveRowNumber();
+        if (!rowNumber) {
+          return;
+        }
+
+        captureFacturacionDraft();
+        renderFacturacionAndFocusLine(rowNumber, "cantidad", {
+          selectAll: false,
+        });
+      });
+
+      input.addEventListener("keydown", (event) => {
+        const rowNumber = resolveRowNumber();
+        if (!rowNumber) {
+          return;
+        }
+
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          focusFacturacionLineInput(rowNumber + 1, "cantidad", {
+            selectAll: false,
+          });
+          return;
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          focusFacturacionLineInput(rowNumber - 1, "cantidad", {
+            selectAll: false,
+          });
+          return;
+        }
+
+        if (event.key !== "Enter") {
+          return;
+        }
+
+        event.preventDefault();
+        captureFacturacionDraft();
+        renderFacturacionAndFocusLine(rowNumber + 1, "cantidad", {
+          selectAll: false,
+        });
+      });
+    });
+
   const facturacionGlobalDiscountInput = document.querySelector(
     "[data-facturacion-global-discount]",
   );
@@ -12330,6 +12412,24 @@ function bindArticleEvents() {
 
       closeTransferLookupModal();
       await loadTransferForEdit(numero);
+    });
+  });
+
+  document.querySelectorAll("[data-transfer-lookup-pdf]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const numero = Number.parseInt(
+        button.getAttribute("data-transfer-lookup-pdf") || "",
+        10,
+      );
+      const inbound =
+        String(button.getAttribute("data-transfer-lookup-pdf-inbound") || "0") === "1";
+      if (!numero) {
+        return;
+      }
+
+      await downloadTransferLookupPdf(numero, inbound);
     });
   });
 
@@ -14567,7 +14667,7 @@ async function saveCashRegister() {
   }
 }
 
-function downloadCashRegisterCloseReport(report) {
+function downloadPdfReport(report, fallbackFileName = "reporte.pdf") {
   const base64 = String(report?.pdfBase64 || "").trim();
   if (
     !base64 ||
@@ -14589,7 +14689,7 @@ function downloadCashRegisterCloseReport(report) {
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download =
-      String(report?.fileName || "cierre-caja.pdf").trim() || "cierre-caja.pdf";
+      String(report?.fileName || fallbackFileName).trim() || fallbackFileName;
     anchor.style.display = "none";
     document.body.appendChild(anchor);
     anchor.click();
@@ -14603,6 +14703,11 @@ function downloadCashRegisterCloseReport(report) {
     return false;
   }
 }
+
+function downloadCashRegisterCloseReport(report) {
+  return downloadPdfReport(report, "cierre-caja.pdf");
+}
+
 async function generateGeneralCloseReport() {
   const currentState = state.reportes || createEmptyReportesState();
   const normalizedFecha = toDateInputValue(
@@ -15967,6 +16072,7 @@ async function openTransferLookupModal() {
   state.transferLookup.open = true;
   state.transferLookup.loading = true;
   state.transferLookup.items = [];
+  state.transferLookup.downloadingKey = "";
   render();
 
   try {
@@ -15993,6 +16099,44 @@ async function openTransferLookupModal() {
 function closeTransferLookupModal() {
   state.transferLookup.open = false;
   state.transferLookup.loading = false;
+  state.transferLookup.downloadingKey = "";
+}
+
+async function downloadTransferLookupPdf(numero, inbound = false) {
+  const normalizedNumero = Number.parseInt(String(numero || ""), 10);
+  if (!normalizedNumero) {
+    return;
+  }
+
+  const downloadKey = buildTransferLookupPdfDownloadKey(normalizedNumero, inbound);
+  state.transferLookup.downloadingKey = downloadKey;
+  clearFlash();
+  render();
+
+  try {
+    const endpoint = inbound
+      ? `/transfers/inbound/${encodeURIComponent(String(normalizedNumero))}/report`
+      : `/transfers/${encodeURIComponent(String(normalizedNumero))}/report`;
+    const response = await apiFetch(endpoint);
+    const downloaded = downloadPdfReport(
+      response.reporte,
+      inbound
+        ? `transferencia-recibida-${String(normalizedNumero)}.pdf`
+        : `transferencia-${String(normalizedNumero)}.pdf`,
+    );
+    setFlash(
+      downloaded
+        ? `PDF de la transferencia ${String(normalizedNumero)} descargado correctamente.`
+        : `PDF de la transferencia ${String(normalizedNumero)} generado correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.transferLookup.downloadingKey = "";
+    render();
+  }
 }
 
 async function loadAdjustmentForEdit(numero) {
@@ -17191,7 +17335,7 @@ function readImpuestoDraft(form) {
 function validateImpuestoDraft(draft) {
   const codigo = Number.parseInt(String(draft.codigo || "0"), 10);
   if (!Number.isInteger(codigo) || codigo <= 0) {
-    return "Debes indicar un cÃ³digo numÃ©rico vÃ¡lido para el impuesto.";
+    return "Debes indicar un cÃƒÆ’Ã‚Â³digo numÃƒÆ’Ã‚Â©rico vÃƒÆ’Ã‚Â¡lido para el impuesto.";
   }
 
   if (!String(draft.nombre || "").trim()) {
@@ -17204,7 +17348,7 @@ function validateImpuestoDraft(draft) {
       .replace(",", "."),
   );
   if (!Number.isFinite(porcentaje) || porcentaje < 0) {
-    return "Debes indicar un porcentaje vÃ¡lido para el impuesto.";
+    return "Debes indicar un porcentaje vÃƒÆ’Ã‚Â¡lido para el impuesto.";
   }
 
   return "";
@@ -17961,6 +18105,7 @@ function createEmptyFacturacionPaymentCedulaPromptState() {
 function buildFacturacionSalePayload(draft, paymentRows, exchangeRate) {
   const normalizedDraft = normalizeFacturacionDraft(draft);
   const rows = normalizeFacturacionItems(normalizedDraft.items)
+    .map((item) => recalculateFacturacionLineAmounts(item))
     .filter((item) => String(item.codigoBarra || "").trim())
     .map((item) => ({
       codigoBarra: String(item.codigoBarra || "").trim(),
@@ -18211,20 +18356,30 @@ function readFacturacionDraft() {
   const contingencia = document.querySelector(
     "[data-facturacion-contingencia]",
   );
-  const lineInputs = Array.from(
+  const lineCodeInputs = Array.from(
     document.querySelectorAll("[data-facturacion-line-codigo]"),
+  );
+  const lineQuantityInputs = Array.from(
+    document.querySelectorAll("[data-facturacion-line-cantidad]"),
   );
   const currentItems =
     Array.isArray(currentDraft.items) && currentDraft.items.length
       ? currentDraft.items
       : createEmptyFacturacionItems();
   const items = currentItems.map((item, index) => {
-    const input = lineInputs[index];
-    return {
+    const codeInput = lineCodeInputs[index];
+    const quantityInput = lineQuantityInputs[index];
+    return recalculateFacturacionLineAmounts({
       ...item,
       codigoBarra:
-        input instanceof HTMLInputElement ? input.value : item.codigoBarra,
-    };
+        codeInput instanceof HTMLInputElement
+          ? codeInput.value
+          : item.codigoBarra,
+      cantidad:
+        quantityInput instanceof HTMLInputElement
+          ? quantityInput.value
+          : item.cantidad,
+    });
   });
 
   return {
@@ -18442,6 +18597,35 @@ function resolveFacturacionPromotionPercentageForPriceList(source, priceList) {
   return resolveFacturacionPromotionPercentage(source);
 }
 
+function recalculateFacturacionLineAmounts(line, options = {}) {
+  const { defaultQuantity = "" } = options;
+  const normalizedLine = normalizeFacturacionLineDraft(line);
+  if (!String(normalizedLine.codigoBarra || "").trim()) {
+    return normalizedLine;
+  }
+
+  const quantityInput =
+    String(normalizedLine.cantidad || "").trim() ||
+    String(defaultQuantity || "").trim();
+  const quantity = Math.max(toFacturacionNumber(quantityInput || "0"), 0);
+  const precio = toFacturacionNumber(normalizedLine.precio);
+  const descuentoPorcentaje = Math.max(
+    toFacturacionNumber(normalizedLine.descuentoPorcentaje),
+    0,
+  );
+  const subtotal = roundToTwoDecimals(precio * quantity);
+  const descuentoMonto = roundToTwoDecimals(
+    subtotal * (descuentoPorcentaje / 100),
+  );
+
+  return {
+    ...normalizedLine,
+    cantidad: quantityInput,
+    subtotal: formatTransferAmount(subtotal),
+    descuentoMonto: formatTransferAmount(descuentoMonto),
+  };
+}
+
 function buildFacturacionLineFromInventory(currentLine, article, priceList) {
   const normalizedPriceList = normalizeFacturacionPriceList(priceList);
   const precioDetal = resolveFacturacionPriceForList(article, "detal");
@@ -18455,29 +18639,29 @@ function buildFacturacionLineFromInventory(currentLine, article, priceList) {
     article,
     normalizedPriceList,
   );
-  const descuentoMonto = precioBase * (descuentoPorcentaje / 100);
 
-  return {
-    ...normalizeFacturacionLineDraft(currentLine),
-    priceList: normalizedPriceList,
-    codigoBarra: article.codigoBarra || currentLine.codigoBarra || "",
-    nombre:
-      article.general?.nombre || article.nombre || currentLine.nombre || "",
-    precio: formatTransferAmount(precioBase),
-    cantidad: "1",
-    subtotal: formatTransferAmount(precioBase),
-    descuentoPorcentaje: formatTransferAmount(descuentoPorcentaje),
-    descuentoMonto: formatTransferAmount(descuentoMonto),
-    precioDetal: formatTransferAmount(precioDetal),
-    precioMayor: formatTransferAmount(precioMayor),
-    precioAfiliado: formatTransferAmount(precioAfiliado),
-    precioPromocion: formatTransferAmount(
-      toFacturacionNumber(
-        article?.precios?.promocion?.precio ?? article?.precioPromocion ?? "0",
+  return recalculateFacturacionLineAmounts(
+    {
+      ...normalizeFacturacionLineDraft(currentLine),
+      priceList: normalizedPriceList,
+      codigoBarra: article.codigoBarra || currentLine.codigoBarra || "",
+      nombre:
+        article.general?.nombre || article.nombre || currentLine.nombre || "",
+      precio: formatTransferAmount(precioBase),
+      cantidad: "1",
+      descuentoPorcentaje: formatTransferAmount(descuentoPorcentaje),
+      precioDetal: formatTransferAmount(precioDetal),
+      precioMayor: formatTransferAmount(precioMayor),
+      precioAfiliado: formatTransferAmount(precioAfiliado),
+      precioPromocion: formatTransferAmount(
+        toFacturacionNumber(
+          article?.precios?.promocion?.precio ?? article?.precioPromocion ?? "0",
+        ),
       ),
-    ),
-    promocionActiva: resolveFacturacionPromotionActive(article),
-  };
+      promocionActiva: resolveFacturacionPromotionActive(article),
+    },
+    { defaultQuantity: "1" },
+  );
 }
 
 function recalculateFacturacionLineForPriceList(line, priceList) {
@@ -18501,16 +18685,15 @@ function recalculateFacturacionLineForPriceList(line, priceList) {
     normalizedLine,
     priceList,
   );
-  const descuentoMonto = precioBase * (descuentoPorcentaje / 100);
 
-  return {
-    ...normalizedLine,
-    precio: formatTransferAmount(precioBase),
-    cantidad: normalizedLine.cantidad || "1",
-    subtotal: formatTransferAmount(precioBase),
-    descuentoPorcentaje: formatTransferAmount(descuentoPorcentaje),
-    descuentoMonto: formatTransferAmount(descuentoMonto),
-  };
+  return recalculateFacturacionLineAmounts(
+    {
+      ...normalizedLine,
+      precio: formatTransferAmount(precioBase),
+      descuentoPorcentaje: formatTransferAmount(descuentoPorcentaje),
+    },
+    { defaultQuantity: "1" },
+  );
 }
 
 function recalculateFacturacionDraftForPriceList(draft, priceList) {
@@ -18566,7 +18749,9 @@ function calculateFacturacionSummary(
   exchangeRate = null,
   draft = null,
 ) {
-  const rows = Array.isArray(items) ? items : [];
+  const rows = (Array.isArray(items) ? items : []).map((item) =>
+    recalculateFacturacionLineAmounts(item),
+  );
   const valorMercancia = rows.reduce(
     (sum, item) => sum + toFacturacionNumber(item?.subtotal),
     0,
@@ -18584,7 +18769,11 @@ function calculateFacturacionSummary(
   const impuestoMonto = subtotal * (impuestoPorcentaje / 100);
   const rateBsPerUsd = resolveFacturacionUsdRate(rows, exchangeRate);
   const totalUnidades = rows.reduce((sum, item) => {
-    return sum + (String(item?.codigoBarra || "").trim() ? 1 : 0);
+    if (!String(item?.codigoBarra || "").trim()) {
+      return sum;
+    }
+
+    return sum + Math.max(toFacturacionNumber(item?.cantidad || "0"), 0);
   }, 0);
   const descuentoPorcentaje = discountOverride.active
     ? discountOverride.percent
@@ -19172,10 +19361,10 @@ function formatFacturacionExchangeRateLabel(exchangeRate) {
     rateMayor > 0 ? ` | Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
   return `Tasa manual: ${formatExchangeRateAmount(rate)} | Vigente ${effectiveDate}${manualMayorLabel}`;
   const mayorLabel =
-    rateMayor > 0 ? ` Â· Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
-  return `Tasa manual: ${formatExchangeRateAmount(rate)} Â· Vigente ${effectiveDate}${mayorLabel}`;
+    rateMayor > 0 ? ` Ãƒâ€šÃ‚Â· Mayor ${formatExchangeRateAmount(rateMayor)}` : "";
+  return `Tasa manual: ${formatExchangeRateAmount(rate)} Ãƒâ€šÃ‚Â· Vigente ${effectiveDate}${mayorLabel}`;
   const provider = String(exchangeRate?.provider || "API externa").trim();
-  return `Tasa BCV USD: ${formatExchangeRateAmount(rate)} Bs/USD Â· Vigente ${effectiveDate} Â· Fuente ${provider}`;
+  return `Tasa BCV USD: ${formatExchangeRateAmount(rate)} Bs/USD Ãƒâ€šÃ‚Â· Vigente ${effectiveDate} Ãƒâ€šÃ‚Â· Fuente ${provider}`;
 }
 
 function formatSimpleDateDisplay(value) {
@@ -19255,27 +19444,46 @@ function selectFacturacionLine(index) {
   state.facturacion.selectedLineIndex = index;
 }
 
-function focusFacturacionLineInput(rowNumber) {
+function focusFacturacionLineInput(
+  rowNumber,
+  fieldName = "codigo",
+  options = {},
+) {
   if (!Number.isInteger(rowNumber) || rowNumber < 1) {
     return;
   }
 
+  const { selectAll = fieldName === "codigo" } = options;
   selectFacturacionLine(rowNumber - 1);
-  const target = document.querySelector(
-    `[data-facturacion-line-codigo="${rowNumber}"]`,
-  );
+  const selector =
+    fieldName === "cantidad"
+      ? `[data-facturacion-line-cantidad="${rowNumber}"]`
+      : `[data-facturacion-line-codigo="${rowNumber}"]`;
+  const target = document.querySelector(selector);
   if (!(target instanceof HTMLInputElement)) {
     return;
   }
 
   target.focus();
-  target.select?.();
+  if (selectAll) {
+    target.select?.();
+    return;
+  }
+
+  const cursorAt = target.value.length;
+  if (typeof target.setSelectionRange === "function") {
+    target.setSelectionRange(cursorAt, cursorAt);
+  }
 }
 
-function renderFacturacionAndFocusLine(rowNumber) {
+function renderFacturacionAndFocusLine(
+  rowNumber,
+  fieldName = "codigo",
+  options = {},
+) {
   render();
   queueMicrotask(() => {
-    focusFacturacionLineInput(rowNumber);
+    focusFacturacionLineInput(rowNumber, fieldName, options);
   });
 }
 
@@ -21288,6 +21496,7 @@ function clearSession() {
     open: false,
     loading: false,
     items: [],
+    downloadingKey: "",
   };
   state.devReturnLookup = {
     open: false,

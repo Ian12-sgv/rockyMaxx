@@ -78,6 +78,11 @@ export class TransfersController {
     return this.transfersService.findInboundOne(numero);
   }
 
+  @Get("inbound/:numero/report")
+  async generateInboundReport(@Param("numero", ParseIntPipe) numero: number) {
+    return this.transfersService.generateInboundTransferReport(numero);
+  }
+
   @Post("inbound/:numero/load")
   async loadInbound(@Param("numero", ParseIntPipe) numero: number) {
     return this.transfersService.loadInboundTransfer(numero);
@@ -86,6 +91,11 @@ export class TransfersController {
   @Get(":numero")
   async findOne(@Param("numero", ParseIntPipe) numero: number) {
     return this.transfersService.findOne(numero);
+  }
+
+  @Get(":numero/report")
+  async generateReport(@Param("numero", ParseIntPipe) numero: number) {
+    return this.transfersService.generateTransferReport(numero);
   }
 
   @Post()

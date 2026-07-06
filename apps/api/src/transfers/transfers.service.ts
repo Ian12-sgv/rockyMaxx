@@ -18,6 +18,7 @@ import { FindTransfersDto } from "./dto/find-transfers.dto";
 import { FindTransferSyncOutboxDto, PushTransferSyncDto, RegisterTransferSyncNodeDto } from "./dto/transfer-sync.dto";
 import { UpdateTransferDto } from "./dto/update-transfer.dto";
 import { toTransferDetailView, toTransferListItemView, transferInclude } from "./transfer-view.util";
+import { buildTransferReportPdf } from "./transfer-report.util";
 import { PrismaService } from "../prisma/prisma.service";
 
 const DEFAULT_TRANSFER_LOT = "TR_AUTO";
@@ -73,6 +74,42 @@ type NormalizedTransferDraft = {
   lines: NormalizedTransferLine[];
   totalValor: Prisma.Decimal;
   quantitiesByBarcode: Map<string, Prisma.Decimal>;
+};
+
+type TransferReportSource = {
+  numero: number | string;
+  fecha: Date | string | null;
+  fechaAprobacion?: Date | string | null;
+  fechaEmision?: Date | string | null;
+  status?: number | string | null;
+  statusNombre?: string | null;
+  codigoEnvia?: string | null;
+  codigoRecibe?: string | null;
+  codigoEnviaInfo?: {
+    codigo?: string | null;
+    nombre?: string | null;
+  } | null;
+  codigoRecibeInfo?: {
+    codigo?: string | null;
+    nombre?: string | null;
+  } | null;
+  documentoOrigen?: string | null;
+  usuario?: string | null;
+  tipoDespacho?: {
+    descripcion?: string | null;
+  } | null;
+  observacion?: string | null;
+  totalValor?: string | number | null;
+  items?: Array<{
+    item?: number;
+    codigoBarra?: string | null;
+    cantidad?: string | number | null;
+    valor?: string | number | null;
+    articulo?: {
+      referencia?: string | null;
+      nombre?: string | null;
+    } | null;
+  }>;
 };
 
 type TransferSyncCatalogPayload = {
@@ -348,6 +385,13 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  async generateTransferReport(numero: number) {
+    const transferencia = await this.findTransferDetailOrThrow(this.prisma, numero);
+    return {
+      reporte: this.buildTransferReportArtifact(transferencia, false),
+    };
+  }
+
   async searchInboundTransfers(findTransfersDto: FindTransfersDto) {
     await this.ensureTransferSyncSchema();
     const limit = findTransfersDto.limit ?? 25;
@@ -402,6 +446,13 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   async findInboundOne(numero: number) {
     return {
       transferencia: await this.findInboundTransferDetailOrThrow(numero),
+    };
+  }
+
+  async generateInboundTransferReport(numero: number) {
+    const transferencia = await this.findInboundTransferDetailOrThrow(numero);
+    return {
+      reporte: this.buildTransferReportArtifact(transferencia, true),
     };
   }
 
@@ -1531,7 +1582,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async loginRemoteSyncNode(baseUrl: string) {
-    let lastErrorMessage = "Usuario o clave inválidos";
+    let lastErrorMessage = "Usuario o clave invÃ¡lidos";
     let lastStatus = 401;
 
     for (const candidate of this.getRemoteSyncCredentialCandidates()) {
@@ -4112,6 +4163,97 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     }
 
     return Math.floor(parsed);
+  }
+
+  private buildTransferReportArtifact(
+    transferencia: TransferReportSource,
+    inbound: boolean,
+  ) {
+    if (Number(transferencia?.status || 0) !== 1) {
+      throw new ConflictException("Solo se puede generar PDF de transferencias aprobadas.");
+    }
+
+    const lines = Array.isArray(transferencia?.items) ? transferencia.items : [];
+    const totalCantidad = lines.reduce(
+      (sum, line) => sum + this.parseTransferReportNumber(line?.cantidad),
+      0,
+    );
+    const report = {
+      title: inbound ? "TRANSFERENCIA RECIBIDA APROBADA" : "TRANSFERENCIA APROBADA",
+      numero: Number(transferencia?.numero || 0),
+      fecha: this.formatTransferReportDate(transferencia?.fecha),
+      fechaAprobacion: this.formatTransferReportDate(
+        transferencia?.fechaAprobacion ?? transferencia?.fechaEmision ?? null,
+      ),
+      status: String(transferencia?.statusNombre || transferencia?.status || "-")
+        .trim()
+        .toUpperCase() || "-",
+      envia:
+        String(transferencia?.codigoEnviaInfo?.nombre || transferencia?.codigoEnvia || "-")
+          .trim() || "-",
+      recibe:
+        String(transferencia?.codigoRecibeInfo?.nombre || transferencia?.codigoRecibe || "-")
+          .trim() || "-",
+      documentoOrigen: String(transferencia?.documentoOrigen || "").trim(),
+      usuario: String(transferencia?.usuario || "").trim(),
+      tipoDespacho: String(transferencia?.tipoDespacho?.descripcion || "").trim(),
+      observacion: String(transferencia?.observacion || "").trim(),
+      totalItems: lines.length,
+      totalCantidad: this.formatTransferReportDecimal(totalCantidad),
+      totalValor: this.formatTransferReportDecimal(transferencia?.totalValor),
+      generatedAt: this.formatTransferReportDate(new Date()),
+      lines: lines.map((line) => {
+        const cantidad = this.parseTransferReportNumber(line?.cantidad);
+        const valorUnitario = this.parseTransferReportNumber(line?.valor);
+        return {
+          item: Number(line?.item || 0),
+          codigoBarra: String(line?.codigoBarra || "").trim(),
+          referencia: String(line?.articulo?.referencia || "").trim(),
+          nombre: String(line?.articulo?.nombre || "").trim(),
+          cantidad: this.formatTransferReportDecimal(cantidad),
+          valorUnitario: this.formatTransferReportDecimal(valorUnitario),
+          subtotal: this.formatTransferReportDecimal(cantidad * valorUnitario),
+        };
+      }),
+    };
+
+    const pdf = buildTransferReportPdf(report);
+    const fileName = inbound
+      ? `transferencia-recibida-${String(report.numero || 0)}.pdf`
+      : `transferencia-${String(report.numero || 0)}.pdf`;
+
+    return {
+      fileName,
+      generatedAt: report.generatedAt,
+      summary: report,
+      pdfBase64: pdf.toString("base64"),
+    };
+  }
+
+  private parseTransferReportNumber(value: unknown) {
+    const normalized = Number.parseFloat(String(value ?? 0).replace(",", "."));
+    return Number.isFinite(normalized) ? normalized : 0;
+  }
+
+  private formatTransferReportDecimal(value: unknown) {
+    return this.parseTransferReportNumber(value).toFixed(2);
+  }
+
+  private formatTransferReportDate(value: Date | string | null | undefined) {
+    if (!value) {
+      return "-";
+    }
+
+    const normalizedDate = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(normalizedDate.getTime())) {
+      return String(value);
+    }
+
+    return new Intl.DateTimeFormat("es-VE", {
+      dateStyle: "short",
+      timeStyle: "short",
+      timeZone: "America/Caracas",
+    }).format(normalizedDate);
   }
 
   private async loadLocationsByCode(
