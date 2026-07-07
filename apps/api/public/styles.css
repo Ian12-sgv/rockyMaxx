@@ -3380,7 +3380,7 @@ button {
 
 .facturacion-summary-grid {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(180px, 1.15fr);
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(180px, 1.15fr);
   gap: 10px;
   align-items: end;
 }
@@ -3518,6 +3518,7 @@ button {
   background: rgba(255, 255, 255, 0.82);
 }
 
+
 .facturacion-payment-table {
   width: 100%;
   min-width: 1120px;
@@ -3560,6 +3561,7 @@ button {
   font-size: 0.84rem;
   font-weight: 700;
 }
+
 
 .facturacion-payment-row-head,
 .facturacion-payment-row-number {

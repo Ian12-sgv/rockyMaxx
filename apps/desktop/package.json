@@ -1,6 +1,6 @@
 {
   "name": "@sistema-arabe/desktop",
-  "version": "3.0.2",
+  "version": "3.0.4",
   "private": true,
   "description": "Cliente de escritorio Rocky Maxx para conectarse al servicio local de la red.",
   "author": "OpenAI Codex",

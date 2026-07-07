@@ -161,12 +161,63 @@ function getWindowsAutoLaunchArgs() {
   return ["--autostart", "--background", "--restart-backend"];
 }
 
+function getWindowsStartupFolderPath() {
+  return join(
+    app.getPath("appData"),
+    "Microsoft",
+    "Windows",
+    "Start Menu",
+    "Programs",
+    "Startup",
+  );
+}
+
+function getWindowsStartupScriptPath() {
+  return join(getWindowsStartupFolderPath(), "RockyMaxxServicioLocal-Autostart.vbs");
+}
+
+function buildWindowsStartupScriptContent() {
+  const escapedExecPath = String(process.execPath || "").replace(/"/g, '""');
+  const args = getWindowsAutoLaunchArgs().join(" ");
+  return [
+    'Set WshShell = CreateObject("WScript.Shell")',
+    `WshShell.Run """${escapedExecPath}"" ${args}", 0, False`,
+    '',
+  ].join("\r\n");
+}
+
+function syncWindowsStartupShortcut(enabled) {
+  if (!supportsWindowsAutoLaunch()) {
+    return false;
+  }
+
+  const startupScriptPath = getWindowsStartupScriptPath();
+
+  try {
+    if (enabled) {
+      mkdirSync(dirname(startupScriptPath), { recursive: true });
+      writeFileSync(startupScriptPath, buildWindowsStartupScriptContent(), "utf8");
+      writeRuntimeLog(`Script de autoarranque creado en Startup: ${startupScriptPath}.`);
+      return true;
+    }
+
+    rmSync(startupScriptPath, { force: true });
+    writeRuntimeLog(`Script de autoarranque eliminado de Startup: ${startupScriptPath}.`);
+    return true;
+  } catch (error) {
+    writeRuntimeLog(`No se pudo actualizar el script de autoarranque en Startup: ${error.message}`);
+    return false;
+  }
+}
+
 function syncWindowsAutoLaunch(enabled) {
   if (!supportsWindowsAutoLaunch()) {
     return false;
   }
 
   const openAtLogin = Boolean(enabled);
+  let loginItemUpdated = false;
+  const startupScriptUpdated = syncWindowsStartupShortcut(openAtLogin);
 
   try {
     app.setLoginItemSettings({
@@ -176,14 +227,15 @@ function syncWindowsAutoLaunch(enabled) {
       enabled: openAtLogin,
       name: app.getName(),
     });
+    loginItemUpdated = true;
     writeRuntimeLog(
       `Autoarranque de Windows ${openAtLogin ? "habilitado" : "deshabilitado"} para ${process.execPath}.`,
     );
-    return true;
   } catch (error) {
     writeRuntimeLog(`No se pudo actualizar el autoarranque de Windows: ${error.message}`);
-    return false;
   }
+
+  return loginItemUpdated || startupScriptUpdated;
 }
 
 function formatBackendFailureMessage(rawError) {

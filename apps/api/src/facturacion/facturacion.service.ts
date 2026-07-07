@@ -1,4 +1,4 @@
-﻿import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type DiarioCaja, type Inventario } from "@prisma/client";
 import { ConfigService } from "@nestjs/config";
 
@@ -18,7 +18,7 @@ const ZERO = new Prisma.Decimal(0);
 const ONE = new Prisma.Decimal(1);
 const HUNDRED = new Prisma.Decimal(100);
 const DEFAULT_FACTURACION_COMPANY_NAME = "SENIAT";
-const DEFAULT_FACTURACION_COMPANY_DESCRIPTION = "Venta de ropa intima y deportiva para dama y caballeros, niÃ±os y niÃ±as y otro tipo de mercancia.";
+const DEFAULT_FACTURACION_COMPANY_DESCRIPTION = "Venta de ropa intima y deportiva para dama y caballeros, niÃƒÂ±os y niÃƒÂ±as y otro tipo de mercancia.";
 const DEFAULT_FACTURACION_COMPANY_TAX_LABEL = "RIF";
 const DEFAULT_FACTURACION_COMPANY_TAX_ID = "J-308460281";
 const DEFAULT_FACTURACION_STORE_CODE = "ORIGEN";
@@ -139,9 +139,9 @@ export class FacturacionService {
           ? totalMercancia.mul(discountOverride.percent).div(HUNDRED).toDecimalPlaces(2)
           : lineDiscountMonto.toDecimalPlaces(2);
         const subtotal = Prisma.Decimal.max(totalMercancia.minus(totalDescuento), ZERO).toDecimalPlaces(2);
-        const impuestoPorcentaje = activeTax?.PorcentajeImpuesto ?? ZERO;
-        const totalImpuesto = subtotal.mul(impuestoPorcentaje).div(HUNDRED).toDecimalPlaces(2);
-        const totalVenta = subtotal.plus(totalImpuesto).toDecimalPlaces(2);
+        const impuestoPorcentaje = ZERO;
+        const totalImpuesto = ZERO;
+        const totalVenta = subtotal;
         const contingenciaActiva = Boolean(payload.emisionContingencia);
         const tasaCambioDetal = this.parseDecimalInput(payload.tasaCambio, "La tasa de cambio detal no es valida.", {
           allowEmpty: true,
@@ -233,11 +233,7 @@ export class FacturacionService {
         for (const line of normalizedItems) {
           const inventory = inventoryByCode.get(line.codigoBarra);
           const effectiveDiscountPercent = discountOverride.active ? discountOverride.percent : line.descuentoPorcentaje;
-          const unitTaxAmount = line.subtotal
-            .minus(line.subtotal.mul(effectiveDiscountPercent).div(HUNDRED))
-            .mul(impuestoPorcentaje)
-            .div(HUNDRED)
-            .toDecimalPlaces(2);
+          const unitTaxAmount = ZERO;
 
           await tx.movVentas.create({
             data: {
@@ -816,7 +812,7 @@ export class FacturacionService {
   }
 
   private paymentUsesUsdAmount(label: string) {
-    return this.normalizeCatalogName(label) === "EFECTIVODOLAR";
+    return ["EFECTIVODOLAR", "USDT", "DOLARELECTRONICO"].includes(this.normalizeCatalogName(label));
   }
 
   private resolveSaleUsdRate(items: NormalizedSaleItem[], detailRate: Prisma.Decimal, mayorRate: Prisma.Decimal) {
