@@ -9476,6 +9476,7 @@ function renderArticleEditor() {
               type="text"
               name="referencia"
               value="${escapeHtml(draft.referencia)}"
+              maxlength="30"
               placeholder="Ingresa la referencia"
             />
           </label>
@@ -10014,6 +10015,7 @@ function renderArticleVariantsPanel(draft) {
           type="text"
           name="codigoBarra"
           value="${escapeHtml(draft.codigoBarra)}"
+          maxlength="30"
           placeholder="Ingresa el codigo de barra"
           required
         />

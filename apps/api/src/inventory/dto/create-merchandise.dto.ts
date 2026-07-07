@@ -7,7 +7,7 @@ import { MerchandisePayloadDto } from "./merchandise-payload.dto";
 export class CreateMerchandiseDto extends MerchandisePayloadDto {
   @IsString()
   @MinLength(1)
-  @MaxLength(15)
+  @MaxLength(30)
   @Transform(({ value }) => toUpperTrimmedString(value))
   declare codigoBarra: string;
 }

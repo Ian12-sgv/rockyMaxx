@@ -139,19 +139,19 @@ export class MerchandisePayloadDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(15)
+  @MaxLength(30)
   @Transform(({ value }) => toUpperTrimmedString(value))
   codigoBarra?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(15)
+  @MaxLength(30)
   @Transform(({ value }) => toUpperTrimmedString(value))
   codigoBarraAnt?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(15)
+  @MaxLength(30)
   @Transform(({ value }) => toTrimmedString(value))
   referencia?: string;
 
