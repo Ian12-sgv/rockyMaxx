@@ -1,4 +1,4 @@
-﻿import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type Cajas, type FormaPago } from "@prisma/client";
 
 import {
@@ -349,12 +349,29 @@ export class CajasService {
       mergedSummary = mergeCashRegisterPaymentSummary(mergedSummary, fallbackBreakdown);
     }
 
-    const breakdown = mergedSummary.payments.map((entry) => ({
-      label: entry.label,
-      totalVed: this.formatDecimal(entry.totalVed),
-      totalUsd: this.formatDecimal(entry.totalUsd),
-      movimientos: Number(entry.movimientos || 0),
-    }));
+    const [tasaCierreUsd, inventoryCost] = await Promise.all([
+      this.resolveGeneralCloseUsdRate(start, end),
+      this.calculateGeneralCloseInventoryCost(start, end),
+    ]);
+    const breakdown = mergedSummary.payments.map((entry) => {
+      const totalVed = new Prisma.Decimal(entry.totalVed || 0);
+      const totalUsd = new Prisma.Decimal(entry.totalUsd || 0);
+      const displayUsd = totalUsd.greaterThan(ZERO)
+        ? totalUsd
+        : totalVed.greaterThan(ZERO) && tasaCierreUsd.greaterThan(ZERO)
+          ? totalVed.div(tasaCierreUsd).toDecimalPlaces(2)
+          : ZERO;
+
+      return {
+        label: entry.label,
+        totalVed: this.formatDecimal(entry.totalVed),
+        totalUsd: this.formatDecimal(entry.totalUsd),
+        displayUsd: this.formatDecimal(displayUsd),
+        movimientos: Number(entry.movimientos || 0),
+      };
+    });
+    const totalGeneralUsd = this.resolveGeneralCloseUsdTotal(breakdown, tasaCierreUsd);
+    const gananciaNetaUsd = totalGeneralUsd.minus(inventoryCost.total).toDecimalPlaces(2);
 
     const summary = {
       fecha: this.formatReportDate(normalizedFecha),
@@ -367,7 +384,9 @@ export class CajasService {
       totalDescuentoVed: this.formatDecimal(salesAggregate._sum?.TotalDescuento),
       totalImpuestoVed: this.formatDecimal(salesAggregate._sum?.TotalImpuesto),
       totalGeneralVed: this.formatDecimal(salesAggregate._sum?.TotalPago),
-      totalGeneralUsd: this.formatDecimal(salesAggregate._sum?.TotalDolares),
+      totalGeneralUsd: this.formatDecimal(totalGeneralUsd),
+      costoMercanciaUsd: this.formatDecimal(inventoryCost.total),
+      gananciaNetaUsd: this.formatDecimal(gananciaNetaUsd),
       cajas: syncedItems.map((item) => ({
         serie: String(item.Serie || "").trim(),
         numeroCaja: Number(item.Numero || 0),
@@ -378,6 +397,12 @@ export class CajasService {
         horaCierre: this.formatTimeValue(item.HoraCierre),
       })),
       breakdown,
+      costosArticulos: inventoryCost.detalles.map((item) => ({
+        articulo: item.articulo,
+        costoUnitarioUsd: this.formatDecimal(item.costoUnitario),
+        cantidad: this.formatDecimal(item.cantidad),
+        costoTotalUsd: this.formatDecimal(item.costoTotal),
+      })),
       generatedAt: this.formatReportTimestamp(new Date()),
     };
 
@@ -546,6 +571,133 @@ export class CajasService {
         movimientos: Number(item._count?._all || 0),
       };
     });
+  }
+
+  private async resolveGeneralCloseUsdRate(start: Date, end: Date) {
+    const latestSaleWithRate = await this.prisma.ventas.findFirst({
+      where: {
+        Fecha: {
+          gte: start,
+          lt: end,
+        },
+        TasaCambio: {
+          not: null,
+          gt: ZERO,
+        },
+      },
+      orderBy: [{ Fecha: "desc" }, { NumeroFactura: "desc" }],
+      select: {
+        TasaCambio: true,
+      },
+    });
+
+    if (!latestSaleWithRate?.TasaCambio || latestSaleWithRate.TasaCambio.lessThanOrEqualTo(ZERO)) {
+      return ZERO;
+    }
+
+    return latestSaleWithRate.TasaCambio.toDecimalPlaces(2);
+  }
+
+  private resolveGeneralCloseUsdTotal(
+    breakdown: Array<{ totalVed: string; totalUsd: string }>,
+    tasaCambioCierre: Prisma.Decimal,
+  ) {
+    return (Array.isArray(breakdown) ? breakdown : []).reduce((sum, entry) => {
+      const totalUsd = new Prisma.Decimal(entry?.totalUsd || 0);
+      if (totalUsd.greaterThan(ZERO)) {
+        return sum.plus(totalUsd);
+      }
+
+      const totalVed = new Prisma.Decimal(entry?.totalVed || 0);
+      if (totalVed.greaterThan(ZERO) && tasaCambioCierre.greaterThan(ZERO)) {
+        return sum.plus(totalVed.div(tasaCambioCierre));
+      }
+
+      return sum;
+    }, ZERO).toDecimalPlaces(2);
+  }
+
+  private async calculateGeneralCloseInventoryCost(start: Date, end: Date) {
+    const soldItems = await this.prisma.movVentas.findMany({
+      where: {
+        venta: {
+          is: {
+            Fecha: {
+              gte: start,
+              lt: end,
+            },
+          },
+        },
+      },
+      select: {
+        CodigoBarra: true,
+        Cantidad: true,
+        inventarioRef: {
+          select: {
+            Referencia: true,
+            CostoDolar: true,
+          },
+        },
+      },
+    });
+
+    const detailsMap = new Map<string, {
+      articulo: string;
+      cantidad: Prisma.Decimal;
+      costoUnitario: Prisma.Decimal;
+      costoTotal: Prisma.Decimal;
+    }>();
+
+    for (const item of soldItems) {
+      const costoUnitario = this.resolveGeneralCloseInventoryUnitCost(item.inventarioRef);
+      const cantidad = item.Cantidad ?? ZERO;
+      if (costoUnitario.lessThanOrEqualTo(ZERO) || cantidad.lessThanOrEqualTo(ZERO)) {
+        continue;
+      }
+
+      const articulo = String(item.inventarioRef?.Referencia || item.CodigoBarra || "").trim() || "SIN CODIGO";
+      const costoTotal = costoUnitario.mul(cantidad).toDecimalPlaces(2);
+      const existing = detailsMap.get(articulo);
+      if (existing) {
+        existing.cantidad = existing.cantidad.plus(cantidad).toDecimalPlaces(2);
+        existing.costoTotal = existing.costoTotal.plus(costoTotal).toDecimalPlaces(2);
+        continue;
+      }
+
+      detailsMap.set(articulo, {
+        articulo,
+        cantidad: cantidad.toDecimalPlaces(2),
+        costoUnitario: costoUnitario.toDecimalPlaces(2),
+        costoTotal,
+      });
+    }
+
+    const detalles = [...detailsMap.values()].sort((left, right) => left.articulo.localeCompare(right.articulo, "es"));
+    const total = detalles.reduce((sum, item) => sum.plus(item.costoTotal), ZERO).toDecimalPlaces(2);
+
+    return {
+      total,
+      detalles,
+    };
+  }
+
+  private resolveGeneralCloseInventoryUnitCost(
+    inventory:
+      | {
+          CostoDolar: Prisma.Decimal;
+        }
+      | null
+      | undefined,
+  ) {
+    if (!inventory) {
+      return ZERO;
+    }
+
+    if (inventory.CostoDolar.greaterThan(ZERO)) {
+      return inventory.CostoDolar;
+    }
+
+    return ZERO;
   }
 
   private formatDecimal(value: Prisma.Decimal | string | number | null | undefined) {
@@ -877,6 +1029,5 @@ export class CajasService {
     return { start, end };
   }
 }
-
 
 

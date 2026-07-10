@@ -1,4 +1,4 @@
-type CashRegisterPaymentSummaryEntry = {
+﻿type CashRegisterPaymentSummaryEntry = {
   key: string;
   label: string;
   totalVed: string;
@@ -23,6 +23,7 @@ export type CashRegisterCloseReportPaymentLine = {
   label: string;
   totalVed: string;
   totalUsd: string;
+  displayUsd?: string;
   movimientos: number;
 };
 
@@ -52,6 +53,13 @@ export type CashRegisterGeneralCloseCajaLine = {
   horaCierre: string;
 };
 
+export type CashRegisterGeneralCloseCostLine = {
+  articulo: string;
+  costoUnitarioUsd: string;
+  cantidad: string;
+  costoTotalUsd: string;
+};
+
 export type CashRegisterGeneralCloseReportPayload = {
   fecha: string;
   totalCajas: number;
@@ -64,8 +72,11 @@ export type CashRegisterGeneralCloseReportPayload = {
   totalImpuestoVed: string;
   totalGeneralVed: string;
   totalGeneralUsd: string;
+  costoMercanciaUsd: string;
+  gananciaNetaUsd: string;
   cajas: CashRegisterGeneralCloseCajaLine[];
   breakdown: CashRegisterCloseReportPaymentLine[];
+  costosArticulos: CashRegisterGeneralCloseCostLine[];
   generatedAt: string;
 };
 
@@ -207,6 +218,12 @@ function buildCashRegisterGeneralCloseReportLines(report: CashRegisterGeneralClo
   ];
 
   appendPaymentBreakdownLines(lines, report.breakdown, "Sin pagos registrados en las cajas de este dia.");
+  appendGeneralCloseInventoryCostLines(
+    lines,
+    report.costosArticulos,
+    report.costoMercanciaUsd,
+    report.gananciaNetaUsd,
+  );
   return lines;
 }
 
@@ -237,29 +254,71 @@ function appendPaymentBreakdownLines(
   lines.push(...renderedLines);
 }
 
+function appendGeneralCloseInventoryCostLines(
+  lines: string[],
+  costosArticulos: CashRegisterGeneralCloseCostLine[],
+  costoMercanciaUsd: string,
+  gananciaNetaUsd: string,
+) {
+  const renderedLines = (Array.isArray(costosArticulos) ? costosArticulos : [])
+    .flatMap((item) => formatGeneralCloseInventoryCostLines(item))
+    .filter(Boolean);
+
+  if (renderedLines.length) {
+    lines.push("", ...renderedLines);
+  }
+
+  lines.push(
+    "",
+    `Inversion: ${formatUsdInline(costoMercanciaUsd)}`,
+    `Ganancia neta: ${formatUsdInline(gananciaNetaUsd)}`,
+  );
+}
+
+function formatGeneralCloseInventoryCostLines(item: CashRegisterGeneralCloseCostLine) {
+  const articulo = toAsciiLabel(item?.articulo || "") || "SIN CODIGO";
+  const costoUnitarioUsd = normalizeMoneyNumber(item?.costoUnitarioUsd);
+  const cantidad = normalizeMoneyNumber(item?.cantidad);
+  const costoTotalUsd = normalizeMoneyNumber(item?.costoTotalUsd);
+
+  if (costoUnitarioUsd <= 0 || cantidad <= 0 || costoTotalUsd <= 0) {
+    return [];
+  }
+
+  const costoUnitarioTexto = formatUsdInline(costoUnitarioUsd);
+  const cantidadTexto = formatQuantityInline(cantidad);
+  const costoTotalTexto = formatUsdInline(costoTotalUsd);
+
+  return [
+    `Costo unitario ${articulo} = ${costoUnitarioTexto}`,
+    `Costo ${articulo}: ${costoUnitarioTexto} x ${cantidadTexto} = ${costoTotalTexto}`,
+  ];
+}
+
 function formatPaymentBreakdownLine(payment: CashRegisterCloseReportPaymentLine) {
   const label = normalizePaymentLabel(payment?.label);
   const ved = normalizeMoneyNumber(payment?.totalVed);
   const usd = normalizeMoneyNumber(payment?.totalUsd);
+  const displayUsd = normalizeMoneyNumber(payment?.displayUsd ?? payment?.totalUsd);
 
-  if (ved <= 0 && usd <= 0) {
+  if (ved <= 0 && usd <= 0 && displayUsd <= 0) {
     return "";
   }
 
   const displayLabel = formatPaymentDisplayLabel(label);
-  if (isUsdOnlyPayment(label, usd)) {
-    return `${displayLabel}: ${formatUsdInline(usd)}`;
+  if (isUsdOnlyPayment(label, displayUsd > 0 ? displayUsd : usd)) {
+    return `${displayLabel}: ${formatUsdInline(displayUsd > 0 ? displayUsd : usd)}`;
   }
 
-  if (ved > 0 && usd > 0) {
-    return `${displayLabel}: ${formatLocalizedMoney(ved)} (${formatUsdInline(usd)})`;
+  if (ved > 0 && displayUsd > 0) {
+    return `${displayLabel}: ${formatLocalizedMoney(ved)} (${formatUsdInline(displayUsd)})`;
   }
 
   if (ved > 0) {
     return `${displayLabel}: ${formatLocalizedMoney(ved)}`;
   }
 
-  return `${displayLabel}: ${formatUsdInline(usd)}`;
+  return `${displayLabel}: ${formatUsdInline(displayUsd > 0 ? displayUsd : usd)}`;
 }
 
 function normalizePaymentLabel(value: unknown) {
@@ -271,6 +330,14 @@ function formatPaymentDisplayLabel(label: string) {
     return "Pago movil";
   }
 
+  if (label.includes("USDT")) {
+    return "USDT";
+  }
+
+  if (label.includes("DOLAR ELECTRONICO")) {
+    return "Dolar electronico";
+  }
+
   if (label.includes("BINANCE")) {
     return "BINANCE";
   }
@@ -279,7 +346,15 @@ function formatPaymentDisplayLabel(label: string) {
     return "$ fisico";
   }
 
-  if (label.includes("TARJETA") || label.includes("DEBITO") || label.includes("CREDITO") || label.includes("PUNTO")) {
+  if (label.includes("TARJETA DE DEBITO") || label.includes("DEBITO")) {
+    return "Debito";
+  }
+
+  if (label.includes("TARJETA DE CREDITO") || label.includes("CREDITO")) {
+    return "Credito";
+  }
+
+  if (label.includes("PUNTO")) {
     return "Punto";
   }
 
@@ -452,3 +527,20 @@ function formatLocalizedMoney(value: unknown) {
 function formatUsdInline(value: unknown) {
   return `${formatLocalizedMoney(value)}$`;
 }
+
+function formatQuantityInline(value: unknown) {
+  const normalized = normalizeMoneyNumber(value);
+  if (!Number.isFinite(normalized)) {
+    return "0";
+  }
+
+  if (Math.abs(normalized - Math.trunc(normalized)) < 0.000001) {
+    return String(Math.trunc(normalized));
+  }
+
+  return new Intl.NumberFormat("es-VE", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(normalized);
+}
+

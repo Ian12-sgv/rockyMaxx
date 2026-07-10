@@ -728,6 +728,10 @@ export class FacturacionService {
       throw new BadRequestException("No hay una tasa de cambio vigente para convertir el efectivo en dolares.");
     }
 
+    if (abonado.greaterThan(totalVenta)) {
+      throw new BadRequestException("No se puede proceder porque el monto pagado es mayor al total de la venta.");
+    }
+
     if (abonado.lessThan(totalVenta)) {
       throw new BadRequestException("Los pagos cargados aun no cubren el total de la venta.");
     }

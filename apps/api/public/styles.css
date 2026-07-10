@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg-cream: #f7f0e2;
   --bg-sand: #e7d6b4;
   --bg-paper: rgba(255, 249, 238, 0.92);
@@ -3177,1353 +3177,6 @@ button {
   line-height: 16px;
 }
 
-.facturacion-page {
-  width: min(1180px, 100%);
-  margin: 0 auto;
-  gap: 8px;
-  min-height: 0;
-}
-
-.facturacion-window {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: calc(100vh - 136px);
-  min-height: 640px;
-  overflow: hidden;
-}
-
-.facturacion-titlebar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.facturacion-titlebar-hints {
-  display: inline-flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  font-size: 11px;
-}
-
-.facturacion-form {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
-  gap: 8px;
-  min-height: 0;
-  padding: 8px;
-}
-
-.facturacion-header-panel,
-.facturacion-lines-panel,
-.facturacion-summary-panel,
-.facturacion-actions-panel {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid rgba(38, 73, 111, 0.18);
-  border-radius: 6px;
-  background: linear-gradient(180deg, #fefefe 0%, #edf4fb 100%);
-}
-
-.facturacion-lines-panel {
-  min-height: 0;
-  padding: 10px 12px 12px;
-}
-
-.facturacion-field-row {
-  display: grid;
-  grid-template-columns: 72px 88px 40px minmax(280px, 1fr) 160px;
-  gap: 6px;
-  align-items: center;
-}
-
-.facturacion-field-label,
-.facturacion-checkbox-row span,
-.facturacion-summary-label {
-  color: #263847;
-  font-size: 0.84rem;
-  font-weight: 800;
-}
-
-.facturacion-code-input,
-.facturacion-name-input,
-.facturacion-side-input,
-.facturacion-lookup-button,
-.facturacion-grid-table input,
-.facturacion-summary-panel input {
-  min-height: 28px;
-  border: 1px solid rgba(35, 48, 58, 0.24);
-  border-radius: 3px;
-  background: #ffffff;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.facturacion-code-input,
-.facturacion-name-input,
-.facturacion-side-input,
-.facturacion-summary-panel input {
-  width: 100%;
-  padding: 0 8px;
-}
-
-.facturacion-code-input {
-  background: #fff8c9;
-}
-
-.facturacion-name-input[readonly],
-.facturacion-side-input[readonly] {
-  background: rgba(255, 255, 255, 0.94);
-}
-
-.facturacion-lookup-button {
-  width: 40px;
-  padding: 0;
-  color: #1d66b3;
-  font-weight: 900;
-}
-
-.facturacion-checkbox-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.facturacion-grid-shell {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  border: 1px solid rgba(37, 59, 89, 0.12);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.76);
-}
-
-.facturacion-grid-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 860px;
-}
-
-.facturacion-grid-table th,
-.facturacion-grid-table td {
-  border: 1px solid rgba(47, 72, 105, 0.16);
-  padding: 0;
-}
-
-.facturacion-grid-table th {
-  height: 24px;
-  background: rgba(228, 238, 248, 0.95);
-  color: #203241;
-  font-size: 0.76rem;
-  font-weight: 800;
-  text-align: center;
-}
-
-.facturacion-grid-table td {
-  height: 22px;
-  background: rgba(255, 255, 255, 0.96);
-}
-
-.facturacion-grid-table input {
-  width: 100%;
-  height: 100%;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.facturacion-row-number {
-  width: 34px;
-  text-align: center;
-  color: #29466f;
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-
-.facturacion-index-head {
-  width: 34px;
-}
-
-.facturacion-empty-head {
-  width: 20px;
-}
-
-.facturacion-price-list-cell {
-  width: 24px;
-  text-align: center;
-  color: #1f5f9c;
-  font-size: 0.76rem;
-  font-weight: 800;
-}
-
-.facturacion-grid-table tbody tr {
-  cursor: pointer;
-}
-
-.facturacion-grid-table tbody tr.facturacion-line-selected td {
-  background: rgba(207, 225, 247, 0.96);
-}
-
-.facturacion-grid-table tbody tr.facturacion-line-selected input {
-  background: rgba(207, 225, 247, 0.96);
-}
-
-.facturacion-cell-right {
-  text-align: right;
-}
-
-.facturacion-summary-grid {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(180px, 1.15fr);
-  gap: 10px;
-  align-items: end;
-}
-
-.facturacion-summary-block {
-  display: grid;
-  gap: 4px;
-}
-
-.facturacion-summary-inline-head,
-.facturacion-summary-formula {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.facturacion-summary-inline-head span,
-.facturacion-summary-formula span,
-.facturacion-usd-row span,
-.facturacion-total-caption span,
-.facturacion-total-caption strong {
-  color: #23384d;
-  font-size: 0.82rem;
-  font-weight: 800;
-}
-
-.facturacion-summary-formula input,
-.facturacion-summary-inline-head input {
-  flex: 1 1 auto;
-}
-
-.facturacion-small-input {
-  max-width: 72px;
-}
-
-.facturacion-summary-total {
-  display: grid;
-  gap: 2px;
-  justify-items: end;
-}
-
-.facturacion-total-caption {
-  display: grid;
-  justify-items: end;
-  gap: 2px;
-}
-
-.facturacion-total-caption strong {
-  color: #4b53cc;
-}
-
-.facturacion-total-input {
-  max-width: 120px;
-  color: #0b8a2a;
-}
-
-.facturacion-usd-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.facturacion-usd-input {
-  max-width: 120px;
-}
-
-.facturacion-actions-panel {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.facturacion-actions-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.facturacion-preview-button {
-  min-width: 160px;
-}
-
-.facturacion-lookup-dialog {
-  width: min(920px, 100%);
-}
-
-.facturacion-frozen-lookup-dialog {
-  width: min(1080px, 100%);
-}
-
-.facturacion-discount-auth-dialog {
-  width: min(560px, 100%);
-}
-
-.facturacion-payment-dialog {
-  width: min(1220px, 100%);
-}
-
-.facturacion-payment-shell {
-  display: grid;
-  gap: 12px;
-  padding: 0 18px 18px;
-}
-
-.facturacion-payment-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  flex-wrap: wrap;
-  color: #203241;
-  font-weight: 800;
-}
-
-.facturacion-payment-rate,
-.facturacion-payment-estimated {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.facturacion-payment-rate strong,
-.facturacion-payment-estimated strong {
-  font-size: 1.05rem;
-}
-
-.facturacion-payment-table-wrap {
-  overflow: auto;
-  border: 1px solid rgba(37, 59, 89, 0.12);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.82);
-}
-
-
-.facturacion-payment-table {
-  width: 100%;
-  min-width: 1120px;
-  border-collapse: collapse;
-}
-
-.facturacion-payment-table th,
-.facturacion-payment-table td {
-  border: 1px solid rgba(47, 72, 105, 0.16);
-  padding: 0;
-}
-
-.facturacion-payment-table th {
-  height: 26px;
-  padding: 0 6px;
-  background: rgba(228, 238, 248, 0.95);
-  color: #203241;
-  font-size: 0.76rem;
-  font-weight: 800;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.facturacion-payment-table td {
-  height: 28px;
-  background: rgba(255, 255, 255, 0.96);
-}
-
-.facturacion-payment-table input,
-.facturacion-payment-table select {
-  width: 100%;
-  height: 100%;
-  min-height: 28px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-
-.facturacion-payment-row-head,
-.facturacion-payment-row-number {
-  width: 34px;
-  text-align: center;
-}
-
-.facturacion-payment-row-number {
-  color: #29466f;
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-
-.facturacion-payment-bottom {
-  display: grid;
-  grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1.05fr);
-  gap: 18px;
-  align-items: start;
-}
-
-.facturacion-payment-summary {
-  display: grid;
-  gap: 8px;
-}
-
-.facturacion-payment-summary-row {
-  display: grid;
-  grid-template-columns: 170px minmax(0, 160px);
-  gap: 10px;
-  align-items: center;
-}
-
-.facturacion-payment-summary-row span {
-  color: #23384d;
-  font-size: 0.82rem;
-  font-weight: 800;
-}
-
-.facturacion-payment-summary-row input,
-.facturacion-payment-total-row input {
-  width: 100%;
-  min-height: 30px;
-  padding: 0 8px;
-  border: 1px solid rgba(35, 48, 58, 0.24);
-  border-radius: 3px;
-  background: #ffffff;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 0.88rem;
-  font-weight: 800;
-}
-
-.facturacion-payment-summary-accent input {
-  color: #14a140;
-}
-
-.facturacion-payment-summary-total input {
-  color: #4b53cc;
-}
-
-.facturacion-payment-side-actions {
-  display: grid;
-  gap: 14px;
-  justify-items: end;
-}
-
-.facturacion-payment-side-buttons {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-  width: 100%;
-}
-
-.facturacion-payment-total-row {
-  display: inline-grid;
-  grid-template-columns: auto 160px;
-  gap: 10px;
-  align-items: center;
-}
-
-.facturacion-payment-total-row span {
-  color: #23384d;
-  font-size: 0.86rem;
-  font-weight: 800;
-}
-
-.facturacion-payment-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-  width: 100%;
-}
-
-.facturacion-payment-cedula-dialog {
-  width: min(460px, 100%);
-}
-
-.facturacion-payment-cedula-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 0 18px 18px;
-  flex-wrap: wrap;
-}
-
-.facturacion-discount-auth-form {
-  margin: 0 auto 22px;
-}
-
-.facturacion-discount-auth-actions {
-  justify-content: flex-end;
-}
-
-.facturacion-discount-enabled {
-  background: #fff8d8 !important;
-  color: #1c2d3d;
-  font-weight: 800;
-}
-
-.facturacion-client-editor-modal {
-  position: relative;
-  z-index: 1;
-  width: min(1020px, 100%);
-  max-height: min(78vh, 760px);
-  overflow: auto;
-}
-
-.facturacion-client-editor-command-bar {
-  justify-content: flex-start;
-}
-
-.exchange-rate-page {
-  width: min(760px, 100%);
-  margin: 0 auto;
-  display: grid;
-  gap: 12px;
-}
-
-.exchange-rate-window {
-  overflow: hidden;
-}
-
-.exchange-rate-form {
-  display: grid;
-  justify-items: center;
-  padding: 18px 22px 24px;
-}
-
-.exchange-rate-panel {
-  display: grid;
-  gap: 14px;
-  max-width: 460px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 18px 22px 20px;
-  border: 1px solid rgba(38, 73, 111, 0.2);
-  border-radius: 8px;
-  background: linear-gradient(180deg, #fdfefe 0%, #edf4fb 100%);
-}
-
-.exchange-rate-field {
-  display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  color: #263847;
-  font-size: 0.88rem;
-  font-weight: 800;
-}
-
-.exchange-rate-field input {
-  width: 100%;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid rgba(35, 48, 58, 0.24);
-  border-radius: 3px;
-  background: #ffffff;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 0.94rem;
-  font-weight: 700;
-  text-align: right;
-}
-
-.exchange-rate-divider {
-  height: 1px;
-  background: linear-gradient(90deg, rgba(38, 73, 111, 0.22) 0%, rgba(38, 73, 111, 0.08) 100%);
-}
-
-.exchange-rate-meta {
-  color: #526b85;
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.exchange-rate-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-top: 2px;
-}
-
-.cash-register-page {
-  width: min(1040px, 100%);
-  margin: 0 auto;
-  gap: 12px;
-}
-
-.cash-register-window {
-  overflow: hidden;
-}
-
-.cash-register-form {
-  gap: 12px;
-}
-
-.cash-register-command-bar {
-  justify-content: flex-start;
-}
-
-.cash-register-header-panel,
-.cash-register-detail-panel {
-  display: grid;
-  gap: 10px 18px;
-  padding: 14px 16px;
-  border: 1px solid rgba(38, 73, 111, 0.18);
-  border-radius: 6px;
-  background: linear-gradient(180deg, #fefefe 0%, #edf4fb 100%);
-}
-
-.cash-register-header-panel {
-  grid-template-columns: minmax(210px, 1.15fr) minmax(180px, 1fr) 130px;
-  align-items: center;
-}
-
-.cash-register-detail-panel {
-  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
-  align-items: center;
-}
-
-.cash-register-field {
-  display: grid;
-  grid-template-columns: 100px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.cash-register-field span,
-.cash-register-status-row legend,
-.cash-register-condition-row span {
-  color: #263847;
-  font-size: 0.84rem;
-  font-weight: 800;
-}
-
-.cash-register-field input {
-  width: 100%;
-  min-height: 32px;
-  padding: 0 8px;
-  border: 1px solid rgba(35, 48, 58, 0.24);
-  border-radius: 3px;
-  background: #ffffff;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.cash-register-field-serie input {
-  max-width: 150px;
-  text-align: center;
-}
-
-.cash-register-field-number {
-  grid-template-columns: 56px minmax(0, 1fr);
-}
-
-.cash-register-field-number input {
-  max-width: 72px;
-  text-align: right;
-}
-
-.cash-register-condition-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 0 10px;
-  color: #203241;
-}
-
-.cash-register-condition-row strong {
-  color: #132f57;
-  font-family: var(--font-display);
-  font-size: 1.18rem;
-}
-
-.cash-register-status-row {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  flex-wrap: wrap;
-  margin: 0;
-  padding: 8px 12px;
-  border: 1px solid rgba(38, 73, 111, 0.18);
-  border-radius: 6px;
-  background: rgba(248, 251, 255, 0.9);
-}
-
-.cash-register-status-row label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #203241;
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-.cash-register-history-panel {
-  display: grid;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid rgba(38, 73, 111, 0.18);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.cash-register-history-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.cash-register-history-head h2 {
-  margin: 0;
-  color: #203241;
-  font-family: var(--font-display);
-  font-size: 1.24rem;
-}
-
-.cash-register-history-head p {
-  margin: 4px 0 0;
-  color: #5a6670;
-  font-size: 0.9rem;
-}
-
-.cash-register-history-actions {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.cash-register-history-actions .field {
-  min-width: 240px;
-}
-
-.cash-register-table-wrap {
-  border-radius: 4px;
-  overflow: auto;
-}
-
-.cash-register-table-wrap .data-table th,
-.cash-register-table-wrap .data-table td {
-  white-space: nowrap;
-}
-
-.compras-page {
-  width: min(1180px, 100%);
-  margin: 0 auto;
-  gap: 12px;
-}
-
-.compras-window {
-  overflow: hidden;
-}
-
-.compras-form {
-  gap: 12px;
-}
-
-.compras-command-bar {
-  justify-content: flex-start;
-}
-
-.compras-panel,
-.compras-lines-panel,
-.compras-history-panel {
-  display: grid;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid rgba(38, 73, 111, 0.18);
-  border-radius: 6px;
-  background: linear-gradient(180deg, #fefefe 0%, #edf4fb 100%);
-}
-
-.compras-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
-  gap: 12px 16px;
-  align-items: start;
-}
-
-.compras-field {
-  display: grid;
-  gap: 6px;
-}
-
-.compras-field span {
-  color: #263847;
-  font-size: 0.84rem;
-  font-weight: 800;
-}
-
-.compras-field input,
-.compras-field select,
-.compras-field textarea {
-  width: 100%;
-  min-height: 34px;
-  padding: 0 8px;
-  border: 1px solid rgba(35, 48, 58, 0.24);
-  border-radius: 3px;
-  background: #ffffff;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.compras-field input[readonly] {
-  background: #eef7ff;
-  color: #1d45b3;
-}
-
-.compras-field textarea {
-  min-height: 74px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-  resize: vertical;
-}
-
-.compras-field-code input {
-  max-width: 160px;
-  background: #fff8c9;
-  color: #1d2430;
-}
-
-.compras-field-wide {
-  grid-column: 1 / -1;
-}
-
-.compras-field-observacion {
-  align-items: start;
-}
-
-.compras-status-slot {
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-}
-
-.compras-lines-head,
-.compras-history-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.compras-lines-head h2,
-.compras-history-head h2 {
-  margin: 0;
-  color: #203241;
-  font-family: var(--font-display);
-  font-size: 1.24rem;
-}
-
-.compras-lines-head p,
-.compras-history-head p {
-  margin: 4px 0 0;
-  color: #5a6670;
-  font-size: 0.9rem;
-}
-
-.compras-lines-actions,
-.compras-history-actions {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.compras-history-actions .field {
-  min-width: 280px;
-}
-
-.compras-items-table-wrap,
-.compras-history-table-wrap {
-  border-radius: 4px;
-  overflow: auto;
-}
-
-.compras-items-table-wrap .data-table th,
-.compras-items-table-wrap .data-table td,
-.compras-history-table-wrap .data-table th,
-.compras-history-table-wrap .data-table td {
-  white-space: nowrap;
-}
-
-.compras-lookup-search {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.compras-lookup-search .field {
-  min-width: min(420px, 100%);
-  flex: 1 1 320px;
-}
-
-@media (max-width: 1180px) {
-  .compras-grid {
-    grid-template-columns: repeat(2, minmax(220px, 1fr));
-  }
-}
-
-@media (max-width: 720px) {
-  .compras-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .compras-history-actions .field,
-  .compras-lookup-search .field {
-    min-width: 100%;
-  }
-}
-
-.clients-page {
-  width: min(1080px, 100%);
-  margin: 0 auto;
-  gap: 12px;
-}
-
-.clients-window {
-  overflow: hidden;
-}
-
-.clients-form {
-  gap: 12px;
-}
-
-.clients-command-bar {
-  justify-content: flex-start;
-}
-
-.clients-panel,
-.clients-history-panel {
-  display: grid;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid rgba(38, 73, 111, 0.18);
-  border-radius: 6px;
-  background: linear-gradient(180deg, #fefefe 0%, #edf4fb 100%);
-}
-
-.clients-grid {
-  display: grid;
-  grid-template-columns: minmax(260px, 1.1fr) minmax(180px, 0.7fr);
-  gap: 12px 18px;
-  align-items: start;
-}
-
-.clients-field {
-  display: grid;
-  grid-template-columns: 104px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.clients-field span,
-.clients-status-row legend {
-  color: #263847;
-  font-size: 0.84rem;
-  font-weight: 800;
-}
-
-.clients-field input,
-.clients-field select,
-.clients-field textarea {
-  width: 100%;
-  min-height: 32px;
-  padding: 0 8px;
-  border: 1px solid rgba(35, 48, 58, 0.24);
-  border-radius: 3px;
-  background: #ffffff;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.clients-field textarea {
-  min-height: 64px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-  resize: vertical;
-}
-
-.clients-field-wide {
-  grid-column: 1 / -1;
-}
-
-.clients-field-code input {
-  max-width: 170px;
-  background: #fff8c9;
-}
-
-.clients-field-address {
-  align-items: start;
-}
-
-.clients-status-row {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  flex-wrap: wrap;
-  grid-column: 1 / -1;
-  margin: 0;
-  padding: 8px 12px;
-  border: 1px solid rgba(38, 73, 111, 0.18);
-  border-radius: 6px;
-  background: rgba(248, 251, 255, 0.9);
-}
-
-.clients-status-row label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #203241;
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-.clients-history-panel {
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.clients-history-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.clients-history-head h2 {
-  margin: 0;
-  color: #203241;
-  font-family: var(--font-display);
-  font-size: 1.24rem;
-}
-
-.clients-history-head p {
-  margin: 4px 0 0;
-  color: #5a6670;
-  font-size: 0.9rem;
-}
-
-.clients-history-actions {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.clients-history-actions .field {
-  min-width: 240px;
-}
-
-.clients-table-wrap {
-  border-radius: 4px;
-  overflow: auto;
-}
-
-.clients-table-wrap .data-table th,
-.clients-table-wrap .data-table td {
-  white-space: nowrap;
-}
-
-.workers-page {
-  width: min(1080px, 100%);
-  margin: 0 auto;
-  gap: 12px;
-}
-
-.workers-window {
-  overflow: hidden;
-}
-
-.workers-form {
-  gap: 12px;
-}
-
-.workers-command-bar {
-  justify-content: flex-start;
-}
-
-.workers-panel,
-.workers-history-panel {
-  display: grid;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid rgba(38, 73, 111, 0.18);
-  border-radius: 6px;
-  background: linear-gradient(180deg, #fefefe 0%, #edf4fb 100%);
-}
-
-.workers-grid {
-  display: grid;
-  grid-template-columns: minmax(260px, 1.2fr) 140px;
-  gap: 12px 18px;
-  align-items: start;
-}
-
-.workers-field {
-  display: grid;
-  grid-template-columns: 94px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.workers-field span,
-.workers-status-row legend {
-  color: #263847;
-  font-size: 0.84rem;
-  font-weight: 800;
-}
-
-.workers-field input,
-.workers-field select,
-.workers-field textarea {
-  width: 100%;
-  min-height: 32px;
-  padding: 0 8px;
-  border: 1px solid rgba(35, 48, 58, 0.24);
-  border-radius: 3px;
-  background: #ffffff;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.workers-field textarea {
-  min-height: 64px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-  resize: vertical;
-}
-
-.workers-field input[readonly] {
-  background: #eef7ff;
-  color: #1d45b3;
-}
-
-.workers-field-wide {
-  grid-column: 1 / -1;
-}
-
-.workers-field-cedula input {
-  max-width: 170px;
-  background: #fff8c9;
-}
-
-.workers-field-code {
-  grid-template-columns: 56px minmax(0, 1fr);
-}
-
-.workers-field-code input {
-  max-width: 72px;
-  text-align: right;
-}
-
-.workers-field-cargo {
-  grid-column: 1 / -1;
-}
-
-.workers-field-address {
-  align-items: start;
-}
-
-.workers-status-row {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  flex-wrap: wrap;
-  grid-column: 1 / -1;
-  margin: 0;
-  padding: 8px 12px;
-  border: 1px solid rgba(38, 73, 111, 0.18);
-  border-radius: 6px;
-  background: rgba(248, 251, 255, 0.9);
-}
-
-.workers-status-row label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #203241;
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-.workers-history-panel {
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.workers-history-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.workers-history-head h2 {
-  margin: 0;
-  color: #203241;
-  font-family: var(--font-display);
-  font-size: 1.24rem;
-}
-
-.workers-history-head p {
-  margin: 4px 0 0;
-  color: #5a6670;
-  font-size: 0.9rem;
-}
-
-.workers-history-actions {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.workers-history-actions .field {
-  min-width: 240px;
-}
-
-.workers-table-wrap {
-  border-radius: 4px;
-  overflow: auto;
-}
-
-.workers-table-wrap .data-table th,
-.workers-table-wrap .data-table td {
-  white-space: nowrap;
-}
-
-.taxes-page {
-  width: min(760px, 100%);
-  margin: 0 auto;
-  gap: 12px;
-}
-
-.taxes-window {
-  overflow: hidden;
-}
-
-.taxes-form {
-  gap: 12px;
-}
-
-.taxes-command-bar {
-  justify-content: flex-start;
-}
-
-.taxes-panel {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 12px 18px;
-  padding: 14px 16px;
-  border: 1px solid rgba(38, 73, 111, 0.18);
-  border-radius: 6px;
-  background: linear-gradient(180deg, #fefefe 0%, #edf4fb 100%);
-}
-
-.taxes-field {
-  display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  grid-column: 1 / -1;
-}
-
-.taxes-field span {
-  color: #263847;
-  font-size: 0.84rem;
-  font-weight: 800;
-}
-
-.taxes-field input {
-  width: 100%;
-  min-height: 32px;
-  padding: 0 8px;
-  border: 1px solid rgba(35, 48, 58, 0.24);
-  border-radius: 3px;
-  background: #ffffff;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.taxes-field-code input {
-  max-width: 92px;
-  background: #fff8c9;
-  text-align: center;
-}
-
-.taxes-field-percent input {
-  max-width: 92px;
-  text-align: right;
-}
-
-.taxes-field-status {
-  align-items: start;
-}
-
-.taxes-status-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 32px;
-}
-
-.taxes-status-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #263847;
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.taxes-status-option input {
-  margin: 0;
-}
-
-.taxes-lookup-dialog {
-  width: min(760px, 100%);
-}
-
 .adjustment-form {
   display: grid;
   gap: 10px;
@@ -6328,5 +4981,1999 @@ button {
 
   .transfer-import-summary label {
     justify-content: space-between;
+  }
+}
+
+/* UI repair: clientes */
+.clients-page {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  gap: 12px;
+}
+
+.clients-window {
+  overflow: hidden;
+}
+
+.clients-form {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.clients-command-bar {
+  margin: 0;
+}
+
+.clients-panel,
+.clients-history-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8fd 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.clients-history-panel {
+  background: #ffffff;
+}
+
+.clients-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+  align-items: start;
+}
+
+.clients-field {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.clients-field span {
+  color: #263847;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.clients-field input,
+.clients-field select,
+.clients-field textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(35, 48, 58, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.clients-field textarea {
+  min-height: 96px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.clients-field-code input {
+  max-width: 180px;
+  background: #fff7cc;
+  font-weight: 800;
+}
+
+.clients-field-date input {
+  max-width: 220px;
+}
+
+.clients-field-wide,
+.clients-field-address,
+.clients-status-row {
+  grid-column: 1 / -1;
+}
+
+.clients-status-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 16px;
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.clients-status-row legend {
+  padding: 0;
+  color: #24384d;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.clients-status-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #24384d;
+  font-weight: 700;
+}
+
+.clients-history-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.clients-history-head h2 {
+  margin: 0;
+  color: #1f3245;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.clients-history-head p {
+  margin: 4px 0 0;
+  color: #617486;
+  font-size: 0.88rem;
+}
+
+.clients-history-actions {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.clients-history-actions .field {
+  flex: 1 1 260px;
+  min-width: 240px;
+}
+
+.clients-history-actions .field span {
+  color: #5a7084;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.clients-table-wrap {
+  max-height: min(48vh, 420px);
+}
+
+.clients-table-wrap .data-table {
+  min-width: 880px;
+}
+
+.clients-table-wrap .data-table th,
+.clients-table-wrap .data-table td {
+  padding: 11px 10px;
+}
+
+.clients-table-wrap .is-selected-row {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+@media (max-width: 1200px) {
+  .clients-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .clients-history-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .clients-history-actions {
+    width: 100%;
+  }
+
+  .clients-history-actions .field {
+    flex: 1 1 240px;
+  }
+}
+
+@media (max-width: 640px) {
+  .clients-field {
+    grid-template-columns: 1fr;
+  }
+
+  .clients-field-code input,
+  .clients-field-date input {
+    max-width: none;
+    text-align: left;
+  }
+
+  .clients-status-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .clients-history-actions .field,
+  .clients-history-actions .button {
+    width: 100%;
+  }
+}
+
+/* UI repair: proveedores */
+.proveedores-page {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  gap: 12px;
+}
+
+.proveedores-window {
+  overflow: hidden;
+}
+
+.proveedores-form {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.proveedores-command-bar {
+  margin: 0;
+}
+
+.proveedores-panel,
+.proveedores-history-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8fd 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.proveedores-history-panel {
+  background: #ffffff;
+}
+
+.proveedores-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 16px;
+  align-items: start;
+}
+
+.proveedores-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.proveedores-field span {
+  color: #263847;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.proveedores-field input,
+.proveedores-field select,
+.proveedores-field textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(35, 48, 58, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.proveedores-field textarea {
+  min-height: 96px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.proveedores-field-code input {
+  max-width: 180px;
+  background: #fff7cc;
+  font-weight: 800;
+}
+
+.proveedores-grid .clients-field-wide,
+.proveedores-grid .clients-field-address,
+.proveedores-status-row {
+  grid-column: 1 / -1;
+}
+
+.proveedores-status-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 16px;
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.proveedores-status-row legend {
+  padding: 0;
+  color: #24384d;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.proveedores-status-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #24384d;
+  font-weight: 700;
+}
+
+.proveedores-history-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.proveedores-history-head h2 {
+  margin: 0;
+  color: #1f3245;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.proveedores-history-head p {
+  margin: 4px 0 0;
+  color: #617486;
+  font-size: 0.88rem;
+}
+
+.proveedores-history-actions {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.proveedores-history-actions .field {
+  flex: 1 1 280px;
+  min-width: 260px;
+}
+
+.proveedores-history-actions .field span {
+  color: #5a7084;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.proveedores-table-wrap {
+  max-height: min(48vh, 420px);
+}
+
+.proveedores-table-wrap .data-table {
+  min-width: 980px;
+}
+
+.proveedores-table-wrap .data-table th,
+.proveedores-table-wrap .data-table td {
+  padding: 11px 10px;
+}
+
+.proveedores-table-wrap .is-selected-row {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+@media (max-width: 1200px) {
+  .proveedores-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .proveedores-history-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .proveedores-history-actions {
+    width: 100%;
+  }
+
+  .proveedores-history-actions .field {
+    flex: 1 1 240px;
+    min-width: 220px;
+  }
+}
+
+@media (max-width: 640px) {
+  .proveedores-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .proveedores-field-code input {
+    max-width: none;
+    text-align: left;
+  }
+
+  .proveedores-status-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .proveedores-history-actions .field,
+  .proveedores-history-actions .button {
+    width: 100%;
+  }
+}
+
+/* UI repair: compras, impresoras, registrar tasa, apertura y cierre de caja */
+.cash-register-page,
+.compras-page,
+.exchange-rate-page,
+.impresoras-page {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  gap: 12px;
+}
+
+.compras-page {
+  width: min(1180px, 100%);
+}
+
+.exchange-rate-page {
+  width: min(760px, 100%);
+}
+
+.cash-register-window,
+.compras-window,
+.exchange-rate-window,
+.impresoras-window {
+  overflow: hidden;
+}
+
+.exchange-rate-window {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.cash-register-form,
+.compras-form,
+.exchange-rate-form,
+.impresoras-form {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.cash-register-command-bar,
+.compras-command-bar,
+.impresoras-command-bar {
+  margin: 0;
+}
+
+.cash-register-header-panel,
+.cash-register-detail-panel,
+.compras-panel,
+.compras-lines-panel,
+.compras-history-panel,
+.impresoras-panel,
+.impresoras-history-panel {
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8fd 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.cash-register-header-panel,
+.cash-register-detail-panel {
+  display: grid;
+  gap: 12px 16px;
+  padding: 14px 16px;
+}
+
+.cash-register-header-panel {
+  grid-template-columns: minmax(240px, 1.3fr) minmax(180px, 1fr) 120px;
+  align-items: end;
+}
+
+.cash-register-detail-panel {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cash-register-field {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.cash-register-field span {
+  color: #263847;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.cash-register-field input,
+.cash-register-field select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(35, 48, 58, 0.22);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.cash-register-field input[readonly] {
+  background: #eef6ff;
+}
+
+.cash-register-field-serie input {
+  font-weight: 800;
+}
+
+.cash-register-field-number {
+  max-width: 120px;
+  justify-self: end;
+}
+
+.cash-register-field-number input {
+  text-align: center;
+  background: #eef7ff;
+  font-weight: 800;
+}
+
+.cash-register-condition-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.84);
+  color: #28425a;
+  font-size: 0.96rem;
+}
+
+.cash-register-condition-row strong {
+  color: #163a68;
+  font-family: var(--font-display);
+  font-size: 1.14rem;
+}
+
+.cash-register-field .field-help-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.cash-register-field .field-help-stack small {
+  color: #617486;
+  line-height: 1.45;
+}
+
+.cash-register-history-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  background: #ffffff;
+}
+
+.cash-register-history-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cash-register-history-head h2,
+.compras-lines-head h2,
+.compras-history-head h2,
+.impresoras-history-head h2 {
+  margin: 0;
+  color: #1f3245;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.cash-register-history-head p,
+.compras-lines-head p,
+.compras-history-head p,
+.impresoras-history-head p {
+  margin: 4px 0 0;
+  color: #617486;
+  font-size: 0.88rem;
+}
+
+.cash-register-history-actions,
+.compras-lines-actions,
+.compras-history-actions,
+.impresoras-inline-actions,
+.impresoras-history-panel .clients-history-actions {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cash-register-history-actions .field,
+.compras-history-actions .field,
+.impresoras-history-panel .clients-history-actions .field {
+  flex: 1 1 260px;
+  min-width: 240px;
+}
+
+.cash-register-history-actions .field span,
+.compras-history-actions .field span,
+.impresoras-history-panel .clients-history-actions .field span {
+  color: #5a7084;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.cash-register-table-wrap {
+  max-height: min(48vh, 420px);
+}
+
+.cash-register-table-wrap .data-table {
+  min-width: 880px;
+}
+
+.cash-register-table-wrap .data-table th,
+.cash-register-table-wrap .data-table td {
+  padding: 11px 10px;
+  white-space: nowrap;
+}
+
+.cash-register-table-wrap .is-selected-row {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.exchange-rate-panel {
+  width: min(560px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8fd 100%);
+  box-shadow: 0 12px 24px rgba(31, 53, 83, 0.05);
+}
+
+.exchange-rate-field {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.exchange-rate-field span {
+  color: #24384d;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.exchange-rate-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(35, 48, 58, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  text-align: right;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.exchange-rate-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: rgba(40, 70, 104, 0.12);
+}
+
+.exchange-rate-meta {
+  color: #38536f;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.exchange-rate-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.exchange-rate-actions .button {
+  min-width: 150px;
+}
+
+.compras-panel,
+.compras-lines-panel,
+.compras-history-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.compras-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px 16px;
+  align-items: start;
+}
+
+.compras-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.compras-field span {
+  color: #263847;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.compras-field input,
+.compras-field select,
+.compras-field textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(35, 48, 58, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.compras-field textarea {
+  min-height: 108px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.compras-field input[readonly] {
+  background: #eef6ff;
+}
+
+.compras-field-code {
+  max-width: 180px;
+}
+
+.compras-field-status {
+  align-content: start;
+}
+
+.compras-status-slot {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+}
+
+.compras-field-observacion {
+  grid-column: 1 / -1;
+}
+
+.compras-lines-head,
+.compras-history-head,
+.impresoras-history-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.compras-items-table-wrap,
+.compras-history-table-wrap {
+  max-height: min(44vh, 420px);
+}
+
+.compras-items-table-wrap .data-table {
+  min-width: 1000px;
+}
+
+.compras-history-table-wrap .data-table {
+  min-width: 920px;
+}
+
+.compras-items-table-wrap .data-table th,
+.compras-items-table-wrap .data-table td,
+.compras-history-table-wrap .data-table th,
+.compras-history-table-wrap .data-table td {
+  padding: 11px 10px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.compras-item-quantity-input,
+.compras-item-subtotal-input {
+  width: 120px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid rgba(35, 48, 58, 0.22);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.compras-item-quantity-input {
+  text-align: right;
+}
+
+.compras-item-subtotal-input {
+  text-align: right;
+  background: #eef6ff;
+  font-weight: 800;
+}
+
+.compras-lookup-dialog {
+  width: min(1100px, calc(100vw - 36px));
+}
+
+.compras-lookup-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.compras-lookup-table-wrap {
+  max-height: min(54vh, 520px);
+}
+
+.compras-lookup-table {
+  min-width: 860px;
+}
+
+.impresoras-panel,
+.impresoras-history-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.impresoras-grid {
+  display: grid;
+  grid-template-columns: 110px minmax(280px, 1.25fr) minmax(260px, 1fr);
+  gap: 14px 16px;
+  align-items: start;
+}
+
+.impresoras-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.impresoras-field span {
+  color: #263847;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.impresoras-field input,
+.impresoras-field select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(35, 48, 58, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.impresoras-field small {
+  color: #617486;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.impresoras-field-code {
+  max-width: 110px;
+}
+
+.impresoras-field-code input {
+  text-align: center;
+  font-weight: 800;
+  background: #eef6ff;
+}
+
+.impresoras-field-wide {
+  grid-column: span 2;
+}
+
+.impresoras-field-status {
+  align-content: start;
+}
+
+.impresoras-note {
+  padding: 10px 12px;
+  border: 1px solid rgba(35, 122, 202, 0.16);
+  border-radius: 10px;
+  background: rgba(35, 122, 202, 0.06);
+}
+
+.impresoras-table-shell {
+  overflow: auto;
+  border: 1px solid rgba(40, 70, 104, 0.1);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.impresoras-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.impresoras-table th,
+.impresoras-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid rgba(35, 48, 58, 0.08);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.impresoras-table th {
+  color: #64748b;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.impresoras-table tbody tr:hover {
+  background: rgba(37, 99, 235, 0.04);
+}
+
+@media (max-width: 1100px) {
+  .compras-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .impresoras-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .impresoras-field-wide,
+  .compras-field-observacion {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .cash-register-header-panel,
+  .cash-register-detail-panel,
+  .compras-grid,
+  .impresoras-grid,
+  .exchange-rate-field {
+    grid-template-columns: 1fr;
+  }
+
+  .cash-register-field,
+  .exchange-rate-field {
+    grid-template-columns: 1fr;
+  }
+
+  .cash-register-field-number,
+  .compras-field-code,
+  .impresoras-field-code {
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .cash-register-history-head,
+  .compras-lines-head,
+  .compras-history-head,
+  .impresoras-history-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .exchange-rate-actions,
+  .impresoras-inline-actions,
+  .impresoras-history-panel .clients-history-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cash-register-history-actions,
+  .compras-lines-actions,
+  .compras-history-actions {
+    width: 100%;
+  }
+
+  .cash-register-history-actions .field,
+  .compras-history-actions .field,
+  .impresoras-history-panel .clients-history-actions .field {
+    min-width: 0;
+  }
+
+  .exchange-rate-actions .button,
+  .compras-lines-actions .button,
+  .impresoras-inline-actions .button,
+  .impresoras-history-panel .clients-history-actions .button {
+    width: 100%;
+  }
+
+  .compras-lookup-search {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* UI repair: facturacion responsive */
+.facturacion-page {
+  width: min(1240px, 100%);
+  margin: 0 auto;
+  gap: 14px;
+}
+
+.facturacion-window {
+  overflow: hidden;
+}
+
+.facturacion-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.facturacion-titlebar > span {
+  color: #173a68;
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 1.8vw, 1.2rem);
+  font-weight: 800;
+}
+
+.facturacion-titlebar-hints {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: #40607d;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.facturacion-form {
+  display: grid;
+  gap: 14px;
+  padding: 12px;
+}
+
+.facturacion-header-panel,
+.facturacion-lines-panel,
+.facturacion-summary-panel {
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8fd 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.facturacion-header-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.facturacion-field-row {
+  display: grid;
+  grid-template-columns: 92px minmax(96px, 132px) 46px minmax(260px, 1.45fr) minmax(150px, 0.7fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.facturacion-field-label {
+  color: #1f344a;
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+
+.facturacion-code-input,
+.facturacion-name-input,
+.facturacion-side-input,
+.facturacion-grid-table input,
+.facturacion-payment-table input,
+.facturacion-payment-table select,
+.facturacion-payment-total-row input,
+.facturacion-payment-summary-row input,
+.facturacion-usd-input,
+.facturacion-total-input,
+.facturacion-small-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(35, 48, 58, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.facturacion-code-input {
+  background: #fff7cc;
+  font-weight: 800;
+}
+
+.facturacion-name-input,
+.facturacion-side-input,
+.facturacion-grid-table input[readonly],
+.facturacion-payment-table input[readonly],
+.facturacion-payment-table input:disabled,
+.facturacion-payment-table select:disabled,
+.facturacion-payment-summary-row input,
+.facturacion-payment-total-row input,
+.facturacion-usd-input,
+.facturacion-total-input {
+  background: #eef6ff;
+}
+
+.facturacion-lookup-button {
+  width: 46px;
+  min-width: 46px;
+  min-height: 42px;
+  border: 1px solid rgba(35, 48, 58, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #2459be;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.facturacion-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #1f344a;
+  font-size: 0.94rem;
+  font-weight: 800;
+}
+
+.facturacion-checkbox-row input {
+  width: 16px;
+  height: 16px;
+}
+
+.facturacion-form > .muted {
+  padding: 10px 12px;
+  border: 1px solid rgba(35, 122, 202, 0.14);
+  border-radius: 10px;
+  background: rgba(35, 122, 202, 0.06);
+}
+
+.facturacion-lines-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.facturacion-grid-shell {
+  overflow: auto;
+  max-height: min(44vh, 460px);
+  background: #ffffff;
+}
+
+.facturacion-grid-table {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+}
+
+.facturacion-grid-table th,
+.facturacion-grid-table td {
+  border-bottom: 1px solid rgba(35, 48, 58, 0.08);
+  padding: 0;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.facturacion-grid-table th {
+  padding: 10px 8px;
+  background: #edf4fb;
+  color: #27405a;
+  font-size: 0.84rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.facturacion-grid-table td input {
+  border: 0;
+  border-radius: 0;
+  min-height: 40px;
+  background: transparent;
+}
+
+.facturacion-grid-table td input:focus {
+  position: relative;
+  z-index: 1;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.34);
+}
+
+.facturacion-index-head,
+.facturacion-row-number {
+  width: 44px;
+  min-width: 44px;
+  text-align: center;
+}
+
+.facturacion-empty-head,
+.facturacion-price-list-cell {
+  width: 36px;
+  min-width: 36px;
+  text-align: center;
+}
+
+.facturacion-row-number,
+.facturacion-price-list-cell {
+  padding: 0 8px;
+  background: #f7fbff;
+  color: #2459be;
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+
+.facturacion-line-selected td {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.facturacion-line-selected .facturacion-row-number,
+.facturacion-line-selected .facturacion-price-list-cell {
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.facturacion-summary-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.facturacion-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.facturacion-summary-block,
+.facturacion-summary-total {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.facturacion-summary-label,
+.facturacion-total-caption span {
+  color: #1f344a;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.facturacion-summary-input-row,
+.facturacion-summary-inline-head,
+.facturacion-summary-formula {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.facturacion-summary-inline-head > span,
+.facturacion-summary-formula > span {
+  color: #46627f;
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.facturacion-summary-inline-head .facturacion-small-input {
+  max-width: 92px;
+}
+
+.facturacion-summary-formula input,
+.facturacion-summary-input-row input {
+  flex: 1 1 auto;
+}
+
+.facturacion-summary-total {
+  justify-content: end;
+}
+
+.facturacion-total-caption {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.facturacion-total-caption strong {
+  color: #2845d1;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.facturacion-total-input {
+  max-width: 180px;
+  justify-self: end;
+  font-size: 1.02rem;
+  font-weight: 900;
+}
+
+.facturacion-usd-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.facturacion-usd-row > span {
+  color: #1f344a;
+  font-size: 0.94rem;
+  font-weight: 900;
+}
+
+.facturacion-usd-input {
+  width: min(180px, 100%);
+  font-weight: 900;
+}
+
+.facturacion-cell-right {
+  text-align: right;
+}
+
+.facturacion-discount-enabled {
+  background: #fff4d0;
+  box-shadow: inset 0 0 0 1px rgba(205, 137, 31, 0.32);
+}
+
+.facturacion-actions-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 0 0;
+}
+
+.facturacion-actions-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.facturacion-preview-button {
+  min-width: 210px;
+}
+
+.facturacion-lookup-dialog,
+.facturacion-line-lookup-dialog,
+.facturacion-frozen-lookup-dialog {
+  width: min(1120px, calc(100vw - 36px));
+}
+
+.facturacion-payment-dialog {
+  width: min(1240px, calc(100vw - 32px));
+}
+
+.facturacion-payment-header {
+  align-items: flex-start;
+}
+
+.facturacion-payment-shell {
+  display: grid;
+  gap: 16px;
+}
+
+.facturacion-payment-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.facturacion-payment-rate,
+.facturacion-payment-estimated {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.facturacion-payment-rate span,
+.facturacion-payment-estimated span {
+  color: #1f344a;
+  font-size: 0.94rem;
+  font-weight: 900;
+}
+
+.facturacion-payment-rate strong,
+.facturacion-payment-estimated strong {
+  color: #173a68;
+  font-size: 1.02rem;
+  font-weight: 900;
+}
+
+.facturacion-payment-table-wrap {
+  overflow: auto;
+  max-height: min(46vh, 460px);
+  border: 1px solid rgba(38, 73, 111, 0.12);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.facturacion-payment-table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: collapse;
+}
+
+.facturacion-payment-table th,
+.facturacion-payment-table td {
+  padding: 8px 8px;
+  border-bottom: 1px solid rgba(35, 48, 58, 0.08);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.facturacion-payment-table th {
+  background: #edf4fb;
+  color: #27405a;
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.facturacion-payment-row-head,
+.facturacion-payment-row-number {
+  width: 36px;
+  min-width: 36px;
+  text-align: center;
+}
+
+.facturacion-payment-row-number {
+  color: #2459be;
+  font-weight: 900;
+}
+
+.facturacion-payment-method-select {
+  min-width: 160px;
+}
+
+.facturacion-payment-bottom {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.05fr) minmax(280px, 0.95fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.facturacion-payment-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.facturacion-payment-summary-row,
+.facturacion-payment-total-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 160px);
+  gap: 12px;
+  align-items: center;
+}
+
+.facturacion-payment-summary-row > span,
+.facturacion-payment-total-row > span {
+  color: #1f344a;
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.facturacion-payment-summary-accent input {
+  color: #16a34a;
+  font-weight: 900;
+}
+
+.facturacion-payment-summary-total input {
+  color: #2845d1;
+  font-weight: 900;
+}
+
+.facturacion-payment-side-actions {
+  display: grid;
+  gap: 16px;
+  justify-items: end;
+}
+
+.facturacion-payment-total-row {
+  justify-items: end;
+}
+
+.facturacion-payment-actions,
+.facturacion-payment-cedula-actions,
+.facturacion-discount-auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.facturacion-payment-cedula-dialog,
+.facturacion-discount-auth-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.facturacion-payment-cedula-actions {
+  padding: 0 24px 24px;
+  justify-content: flex-end;
+}
+
+.facturacion-discount-auth-form {
+  width: min(520px, 100%);
+}
+
+.facturacion-line-lookup-table td:nth-child(4),
+.facturacion-lookup-table td:nth-child(4) {
+  min-width: 180px;
+}
+
+.facturacion-line-lookup-table td:nth-child(5),
+.facturacion-lookup-table td:nth-child(5) {
+  min-width: 220px;
+  white-space: normal;
+}
+
+@media (max-width: 1180px) {
+  .facturacion-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .facturacion-field-row {
+    grid-template-columns: 92px minmax(96px, 132px) 46px minmax(220px, 1fr);
+  }
+
+  .facturacion-side-input {
+    grid-column: 2 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .facturacion-titlebar,
+  .facturacion-payment-topline,
+  .facturacion-actions-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .facturacion-titlebar-hints,
+  .facturacion-actions-left {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .facturacion-actions-left .button,
+  .facturacion-preview-button {
+    flex: 1 1 220px;
+  }
+
+  .facturacion-payment-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .facturacion-payment-side-actions {
+    justify-items: stretch;
+  }
+
+  .facturacion-payment-actions {
+    justify-content: stretch;
+  }
+
+  .facturacion-payment-actions .button,
+  .facturacion-payment-cedula-actions .button,
+  .facturacion-discount-auth-actions .button {
+    flex: 1 1 180px;
+  }
+}
+
+@media (max-width: 640px) {
+  .facturacion-page {
+    width: 100%;
+  }
+
+  .facturacion-form {
+    padding: 10px;
+    gap: 12px;
+  }
+
+  .facturacion-header-panel,
+  .facturacion-summary-panel {
+    padding: 14px;
+  }
+
+  .facturacion-field-row,
+  .facturacion-summary-grid,
+  .facturacion-payment-summary-row,
+  .facturacion-payment-total-row {
+    grid-template-columns: 1fr;
+  }
+
+  .facturacion-field-label {
+    padding-bottom: 2px;
+  }
+
+  .facturacion-side-input,
+  .facturacion-lookup-button,
+  .facturacion-total-input,
+  .facturacion-usd-input {
+    grid-column: auto;
+    width: 100%;
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .facturacion-summary-total,
+  .facturacion-total-caption,
+  .facturacion-usd-row,
+  .facturacion-payment-total-row,
+  .facturacion-payment-cedula-actions,
+  .facturacion-discount-auth-actions {
+    justify-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .facturacion-actions-left,
+  .facturacion-payment-actions,
+  .facturacion-payment-cedula-actions,
+  .facturacion-discount-auth-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .facturacion-actions-left .button,
+  .facturacion-preview-button,
+  .facturacion-payment-actions .button,
+  .facturacion-payment-cedula-actions .button,
+  .facturacion-discount-auth-actions .button {
+    width: 100%;
+  }
+
+  .facturacion-grid-shell {
+    max-height: min(42vh, 420px);
+  }
+
+  .facturacion-grid-table {
+    min-width: 920px;
+  }
+
+  .facturacion-payment-dialog,
+  .facturacion-lookup-dialog,
+  .facturacion-line-lookup-dialog,
+  .facturacion-frozen-lookup-dialog,
+  .facturacion-payment-cedula-dialog,
+  .facturacion-discount-auth-dialog {
+    width: calc(100vw - 24px);
+  }
+
+  .facturacion-payment-shell {
+    gap: 14px;
+  }
+
+  .facturacion-payment-table {
+    min-width: 980px;
+  }
+}
+
+/* UI refinement: facturacion payment overflow */
+.facturacion-summary-grid {
+  grid-template-columns:
+    minmax(180px, 0.95fr)
+    minmax(230px, 1.08fr)
+    minmax(230px, 1.08fr)
+    minmax(170px, 0.72fr);
+  gap: 16px 18px;
+  align-items: end;
+}
+
+.facturacion-summary-block,
+.facturacion-summary-total,
+.facturacion-summary-input-row,
+.facturacion-summary-inline-head,
+.facturacion-summary-formula {
+  min-width: 0;
+}
+
+.facturacion-summary-formula input,
+.facturacion-summary-input-row input,
+.facturacion-total-input,
+.facturacion-usd-input {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.facturacion-summary-total {
+  align-content: end;
+  justify-items: end;
+  gap: 8px;
+}
+
+.facturacion-total-caption {
+  width: 100%;
+}
+
+.facturacion-payment-dialog {
+  max-height: min(92vh, 940px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.facturacion-payment-shell {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+  padding-bottom: 4px;
+}
+
+.facturacion-payment-topline {
+  align-items: flex-start;
+}
+
+.facturacion-payment-table-wrap {
+  max-height: min(38vh, 350px);
+  flex-shrink: 0;
+}
+
+.facturacion-payment-table th:nth-child(2),
+.facturacion-payment-table td:nth-child(2) {
+  min-width: 180px;
+}
+
+.facturacion-payment-table th:nth-child(3),
+.facturacion-payment-table td:nth-child(3),
+.facturacion-payment-table th:nth-child(4),
+.facturacion-payment-table td:nth-child(4) {
+  min-width: 150px;
+}
+
+.facturacion-payment-table th:nth-child(5),
+.facturacion-payment-table td:nth-child(5),
+.facturacion-payment-table th:nth-child(6),
+.facturacion-payment-table td:nth-child(6) {
+  min-width: 170px;
+}
+
+.facturacion-payment-table th:nth-child(7),
+.facturacion-payment-table td:nth-child(7) {
+  min-width: 120px;
+}
+
+.facturacion-payment-table th:nth-child(8),
+.facturacion-payment-table td:nth-child(8) {
+  min-width: 160px;
+}
+
+.facturacion-payment-table input,
+.facturacion-payment-table select,
+.facturacion-payment-summary-row input,
+.facturacion-payment-total-row input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.facturacion-payment-bottom {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 16px 20px;
+}
+
+.facturacion-payment-summary {
+  min-width: 0;
+  align-content: start;
+}
+
+.facturacion-payment-summary-row,
+.facturacion-payment-total-row {
+  grid-template-columns: minmax(150px, 1fr) minmax(140px, 160px);
+  min-width: 0;
+}
+
+.facturacion-payment-side-actions {
+  min-width: 0;
+  align-content: start;
+}
+
+@media (max-width: 1040px) {
+  .facturacion-payment-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .facturacion-payment-side-actions {
+    justify-items: stretch;
+  }
+
+  .facturacion-payment-total-row {
+    justify-items: stretch;
+  }
+}
+
+@media (max-width: 760px) {
+  .facturacion-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .facturacion-total-caption,
+  .facturacion-summary-total,
+  .facturacion-usd-row {
+    justify-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .facturacion-payment-table-wrap {
+    max-height: min(34vh, 300px);
+  }
+}
+
+/* UI refinement: impresoras status inline */
+.impresoras-field-status .taxes-status-group {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.impresoras-field-status .taxes-status-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.impresoras-field-status .taxes-status-option span {
+  white-space: nowrap;
+}
+
+
+
+/* UI repair: impuestos */
+.taxes-page {
+  width: min(920px, 100%);
+  margin: 0 auto;
+  gap: 12px;
+}
+
+.taxes-window {
+  overflow: hidden;
+}
+
+.taxes-form {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.taxes-command-bar {
+  margin: 0;
+}
+
+.taxes-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8fd 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.taxes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+  align-items: start;
+}
+
+.taxes-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.taxes-field span,
+.taxes-field legend {
+  color: #263847;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.taxes-field legend {
+  padding: 0;
+}
+
+.taxes-field input,
+.taxes-field select,
+.taxes-field textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(35, 48, 58, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.taxes-field-code input {
+  max-width: 180px;
+  background: #fff7cc;
+  font-weight: 800;
+}
+
+.taxes-field-wide,
+.taxes-field-status {
+  grid-column: 1 / -1;
+}
+
+.taxes-field-percent input {
+  max-width: 220px;
+}
+
+.taxes-field-status {
+  padding: 12px 16px;
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.taxes-status-group {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.taxes-status-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #24384d;
+  font-weight: 700;
+}
+
+.taxes-status-option span {
+  font-size: 0.92rem;
+}
+
+.taxes-lookup-table-wrap {
+  max-height: min(48vh, 420px);
+}
+
+.taxes-lookup-table {
+  min-width: 520px;
+}
+
+@media (max-width: 900px) {
+  .taxes-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .taxes-field {
+    grid-template-columns: 1fr;
+  }
+
+  .taxes-field-code input,
+  .taxes-field-percent input {
+    max-width: none;
+    text-align: left;
+  }
+
+  .taxes-status-group {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
   }
 }

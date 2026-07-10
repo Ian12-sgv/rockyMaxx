@@ -346,7 +346,7 @@ async function probeServer(serverUrl) {
   }
 
   if (response.statusCode < 200 || response.statusCode >= 500) {
-    throw new Error(`El servidor respondiÃ³ con estado ${response.statusCode}.`);
+    throw new Error(`El servidor respondiÃƒÂ³ con estado ${response.statusCode}.`);
   }
 
   return {
@@ -395,10 +395,10 @@ function createMainWindow(serverUrl) {
   });
 
   mainWindow.webContents.on("did-fail-load", (_event, code, description, validatedUrl) => {
-    writeRuntimeLog(`FallÃ³ la carga del cliente. url=${validatedUrl} code=${code} description=${description}`);
+    writeRuntimeLog(`FallÃƒÂ³ la carga del cliente. url=${validatedUrl} code=${code} description=${description}`);
     dialog.showErrorBox(
       "Rocky Maxx Cliente",
-      `No se pudo abrir el servidor configurado.\n\n${description}\n\nSe abrirÃ¡ la configuraciÃ³n del cliente.`,
+      `No se pudo abrir el servidor configurado.\n\n${description}\n\nSe abrirÃƒÂ¡ la configuraciÃƒÂ³n del cliente.`,
     );
     if (mainWindow) {
       mainWindow.close();
@@ -413,7 +413,17 @@ function createMainWindow(serverUrl) {
     mainWindow = null;
   });
 
-  void mainWindow.loadURL(normalizeServerUrl(serverUrl));
+  const normalizedServerUrl = normalizeServerUrl(serverUrl);
+  const cacheBustedUrl = `${normalizedServerUrl}${normalizedServerUrl.includes("?") ? "&" : "?"}desktopReload=${Date.now()}`;
+
+  void mainWindow.webContents.session
+    .clearCache()
+    .catch((error) => {
+      writeRuntimeLog(`No se pudo limpiar la cache del cliente: ${error.message}`);
+    })
+    .finally(() => {
+      void mainWindow.loadURL(cacheBustedUrl);
+    });
 }
 
 async function openConfigWindow(options = {}) {
@@ -613,7 +623,67 @@ function resolvePrinterDeviceName(printers, requestedPrinterName, options = {}) 
 
 
 function buildPrintableHtmlUrl(html) {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(String(html || ""))}`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
+function sanitizePdfFileName(value, fallback = "factura-rocky-maxx") {
+  const normalized = String(value || "")
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized || fallback;
+}
+
+async function exportHtmlPdfDocument(payload = {}) {
+  const html = String(payload?.html || "").trim();
+  if (!html) {
+    throw new Error("No se recibio el contenido HTML para generar el PDF.");
+  }
+
+  const requestedFileName = String(payload?.fileName || payload?.jobTitle || "factura-rocky-maxx").trim();
+  const normalizedFileName = `${sanitizePdfFileName(requestedFileName)}.pdf`.replace(/\.pdf\.pdf$/i, ".pdf");
+  const outputDir = join(app.getPath("downloads"), "Rocky Maxx", "Facturas PDF");
+  const filePath = join(outputDir, normalizedFileName);
+
+  mkdirSync(outputDir, { recursive: true });
+
+  const pdfWindow = new BrowserWindow({
+    show: false,
+    width: 820,
+    height: 1180,
+    autoHideMenuBar: true,
+    backgroundColor: "#ffffff",
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: false,
+    },
+  });
+
+  try {
+    await pdfWindow.loadURL(buildPrintableHtmlUrl(html));
+    const pdfBuffer = await pdfWindow.webContents.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true,
+      margins: {
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+      },
+    });
+    writeFileSync(filePath, pdfBuffer);
+    writeRuntimeLog(`PDF generado para factura en ${filePath}`);
+    return {
+      ok: true,
+      fileName: normalizedFileName,
+      filePath,
+      directory: outputDir,
+    };
+  } finally {
+    if (!pdfWindow.isDestroyed()) {
+      pdfWindow.close();
+    }
+  }
 }
 
 async function executePrintJob(printWindow, options = {}) {
@@ -727,13 +797,33 @@ async function printHtmlDocument(payload = {}) {
         writeRuntimeLog(
           `Impresion completada ${jobTitle}. printer=${result.printerName || attempt.deviceName || '-'} mode=${attempt.mode}`,
         );
-        return {
+        const response = {
           ok: true,
           printerName: result.printerName || attempt.deviceName || resolvedDeviceName || preferredFallbackDeviceName,
           jobTitle,
           copies,
           fallbackMode: attempt.mode,
         };
+        if (payload?.savePdf === true) {
+          try {
+            const pdfResult = await exportHtmlPdfDocument({
+              html,
+              fileName: String(payload?.pdfFileName || "").trim() || `${jobTitle}.pdf`,
+              jobTitle,
+            });
+            response.pdfFilePath = String(pdfResult?.filePath || "").trim();
+            response.pdfFileName = String(pdfResult?.fileName || "").trim();
+            response.pdfSaved = Boolean(pdfResult?.ok);
+            response.pdfError = "";
+          } catch (error) {
+            response.pdfFilePath = "";
+            response.pdfFileName = "";
+            response.pdfSaved = false;
+            response.pdfError = error instanceof Error ? error.message : String(error);
+            writeRuntimeLog(`Fallo guardado PDF ${jobTitle}: ${response.pdfError}`);
+          }
+        }
+        return response;
       } catch (error) {
         lastError = error;
         writeRuntimeLog(
@@ -766,6 +856,10 @@ ipcMain.handle("client-printers:list", async () => {
 
 ipcMain.handle("client-printers:print-html", async (_event, payload) => {
   return printHtmlDocument(payload);
+});
+
+ipcMain.handle("client-printers:export-html-pdf", async (_event, payload) => {
+  return exportHtmlPdfDocument(payload);
 });
 
 ipcMain.handle("client-server:check", async (_event, serverUrl) => {
@@ -850,7 +944,7 @@ app.whenReady().then(async () => {
     await openConfigWindow({
       serverUrl: "",
       errorMessage:
-        "Configura la URL de la PC principal para abrir Rocky Maxx en esta estaciÃ³n de trabajo.",
+        "Configura la URL de la PC principal para abrir Rocky Maxx en esta estaciÃƒÂ³n de trabajo.",
     });
     return;
   }
@@ -871,6 +965,7 @@ app.whenReady().then(async () => {
   dialog.showErrorBox("Rocky Maxx Cliente", `No se pudo iniciar el cliente.\n\n${error.message}`);
   app.quit();
 });
+
 
 
 
