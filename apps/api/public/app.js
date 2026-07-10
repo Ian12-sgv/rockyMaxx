@@ -5304,14 +5304,7 @@ function buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary) {
       saleTimeLabel,
     ),
   );
-  lines.push(
-    ...formatTicketReceiptDualValueLines(
-      "FECHA: ",
-      saleDateLabel,
-      "Tasa: ",
-      formatExchangeRateAmount(summary?.rateBsPerUsd || 0),
-    ),
-  );
+  lines.push(...formatTicketReceiptLabelValueLines("FECHA: ", saleDateLabel));
   lines.push("-".repeat(FACTURACION_TICKET_WIDTH));
   lines.push("");
 
@@ -5399,9 +5392,9 @@ function buildFacturacionInvoiceHtml(venta, draft, paymentRows, summary) {
         row,
         summary?.rateBsPerUsd || 0,
       );
-      const amountLabel = facturacionPaymentMethodUsesUsdAmount(row?.formaPago)
-        ? `${formatTransferAmount(originalAmount)} $ (${formatTransferAmount(amountBs)} BsS)`
-        : `${formatTransferAmount(amountBs)} BsS`;
+      const amountLabel = `${formatTransferAmount(amountBs)} BsS`;
+
+
       lines.push(
         ...formatTicketReceiptTwoColumnLines(
           String(row?.formaPago || ""),
@@ -23289,6 +23282,7 @@ function getSessionStorage() {
     ? window.localStorage
     : window.sessionStorage;
 }
+
 
 
 
