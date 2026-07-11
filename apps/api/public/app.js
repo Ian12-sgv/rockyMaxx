@@ -4308,7 +4308,7 @@ function renderFacturacionClientEditorModal() {
   return `
     <div class="article-lookup-overlay facturacion-client-editor-overlay">
       <button class="article-lookup-backdrop" type="button" data-facturacion-client-editor-close aria-label="Cerrar cliente"></button>
-      <section class="transfer-register-shell adjustment-window clients-window facturacion-client-editor-modal" role="dialog" aria-modal="true" aria-labelledby="facturacion-client-editor-title">
+      <section class="article-lookup-dialog transfer-register-shell adjustment-window clients-window facturacion-client-editor-modal" role="dialog" aria-modal="true" aria-labelledby="facturacion-client-editor-title">
         <div class="adjustment-titlebar" id="facturacion-client-editor-title">Clientes</div>
         <form id="facturacion-client-editor-form" class="adjustment-form clients-form">
           <div class="transfer-command-bar adjustment-command-bar clients-command-bar facturacion-client-editor-command-bar" role="toolbar" aria-label="Acciones de cliente">
