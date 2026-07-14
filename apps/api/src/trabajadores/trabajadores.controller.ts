@@ -37,6 +37,7 @@ export class TrabajadoresController {
   }
 
   @Post()
+  @RequireGroups("admin", "caja")
   async create(@Body() createTrabajadorDto: CreateTrabajadorDto) {
     return {
       trabajador: await this.trabajadoresService.create(createTrabajadorDto),

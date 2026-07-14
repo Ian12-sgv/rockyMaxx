@@ -8,6 +8,18 @@ const statusTitle = document.getElementById("status-title");
 const statusText = document.getElementById("status-text");
 
 let currentServerUrl = "";
+let verifiedServerUrl = "";
+
+function setConnectionActionsEnabled(enabled) {
+  saveButton.disabled = !enabled;
+  openButton.disabled = !enabled;
+}
+
+function invalidateConnectionVerification() {
+  verifiedServerUrl = "";
+  setConnectionActionsEnabled(false);
+  statusCard.hidden = true;
+}
 
 function setFlash(message, type = "info") {
   flash.textContent = message;
@@ -38,6 +50,7 @@ async function hydrate() {
   const config = await window.rockyClient.getConfig();
   currentServerUrl = normalizeUrl(config?.serverUrl || "");
   serverUrlInput.value = currentServerUrl;
+  invalidateConnectionVerification();
 }
 
 window.rockyClient.onState((payload) => {
@@ -60,12 +73,15 @@ checkButton.addEventListener("click", async () => {
 
   const result = await window.rockyClient.checkServer(serverUrl);
   if (!result.ok) {
+    invalidateConnectionVerification();
     setFlash(result.message || "No se pudo conectar al servidor.", "error");
     return;
   }
 
   currentServerUrl = normalizeUrl(result.serverUrl || serverUrl);
+  verifiedServerUrl = currentServerUrl;
   serverUrlInput.value = currentServerUrl;
+  setConnectionActionsEnabled(true);
   setFlash("Servidor encontrado correctamente.", "success");
   const databaseName = result.payload?.database?.database || "Sin datos";
   const port = result.payload?.port || "3000";
@@ -76,6 +92,11 @@ saveButton.addEventListener("click", async () => {
   const serverUrl = normalizeUrl(serverUrlInput.value);
   if (!serverUrl) {
     setFlash("Debes escribir la URL del servidor local.", "error");
+    return;
+  }
+
+  if (serverUrl !== verifiedServerUrl) {
+    setFlash("Debes probar la conexion antes de guardar.", "error");
     return;
   }
 
@@ -91,6 +112,11 @@ openButton.addEventListener("click", async () => {
     return;
   }
 
+  if (serverUrl !== verifiedServerUrl) {
+    setFlash("Debes probar la conexion antes de abrir Rocky Maxx.", "error");
+    return;
+  }
+
   setFlash("Abriendo Rocky Maxx...", "info");
 
   try {
@@ -101,6 +127,13 @@ openButton.addEventListener("click", async () => {
     setStatus("Servidor listo", `Base: ${databaseName}. URL activa: ${currentServerUrl}.`);
   } catch (error) {
     setFlash(error?.message || "No se pudo abrir el servidor.", "error");
+  }
+});
+
+serverUrlInput.addEventListener("input", () => {
+  const serverUrl = normalizeUrl(serverUrlInput.value);
+  if (serverUrl !== verifiedServerUrl) {
+    invalidateConnectionVerification();
   }
 });
 

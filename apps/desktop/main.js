@@ -940,26 +940,12 @@ app.whenReady().then(async () => {
   const config = loadClientConfig();
   writeRuntimeLog(`Arranque del cliente. serverUrl=${config.serverUrl} configured=${config.isConfigured}`);
 
-  if (!config.isConfigured) {
-    await openConfigWindow({
-      serverUrl: "",
-      errorMessage:
-        "Configura la URL de la PC principal para abrir Rocky Maxx en esta estaciÃƒÂ³n de trabajo.",
-    });
-    return;
-  }
-
-  try {
-    await probeServer(config.serverUrl);
-    createMainWindow(config.serverUrl);
-  } catch (error) {
-    writeRuntimeLog(`No se pudo abrir el servidor por defecto: ${error.message}`);
-    await openConfigWindow({
-      serverUrl: config.serverUrl,
-      errorMessage:
-        "No se pudo conectar al servidor configurado. Indica la URL de la PC principal, por ejemplo http://192.168.1.10:3000",
-    });
-  }
+  await openConfigWindow({
+    serverUrl: config.isConfigured ? config.serverUrl : "",
+    errorMessage: config.isConfigured
+      ? "Prueba la conexion con el servidor antes de abrir Rocky Maxx."
+      : "Configura la URL de la PC principal y prueba la conexion antes de abrir Rocky Maxx.",
+  });
 }).catch((error) => {
   writeRuntimeLog(`Fallo el arranque del cliente: ${error.stack || error.message}`);
   dialog.showErrorBox("Rocky Maxx Cliente", `No se pudo iniciar el cliente.\n\n${error.message}`);

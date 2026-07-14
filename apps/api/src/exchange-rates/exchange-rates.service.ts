@@ -100,7 +100,7 @@ export class ExchangeRatesService {
       };
     });
 
-    await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
+    void this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 }).catch(() => undefined);
     const updatedAt = this.getMostRecentDate([detalle?.Fecha, mayor?.Fecha]);
 
     return {

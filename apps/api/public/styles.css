@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg-cream: #f7f0e2;
   --bg-sand: #e7d6b4;
   --bg-paper: rgba(255, 249, 238, 0.92);
@@ -6975,5 +6975,888 @@ button {
     align-items: flex-start;
     flex-direction: column;
     gap: 10px;
+  }
+}
+
+.transfer-bulk-command {
+  border-color: #8cb8aa;
+  background: #edf8f4;
+  color: #185d4e;
+}
+
+.inventory-bulk-dialog {
+  width: min(920px, calc(100vw - 32px));
+  max-height: min(820px, calc(100vh - 32px));
+  overflow: auto;
+}
+
+.inventory-bulk-form,
+.inventory-bulk-jobs {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #d8e2ec;
+  border-radius: 16px;
+  background: #f9fbfd;
+}
+
+.inventory-bulk-toolbar,
+.inventory-bulk-jobs-title,
+.inventory-bulk-job > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.inventory-bulk-toolbar div {
+  display: grid;
+  gap: 4px;
+}
+
+.inventory-bulk-toolbar span,
+.inventory-bulk-jobs-title span,
+.inventory-bulk-job span,
+.inventory-bulk-destination small {
+  color: #64748b;
+}
+
+.inventory-bulk-destinations {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.inventory-bulk-destination {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px;
+  border: 1px solid #d8e2ec;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.inventory-bulk-destination:has(input:checked) {
+  border-color: #2f8977;
+  background: #edf8f4;
+}
+
+.inventory-bulk-destination input {
+  margin-top: 3px;
+}
+
+.inventory-bulk-destination span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.inventory-bulk-destination small {
+  overflow-wrap: anywhere;
+}
+
+.inventory-bulk-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.inventory-bulk-jobs {
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-bulk-job {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(180px, 1.5fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #d8e2ec;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.inventory-bulk-job > div:first-child {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.inventory-bulk-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5edf5;
+}
+
+.inventory-bulk-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2f8977;
+}
+
+.inventory-bulk-status {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #edf2f7;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.inventory-bulk-status-completed {
+  background: #e7f7ef;
+  color: #17643e;
+}
+
+.inventory-bulk-status-error {
+  background: #fdecec;
+  color: #a33131;
+}
+
+.inventory-bulk-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #a33131;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .inventory-bulk-destinations {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-bulk-job {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Viewport fit: facturacion and payment form */
+.desktop-frame:has(.facturacion-page) {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.desktop-workspace:has(.facturacion-page) {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 6px 10px 8px;
+}
+
+.desktop-workspace:has(.facturacion-page) > .flash {
+  flex: 0 0 auto;
+  margin-bottom: 6px;
+}
+
+.facturacion-page {
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 5px;
+}
+
+.facturacion-page .modern-breadcrumb {
+  min-height: 18px;
+  font-size: 0.8rem;
+}
+
+.facturacion-window {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.facturacion-titlebar {
+  min-height: 26px;
+  padding: 3px 8px;
+}
+
+.facturacion-form {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  overflow: hidden;
+}
+
+.facturacion-header-panel {
+  flex: 0 0 auto;
+  gap: 5px;
+  padding: 7px 9px;
+}
+
+.facturacion-field-row {
+  gap: 7px;
+}
+
+.facturacion-code-input,
+.facturacion-name-input,
+.facturacion-side-input,
+.facturacion-lookup-button,
+.facturacion-grid-table input,
+.facturacion-payment-table input,
+.facturacion-payment-table select,
+.facturacion-payment-total-row input,
+.facturacion-payment-summary-row input,
+.facturacion-usd-input,
+.facturacion-total-input,
+.facturacion-small-input {
+  min-height: 32px;
+}
+
+.facturacion-checkbox-row {
+  gap: 7px;
+  font-size: 0.82rem;
+}
+
+.facturacion-form > .muted {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+}
+
+.facturacion-lines-panel {
+  min-height: 94px;
+  flex: 1 1 auto;
+}
+
+.facturacion-grid-shell {
+  height: 100%;
+  max-height: none;
+}
+
+.facturacion-grid-table th {
+  padding: 5px 7px;
+  font-size: 0.78rem;
+}
+
+.facturacion-grid-table td input {
+  min-height: 31px;
+}
+
+.facturacion-summary-panel {
+  flex: 0 0 auto;
+  gap: 5px;
+  padding: 7px 9px;
+}
+
+.facturacion-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px 10px;
+}
+
+.facturacion-summary-block,
+.facturacion-summary-total {
+  gap: 4px;
+}
+
+.facturacion-summary-input-row,
+.facturacion-summary-inline-head,
+.facturacion-summary-formula {
+  gap: 6px;
+}
+
+.facturacion-summary-label,
+.facturacion-total-caption span,
+.facturacion-usd-row > span {
+  font-size: 0.8rem;
+}
+
+.facturacion-summary-total {
+  gap: 3px;
+}
+
+.facturacion-total-caption {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.facturacion-usd-row {
+  gap: 8px;
+}
+
+.facturacion-summary-panel > .muted {
+  font-size: 0.76rem;
+  line-height: 1.2;
+}
+
+.facturacion-actions-panel {
+  flex: 0 0 auto;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 7px;
+  padding-top: 0;
+}
+
+.facturacion-actions-left {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.facturacion-actions-panel .button {
+  min-height: 32px;
+  padding: 0 13px;
+  white-space: nowrap;
+}
+
+.facturacion-preview-button {
+  min-width: 170px;
+}
+
+.facturacion-payment-overlay {
+  padding: 6px;
+}
+
+.facturacion-payment-dialog {
+  width: min(1240px, calc(100vw - 12px));
+  height: calc(100dvh - 12px);
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.facturacion-payment-header {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.facturacion-payment-header .article-lookup-header-copy {
+  gap: 1px;
+}
+
+.facturacion-payment-header .article-lookup-header-copy h3 {
+  font-size: 1.22rem;
+}
+
+.facturacion-payment-header .article-lookup-header-copy p,
+.facturacion-payment-dialog > .muted {
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.facturacion-payment-dialog > .muted {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 3px 7px;
+}
+
+.facturacion-payment-shell {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.facturacion-payment-topline {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.facturacion-payment-rate span,
+.facturacion-payment-estimated span {
+  font-size: 0.82rem;
+}
+
+.facturacion-payment-rate strong,
+.facturacion-payment-estimated strong {
+  font-size: 0.9rem;
+}
+
+.facturacion-payment-table-wrap {
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  overflow: auto;
+}
+
+.facturacion-payment-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.facturacion-payment-table th,
+.facturacion-payment-table td {
+  padding: 3px 4px;
+}
+
+.facturacion-payment-table th {
+  font-size: 0.72rem;
+}
+
+.facturacion-payment-table th:nth-child(1),
+.facturacion-payment-table td:nth-child(1) {
+  width: 3.5%;
+  min-width: 28px;
+}
+
+.facturacion-payment-table th:nth-child(2),
+.facturacion-payment-table td:nth-child(2) {
+  width: 16.5%;
+  min-width: 0;
+}
+
+.facturacion-payment-table th:nth-child(3),
+.facturacion-payment-table td:nth-child(3),
+.facturacion-payment-table th:nth-child(4),
+.facturacion-payment-table td:nth-child(4) {
+  width: 14%;
+  min-width: 0;
+}
+
+.facturacion-payment-table th:nth-child(5),
+.facturacion-payment-table td:nth-child(5) {
+  width: 15%;
+  min-width: 0;
+}
+
+.facturacion-payment-table th:nth-child(6),
+.facturacion-payment-table td:nth-child(6) {
+  width: 14.5%;
+  min-width: 0;
+}
+
+.facturacion-payment-table th:nth-child(7),
+.facturacion-payment-table td:nth-child(7) {
+  width: 10%;
+  min-width: 0;
+}
+
+.facturacion-payment-table th:nth-child(8),
+.facturacion-payment-table td:nth-child(8) {
+  width: 12.5%;
+  min-width: 0;
+}
+
+.facturacion-payment-table input,
+.facturacion-payment-table select {
+  min-height: 31px;
+  padding: 0 6px;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+}
+
+.facturacion-payment-method-select {
+  min-width: 0;
+}
+
+.facturacion-payment-bottom {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 270px);
+  gap: 8px 14px;
+  align-items: end;
+}
+
+.facturacion-payment-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px 10px;
+}
+
+.facturacion-payment-summary-row,
+.facturacion-payment-total-row {
+  grid-template-columns: minmax(92px, 1fr) minmax(98px, 132px);
+  gap: 6px;
+}
+
+.facturacion-payment-summary-row > span,
+.facturacion-payment-total-row > span {
+  font-size: 0.78rem;
+}
+
+.facturacion-payment-summary-row input,
+.facturacion-payment-total-row input {
+  min-height: 31px;
+  padding: 0 7px;
+}
+
+.facturacion-payment-side-actions {
+  gap: 7px;
+}
+
+.facturacion-payment-actions {
+  flex-wrap: nowrap;
+  gap: 7px;
+}
+
+.facturacion-payment-actions .button {
+  min-height: 34px;
+  padding: 0 14px;
+}
+
+@media (max-width: 900px) {
+  .facturacion-titlebar,
+  .facturacion-actions-panel,
+  .facturacion-payment-topline {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .facturacion-payment-bottom {
+    grid-template-columns: minmax(0, 1fr) 210px;
+  }
+
+  .facturacion-payment-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .facturacion-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .facturacion-actions-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .facturacion-actions-left {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .facturacion-actions-left .button,
+  .facturacion-preview-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .facturacion-payment-table {
+    min-width: 740px;
+  }
+
+  .facturacion-payment-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .facturacion-payment-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .facturacion-payment-side-actions,
+  .facturacion-payment-total-row {
+    justify-items: stretch;
+  }
+}
+
+@media (max-height: 680px) {
+  .facturacion-titlebar-hints {
+    display: none;
+  }
+
+  .facturacion-header-panel {
+    padding-block: 5px;
+  }
+
+  .facturacion-lines-panel {
+    min-height: 72px;
+  }
+
+  .facturacion-payment-header .article-lookup-header-copy p {
+    display: none;
+  }
+
+  .facturacion-payment-table input,
+  .facturacion-payment-table select {
+    min-height: 28px;
+  }
+}
+
+/* UI repair: trabajadores */
+.workers-page {
+  width: min(1140px, 100%);
+  margin: 0 auto;
+  gap: 12px;
+}
+
+.workers-window {
+  overflow: hidden;
+}
+
+.workers-form {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.workers-command-bar {
+  margin: 0;
+}
+
+.workers-panel,
+.workers-history-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8fd 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.workers-history-panel {
+  background: #ffffff;
+}
+
+.workers-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px 16px;
+  align-items: start;
+}
+
+.workers-field {
+  grid-column: span 4;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workers-field > span {
+  color: #263847;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.workers-field input,
+.workers-field select,
+.workers-field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(35, 48, 58, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.workers-field textarea {
+  min-height: 78px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.workers-field-cedula {
+  grid-column: span 3;
+}
+
+.workers-field-code {
+  grid-column: span 2;
+}
+
+.workers-field-wide:not(.workers-field-address) {
+  grid-column: span 7;
+}
+
+.workers-field-cargo {
+  grid-column: span 6;
+}
+
+.workers-grid > .workers-field:nth-of-type(5),
+.workers-grid > .workers-field:nth-of-type(6) {
+  grid-column: span 3;
+}
+
+.workers-field-address {
+  grid-column: 1 / -1;
+}
+
+.workers-grid > .workers-field:nth-of-type(8),
+.workers-grid > .workers-field:nth-of-type(9) {
+  grid-column: span 6;
+}
+
+.workers-field-cedula input {
+  background: #fff7cc;
+  font-weight: 800;
+}
+
+.workers-field-code input {
+  background: #eef6ff;
+  font-weight: 800;
+  text-align: center;
+}
+
+.workers-status-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  padding: 12px 16px;
+  border: 1px solid rgba(38, 73, 111, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.workers-status-row legend {
+  padding: 0;
+  color: #24384d;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.workers-status-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #24384d;
+  font-weight: 700;
+}
+
+.workers-history-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.workers-history-head h2 {
+  margin: 0;
+  color: #1f3245;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.workers-history-head p {
+  margin: 4px 0 0;
+  color: #617486;
+  font-size: 0.88rem;
+}
+
+.workers-history-actions {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.workers-history-actions .field {
+  flex: 1 1 300px;
+  min-width: 260px;
+}
+
+.workers-history-actions .field span {
+  color: #5a7084;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.workers-table-wrap {
+  max-height: min(46vh, 420px);
+}
+
+.workers-table-wrap .data-table {
+  min-width: 900px;
+}
+
+.workers-table-wrap .data-table th,
+.workers-table-wrap .data-table td {
+  padding: 11px 10px;
+  vertical-align: middle;
+}
+
+.workers-table-wrap .sucursal-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+@media (max-width: 960px) {
+  .workers-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workers-field,
+  .workers-field-cedula,
+  .workers-field-code,
+  .workers-field-wide:not(.workers-field-address),
+  .workers-field-cargo,
+  .workers-grid > .workers-field:nth-of-type(5),
+  .workers-grid > .workers-field:nth-of-type(6),
+  .workers-grid > .workers-field:nth-of-type(8),
+  .workers-grid > .workers-field:nth-of-type(9) {
+    grid-column: span 1;
+  }
+
+  .workers-field-address,
+  .workers-status-row {
+    grid-column: 1 / -1;
+  }
+
+  .workers-history-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workers-history-actions {
+    width: 100%;
+  }
+
+  .workers-history-actions .field {
+    flex: 1 1 240px;
+  }
+}
+
+@media (max-width: 640px) {
+  .workers-form {
+    padding: 10px;
+  }
+
+  .workers-panel,
+  .workers-history-panel {
+    padding: 12px;
+  }
+
+  .workers-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workers-field,
+  .workers-field-cedula,
+  .workers-field-code,
+  .workers-field-wide:not(.workers-field-address),
+  .workers-field-cargo,
+  .workers-field-address,
+  .workers-grid > .workers-field:nth-of-type(5),
+  .workers-grid > .workers-field:nth-of-type(6),
+  .workers-grid > .workers-field:nth-of-type(8),
+  .workers-grid > .workers-field:nth-of-type(9),
+  .workers-status-row {
+    grid-column: 1;
+  }
+
+  .workers-field-code input {
+    text-align: left;
+  }
+
+  .workers-status-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .workers-history-actions .field,
+  .workers-history-actions .button {
+    width: 100%;
+    min-width: 0;
   }
 }

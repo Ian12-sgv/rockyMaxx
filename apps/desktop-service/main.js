@@ -210,6 +210,26 @@ function syncWindowsStartupShortcut(enabled) {
   }
 }
 
+function removeLegacyWindowsAutoLaunchEntries() {
+  if (!supportsWindowsAutoLaunch()) {
+    return;
+  }
+
+  const legacyNames = ["rockyPrueba servidor"];
+  for (const legacyName of legacyNames) {
+    execFile(
+      "reg.exe",
+      ["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", legacyName, "/f"],
+      { windowsHide: true },
+      (error) => {
+        if (!error) {
+          writeRuntimeLog(`Autoarranque anterior eliminado: ${legacyName}.`);
+        }
+      },
+    );
+  }
+}
+
 function syncWindowsAutoLaunch(enabled) {
   if (!supportsWindowsAutoLaunch()) {
     return false;
@@ -217,6 +237,7 @@ function syncWindowsAutoLaunch(enabled) {
 
   const openAtLogin = Boolean(enabled);
   let loginItemUpdated = false;
+  removeLegacyWindowsAutoLaunchEntries();
   const startupScriptUpdated = syncWindowsStartupShortcut(openAtLogin);
 
   try {
@@ -1115,7 +1136,7 @@ app.on("before-quit", () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" && !shouldKeepRunningInBackground()) {
     app.quit();
   }
 });

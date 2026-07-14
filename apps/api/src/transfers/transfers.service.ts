@@ -9,6 +9,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Prisma, type Inventario, type Sucursales } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 
 import { UserView } from "../users/user-view.util";
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
@@ -36,6 +37,12 @@ const TRANSFER_SYNC_STATUS_ERROR = "ERROR";
 const DEFAULT_TRANSFER_SYNC_AUTO_RETRY_INTERVAL_MS = 30_000;
 const DEFAULT_TRANSFER_SYNC_AUTO_RETRY_STARTUP_DELAY_MS = 5_000;
 const DEFAULT_TRANSFER_SYNC_AUTO_RETRY_LIMIT = 25;
+const INVENTORY_BULK_STATUS_PENDING = "PENDING";
+const INVENTORY_BULK_STATUS_RUNNING = "RUNNING";
+const INVENTORY_BULK_STATUS_COMPLETED = "COMPLETED";
+const INVENTORY_BULK_STATUS_ERROR = "ERROR";
+const INVENTORY_BULK_BATCH_SIZE = 25;
+const INVENTORY_BULK_RETRY_INTERVAL_MS = 30_000;
 const ZERO = new Prisma.Decimal(0);
 
 type TransferTransactionClient = Prisma.TransactionClient;
@@ -236,6 +243,24 @@ type TransferSyncInboxRow = {
   LastError: string | null;
 };
 
+type InventoryBulkJobRow = {
+  JobId: string;
+  DestinationNodeId: string;
+  DestinationCode: string;
+  DestinationName: string | null;
+  ApiUrl: string;
+  Status: string;
+  TotalItems: number;
+  ProcessedItems: number;
+  CursorCodigoBarra: string | null;
+  RequestedBy: string;
+  CreatedAt: Date;
+  UpdatedAt: Date;
+  CompletedAt: Date | null;
+  Attempts: number;
+  LastError: string | null;
+};
+
 type TransferCorrectionItemRow = {
   Numero: number;
   Item: number;
@@ -272,6 +297,8 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   private transferSyncAutoRetryTimer: ReturnType<typeof setInterval> | null = null;
   private transferSyncAutoRetryStartupTimer: ReturnType<typeof setTimeout> | null = null;
   private transferSyncAutoRetryInProgress = false;
+  private inventoryBulkRetryTimer: ReturnType<typeof setInterval> | null = null;
+  private inventoryBulkProcessing = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -279,12 +306,15 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     private readonly mirrorSyncService: MirrorSyncService,
   ) {}
 
-  onModuleInit() {
+  async onModuleInit() {
+    await this.ensureInventoryBulkSchema();
     this.startTransferSyncAutoRetry();
+    this.startInventoryBulkRetry();
   }
 
   onModuleDestroy() {
     this.stopTransferSyncAutoRetry();
+    this.stopInventoryBulkRetry();
   }
 
   async getMetadata() {
@@ -1065,6 +1095,318 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       transferencia,
       sync,
       mirrorSync,
+    };
+  }
+
+  async getInventoryBulkStatus() {
+    await this.ensureInventoryBulkSchema();
+    const [nodes, jobs, totalItems] = await Promise.all([
+      this.prisma.$queryRawUnsafe<TransferSyncNodeRow[]>(`
+        select "NodeId", "SucursalCodigo", "Nombre", "Tipo", "ApiUrl", "CreatedAt", "UpdatedAt", "LastSeenAt"
+        from dbo."SYNC_NODES"
+        order by "SucursalCodigo" asc, "NodeId" asc
+      `),
+      this.getInventoryBulkJobs(),
+      this.prisma.inventario.count(),
+    ]);
+
+    return {
+      totalItems,
+      destinations: nodes
+        .filter((node) => {
+          const nodeId = this.normalizeSyncNodeId(node.NodeId);
+          return Boolean(node.ApiUrl) && nodeId !== DEFAULT_ORIGIN_CODE && nodeId !== "BODEGA001";
+        })
+        .map((node) => ({
+          ...this.toTransferSyncNodeView(node),
+          apiUrl: this.resolveInventoryBulkNodeApiUrl(node),
+        })),
+      jobs: jobs.map((job) => this.toInventoryBulkJobView(job)),
+    };
+  }
+
+  async createInventoryBulkTransfer(body: Record<string, unknown>, user: UserView) {
+    const isSystem = user.grupos.some(
+      (group) => String(group.codigo || "").trim().toUpperCase() === "SISTEMA",
+    );
+    if (!isSystem) {
+      throw new ConflictException("Solo el usuario sistema puede ejecutar la transferencia masiva de inventario.");
+    }
+
+    await this.ensureInventoryBulkSchema();
+    const apiPort = Number(this.configService.get<string | number>("API_PORT", 3000));
+    if (apiPort !== 3000) {
+      throw new ConflictException("La transferencia masiva solo puede ejecutarse desde la bodega central.");
+    }
+    const requestedIds = Array.isArray(body.destinationNodeIds)
+      ? Array.from(new Set(body.destinationNodeIds.map((value) => this.normalizeSyncNodeId(value))))
+      : [];
+    if (requestedIds.length === 0) {
+      throw new BadRequestException("Debes seleccionar al menos una tienda o bodega destino.");
+    }
+
+    const nodes = await this.prisma.$queryRawUnsafe<TransferSyncNodeRow[]>(`
+      select "NodeId", "SucursalCodigo", "Nombre", "Tipo", "ApiUrl", "CreatedAt", "UpdatedAt", "LastSeenAt"
+      from dbo."SYNC_NODES"
+      order by "SucursalCodigo" asc, "NodeId" asc
+    `);
+    const selectedNodes = requestedIds.map((nodeId) => {
+      const node = nodes.find((item) => this.normalizeSyncNodeId(item.NodeId) === nodeId);
+      if (!node) {
+        throw new NotFoundException(`No existe el nodo destino ${nodeId}.`);
+      }
+      if ([DEFAULT_ORIGIN_CODE, "BODEGA001"].includes(nodeId)) {
+        throw new BadRequestException("La bodega central no puede seleccionarse como destino.");
+      }
+      const apiUrl = this.resolveInventoryBulkNodeApiUrl(node);
+      if (!apiUrl) {
+        throw new ConflictException(`El nodo ${nodeId} no tiene una URL VPS configurada.`);
+      }
+      return { ...node, ApiUrl: apiUrl };
+    });
+
+    const activeJobs = await this.getInventoryBulkJobs([INVENTORY_BULK_STATUS_PENDING, INVENTORY_BULK_STATUS_RUNNING]);
+    const activeNodeIds = new Set(activeJobs.map((job) => this.normalizeSyncNodeId(job.DestinationNodeId)));
+    const duplicated = selectedNodes.find((node) => activeNodeIds.has(this.normalizeSyncNodeId(node.NodeId)));
+    if (duplicated) {
+      throw new ConflictException(`Ya existe una transferencia masiva activa para ${duplicated.Nombre || duplicated.NodeId}.`);
+    }
+
+    const totalItems = await this.prisma.inventario.count();
+    const jobs: InventoryBulkJobRow[] = [];
+    for (const node of selectedNodes) {
+      const jobId = randomUUID();
+      const rows = await this.prisma.$queryRawUnsafe<InventoryBulkJobRow[]>(
+        `
+          insert into dbo."INVENTORY_BULK_SYNC_JOBS"
+            ("JobId", "DestinationNodeId", "DestinationCode", "DestinationName", "ApiUrl", "Status",
+             "TotalItems", "ProcessedItems", "CursorCodigoBarra", "RequestedBy", "CreatedAt", "UpdatedAt",
+             "CompletedAt", "Attempts", "LastError")
+          values ($1, $2, $3, $4, $5, $6, $7, 0, null, $8, now(), now(), null, 0, null)
+          returning *
+        `,
+        jobId,
+        node.NodeId,
+        node.SucursalCodigo,
+        node.Nombre,
+        node.ApiUrl,
+        INVENTORY_BULK_STATUS_PENDING,
+        totalItems,
+        user.codUsuario,
+      );
+      jobs.push(rows[0]);
+    }
+
+    void this.processInventoryBulkJobs();
+    return {
+      queued: jobs.length,
+      totalItems,
+      jobs: jobs.map((job) => this.toInventoryBulkJobView(job)),
+      message: "Transferencia masiva encolada. El servicio continuara enviando los lotes al VPS.",
+    };
+  }
+
+  async importInventoryBulkBatch(body: Record<string, unknown>) {
+    return this.mirrorSyncService.importInventorySnapshotBatch(body.items);
+  }
+
+  private async ensureInventoryBulkSchema() {
+    await this.ensureTransferSyncSchema();
+    await this.prisma.$executeRawUnsafe(`
+      create table if not exists dbo."INVENTORY_BULK_SYNC_JOBS" (
+        "JobId" varchar(80) primary key,
+        "DestinationNodeId" text not null,
+        "DestinationCode" varchar(30) not null,
+        "DestinationName" varchar(120),
+        "ApiUrl" varchar(240) not null,
+        "Status" varchar(20) not null default 'PENDING',
+        "TotalItems" integer not null default 0,
+        "ProcessedItems" integer not null default 0,
+        "CursorCodigoBarra" varchar(30),
+        "RequestedBy" varchar(30) not null,
+        "CreatedAt" timestamptz not null default now(),
+        "UpdatedAt" timestamptz not null default now(),
+        "CompletedAt" timestamptz,
+        "Attempts" integer not null default 0,
+        "LastError" text
+      )
+    `);
+    await this.prisma.$executeRawUnsafe(`
+      create index if not exists "IX_INVENTORY_BULK_SYNC_JOBS_Status"
+      on dbo."INVENTORY_BULK_SYNC_JOBS" ("Status", "CreatedAt")
+    `);
+  }
+
+  private startInventoryBulkRetry() {
+    if (this.inventoryBulkRetryTimer) {
+      return;
+    }
+    setTimeout(() => void this.processInventoryBulkJobs(), 2_000);
+    this.inventoryBulkRetryTimer = setInterval(
+      () => void this.processInventoryBulkJobs(),
+      INVENTORY_BULK_RETRY_INTERVAL_MS,
+    );
+  }
+
+  private stopInventoryBulkRetry() {
+    if (this.inventoryBulkRetryTimer) {
+      clearInterval(this.inventoryBulkRetryTimer);
+      this.inventoryBulkRetryTimer = null;
+    }
+  }
+
+  private async processInventoryBulkJobs() {
+    if (this.inventoryBulkProcessing) {
+      return;
+    }
+    this.inventoryBulkProcessing = true;
+    try {
+      await this.ensureInventoryBulkSchema();
+      const jobs = await this.getInventoryBulkJobs([INVENTORY_BULK_STATUS_PENDING, INVENTORY_BULK_STATUS_RUNNING]);
+      await Promise.all(jobs.slice(0, 12).map((job) => this.processInventoryBulkJob(job)));
+    } catch (error) {
+      this.logger.warn(`Fallo el ciclo de transferencia masiva: ${this.extractSyncErrorMessage(error)}`);
+    } finally {
+      this.inventoryBulkProcessing = false;
+    }
+  }
+
+  private async processInventoryBulkJob(job: InventoryBulkJobRow) {
+    await this.prisma.$executeRawUnsafe(
+      `update dbo."INVENTORY_BULK_SYNC_JOBS" set "Status" = $2, "UpdatedAt" = now() where "JobId" = $1`,
+      job.JobId,
+      INVENTORY_BULK_STATUS_RUNNING,
+    );
+
+    let cursor = job.CursorCodigoBarra;
+    let processed = job.ProcessedItems;
+    try {
+      while (true) {
+        const batch = await this.mirrorSyncService.getInventorySnapshotBatch({
+          afterCodigoBarra: cursor,
+          take: INVENTORY_BULK_BATCH_SIZE,
+          jobId: job.JobId,
+        });
+        if (batch.items.length > 0) {
+          await this.postInventoryBulkBatch(job.ApiUrl, job.JobId, batch.items);
+          processed += batch.items.length;
+          cursor = batch.lastCodigoBarra;
+        }
+
+        const completed = batch.completed;
+        await this.prisma.$executeRawUnsafe(
+          `
+            update dbo."INVENTORY_BULK_SYNC_JOBS"
+            set "Status" = $2, "ProcessedItems" = $3, "CursorCodigoBarra" = $4,
+                "UpdatedAt" = now(), "CompletedAt" = case when $2 = $5 then now() else null end,
+                "LastError" = null
+            where "JobId" = $1
+          `,
+          job.JobId,
+          completed ? INVENTORY_BULK_STATUS_COMPLETED : INVENTORY_BULK_STATUS_RUNNING,
+          processed,
+          cursor || null,
+          INVENTORY_BULK_STATUS_COMPLETED,
+        );
+        if (completed) {
+          break;
+        }
+      }
+    } catch (error) {
+      const message = this.extractSyncErrorMessage(error);
+      await this.prisma.$executeRawUnsafe(
+        `
+          update dbo."INVENTORY_BULK_SYNC_JOBS"
+          set "Status" = case when "Attempts" + 1 >= 10 then $2 else $3 end,
+              "ProcessedItems" = $4, "CursorCodigoBarra" = $5, "UpdatedAt" = now(),
+              "Attempts" = "Attempts" + 1, "LastError" = $6
+          where "JobId" = $1
+        `,
+        job.JobId,
+        INVENTORY_BULK_STATUS_ERROR,
+        INVENTORY_BULK_STATUS_PENDING,
+        processed,
+        cursor || null,
+        message,
+      );
+      this.logger.warn(`Transferencia masiva ${job.JobId} pendiente: ${message}`);
+    }
+  }
+
+  private resolveInventoryBulkNodeApiUrl(node: TransferSyncNodeRow) {
+    const configuredBase = this.normalizeOptionalApiUrl(
+      this.configService.get<string>("TRANSFER_SYNC_REMOTE_API_URL", "") ||
+        this.configService.get<string>("MIRROR_SYNC_REMOTE_API_URL", ""),
+    );
+    if (configuredBase) {
+      const parsed = new URL(configuredBase);
+      parsed.pathname = parsed.pathname.replace(/\/(?:tienda|bodega)\d{3}\/?$/i, "").replace(/\/$/, "");
+      const root = parsed.toString().replace(/\/$/, "");
+      const nodeId = this.normalizeSyncNodeId(node.NodeId);
+      const tienda = nodeId.match(/^TIENDA(\d+)$/);
+      if (tienda) {
+        return `${root}/tienda${tienda[1].padStart(3, "0")}`;
+      }
+      const bodega = nodeId.match(/^BODEGA(\d+)$/);
+      if (bodega) {
+        return `${root}/bodega${bodega[1].padStart(3, "0")}`;
+      }
+    }
+    return this.normalizeOptionalApiUrl(node.ApiUrl);
+  }
+
+  private async postInventoryBulkBatch(apiUrl: string, jobId: string, items: unknown[]) {
+    const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
+    const token = await this.loginRemoteSyncNode(baseUrl);
+    const response = await fetch(`${baseUrl}/api/transfers/inventory-bulk/import`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ jobId, items }),
+    });
+    const responseBody = await this.readRemoteJson(response);
+    if (!response.ok) {
+      throw new ConflictException(
+        `El VPS rechazo el lote masivo: ${this.formatRemoteError(responseBody, response.status)}`,
+      );
+    }
+    return responseBody;
+  }
+
+  private async getInventoryBulkJobs(statuses: string[] = []) {
+    if (statuses.length === 0) {
+      return this.prisma.$queryRawUnsafe<InventoryBulkJobRow[]>(`
+        select * from dbo."INVENTORY_BULK_SYNC_JOBS" order by "CreatedAt" desc limit 50
+      `);
+    }
+    return this.prisma.$queryRawUnsafe<InventoryBulkJobRow[]>(
+      `
+        select * from dbo."INVENTORY_BULK_SYNC_JOBS"
+        where "Status" = any($1::varchar[])
+        order by "CreatedAt" asc
+      `,
+      statuses,
+    );
+  }
+
+  private toInventoryBulkJobView(job: InventoryBulkJobRow) {
+    return {
+      jobId: job.JobId,
+      destinationNodeId: job.DestinationNodeId,
+      destinationCode: job.DestinationCode,
+      destinationName: job.DestinationName,
+      apiUrl: job.ApiUrl,
+      status: job.Status,
+      totalItems: job.TotalItems,
+      processedItems: job.ProcessedItems,
+      requestedBy: job.RequestedBy,
+      createdAt: job.CreatedAt,
+      updatedAt: job.UpdatedAt,
+      completedAt: job.CompletedAt,
+      attempts: job.Attempts,
+      lastError: job.LastError,
     };
   }
 

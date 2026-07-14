@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { mkdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Prisma, type DiarioCaja, type Inventario } from "@prisma/client";
 import { ConfigService } from "@nestjs/config";
 
@@ -13,6 +17,7 @@ import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { UserView } from "../users/user-view.util";
 import { CreateFacturacionSaleDto, FacturacionPaymentRowDto, FacturacionSaleItemDto } from "./dto/create-facturacion-sale.dto";
+import { buildFacturacionInvoicePdf, type FacturacionInvoicePdfPayload } from "./facturacion-invoice-pdf.util";
 
 const ZERO = new Prisma.Decimal(0);
 const ONE = new Prisma.Decimal(1);
@@ -86,8 +91,17 @@ type CompanyPrintProfile = {
   companyTaxId: string;
 };
 
+class DuplicateFacturacionRequestError extends Error {
+  constructor(readonly requestId: string) {
+    super(`La solicitud de facturacion ${requestId} ya esta siendo procesada.`);
+  }
+}
+
 @Injectable()
 export class FacturacionService {
+  private readonly logger = new Logger(FacturacionService.name);
+  private facturacionInfrastructurePromise: Promise<void> | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
@@ -100,9 +114,30 @@ export class FacturacionService {
       throw new BadRequestException("No se pudo identificar el usuario autenticado.");
     }
 
-    const result = await this.prisma.$transaction(
-      async (tx) => {
-        const cajaActiva = await this.findActiveCajaSession(tx);
+    const requestId = this.normalizeFacturacionRequestId(payload.requestId);
+    await this.ensureFacturacionInfrastructure();
+    if (requestId) {
+      const cachedResult = await this.findFacturacionRequestResult(requestId);
+      if (cachedResult) {
+        return this.finalizeFacturacionSale(cachedResult);
+      }
+    }
+
+    let result;
+    try {
+      result = await this.prisma.$transaction(
+        async (tx) => {
+          if (requestId) {
+            const claimed = await tx.$executeRawUnsafe(
+              `INSERT INTO "dbo"."FACTURACION_IDEMPOTENCIA" ("RequestId", "RespuestaJson") VALUES ($1, NULL) ON CONFLICT ("RequestId") DO NOTHING`,
+              requestId,
+            );
+            if (claimed === 0) {
+              throw new DuplicateFacturacionRequestError(requestId);
+            }
+          }
+
+          const cajaActiva = await this.findActiveCajaSession(tx);
         const cliente = await this.resolveCliente(tx, payload.clienteCodigo);
         const vendedor = await this.resolveTrabajador(tx, payload.vendedorCedula);
         const activeTax = await this.findActiveTax(tx);
@@ -293,7 +328,7 @@ export class FacturacionService {
           cajaActiva.Serie,
         );
 
-        return {
+        const saleResult = {
           numeroFactura: numeroFactura.toString(),
           serie: cajaActiva.Serie,
           fecha: saleDate,
@@ -323,13 +358,123 @@ export class FacturacionService {
           formatoContingenciaId: printerConfig.formatoContingenciaId,
           formatoContingenciaArchivo: printerConfig.formatoContingenciaArchivo,
           items: normalizedItems.length,
+          totalUnidades: normalizedItems.reduce((sum, item) => sum.plus(item.cantidad), ZERO).toString(),
+          lineas: normalizedItems.map((item) => {
+            const inventory = inventoryByCode.get(item.codigoBarra);
+            return {
+              codigoBarra: item.codigoBarra,
+              nombre: String(inventory?.Nombre || item.codigoBarra).trim(),
+              cantidad: item.cantidad.toString(),
+              precio: item.precio.toString(),
+              subtotal: item.subtotal.toString(),
+              descuentoPorcentaje: (discountOverride.active ? discountOverride.percent : item.descuentoPorcentaje).toString(),
+            };
+          }),
+          pagos: paymentBreakdown.map((payment) => ({
+            label: payment.label,
+            totalVed: payment.totalVed,
+            totalUsd: payment.totalUsd,
+          })),
         };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+
+        if (requestId) {
+          await tx.$executeRawUnsafe(
+            `UPDATE "dbo"."FACTURACION_IDEMPOTENCIA" SET "RespuestaJson" = $2 WHERE "RequestId" = $1`,
+            requestId,
+            JSON.stringify(saleResult),
+          );
+        }
+
+        return saleResult;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (!(error instanceof DuplicateFacturacionRequestError) || !requestId) {
+        throw error;
+      }
+
+      const cachedResult = await this.waitForFacturacionRequestResult(requestId);
+      if (!cachedResult) {
+        throw new ConflictException("La factura sigue procesandose. Intenta nuevamente en unos segundos.");
+      }
+      result = cachedResult;
+    }
 
     await this.mirrorSyncService.pushPendingMirrorSync({ limit: 25 });
-    return result;
+    return this.finalizeFacturacionSale(result);
+  }
+
+  private normalizeFacturacionRequestId(value: string | undefined) {
+    const normalized = String(value || "").trim();
+    return normalized && /^[a-zA-Z0-9_-]{8,64}$/.test(normalized) ? normalized : "";
+  }
+
+  private async ensureFacturacionInfrastructure() {
+    if (!this.facturacionInfrastructurePromise) {
+      this.facturacionInfrastructurePromise = this.prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "dbo"."FACTURACION_IDEMPOTENCIA" (
+          "RequestId" VARCHAR(64) PRIMARY KEY,
+          "RespuestaJson" TEXT NULL,
+          "CreadoEn" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `).then(() => undefined).catch((error) => {
+        this.facturacionInfrastructurePromise = null;
+        throw error;
+      });
+    }
+    await this.facturacionInfrastructurePromise;
+  }
+
+  private async findFacturacionRequestResult(requestId: string) {
+    const rows = await this.prisma.$queryRawUnsafe<Array<{ RespuestaJson: string | null }>>(
+      `SELECT "RespuestaJson" FROM "dbo"."FACTURACION_IDEMPOTENCIA" WHERE "RequestId" = $1 LIMIT 1`,
+      requestId,
+    );
+    const serialized = String(rows[0]?.RespuestaJson || "").trim();
+    return serialized ? JSON.parse(serialized) : null;
+  }
+
+  private async waitForFacturacionRequestResult(requestId: string) {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const result = await this.findFacturacionRequestResult(requestId);
+      if (result) return result;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return null;
+  }
+
+  private async finalizeFacturacionSale(result: Record<string, any>) {
+    try {
+      const pdfCentralPath = await this.writeCentralFacturacionPdf(result as FacturacionInvoicePdfPayload);
+      return { ...result, pdfCentralGuardado: true, pdfCentralPath };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`No se pudo guardar el PDF central de la factura: ${message}`);
+      return { ...result, pdfCentralGuardado: false, pdfCentralPath: "", pdfCentralError: message };
+    }
+  }
+
+  private async writeCentralFacturacionPdf(result: FacturacionInvoicePdfPayload) {
+    const configuredDirectory = String(this.configService.get<string>("FACTURAS_PDF_DIR", "") || "").trim();
+    const outputDirectory = configuredDirectory || join(homedir(), "Downloads", "Rocky Maxx", "Facturas PDF");
+    const serie = String(result.serie || "sin-serie").replace(/[^a-zA-Z0-9_-]+/g, "-");
+    const numero = String(result.numeroFactura || "sin-numero").replace(/[^a-zA-Z0-9_-]+/g, "-");
+    const filePath = join(outputDirectory, `factura-${serie}-${numero}.pdf`);
+    const pdf = buildFacturacionInvoicePdf(result);
+
+    await mkdir(outputDirectory, { recursive: true });
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await writeFile(filePath, pdf);
+        return filePath;
+      } catch (error) {
+        lastError = error;
+        await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
+      }
+    }
+    throw lastError || new Error("No se pudo escribir el PDF central.");
   }
 
   private async findActiveCajaSession(tx: FacturacionTransactionClient): Promise<ActiveCajaSession> {

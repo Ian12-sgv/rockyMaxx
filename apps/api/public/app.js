@@ -1,4 +1,4 @@
-﻿const API_BASE = "/api";
+const API_BASE = "/api";
 const TOKEN_STORAGE_KEY = "rocky.maxx.access-token";
 const USER_STORAGE_KEY = "rocky.maxx.user";
 const REMEMBER_SESSION_STORAGE_KEY = "rocky.maxx.remember-session";
@@ -185,6 +185,15 @@ const state = {
     loading: false,
     items: [],
     downloadingKey: "",
+  },
+  inventoryBulk: {
+    open: false,
+    loading: false,
+    submitting: false,
+    totalItems: 0,
+    destinations: [],
+    selectedNodeIds: [],
+    jobs: [],
   },
   devReturnLookup: {
     open: false,
@@ -676,6 +685,15 @@ async function hydrateAuthenticatedState() {
     loading: false,
     items: [],
   };
+  state.inventoryBulk = {
+    open: false,
+    loading: false,
+    submitting: false,
+    totalItems: 0,
+    destinations: [],
+    selectedNodeIds: [],
+    jobs: [],
+  };
   state.devReturnLookup = {
     open: false,
     loading: false,
@@ -1113,6 +1131,7 @@ function renderShellView() {
       ${renderArticleLookupModal()}
       ${renderAdjustmentLookupModal()}
       ${renderTransferLookupModal()}
+      ${renderInventoryBulkTransferModal()}
       ${renderDevReturnLookupModal()}
       ${renderImpuestosLookupModal()}
       ${renderFacturacionLookupModal()}
@@ -2023,6 +2042,16 @@ function renderTransfersWorkspace() {
               <span class="transfer-command-icon">B</span>
               Buscar
             </button>
+            ${
+              userIsSystemOperator()
+                ? `
+                  <button class="transfer-command-button transfer-bulk-command" type="button" data-open-inventory-bulk ${isBusy ? "disabled" : ""}>
+                    <span class="transfer-command-icon">M</span>
+                    Transferencia masiva
+                  </button>
+                `
+                : ""
+            }
             <button class="transfer-command-button" type="button" data-print-transfer>
               <span class="transfer-command-icon">P</span>
               Imprimir
@@ -9611,6 +9640,116 @@ function renderTransferLookupModal() {
   `;
 }
 
+function renderInventoryBulkTransferModal() {
+  const bulk = state.inventoryBulk;
+  if (!bulk?.open || !userIsSystemOperator()) {
+    return "";
+  }
+
+  const destinations = Array.isArray(bulk.destinations) ? bulk.destinations : [];
+  const selected = new Set(Array.isArray(bulk.selectedNodeIds) ? bulk.selectedNodeIds : []);
+  const jobs = Array.isArray(bulk.jobs) ? bulk.jobs : [];
+
+  return `
+    <div class="article-lookup-overlay inventory-bulk-overlay">
+      <button class="article-lookup-backdrop" type="button" data-inventory-bulk-close aria-label="Cerrar transferencia masiva"></button>
+      <section class="article-lookup-dialog inventory-bulk-dialog" role="dialog" aria-modal="true" aria-labelledby="inventory-bulk-title">
+        <div class="article-lookup-header inventory-bulk-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Transferencias</p>
+            <h3 id="inventory-bulk-title">Transferencia masiva de inventario</h3>
+            <p>Envia todos los campos y la existencia actual de ${escapeHtml(String(bulk.totalItems || 0))} articulos a los VPS seleccionados.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <button class="article-command-button" type="button" data-inventory-bulk-refresh ${bulk.loading ? "disabled" : ""}>Actualizar estado</button>
+            <button class="article-command-button" type="button" data-inventory-bulk-close>Cerrar</button>
+          </div>
+        </div>
+
+        ${
+          bulk.loading
+            ? renderLoadingState("Consultando tiendas, bodegas y trabajos masivos...")
+            : `
+              <form id="inventory-bulk-form" class="inventory-bulk-form">
+                <div class="inventory-bulk-toolbar">
+                  <div>
+                    <strong>Destinos VPS</strong>
+                    <span>La bodega central no se modifica ni pierde existencia.</span>
+                  </div>
+                  <button class="button button-ghost" type="button" data-inventory-bulk-select-all ${destinations.length ? "" : "disabled"}>
+                    Seleccionar todos
+                  </button>
+                </div>
+                <div class="inventory-bulk-destinations">
+                  ${
+                    destinations.length
+                      ? destinations.map((destination) => `
+                          <label class="inventory-bulk-destination">
+                            <input
+                              type="checkbox"
+                              name="destinationNodeIds"
+                              value="${escapeHtml(destination.nodeId || "")}"
+                              ${selected.has(destination.nodeId) ? "checked" : ""}
+                            />
+                            <span>
+                              <strong>${escapeHtml(destination.nombre || destination.sucursalCodigo || destination.nodeId)}</strong>
+                              <small>${escapeHtml(destination.sucursalCodigo || "-")} | ${escapeHtml(destination.apiUrl || "Sin URL VPS")}</small>
+                            </span>
+                          </label>
+                        `).join("")
+                      : `<div class="empty-state inventory-bulk-empty"><h3>Sin destinos configurados</h3><p>Las tiendas y bodegas deben existir en SYNC_NODES con su URL VPS.</p></div>`
+                  }
+                </div>
+                <div class="inventory-bulk-actions">
+                  <button class="button button-primary" type="submit" ${bulk.submitting || !destinations.length ? "disabled" : ""}>
+                    ${bulk.submitting ? "Encolando..." : "Enviar inventario al VPS"}
+                  </button>
+                </div>
+              </form>
+
+              <div class="inventory-bulk-jobs">
+                <div class="inventory-bulk-jobs-title">
+                  <strong>Ultimos envios</strong>
+                  <span>${escapeHtml(String(jobs.length))} trabajo(s)</span>
+                </div>
+                ${
+                  jobs.length
+                    ? jobs.map((job) => {
+                        const total = Number(job.totalItems || 0);
+                        const processed = Number(job.processedItems || 0);
+                        const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 100;
+                        return `
+                          <article class="inventory-bulk-job">
+                            <div>
+                              <strong>${escapeHtml(job.destinationName || job.destinationCode || job.destinationNodeId)}</strong>
+                              <span>${escapeHtml(String(processed))} / ${escapeHtml(String(total))} articulos</span>
+                            </div>
+                            <div class="inventory-bulk-progress"><span style="width: ${percent}%"></span></div>
+                            <span class="inventory-bulk-status inventory-bulk-status-${escapeHtml(String(job.status || "").toLowerCase())}">${escapeHtml(renderInventoryBulkStatus(job.status))}</span>
+                            ${job.lastError ? `<p class="inventory-bulk-error">${escapeHtml(job.lastError)}</p>` : ""}
+                          </article>
+                        `;
+                      }).join("")
+                    : `<p class="inventory-bulk-no-jobs">Todavia no se han ejecutado transferencias masivas.</p>`
+                }
+              </div>
+            `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderInventoryBulkStatus(status) {
+  const labels = {
+    PENDING: "Pendiente",
+    RUNNING: "Enviando",
+    COMPLETED: "Completada",
+    ERROR: "Error",
+  };
+  return labels[String(status || "").toUpperCase()] || String(status || "Pendiente");
+}
+
 function renderAdjustmentLookupModal() {
   if (!state.adjustmentLookup.open) {
     return "";
@@ -10688,10 +10827,7 @@ function bindFacturacionEvents() {
           paymentRowsSnapshot,
           state.facturacion.exchangeRate,
         );
-        const response = await apiFetch("/facturacion/sales", {
-          method: "POST",
-          body: payload,
-        });
+        const response = await apiFetchFacturacionSaleWithRetry(payload);
         const venta = response?.venta || {};
         const currentPriceList = getCurrentFacturacionPriceList();
         const preservedRate = normalizeFacturacionExchangeRateState(
@@ -12584,6 +12720,42 @@ function bindTransferEvents() {
 
   document.querySelector("[data-open-load-transfer]")?.addEventListener("click", async () => {
     await openTransferLookupModal();
+  });
+
+  document.querySelector("[data-open-inventory-bulk]")?.addEventListener("click", async () => {
+    await openInventoryBulkTransferModal();
+  });
+
+  document.querySelectorAll("[data-inventory-bulk-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeInventoryBulkTransferModal();
+      render();
+    });
+  });
+
+  document.querySelector("[data-inventory-bulk-refresh]")?.addEventListener("click", async () => {
+    await loadInventoryBulkStatus();
+  });
+
+  document.querySelector("[data-inventory-bulk-select-all]")?.addEventListener("click", () => {
+    state.inventoryBulk.selectedNodeIds = state.inventoryBulk.destinations.map((item) => item.nodeId);
+    render();
+  });
+
+  document.querySelectorAll('input[name="destinationNodeIds"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      state.inventoryBulk.selectedNodeIds = Array.from(
+        document.querySelectorAll('input[name="destinationNodeIds"]:checked'),
+      ).map((item) => item.value);
+    });
+  });
+
+  document.getElementById("inventory-bulk-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    state.inventoryBulk.selectedNodeIds = Array.from(
+      document.querySelectorAll('input[name="destinationNodeIds"]:checked'),
+    ).map((item) => item.value);
+    await submitInventoryBulkTransfer();
   });
 
   document.querySelector("[data-print-transfer]")?.addEventListener("click", () => {
@@ -17067,6 +17239,71 @@ function resolveTransferLineLotLabel() {
   return selected || "Auto";
 }
 
+async function openInventoryBulkTransferModal() {
+  if (!userIsSystemOperator()) {
+    setFlash("Solo el usuario sistema puede ejecutar transferencias masivas.", "error");
+    render();
+    return;
+  }
+  state.inventoryBulk.open = true;
+  state.inventoryBulk.selectedNodeIds = [];
+  await loadInventoryBulkStatus();
+}
+
+async function loadInventoryBulkStatus() {
+  state.inventoryBulk.loading = true;
+  clearFlash();
+  render();
+  try {
+    const response = await apiFetch("/transfers/inventory-bulk");
+    state.inventoryBulk.totalItems = Number(response.totalItems || 0);
+    state.inventoryBulk.destinations = Array.isArray(response.destinations) ? response.destinations : [];
+    state.inventoryBulk.jobs = Array.isArray(response.jobs) ? response.jobs : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo consultar la transferencia masiva: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.inventoryBulk.loading = false;
+    render();
+  }
+}
+
+function closeInventoryBulkTransferModal() {
+  state.inventoryBulk.open = false;
+  state.inventoryBulk.loading = false;
+  state.inventoryBulk.submitting = false;
+}
+
+async function submitInventoryBulkTransfer() {
+  const destinationNodeIds = Array.isArray(state.inventoryBulk.selectedNodeIds)
+    ? state.inventoryBulk.selectedNodeIds.filter(Boolean)
+    : [];
+  if (destinationNodeIds.length === 0) {
+    setFlash("Selecciona al menos una tienda o bodega destino.", "error");
+    render();
+    return;
+  }
+
+  state.inventoryBulk.submitting = true;
+  clearFlash();
+  render();
+  try {
+    const response = await apiFetch("/transfers/inventory-bulk", {
+      method: "POST",
+      body: { destinationNodeIds },
+    });
+    state.inventoryBulk.selectedNodeIds = [];
+    await loadInventoryBulkStatus();
+    setFlash(response.message || "Transferencia masiva encolada correctamente.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.inventoryBulk.submitting = false;
+    render();
+  }
+}
+
 async function openTransferLookupModal() {
   captureTransferDraft();
   state.transferLookup.open = true;
@@ -19571,6 +19808,7 @@ function buildFacturacionSalePayload(draft, paymentRows, exchangeRate) {
     }));
 
   return {
+    requestId: createFacturacionRequestId(),
     clienteCodigo: String(normalizedDraft.clienteCodigo || "").trim(),
     vendedorCedula: String(normalizedDraft.vendedorCedula || "").trim(),
     emisionContingencia: Boolean(normalizedDraft.emisionContingencia),
@@ -19588,6 +19826,46 @@ function buildFacturacionSalePayload(draft, paymentRows, exchangeRate) {
     items: rows,
     pagos: payments,
   };
+}
+
+function createFacturacionRequestId() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `factura-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function apiFetchFacturacionSaleWithRetry(payload) {
+  const retryDelays = [0, 500, 1500];
+  let lastError = null;
+
+  for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
+    if (retryDelays[attempt] > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, retryDelays[attempt]));
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+    try {
+      return await apiFetch("/facturacion/sales", {
+        method: "POST",
+        body: payload,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.status || 0);
+      const retryable = status === 0 || [502, 503, 504].includes(status);
+      if (!retryable || attempt === retryDelays.length - 1) {
+        throw error;
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  throw lastError || new Error("No se pudo registrar la factura.");
 }
 
 function normalizeFacturacionPaymentMethod(method) {
@@ -22960,6 +23238,7 @@ async function apiFetch(path, options = {}) {
           ? options.body
           : JSON.stringify(options.body)
         : undefined,
+    signal: options.signal,
   });
 
   const payload = await readResponsePayload(response);
@@ -23206,6 +23485,15 @@ function clearSession() {
     open: false,
     loading: false,
     items: [],
+  };
+  state.inventoryBulk = {
+    open: false,
+    loading: false,
+    submitting: false,
+    totalItems: 0,
+    destinations: [],
+    selectedNodeIds: [],
+    jobs: [],
   };
   state.devReturnLookup = {
     open: false,

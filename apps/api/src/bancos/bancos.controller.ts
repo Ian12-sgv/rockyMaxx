@@ -15,11 +15,13 @@ export class BancosController {
   constructor(private readonly bancosService: BancosService) {}
 
   @Get("metadata")
+  @RequireGroups("admin", "caja")
   async getMetadata() {
     return this.bancosService.getMetadata();
   }
 
   @Get()
+  @RequireGroups("admin", "caja")
   async findAll(@Query() findBancosDto: FindBancosDto) {
     return {
       bancos: await this.bancosService.findAll(findBancosDto),
@@ -27,6 +29,7 @@ export class BancosController {
   }
 
   @Get(":codigo")
+  @RequireGroups("admin", "caja")
   async findOne(@Param("codigo") codigo: string) {
     return {
       banco: await this.bancosService.findOne(codigo),

@@ -126,6 +126,13 @@ export class FacturacionPaymentRowDto {
 }
 
 export class CreateFacturacionSaleDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  @Type(() => String)
+  @Transform(({ value }) => toOptionalTrimmedString(value))
+  declare requestId?: string;
+
   @IsString()
   @MaxLength(20)
   @Type(() => String)

@@ -38,6 +38,27 @@ export class TransfersController {
     return this.transfersService.registerTransferSyncNode(registerTransferSyncNodeDto);
   }
 
+  @RequireGroups("sistema")
+  @Get("inventory-bulk")
+  async getInventoryBulkStatus() {
+    return this.transfersService.getInventoryBulkStatus();
+  }
+
+  @RequireGroups("sistema")
+  @Post("inventory-bulk")
+  async createInventoryBulkTransfer(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser() user: UserView,
+  ) {
+    return this.transfersService.createInventoryBulkTransfer(body, user);
+  }
+
+  @RequireGroups("admin", "sistema")
+  @Post("inventory-bulk/import")
+  async importInventoryBulkTransfer(@Body() body: Record<string, unknown>) {
+    return this.transfersService.importInventoryBulkBatch(body);
+  }
+
   @Get("sync/outbox")
   async listSyncOutbox(@Query() findTransferSyncOutboxDto: FindTransferSyncOutboxDto) {
     return this.transfersService.listTransferSyncOutbox(findTransferSyncOutboxDto);

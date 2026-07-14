@@ -354,6 +354,53 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async getInventorySnapshotBatch(options: {
+    afterCodigoBarra?: string | null;
+    take?: number;
+    jobId: string;
+  }) {
+    const take = Math.min(Math.max(Number(options.take || 25), 1), 25);
+    const afterCodigoBarra = String(options.afterCodigoBarra || "").trim();
+    const items = await this.prisma.inventario.findMany({
+      where: afterCodigoBarra
+        ? {
+            CodigoBarra: {
+              gt: afterCodigoBarra,
+            },
+          }
+        : undefined,
+      include: inventoryInclude,
+      orderBy: { CodigoBarra: "asc" },
+      take,
+    });
+
+    return {
+      items: items.map((item) => ({
+        ...this.buildInventoryUpsertEnvelope(item),
+        globalId: `${options.jobId}-INVENTORY-${item.CodigoBarra}`,
+      })),
+      lastCodigoBarra: items.at(-1)?.CodigoBarra ?? afterCodigoBarra,
+      completed: items.length < take,
+    };
+  }
+
+  async importInventorySnapshotBatch(rawItems: unknown) {
+    if (!Array.isArray(rawItems) || rawItems.length === 0 || rawItems.length > 25) {
+      throw new BadRequestException("El lote masivo debe contener entre 1 y 25 articulos.");
+    }
+
+    const results = [];
+    for (const item of rawItems) {
+      results.push(await this.importMirrorPayload(item));
+    }
+
+    return {
+      processed: results.length,
+      imported: results.filter((item) => item.imported).length,
+      results,
+    };
+  }
+
   async enqueueInventoryDeleteTx(
     tx: MirrorSyncTransactionClient,
     codigoBarra: string,

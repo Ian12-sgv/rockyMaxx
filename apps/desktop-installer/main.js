@@ -827,6 +827,68 @@ async function restoreDumpIntoLocalDatabase(postgresState, localUser, localPassw
   );
 }
 
+async function ensureRestoredDatabaseCompatibility(postgresState, localUser, localPassword, databaseName) {
+  await runPsqlCommand(
+    postgresState,
+    localUser,
+    localPassword,
+    databaseName,
+    `
+      ALTER TABLE IF EXISTS dbo."IMPUESTOS"
+      ADD COLUMN IF NOT EXISTS "Status" INTEGER;
+
+      DO $compatibility$
+      DECLARE
+        preferred_code INTEGER;
+      BEGIN
+        IF to_regclass('dbo."IMPUESTOS"') IS NOT NULL THEN
+          IF NOT EXISTS (
+            SELECT 1
+            FROM dbo."IMPUESTOS"
+            WHERE COALESCE("Status", 0) = 1
+          ) THEN
+            SELECT "Codigo"
+            INTO preferred_code
+            FROM dbo."IMPUESTOS"
+            ORDER BY CASE WHEN "Codigo" = 1 THEN 0 ELSE 1 END, "Codigo" ASC
+            LIMIT 1;
+
+            IF preferred_code IS NOT NULL THEN
+              UPDATE dbo."IMPUESTOS"
+              SET "Status" = CASE WHEN "Codigo" = preferred_code THEN 1 ELSE 0 END;
+            END IF;
+          ELSE
+            UPDATE dbo."IMPUESTOS"
+            SET "Status" = 0
+            WHERE "Status" IS NULL;
+          END IF;
+        END IF;
+      END
+      $compatibility$;
+
+      DO $printer_compatibility$
+      BEGIN
+        IF to_regclass('dbo."IMPRESORAFISCAL"') IS NOT NULL THEN
+          INSERT INTO dbo."IMPRESORAFISCAL"
+            ("ID", "NombreImpresora", "Status", "IdProcesoImpresion", "MontoMaximoDiario", "IncluyeIGTF")
+          VALUES (0, 'NO APLICA', 1, 0, 99000000.00, FALSE)
+          ON CONFLICT ("ID") DO NOTHING;
+        END IF;
+      END
+      $printer_compatibility$;
+
+      CREATE TABLE IF NOT EXISTS dbo."FACTURACION_IDEMPOTENCIA" (
+        "RequestId" VARCHAR(64) PRIMARY KEY,
+        "RespuestaJson" TEXT NULL,
+        "CreadoEn" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE IF EXISTS dbo."DEVBORRADOR"
+      ADD COLUMN IF NOT EXISTS "CodigoOrigen" VARCHAR(15);
+    `,
+  );
+}
+
 function replaceDatabaseUrlCredentials(databaseUrl, userName, password) {
   const parsed = new URL(databaseUrl);
   parsed.username = encodeURIComponent(userName);
@@ -966,6 +1028,12 @@ async function restoreFromVps(payload) {
       localPassword,
       remoteNode.localDatabaseName,
       dumpArtifact.dumpPath,
+    );
+    await ensureRestoredDatabaseCompatibility(
+      postgresState,
+      localUser,
+      localPassword,
+      remoteNode.localDatabaseName,
     );
     await updateServiceRuntimeEnvFiles(localUser, localPassword);
   } finally {

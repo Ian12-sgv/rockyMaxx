@@ -15,11 +15,13 @@ export class TiposPagoController {
   constructor(private readonly tiposPagoService: TiposPagoService) {}
 
   @Get("metadata")
+  @RequireGroups("admin", "caja")
   async getMetadata() {
     return this.tiposPagoService.getMetadata();
   }
 
   @Get()
+  @RequireGroups("admin", "caja")
   async findAll(@Query() findTiposPagoDto: FindTiposPagoDto) {
     return {
       tiposPago: await this.tiposPagoService.findAll(findTiposPagoDto),
@@ -27,6 +29,7 @@ export class TiposPagoController {
   }
 
   @Get(":codigo")
+  @RequireGroups("admin", "caja")
   async findOne(@Param("codigo") codigo: string) {
     return {
       tipoPago: await this.tiposPagoService.findOne(codigo),
