@@ -19,6 +19,7 @@ const MIRROR_SYNC_EVENT_CLIENT_UPSERT = "CLIENT_UPSERT";
 const MIRROR_SYNC_EVENT_WORKER_UPSERT = "WORKER_UPSERT";
 const MIRROR_SYNC_EVENT_RATE_UPSERT = "RATE_UPSERT";
 const MIRROR_SYNC_EVENT_SALE_UPSERT = "SALE_UPSERT";
+const MIRROR_SYNC_EVENT_CAJA_UPSERT = "CAJA_UPSERT";
 const DEFAULT_MIRROR_SYNC_RETRY_INTERVAL_MS = 30_000;
 const DEFAULT_MIRROR_SYNC_RETRY_STARTUP_DELAY_MS = 5_000;
 const DEFAULT_MIRROR_SYNC_RETRY_LIMIT = 200;
@@ -42,6 +43,11 @@ type TrabajadorWithRelations = Prisma.TrabajadoresGetPayload<{
 type VentaWithRelations = Prisma.VentasGetPayload<{
   include: {
     movVentas: true;
+  };
+}>;
+type CajaWithImpresora = Prisma.CajasGetPayload<{
+  include: {
+    impresoraFiscal: true;
   };
 }>;
 
@@ -208,6 +214,35 @@ type MirrorSyncSaleLinePayload = {
   idRegla: number;
 };
 
+type MirrorSyncImpresoraFiscalPayload = {
+  id: number;
+  nombreImpresora: string | null;
+  status: number | null;
+  idProcesoImpresion: number | null;
+  montoMaximoDiario: string | null;
+  incluyeIGTF: boolean;
+};
+
+type MirrorSyncCajaPayload = {
+  serie: string;
+  numero: number;
+  fondoCaja: string;
+  tipoListaPrecio: number;
+  tipoVenta: number;
+  tipoReporte: number;
+  ultimaFactura: string;
+  ultimaDevolucion: string;
+  permiteDescuento: number;
+  permiteFacturasExentas: number;
+  permiteAlternarListas: number;
+  cambiarPrecios: number;
+  requerirAutorizacion: number;
+  idImpresoraFiscal: number;
+  nombreImpresora: string | null;
+  numeroCopias: number | null;
+  incluirIGTF: boolean | null;
+};
+
 type MirrorEnvelopeBase = {
   schemaVersion: number;
   globalId: string;
@@ -273,6 +308,16 @@ type SaleUpsertEnvelope = MirrorEnvelopeBase & {
   eventType: typeof MIRROR_SYNC_EVENT_SALE_UPSERT;
   sale: MirrorSyncSalePayload;
   movVentas: MirrorSyncSaleLinePayload[];
+  // Nullable (not optional) so legacy envelopes read from outbox/inbox history are
+  // forced to explicitly carry the "no caja" case instead of silently omitting it.
+  caja: MirrorSyncCajaPayload | null;
+  impresoraFiscal: MirrorSyncImpresoraFiscalPayload | null;
+};
+
+type CajaUpsertEnvelope = MirrorEnvelopeBase & {
+  eventType: typeof MIRROR_SYNC_EVENT_CAJA_UPSERT;
+  caja: MirrorSyncCajaPayload;
+  impresoraFiscal: MirrorSyncImpresoraFiscalPayload;
 };
 
 type MirrorSyncEnvelope =
@@ -283,7 +328,8 @@ type MirrorSyncEnvelope =
   | ClientUpsertEnvelope
   | WorkerUpsertEnvelope
   | RateUpsertEnvelope
-  | SaleUpsertEnvelope;
+  | SaleUpsertEnvelope
+  | CajaUpsertEnvelope;
 
 type CatalogSnapshotRow = {
   Codigo: string | number;
@@ -605,7 +651,94 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    await this.recordPendingEnvelope(tx, this.buildSaleUpsertEnvelope(venta));
+    const caja = await tx.cajas.findUnique({
+      where: { Serie: venta.Serie },
+      include: { impresoraFiscal: true },
+    });
+
+    if (!caja) {
+      throw new BadRequestException(
+        `No se puede sincronizar la venta ${venta.Serie}-${venta.NumeroFactura.toString()}: la caja ${venta.Serie} no existe localmente.`,
+      );
+    }
+
+    await this.recordPendingEnvelope(tx, this.buildSaleUpsertEnvelope(venta, caja));
+  }
+
+  async enqueueCajaUpsertTx(
+    tx: MirrorSyncTransactionClient,
+    serie: string,
+  ) {
+    if (!this.isMirrorSyncEnabled()) {
+      return;
+    }
+
+    const normalizedSerie = this.normalizeCode(serie);
+    if (!normalizedSerie) {
+      return;
+    }
+
+    const caja = await tx.cajas.findUnique({
+      where: { Serie: normalizedSerie },
+      include: { impresoraFiscal: true },
+    });
+
+    if (!caja) {
+      return;
+    }
+
+    await this.recordPendingEnvelope(tx, this.buildCajaUpsertEnvelope(caja));
+  }
+
+  async enqueueCajaUpsert(serie: string) {
+    if (!this.isMirrorSyncEnabled()) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.enqueueCajaUpsertTx(tx, serie);
+    });
+  }
+
+  async backfillCajaUpserts() {
+    await this.ensureMirrorSyncSchema();
+
+    if (!this.isMirrorSyncEnabled()) {
+      return {
+        enabled: false,
+        found: 0,
+        queued: 0,
+        skipped: 0,
+      };
+    }
+
+    const cajas = await this.prisma.cajas.findMany({
+      select: { Serie: true },
+      orderBy: { Serie: "asc" },
+    });
+
+    let queued = 0;
+    let skipped = 0;
+
+    for (const item of cajas) {
+      const normalizedSerie = this.normalizeCode(item.Serie);
+      if (!normalizedSerie) {
+        skipped += 1;
+        continue;
+      }
+
+      await this.prisma.$transaction(async (tx) => {
+        await this.enqueueCajaUpsertTx(tx, normalizedSerie);
+      });
+      queued += 1;
+    }
+
+    return {
+      enabled: true,
+      found: cajas.length,
+      queued,
+      skipped,
+    };
   }
 
   async pushPendingMirrorSync(options: { limit?: number } = {}) {
@@ -659,23 +792,26 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     await this.ensureMirrorSyncSchema();
     const payload = this.normalizeEnvelope(body);
 
+    const existingInbox = await this.getInboxRow(this.prisma, payload.globalId);
+    if (existingInbox?.Status === MIRROR_SYNC_STATUS_APPLIED) {
+      return {
+        imported: false,
+        status: MIRROR_SYNC_STATUS_APPLIED,
+        globalId: payload.globalId,
+        entityType: payload.entityType,
+        entityKey: payload.entityKey,
+        message: "El paquete espejo ya habia sido aplicado.",
+      };
+    }
+
+    // Recorded as its own statement, outside the apply transaction below, so a
+    // rollback of the apply never erases the fact that this envelope was received:
+    // markInboxError() (in the catch block) always has a row to update into ERROR.
+    await this.upsertInboxRow(this.prisma, payload, MIRROR_SYNC_STATUS_RECEIVED);
+
     try {
-      const result = await this.prisma.$transaction(
+      await this.prisma.$transaction(
         async (tx) => {
-          const existingInbox = await this.getInboxRow(tx, payload.globalId);
-          if (existingInbox?.Status === MIRROR_SYNC_STATUS_APPLIED) {
-            return {
-              imported: false,
-              status: MIRROR_SYNC_STATUS_APPLIED,
-              globalId: payload.globalId,
-              entityType: payload.entityType,
-              entityKey: payload.entityKey,
-              message: "El paquete espejo ya habia sido aplicado.",
-            };
-          }
-
-          await this.upsertInboxRow(tx, payload, MIRROR_SYNC_STATUS_RECEIVED);
-
           if (payload.eventType === MIRROR_SYNC_EVENT_INVENTORY_UPSERT) {
             await this.applyInventoryUpsertEnvelope(tx, payload);
           } else if (payload.eventType === MIRROR_SYNC_EVENT_INVENTORY_DELETE) {
@@ -690,26 +826,26 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
             await this.applyTrabajadorUpsertEnvelope(tx, payload);
           } else if (payload.eventType === MIRROR_SYNC_EVENT_RATE_UPSERT) {
             await this.applyRateUpsertEnvelope(tx, payload);
+          } else if (payload.eventType === MIRROR_SYNC_EVENT_CAJA_UPSERT) {
+            await this.applyCajaUpsertEnvelope(tx, payload);
           } else if (payload.eventType === MIRROR_SYNC_EVENT_SALE_UPSERT) {
             await this.applySaleUpsertEnvelope(tx, payload);
           } else {
             throw new BadRequestException("Tipo de evento espejo no soportado.");
           }
-
-          await this.updateInboxRowStatus(tx, payload.globalId, MIRROR_SYNC_STATUS_APPLIED, null);
-
-          return {
-            imported: true,
-            status: MIRROR_SYNC_STATUS_APPLIED,
-            globalId: payload.globalId,
-            entityType: payload.entityType,
-            entityKey: payload.entityKey,
-          };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
 
-      return result;
+      await this.updateInboxRowStatus(this.prisma, payload.globalId, MIRROR_SYNC_STATUS_APPLIED, null);
+
+      return {
+        imported: true,
+        status: MIRROR_SYNC_STATUS_APPLIED,
+        globalId: payload.globalId,
+        entityType: payload.entityType,
+        entityKey: payload.entityKey,
+      };
     } catch (error) {
       await this.markInboxError(payload.globalId, this.extractErrorMessage(error));
       throw error;
@@ -1056,7 +1192,57 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private buildSaleUpsertEnvelope(venta: VentaWithRelations): SaleUpsertEnvelope {
+  private buildCajaPayload(caja: CajaWithImpresora): MirrorSyncCajaPayload {
+    return {
+      serie: caja.Serie,
+      numero: caja.Numero,
+      fondoCaja: this.toDecimalString(caja.FondoCaja),
+      tipoListaPrecio: caja.TipoListaPrecio,
+      tipoVenta: caja.TipoVenta,
+      tipoReporte: caja.TipoReporte,
+      ultimaFactura: caja.UltimaFactura.toString(),
+      ultimaDevolucion: caja.UltimaDevolucion.toString(),
+      permiteDescuento: caja.PermiteDescuento,
+      permiteFacturasExentas: caja.PermiteFacturasExentas,
+      permiteAlternarListas: caja.PermiteAlternarListas,
+      cambiarPrecios: caja.CambiarPrecios,
+      requerirAutorizacion: caja.RequerirAutorizacion,
+      idImpresoraFiscal: caja.IdImpresoraFiscal,
+      nombreImpresora: caja.NombreImpresora ?? null,
+      numeroCopias: caja.NumeroCopias ?? null,
+      incluirIGTF: caja.IncluirIGTF ?? null,
+    };
+  }
+
+  private buildImpresoraFiscalPayload(
+    impresoraFiscal: CajaWithImpresora["impresoraFiscal"],
+  ): MirrorSyncImpresoraFiscalPayload {
+    return {
+      id: impresoraFiscal.ID,
+      nombreImpresora: impresoraFiscal.NombreImpresora ?? null,
+      status: impresoraFiscal.Status ?? null,
+      idProcesoImpresion: impresoraFiscal.IdProcesoImpresion ?? null,
+      montoMaximoDiario:
+        impresoraFiscal.MontoMaximoDiario == null ? null : this.toDecimalString(impresoraFiscal.MontoMaximoDiario),
+      incluyeIGTF: Boolean(impresoraFiscal.IncluyeIGTF),
+    };
+  }
+
+  private buildCajaUpsertEnvelope(caja: CajaWithImpresora): CajaUpsertEnvelope {
+    const entityKey = this.normalizeCode(caja.Serie);
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.buildGlobalId("CAJAS", entityKey),
+      sourceDatabase: this.getCurrentDatabaseName(),
+      entityType: "CAJAS",
+      entityKey,
+      eventType: MIRROR_SYNC_EVENT_CAJA_UPSERT,
+      caja: this.buildCajaPayload(caja),
+      impresoraFiscal: this.buildImpresoraFiscalPayload(caja.impresoraFiscal),
+    };
+  }
+
+  private buildSaleUpsertEnvelope(venta: VentaWithRelations, caja: CajaWithImpresora): SaleUpsertEnvelope {
     const entityKey = this.buildSaleEntityKey(venta.NumeroFactura, venta.Serie);
     return {
       schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
@@ -1065,6 +1251,8 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       entityType: "VENTAS",
       entityKey,
       eventType: MIRROR_SYNC_EVENT_SALE_UPSERT,
+      caja: this.buildCajaPayload(caja),
+      impresoraFiscal: this.buildImpresoraFiscalPayload(caja.impresoraFiscal),
       sale: {
         numeroFactura: venta.NumeroFactura.toString(),
         serie: venta.Serie,
@@ -1629,10 +1817,103 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     await this.recalculateInventoryPricesFromRatesTx(tx);
   }
 
+  private async applyImpresoraFiscalUpsert(
+    tx: MirrorSyncTransactionClient,
+    impresora: MirrorSyncImpresoraFiscalPayload,
+  ) {
+    // Written with raw SQL (matching prisma.service.ts / impresoras.service.ts) rather
+    // than the typed Prisma client: IMPRESORAFISCAL.ID is both PK and its own self-FK,
+    // which the rest of the codebase already routes around via raw SQL for this table.
+    await tx.$executeRawUnsafe(
+      `
+        insert into dbo."IMPRESORAFISCAL"
+          ("ID", "NombreImpresora", "Status", "IdProcesoImpresion", "MontoMaximoDiario", "IncluyeIGTF")
+        values ($1, $2, $3, $4, $5::numeric, $6)
+        on conflict ("ID") do update set
+          "NombreImpresora" = excluded."NombreImpresora",
+          "Status" = excluded."Status",
+          "IdProcesoImpresion" = excluded."IdProcesoImpresion",
+          "MontoMaximoDiario" = excluded."MontoMaximoDiario",
+          "IncluyeIGTF" = excluded."IncluyeIGTF"
+      `,
+      impresora.id,
+      impresora.nombreImpresora,
+      impresora.status,
+      impresora.idProcesoImpresion,
+      impresora.montoMaximoDiario,
+      impresora.incluyeIGTF,
+    );
+  }
+
+  private async applyCajaUpsert(
+    tx: MirrorSyncTransactionClient,
+    caja: MirrorSyncCajaPayload,
+  ) {
+    await tx.cajas.upsert({
+      where: { Serie: caja.serie },
+      create: {
+        Serie: caja.serie,
+        Numero: caja.numero,
+        FondoCaja: caja.fondoCaja,
+        TipoListaPrecio: caja.tipoListaPrecio,
+        TipoVenta: caja.tipoVenta,
+        TipoReporte: caja.tipoReporte,
+        UltimaFactura: BigInt(caja.ultimaFactura),
+        UltimaDevolucion: BigInt(caja.ultimaDevolucion),
+        PermiteDescuento: caja.permiteDescuento,
+        PermiteFacturasExentas: caja.permiteFacturasExentas,
+        PermiteAlternarListas: caja.permiteAlternarListas,
+        CambiarPrecios: caja.cambiarPrecios,
+        RequerirAutorizacion: caja.requerirAutorizacion,
+        IdImpresoraFiscal: caja.idImpresoraFiscal,
+        NombreImpresora: caja.nombreImpresora,
+        NumeroCopias: caja.numeroCopias,
+        IncluirIGTF: caja.incluirIGTF,
+      },
+      update: {
+        Numero: caja.numero,
+        FondoCaja: caja.fondoCaja,
+        TipoListaPrecio: caja.tipoListaPrecio,
+        TipoVenta: caja.tipoVenta,
+        TipoReporte: caja.tipoReporte,
+        UltimaFactura: BigInt(caja.ultimaFactura),
+        UltimaDevolucion: BigInt(caja.ultimaDevolucion),
+        PermiteDescuento: caja.permiteDescuento,
+        PermiteFacturasExentas: caja.permiteFacturasExentas,
+        PermiteAlternarListas: caja.permiteAlternarListas,
+        CambiarPrecios: caja.cambiarPrecios,
+        RequerirAutorizacion: caja.requerirAutorizacion,
+        IdImpresoraFiscal: caja.idImpresoraFiscal,
+        NombreImpresora: caja.nombreImpresora,
+        NumeroCopias: caja.numeroCopias,
+        IncluirIGTF: caja.incluirIGTF,
+      },
+    });
+  }
+
+  private async applyCajaUpsertEnvelope(
+    tx: MirrorSyncTransactionClient,
+    payload: CajaUpsertEnvelope,
+  ) {
+    await this.applyImpresoraFiscalUpsert(tx, payload.impresoraFiscal);
+    await this.applyCajaUpsert(tx, payload.caja);
+  }
+
   private async applySaleUpsertEnvelope(
     tx: MirrorSyncTransactionClient,
     payload: SaleUpsertEnvelope,
   ) {
+    // CAJAS (and its IMPRESORAFISCAL dependency) must exist before VENTAS.Serie -> CAJAS.Serie
+    // can be satisfied. Legacy envelopes captured before this field existed carry caja=null;
+    // if the destination doesn't already have that CAJAS row, ventas.upsert below will throw
+    // P2003 and importMirrorPayload's caller records a durable ERROR instead of losing it.
+    if (payload.caja) {
+      if (payload.impresoraFiscal) {
+        await this.applyImpresoraFiscalUpsert(tx, payload.impresoraFiscal);
+      }
+      await this.applyCajaUpsert(tx, payload.caja);
+    }
+
     const sale = payload.sale;
     const numeroFactura = BigInt(sale.numeroFactura);
     const numeroOrden = BigInt(sale.numeroOrden);
@@ -2085,6 +2366,10 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       return this.normalizeSaleUpsertEnvelope(raw);
     }
 
+    if (eventType === MIRROR_SYNC_EVENT_CAJA_UPSERT) {
+      return this.normalizeCajaUpsertEnvelope(raw);
+    }
+
     throw new BadRequestException("Tipo de evento espejo no soportado.");
   }
 
@@ -2246,7 +2531,89 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       eventType: MIRROR_SYNC_EVENT_SALE_UPSERT,
       sale: this.normalizeSalePayload(raw.sale),
       movVentas: rawLines.map((item, index) => this.normalizeSaleLinePayload(item, index)),
+      caja: this.normalizeOptionalCajaPayload(raw.caja),
+      impresoraFiscal: this.normalizeOptionalImpresoraFiscalPayload(raw.impresoraFiscal),
     };
+  }
+
+  private normalizeCajaUpsertEnvelope(raw: Record<string, unknown>): CajaUpsertEnvelope {
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.normalizeRequiredCode(raw.globalId, "GlobalId espejo invalido."),
+      sourceDatabase: String(raw.sourceDatabase || "").trim(),
+      entityType: this.normalizeRequiredCode(raw.entityType, "EntityType espejo invalido."),
+      entityKey: this.normalizeRequiredCode(raw.entityKey, "EntityKey espejo invalido."),
+      eventType: MIRROR_SYNC_EVENT_CAJA_UPSERT,
+      caja: this.normalizeCajaPayload(raw.caja),
+      impresoraFiscal: this.normalizeImpresoraFiscalPayload(raw.impresoraFiscal),
+    };
+  }
+
+  private normalizeCajaPayload(raw: unknown): MirrorSyncCajaPayload {
+    const value = this.asRecord(raw);
+    return {
+      serie: this.normalizeRequiredCode(value.serie, "Serie de caja invalida."),
+      numero: this.toNonNegativeInteger(value.numero, "Numero de caja invalido."),
+      fondoCaja: this.normalizeDecimalString(value.fondoCaja, "Fondo de caja invalido."),
+      tipoListaPrecio: this.toNonNegativeInteger(value.tipoListaPrecio, "Tipo de lista de precio invalido."),
+      tipoVenta: this.toNonNegativeInteger(value.tipoVenta, "Tipo de venta de caja invalido."),
+      tipoReporte: this.toNonNegativeInteger(value.tipoReporte, "Tipo de reporte de caja invalido."),
+      ultimaFactura: this.normalizeBigIntString(value.ultimaFactura, "Ultima factura de caja invalida."),
+      ultimaDevolucion: this.normalizeBigIntString(value.ultimaDevolucion, "Ultima devolucion de caja invalida."),
+      permiteDescuento: this.toNonNegativeInteger(value.permiteDescuento, "Permite descuento de caja invalido."),
+      permiteFacturasExentas: this.toNonNegativeInteger(
+        value.permiteFacturasExentas,
+        "Permite facturas exentas de caja invalido.",
+      ),
+      permiteAlternarListas: this.toNonNegativeInteger(
+        value.permiteAlternarListas,
+        "Permite alternar listas de caja invalido.",
+      ),
+      cambiarPrecios: this.toNonNegativeInteger(value.cambiarPrecios, "Cambiar precios de caja invalido."),
+      requerirAutorizacion: this.toNonNegativeInteger(
+        value.requerirAutorizacion,
+        "Requerir autorizacion de caja invalido.",
+      ),
+      idImpresoraFiscal: this.toNonNegativeInteger(value.idImpresoraFiscal, "Impresora fiscal de caja invalida."),
+      nombreImpresora: value.nombreImpresora == null ? null : String(value.nombreImpresora),
+      numeroCopias:
+        value.numeroCopias == null ? null : this.toNonNegativeInteger(value.numeroCopias, "Numero de copias de caja invalido."),
+      incluirIGTF: value.incluirIGTF == null ? null : this.toBoolean(value.incluirIGTF),
+    };
+  }
+
+  private normalizeOptionalCajaPayload(raw: unknown): MirrorSyncCajaPayload | null {
+    if (raw == null) {
+      return null;
+    }
+
+    return this.normalizeCajaPayload(raw);
+  }
+
+  private normalizeImpresoraFiscalPayload(raw: unknown): MirrorSyncImpresoraFiscalPayload {
+    const value = this.asRecord(raw);
+    return {
+      id: this.toNonNegativeInteger(value.id, "Identificador de impresora fiscal invalido."),
+      nombreImpresora: value.nombreImpresora == null ? null : String(value.nombreImpresora),
+      status: value.status == null ? null : this.normalizeSignedInteger(value.status, "Status de impresora fiscal invalido."),
+      idProcesoImpresion:
+        value.idProcesoImpresion == null
+          ? null
+          : this.toNonNegativeInteger(value.idProcesoImpresion, "Proceso de impresion fiscal invalido."),
+      montoMaximoDiario:
+        value.montoMaximoDiario == null
+          ? null
+          : this.normalizeDecimalString(value.montoMaximoDiario, "Monto maximo diario de impresora invalido."),
+      incluyeIGTF: this.toBoolean(value.incluyeIGTF),
+    };
+  }
+
+  private normalizeOptionalImpresoraFiscalPayload(raw: unknown): MirrorSyncImpresoraFiscalPayload | null {
+    if (raw == null) {
+      return null;
+    }
+
+    return this.normalizeImpresoraFiscalPayload(raw);
   }
 
   private normalizeClientePayload(raw: unknown): MirrorSyncClientePayload {

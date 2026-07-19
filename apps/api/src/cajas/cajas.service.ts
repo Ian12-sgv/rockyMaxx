@@ -9,6 +9,7 @@ import {
   parseCashRegisterPaymentSummary,
   serializeCashRegisterPaymentSummary,
 } from "./caja-close-report.util";
+import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { toCajaConfigView, toCajaView } from "./caja-view.util";
 import { CreateCajaDto } from "./dto/create-caja.dto";
@@ -34,7 +35,10 @@ type NormalizedCajaInput = {
 
 @Injectable()
 export class CajasService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mirrorSyncService: MirrorSyncService,
+  ) {}
 
   async getMetadata() {
     const cajas = await this.prisma.cajas.findMany({
@@ -825,6 +829,7 @@ export class CajasService {
             ?? "NO APLICA",
         },
       });
+      await this.mirrorSyncService.enqueueCajaUpsertTx(tx, normalized.serie);
       return;
     }
 
@@ -853,6 +858,7 @@ export class CajasService {
         IncluirIGTF: template?.IncluirIGTF ?? false,
       },
     });
+    await this.mirrorSyncService.enqueueCajaUpsertTx(tx, normalized.serie);
   }
 
   private normalizeSerie(value: string) {

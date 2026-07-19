@@ -12,4 +12,9 @@ export class MirrorSyncController {
   async importMirrorPayload(@Body() body: unknown) {
     return this.mirrorSyncService.importMirrorPayload(body);
   }
+
+  @Post("bootstrap/cajas")
+  async bootstrapCajas() {
+    return this.mirrorSyncService.backfillCajaUpserts();
+  }
 }
