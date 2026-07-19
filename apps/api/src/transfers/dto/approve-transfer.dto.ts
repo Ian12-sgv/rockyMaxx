@@ -6,7 +6,7 @@ import { toOptionalTrimmedString, toUpperTrimmedString } from "./transfer-dto.he
 export class TransferDuplicateResolutionDto {
   @IsString()
   @MinLength(1)
-  @MaxLength(15)
+  @MaxLength(30)
   @Type(() => String)
   @Transform(({ value }) => toUpperTrimmedString(value))
   declare codigoBarra: string;
@@ -16,7 +16,7 @@ export class TransferDuplicateResolutionDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(15)
+  @MaxLength(30)
   @Type(() => String)
   @Transform(({ value }) => toOptionalTrimmedString(value)?.toUpperCase())
   declare nuevoCodigoBarra?: string;

@@ -2710,7 +2710,7 @@ function renderDevReturnLinesEditor(draft, { isLocked = false } = {}) {
                     name="codigoBarra"
                     data-dev-return-barcode-input="${index}"
                     value="${escapeHtml(toInputValue(line.codigoBarra))}"
-                    maxlength="15"
+                    maxlength="30"
                     ${isLocked ? "disabled" : ""}
                   />
                 </td>
@@ -3546,7 +3546,7 @@ function renderAdjustmentLinesEditor(draft, { isApproved = false } = {}) {
                     name="codigoBarra"
                     data-adjustment-barcode-input="${index}"
                     value="${escapeHtml(toInputValue(line.codigoBarra))}"
-                    maxlength="15"
+                    maxlength="30"
                     ${isApproved ? "disabled" : ""}
                   />
                 </td>
@@ -3913,7 +3913,7 @@ function renderTransferLinesEditor(draft, options = {}) {
                       name="codigoBarra"
                       data-transfer-barcode-input="${index}"
                       value="${escapeHtml(toInputValue(line.codigoBarra))}"
-                      maxlength="15"
+                      maxlength="30"
                       placeholder="Codigo"
                       ${isLocked ? "disabled" : ""}
                     />

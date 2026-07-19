@@ -1612,7 +1612,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
         "Numero" integer not null,
         "Item" integer not null,
         "NumeroCaja" integer not null,
-        "CodigoBarra" varchar(15) not null,
+        "CodigoBarra" varchar(30) not null,
         "Referencia" varchar(30) not null,
         "CreatedAt" timestamptz not null default now(),
         "UpdatedAt" timestamptz not null default now(),

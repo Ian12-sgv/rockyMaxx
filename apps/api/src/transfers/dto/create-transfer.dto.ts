@@ -21,7 +21,7 @@ import {
 export class CreateTransferLineDto {
   @IsOptional()
   @IsString()
-  @MaxLength(15)
+  @MaxLength(30)
   @Type(() => String)
   @Transform(({ value }) => toUpperTrimmedString(value))
   declare codigoBarra?: string;

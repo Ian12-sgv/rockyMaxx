@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS dbo."AJUSTES" (
 
 CREATE TABLE IF NOT EXISTS dbo."MOVAJUSTES" (
   "Numero" bigint NOT NULL,
-  "CodigoBarra" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
   "Cantidad" numeric(24,4) DEFAULT 0 NOT NULL,
   "Costo" numeric(24,8) DEFAULT 0 NOT NULL
 );
@@ -281,7 +281,7 @@ CREATE TABLE IF NOT EXISTS dbo."IMOVDEVTRANSFERENCIAS" (
   "CodigoEnvia" varchar(15) NOT NULL,
   "Item" integer NOT NULL,
   "Fecha" timestamp(0) without time zone NOT NULL,
-  "CodigoBarra" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
   "Cantidad" numeric(18,2) DEFAULT 0 NOT NULL,
   "Valor" numeric(24,8) DEFAULT 0 NOT NULL,
   "NumeroCaja" integer DEFAULT 0 NOT NULL,
@@ -295,7 +295,7 @@ CREATE TABLE IF NOT EXISTS dbo."IMOVTRANSFERENCIAS" (
   "CodigoEnvia" varchar(15) NOT NULL,
   "Item" integer NOT NULL,
   "Fecha" timestamp(0) without time zone NOT NULL,
-  "CodigoBarra" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
   "Cantidad" numeric(18,2) DEFAULT 0 NOT NULL,
   "Valor" numeric(24,8) DEFAULT 0 NOT NULL,
   "NumeroCaja" integer DEFAULT 0 NOT NULL,
@@ -320,8 +320,8 @@ CREATE TABLE IF NOT EXISTS dbo."IMPUESTOS" (
 );
 
 CREATE TABLE IF NOT EXISTS dbo."INVENTARIO" (
-  "CodigoBarra" varchar(15) NOT NULL,
-  "Referencia" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
+  "Referencia" varchar(30) NOT NULL,
   "CodigoMarca" varchar(3) NOT NULL,
   "Nombre" varchar(150) NOT NULL,
   "Talla" varchar(6) NOT NULL,
@@ -349,7 +349,7 @@ CREATE TABLE IF NOT EXISTS dbo."INVENTARIO" (
   "Tipo" smallint DEFAULT 0 NOT NULL,
   "Status" smallint DEFAULT 0 NOT NULL,
   "Serializado" smallint DEFAULT 0 NOT NULL,
-  "CodigoBarraAnt" varchar(15) NOT NULL
+  "CodigoBarraAnt" varchar(30) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS dbo."ITRANSFERENCIAS" (
@@ -397,7 +397,7 @@ CREATE TABLE IF NOT EXISTS dbo."MARCAS" (
 CREATE TABLE IF NOT EXISTS dbo."MOVCOMPRAS" (
   "Documento" varchar(12) NOT NULL,
   "Proveedor" varchar(15) NOT NULL,
-  "CodigoBarra" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
   "Cantidad" numeric(18,2) DEFAULT 0 NOT NULL,
   "CantidadDevuelta" numeric(18,2) DEFAULT 0 NOT NULL,
   "PrecioFactura" numeric(24,8) DEFAULT 0 NOT NULL,
@@ -409,7 +409,7 @@ CREATE TABLE IF NOT EXISTS dbo."MOVCOMPRAS" (
 
 CREATE TABLE IF NOT EXISTS dbo."MOVDEVBORRADOR" (
   "Numero" bigint NOT NULL,
-  "CodigoBarra" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
   "Cantidad" numeric(18,2) NOT NULL,
   "NumeroCaja" integer NOT NULL,
   "Item" integer NOT NULL,
@@ -419,7 +419,7 @@ CREATE TABLE IF NOT EXISTS dbo."MOVDEVBORRADOR" (
 CREATE TABLE IF NOT EXISTS dbo."MOVDEVCOMPRAS" (
   "Numero" bigint NOT NULL,
   "Item" integer NOT NULL,
-  "CodigoBarra" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
   "Cantidad" numeric(18,2) NOT NULL,
   "Precio" numeric(24,8) NOT NULL,
   "PorcentajeImpuesto" numeric(18,2) DEFAULT 0 NOT NULL,
@@ -429,7 +429,7 @@ CREATE TABLE IF NOT EXISTS dbo."MOVDEVCOMPRAS" (
 CREATE TABLE IF NOT EXISTS dbo."MOVDEVTRANSFERENCIAS" (
   "Numero" integer NOT NULL,
   "Fecha" timestamp(0) without time zone NOT NULL,
-  "CodigoBarra" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
   "Cantidad" numeric(18,2) DEFAULT 0 NOT NULL,
   "Valor" numeric(24,8) DEFAULT 0 NOT NULL,
   "NumeroCaja" integer DEFAULT 0 NOT NULL,
@@ -445,7 +445,7 @@ CREATE TABLE IF NOT EXISTS dbo."MOVDEVVENTAS" (
   "Item" integer NOT NULL,
   "Hora" timestamp(0) without time zone NOT NULL,
   "TipoLista" varchar(1) NOT NULL,
-  "CodigoBarra" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
   "Precio" numeric(24,8) NOT NULL,
   "PrecioLista" numeric(24,8) NOT NULL,
   "Costo" numeric(24,8) NOT NULL,
@@ -480,7 +480,7 @@ CREATE TABLE IF NOT EXISTS dbo."MOVLISTAPRECIO" (
 CREATE TABLE IF NOT EXISTS dbo."MOVTRANSFERENCIAS" (
   "Numero" integer NOT NULL,
   "Fecha" timestamp(0) without time zone,
-  "CodigoBarra" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
   "Cantidad" numeric(18,2) NOT NULL,
   "Valor" numeric(24,8) NOT NULL,
   "NumeroCaja" integer NOT NULL,
@@ -495,7 +495,7 @@ CREATE TABLE IF NOT EXISTS dbo."MOVVENTAS" (
   "Serie" varchar(15) NOT NULL,
   "Hora" timestamp(0) without time zone NOT NULL,
   "TipoLista" varchar(1) NOT NULL,
-  "CodigoBarra" varchar(15) NOT NULL,
+  "CodigoBarra" varchar(30) NOT NULL,
   "Precio" numeric(24,8) NOT NULL,
   "PrecioLista" numeric(24,8) NOT NULL,
   "Costo" numeric(24,8) NOT NULL,

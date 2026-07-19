@@ -20,7 +20,7 @@ import {
 
 export class CreateAdjustmentLineDto {
   @IsString()
-  @MaxLength(15)
+  @MaxLength(30)
   @Type(() => String)
   @Transform(({ value }) => toUpperTrimmedString(value))
   declare codigoBarra: string;
