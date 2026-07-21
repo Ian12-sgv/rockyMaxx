@@ -1,5 +1,7 @@
 node_modules/
 apps/api/dist/
+apps/bodega-api/dist/
+apps/bodega-api/generated/
 scripts/__pycache__/
 *.pyc
 *.tsbuildinfo

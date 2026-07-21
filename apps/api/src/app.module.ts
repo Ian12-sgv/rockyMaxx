@@ -5,6 +5,7 @@ import { AdjustmentsModule } from "./adjustments/adjustments.module";
 import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
 import { BancosModule } from "./bancos/bancos.module";
+import { BodegaExportModule } from "./bodega-export/bodega-export.module";
 import { CajasModule } from "./cajas/cajas.module";
 import { ClientesModule } from "./clientes/clientes.module";
 import { ComprasModule } from "./compras/compras.module";
@@ -35,6 +36,7 @@ import { UsersModule } from "./users/users.module";
     MirrorSyncModule,
     AdjustmentsModule,
     BancosModule,
+    BodegaExportModule,
     CajasModule,
     HealthModule,
     ImpresorasModule,

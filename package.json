@@ -1,28 +1,36 @@
 {
-    "name":  "sistema-arabe",
-    "version":  "2.1.7",
-    "private":  true,
-    "workspaces":  [
-                       "apps/api",
-                       "apps/desktop",
-                       "apps/desktop-service",
-                       "apps/desktop-installer"
-                   ],
-    "scripts":  {
-                    "dev:api":  "npm run start:dev --workspace=@sistema-arabe/api",
-                    "build:api":  "npm run build --workspace=@sistema-arabe/api",
-                    "desktop:start":  "npm run start --workspace=@sistema-arabe/desktop",
-                    "desktop:start:direct":  "npm run start --workspace=@sistema-arabe/desktop",
-                    "desktop:dist":  "npm run client:dist",
-                    "client:dist":  "npm run dist:win --workspace=@sistema-arabe/desktop",
-                    "installer:start":  "npm run start --workspace=@sistema-arabe/desktop-installer",
-                    "installer:dist":  "npm run dist:win --workspace=@sistema-arabe/desktop-installer",
-                    "service:prepare-runtime":  "node scripts/prepare-desktop-runtime.cjs --target apps/desktop-service",
-                    "service:start":  "npm run build:api \u0026\u0026 npm run service:prepare-runtime \u0026\u0026 npm run start --workspace=@sistema-arabe/desktop-service",
-                    "service:dist":  "npm run build:api \u0026\u0026 npm run service:prepare-runtime \u0026\u0026 npm run dist:win --workspace=@sistema-arabe/desktop-service",
-                    "lan:dist":  "npm run client:dist \u0026\u0026 npm run service:dist",
-                    "typecheck:api":  "npm run typecheck --workspace=@sistema-arabe/api",
-                    "prisma:generate":  "npm run prisma:generate --workspace=@sistema-arabe/api",
-                    "prisma:validate":  "npm run prisma:validate --workspace=@sistema-arabe/api"
-                }
+  "name": "sistema-arabe",
+  "version": "2.1.7",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/desktop",
+    "apps/desktop-service",
+    "apps/desktop-installer",
+    "apps/bodega-api"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace=@sistema-arabe/api",
+    "build:api": "npm run build --workspace=@sistema-arabe/api",
+    "desktop:start": "npm run start --workspace=@sistema-arabe/desktop",
+    "desktop:start:direct": "npm run start --workspace=@sistema-arabe/desktop",
+    "desktop:dist": "npm run client:dist",
+    "client:dist": "npm run dist:win --workspace=@sistema-arabe/desktop",
+    "installer:start": "npm run start --workspace=@sistema-arabe/desktop-installer",
+    "installer:dist": "npm run dist:win --workspace=@sistema-arabe/desktop-installer",
+    "service:prepare-runtime": "node scripts/prepare-desktop-runtime.cjs --target apps/desktop-service",
+    "service:start": "npm run build:api && npm run service:prepare-runtime && npm run start --workspace=@sistema-arabe/desktop-service",
+    "service:dist": "npm run build:api && npm run service:prepare-runtime && npm run dist:win --workspace=@sistema-arabe/desktop-service",
+    "lan:dist": "npm run client:dist && npm run service:dist",
+    "typecheck:api": "npm run typecheck --workspace=@sistema-arabe/api",
+    "prisma:generate": "npm run prisma:generate --workspace=@sistema-arabe/api",
+    "prisma:validate": "npm run prisma:validate --workspace=@sistema-arabe/api",
+    "dev:bodega-api": "npm run start:dev --workspace=@sistema-arabe/bodega-api",
+    "build:bodega-api": "npm run build --workspace=@sistema-arabe/bodega-api",
+    "typecheck:bodega-api": "npm run typecheck --workspace=@sistema-arabe/bodega-api",
+    "prisma:generate:bodega-api": "npm run prisma:generate --workspace=@sistema-arabe/bodega-api",
+    "prisma:validate:bodega-api": "npm run prisma:validate --workspace=@sistema-arabe/bodega-api",
+    "prisma:migrate:bodega-api": "npm run prisma:migrate:deploy --workspace=@sistema-arabe/bodega-api",
+    "prisma:seed:bodega-api": "npm run prisma:seed --workspace=@sistema-arabe/bodega-api"
+  }
 }

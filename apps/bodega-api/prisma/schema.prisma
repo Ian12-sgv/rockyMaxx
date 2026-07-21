@@ -1,0 +1,274 @@
+// Bodega de datos historica multi-tienda (MVP).
+// Base fisica dedicada: bodega_datos (VPS). No comparte conexion con apps/api.
+// Nomenclatura obligatoria: DIM_* dimensiones, HECH_* hechos, ETL_* control de sync.
+
+generator client {
+  provider = "prisma-client-js"
+  // Output aislado: este workspace NUNCA debe escribir en node_modules/@prisma/client
+  // (esa ruta la hospeda el workspace npm en la raiz y ya la usa apps/api con un
+  // schema completamente distinto; generar ahi sin output propio lo sobrescribe).
+  output   = "../generated/prisma-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model DimTiendas {
+  id           String   @id @default(uuid()) @db.Uuid
+  codigoLegacy String   @unique(map: "uq_dim_tiendas_codigo_legacy") @map("codigo_legacy") @db.VarChar(20)
+  tipo         String   @map("tipo") @db.VarChar(20)
+  nombre       String?  @map("nombre") @db.VarChar(120)
+  databaseName String?  @map("database_name") @db.VarChar(120)
+  apiPath      String?  @map("api_path") @db.VarChar(120)
+  activa       Boolean  @default(true) @map("activa")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  articulosHist     DimArticulosHist[]
+  clientesHist      DimClientesHist[]
+  inventarioHist    HechInventarioHist[]
+  ventasHist        HechVentasHist[]
+  ventasDetalleHist HechVentasDetalleHist[]
+  pagosHist         HechPagosHist[]
+  cajasHist         HechCajasHist[]
+  syncRuns          EtlSyncRuns[]
+  syncErrors        EtlSyncErrors[]
+  watermarks        EtlWatermarks[]
+
+  @@map("DIM_TIENDAS")
+}
+
+model DimArticulosHist {
+  id                 String    @id @default(uuid()) @db.Uuid
+  dimTiendaId        String    @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy String    @map("codigo_tienda_legacy") @db.VarChar(20)
+  tablaOrigen        String    @map("tabla_origen") @db.VarChar(60)
+  pkOrigen           String    @map("pk_origen") @db.VarChar(200)
+  operacion          String    @map("operacion") @db.VarChar(20)
+  hashRegistro       String    @map("hash_registro") @db.VarChar(64)
+  payloadJson        Json      @map("payload_json")
+  esActual           Boolean   @default(true) @map("es_actual")
+  validoDesde        DateTime  @default(now()) @map("valido_desde")
+  validoHasta        DateTime? @map("valido_hasta")
+  syncRunId          String    @map("sync_run_id") @db.Uuid
+  fechaExtraida      DateTime  @map("fecha_extraida")
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+
+  dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
+  syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
+
+  @@unique([dimTiendaId, tablaOrigen, pkOrigen, hashRegistro], map: "uq_dim_articulos_hist_identidad")
+  @@index([dimTiendaId, tablaOrigen, pkOrigen, esActual], map: "ix_dim_articulos_hist_actual")
+  @@map("DIM_ARTICULOS_HIST")
+}
+
+model DimClientesHist {
+  id                 String    @id @default(uuid()) @db.Uuid
+  dimTiendaId        String    @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy String    @map("codigo_tienda_legacy") @db.VarChar(20)
+  tablaOrigen        String    @map("tabla_origen") @db.VarChar(60)
+  pkOrigen           String    @map("pk_origen") @db.VarChar(200)
+  operacion          String    @map("operacion") @db.VarChar(20)
+  hashRegistro       String    @map("hash_registro") @db.VarChar(64)
+  payloadJson        Json      @map("payload_json")
+  esActual           Boolean   @default(true) @map("es_actual")
+  validoDesde        DateTime  @default(now()) @map("valido_desde")
+  validoHasta        DateTime? @map("valido_hasta")
+  syncRunId          String    @map("sync_run_id") @db.Uuid
+  fechaExtraida      DateTime  @map("fecha_extraida")
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+
+  dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
+  syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
+
+  @@unique([dimTiendaId, tablaOrigen, pkOrigen, hashRegistro], map: "uq_dim_clientes_hist_identidad")
+  @@index([dimTiendaId, tablaOrigen, pkOrigen, esActual], map: "ix_dim_clientes_hist_actual")
+  @@map("DIM_CLIENTES_HIST")
+}
+
+model HechInventarioHist {
+  id                 String    @id @default(uuid()) @db.Uuid
+  dimTiendaId        String    @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy String    @map("codigo_tienda_legacy") @db.VarChar(20)
+  tablaOrigen        String    @map("tabla_origen") @db.VarChar(60)
+  pkOrigen           String    @map("pk_origen") @db.VarChar(200)
+  operacion          String    @map("operacion") @db.VarChar(20)
+  hashRegistro       String    @map("hash_registro") @db.VarChar(64)
+  payloadJson        Json      @map("payload_json")
+  esActual           Boolean   @default(true) @map("es_actual")
+  validoDesde        DateTime  @default(now()) @map("valido_desde")
+  validoHasta        DateTime? @map("valido_hasta")
+  syncRunId          String    @map("sync_run_id") @db.Uuid
+  fechaExtraida      DateTime  @map("fecha_extraida")
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+
+  dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
+  syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
+
+  @@unique([dimTiendaId, tablaOrigen, pkOrigen, hashRegistro], map: "uq_hech_inventario_hist_identidad")
+  @@index([dimTiendaId, tablaOrigen, pkOrigen, esActual], map: "ix_hech_inventario_hist_actual")
+  @@map("HECH_INVENTARIO_HIST")
+}
+
+model HechVentasHist {
+  id                 String    @id @default(uuid()) @db.Uuid
+  dimTiendaId        String    @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy String    @map("codigo_tienda_legacy") @db.VarChar(20)
+  tablaOrigen        String    @map("tabla_origen") @db.VarChar(60)
+  pkOrigen           String    @map("pk_origen") @db.VarChar(200)
+  operacion          String    @map("operacion") @db.VarChar(20)
+  hashRegistro       String    @map("hash_registro") @db.VarChar(64)
+  payloadJson        Json      @map("payload_json")
+  esActual           Boolean   @default(true) @map("es_actual")
+  validoDesde        DateTime  @default(now()) @map("valido_desde")
+  validoHasta        DateTime? @map("valido_hasta")
+  syncRunId          String    @map("sync_run_id") @db.Uuid
+  fechaExtraida      DateTime  @map("fecha_extraida")
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+
+  dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
+  syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
+
+  @@unique([dimTiendaId, tablaOrigen, pkOrigen, hashRegistro], map: "uq_hech_ventas_hist_identidad")
+  @@index([dimTiendaId, tablaOrigen, pkOrigen, esActual], map: "ix_hech_ventas_hist_actual")
+  @@map("HECH_VENTAS_HIST")
+}
+
+model HechVentasDetalleHist {
+  id                 String    @id @default(uuid()) @db.Uuid
+  dimTiendaId        String    @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy String    @map("codigo_tienda_legacy") @db.VarChar(20)
+  tablaOrigen        String    @map("tabla_origen") @db.VarChar(60)
+  pkOrigen           String    @map("pk_origen") @db.VarChar(200)
+  operacion          String    @map("operacion") @db.VarChar(20)
+  hashRegistro       String    @map("hash_registro") @db.VarChar(64)
+  payloadJson        Json      @map("payload_json")
+  esActual           Boolean   @default(true) @map("es_actual")
+  validoDesde        DateTime  @default(now()) @map("valido_desde")
+  validoHasta        DateTime? @map("valido_hasta")
+  syncRunId          String    @map("sync_run_id") @db.Uuid
+  fechaExtraida      DateTime  @map("fecha_extraida")
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+
+  dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
+  syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
+
+  @@unique([dimTiendaId, tablaOrigen, pkOrigen, hashRegistro], map: "uq_hech_ventas_detalle_hist_identidad")
+  @@index([dimTiendaId, tablaOrigen, pkOrigen, esActual], map: "ix_hech_ventas_detalle_hist_actual")
+  @@map("HECH_VENTAS_DETALLE_HIST")
+}
+
+model HechPagosHist {
+  id                 String    @id @default(uuid()) @db.Uuid
+  dimTiendaId        String    @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy String    @map("codigo_tienda_legacy") @db.VarChar(20)
+  tablaOrigen        String    @map("tabla_origen") @db.VarChar(60)
+  pkOrigen           String    @map("pk_origen") @db.VarChar(200)
+  operacion          String    @map("operacion") @db.VarChar(20)
+  hashRegistro       String    @map("hash_registro") @db.VarChar(64)
+  payloadJson        Json      @map("payload_json")
+  esActual           Boolean   @default(true) @map("es_actual")
+  validoDesde        DateTime  @default(now()) @map("valido_desde")
+  validoHasta        DateTime? @map("valido_hasta")
+  syncRunId          String    @map("sync_run_id") @db.Uuid
+  fechaExtraida      DateTime  @map("fecha_extraida")
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+
+  dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
+  syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
+
+  @@unique([dimTiendaId, tablaOrigen, pkOrigen, hashRegistro], map: "uq_hech_pagos_hist_identidad")
+  @@index([dimTiendaId, tablaOrigen, pkOrigen, esActual], map: "ix_hech_pagos_hist_actual")
+  @@map("HECH_PAGOS_HIST")
+}
+
+model HechCajasHist {
+  id                 String    @id @default(uuid()) @db.Uuid
+  dimTiendaId        String    @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy String    @map("codigo_tienda_legacy") @db.VarChar(20)
+  tablaOrigen        String    @map("tabla_origen") @db.VarChar(60)
+  pkOrigen           String    @map("pk_origen") @db.VarChar(200)
+  operacion          String    @map("operacion") @db.VarChar(20)
+  hashRegistro       String    @map("hash_registro") @db.VarChar(64)
+  payloadJson        Json      @map("payload_json")
+  esActual           Boolean   @default(true) @map("es_actual")
+  validoDesde        DateTime  @default(now()) @map("valido_desde")
+  validoHasta        DateTime? @map("valido_hasta")
+  syncRunId          String    @map("sync_run_id") @db.Uuid
+  fechaExtraida      DateTime  @map("fecha_extraida")
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+
+  dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
+  syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
+
+  @@unique([dimTiendaId, tablaOrigen, pkOrigen, hashRegistro], map: "uq_hech_cajas_hist_identidad")
+  @@index([dimTiendaId, tablaOrigen, pkOrigen, esActual], map: "ix_hech_cajas_hist_actual")
+  @@map("HECH_CAJAS_HIST")
+}
+
+model EtlSyncRuns {
+  id                    String    @id @default(uuid()) @db.Uuid
+  dimTiendaId           String    @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy    String    @map("codigo_tienda_legacy") @db.VarChar(20)
+  startedAt             DateTime  @default(now()) @map("started_at")
+  finishedAt            DateTime? @map("finished_at")
+  status                String    @default("RUNNING") @map("status") @db.VarChar(20)
+  tablasProcesadas      Json      @default("[]") @map("tablas_procesadas")
+  registrosLeidos       Int       @default(0) @map("registros_leidos")
+  registrosInsertados   Int       @default(0) @map("registros_insertados")
+  registrosActualizados Int       @default(0) @map("registros_actualizados")
+  registrosOmitidos     Int       @default(0) @map("registros_omitidos")
+  errorCount            Int       @default(0) @map("error_count")
+
+  dimTienda DimTiendas @relation(fields: [dimTiendaId], references: [id])
+
+  articulosHist     DimArticulosHist[]
+  clientesHist      DimClientesHist[]
+  inventarioHist    HechInventarioHist[]
+  ventasHist        HechVentasHist[]
+  ventasDetalleHist HechVentasDetalleHist[]
+  pagosHist         HechPagosHist[]
+  cajasHist         HechCajasHist[]
+  errores           EtlSyncErrors[]
+
+  @@index([dimTiendaId, startedAt], map: "ix_etl_sync_runs_tienda_started")
+  @@map("ETL_SYNC_RUNS")
+}
+
+model EtlSyncErrors {
+  id                 String   @id @default(uuid()) @db.Uuid
+  syncRunId          String   @map("sync_run_id") @db.Uuid
+  dimTiendaId        String   @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy String   @map("codigo_tienda_legacy") @db.VarChar(20)
+  tablaOrigen        String   @map("tabla_origen") @db.VarChar(60)
+  pkOrigen           String?  @map("pk_origen") @db.VarChar(200)
+  errorMessage       String   @map("error_message") @db.Text
+  payloadJson        Json?    @map("payload_json")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
+  dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
+
+  @@index([dimTiendaId, tablaOrigen, createdAt], map: "ix_etl_sync_errors_tienda_tabla")
+  @@index([syncRunId], map: "ix_etl_sync_errors_run")
+  @@map("ETL_SYNC_ERRORS")
+}
+
+model EtlWatermarks {
+  id                 String    @id @default(uuid()) @db.Uuid
+  dimTiendaId        String    @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy String    @map("codigo_tienda_legacy") @db.VarChar(20)
+  entidadDestino     String    @map("entidad_destino") @db.VarChar(60)
+  tablaOrigen        String    @map("tabla_origen") @db.VarChar(60)
+  lastPkOrigen       String?   @map("last_pk_origen") @db.VarChar(200)
+  lastUpdatedAt      DateTime? @map("last_updated_at")
+  lastHash           String?   @map("last_hash") @db.VarChar(64)
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  dimTienda DimTiendas @relation(fields: [dimTiendaId], references: [id])
+
+  @@unique([dimTiendaId, entidadDestino], map: "uq_etl_watermarks_tienda_entidad")
+  @@map("ETL_WATERMARKS")
+}
