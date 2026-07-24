@@ -43,6 +43,17 @@ type TrabajadorWithRelations = Prisma.TrabajadoresGetPayload<{
 type VentaWithRelations = Prisma.VentasGetPayload<{
   include: {
     movVentas: true;
+    clienteRef: {
+      include: {
+        tipoCliente: true;
+        contribuyenteTipo: true;
+      };
+    };
+    trabajadorRef: {
+      include: {
+        cargoRef: true;
+      };
+    };
   };
 }>;
 type CajaWithImpresora = Prisma.CajasGetPayload<{
@@ -304,6 +315,17 @@ type RateUpsertEnvelope = MirrorEnvelopeBase & {
   rate: MirrorSyncRatePayload;
 };
 
+type MirrorSyncClientSnapshot = {
+  cliente: MirrorSyncClientePayload;
+  tipoCliente: MirrorSyncClientTypePayload;
+  tipoContribuyente: MirrorSyncClientTypePayload;
+};
+
+type MirrorSyncTrabajadorSnapshot = {
+  trabajador: MirrorSyncTrabajadorPayload;
+  cargo: MirrorSyncCargoPayload;
+};
+
 type SaleUpsertEnvelope = MirrorEnvelopeBase & {
   eventType: typeof MIRROR_SYNC_EVENT_SALE_UPSERT;
   sale: MirrorSyncSalePayload;
@@ -312,6 +334,10 @@ type SaleUpsertEnvelope = MirrorEnvelopeBase & {
   // forced to explicitly carry the "no caja" case instead of silently omitting it.
   caja: MirrorSyncCajaPayload | null;
   impresoraFiscal: MirrorSyncImpresoraFiscalPayload | null;
+  // Mismo criterio: envelopes anteriores a este cambio no traen snapshot de
+  // cliente/trabajador y deben normalizar a null explicito, no fabricarse.
+  cliente: MirrorSyncClientSnapshot | null;
+  trabajador: MirrorSyncTrabajadorSnapshot | null;
 };
 
 type CajaUpsertEnvelope = MirrorEnvelopeBase & {
@@ -642,6 +668,17 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
         movVentas: {
           orderBy: {
             Item: "asc",
+          },
+        },
+        clienteRef: {
+          include: {
+            tipoCliente: true,
+            contribuyenteTipo: true,
+          },
+        },
+        trabajadorRef: {
+          include: {
+            cargoRef: true,
           },
         },
       },
@@ -1108,15 +1145,9 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private buildClienteUpsertEnvelope(cliente: ClienteWithRelations): ClientUpsertEnvelope {
+  private buildClienteSnapshot(cliente: ClienteWithRelations): MirrorSyncClientSnapshot {
     const entityKey = this.normalizeCode(cliente.Codigo);
     return {
-      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
-      globalId: this.buildGlobalId("CLIENTES", entityKey),
-      sourceDatabase: this.getCurrentDatabaseName(),
-      entityType: "CLIENTES",
-      entityKey,
-      eventType: MIRROR_SYNC_EVENT_CLIENT_UPSERT,
       cliente: {
         codigo: entityKey,
         nombre: cliente.Nombre,
@@ -1140,15 +1171,22 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private buildTrabajadorUpsertEnvelope(trabajador: TrabajadorWithRelations): WorkerUpsertEnvelope {
-    const entityKey = this.normalizeCode(trabajador.Cedula);
+  private buildClienteUpsertEnvelope(cliente: ClienteWithRelations): ClientUpsertEnvelope {
+    const entityKey = this.normalizeCode(cliente.Codigo);
     return {
       schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
-      globalId: this.buildGlobalId("TRABAJADORES", entityKey),
+      globalId: this.buildGlobalId("CLIENTES", entityKey),
       sourceDatabase: this.getCurrentDatabaseName(),
-      entityType: "TRABAJADORES",
+      entityType: "CLIENTES",
       entityKey,
-      eventType: MIRROR_SYNC_EVENT_WORKER_UPSERT,
+      eventType: MIRROR_SYNC_EVENT_CLIENT_UPSERT,
+      ...this.buildClienteSnapshot(cliente),
+    };
+  }
+
+  private buildTrabajadorSnapshot(trabajador: TrabajadorWithRelations): MirrorSyncTrabajadorSnapshot {
+    const entityKey = this.normalizeCode(trabajador.Cedula);
+    return {
       trabajador: {
         cedula: entityKey,
         codigo: trabajador.Codigo,
@@ -1168,6 +1206,19 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
         nombre: trabajador.cargoRef.Nombre ?? null,
         status: trabajador.cargoRef.Status ?? null,
       },
+    };
+  }
+
+  private buildTrabajadorUpsertEnvelope(trabajador: TrabajadorWithRelations): WorkerUpsertEnvelope {
+    const entityKey = this.normalizeCode(trabajador.Cedula);
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.buildGlobalId("TRABAJADORES", entityKey),
+      sourceDatabase: this.getCurrentDatabaseName(),
+      entityType: "TRABAJADORES",
+      entityKey,
+      eventType: MIRROR_SYNC_EVENT_WORKER_UPSERT,
+      ...this.buildTrabajadorSnapshot(trabajador),
     };
   }
 
@@ -1253,6 +1304,8 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       eventType: MIRROR_SYNC_EVENT_SALE_UPSERT,
       caja: this.buildCajaPayload(caja),
       impresoraFiscal: this.buildImpresoraFiscalPayload(caja.impresoraFiscal),
+      cliente: this.buildClienteSnapshot(venta.clienteRef),
+      trabajador: this.buildTrabajadorSnapshot(venta.trabajadorRef),
       sale: {
         numeroFactura: venta.NumeroFactura.toString(),
         serie: venta.Serie,
@@ -1374,7 +1427,7 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
           "LastError"
         from dbo."MIRROR_SYNC_OUTBOX"
         where "Status" = $1
-        order by "CreatedAt" asc
+        order by "CreatedAt" asc, "GlobalId" asc
         limit $2
       `,
       MIRROR_SYNC_STATUS_PENDING,
@@ -1678,37 +1731,37 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async applyClienteUpsertEnvelope(
+  private async applyClienteSnapshot(
     tx: MirrorSyncTransactionClient,
-    payload: ClientUpsertEnvelope,
+    snapshot: MirrorSyncClientSnapshot,
   ) {
     await tx.tiposCliente.upsert({
-      where: { Codigo: payload.tipoCliente.codigo },
+      where: { Codigo: snapshot.tipoCliente.codigo },
       create: {
-        Codigo: payload.tipoCliente.codigo,
-        Descripcion: payload.tipoCliente.descripcion ?? null,
-        Status: payload.tipoCliente.status ?? 1,
+        Codigo: snapshot.tipoCliente.codigo,
+        Descripcion: snapshot.tipoCliente.descripcion ?? null,
+        Status: snapshot.tipoCliente.status ?? 1,
       },
       update: {
-        Descripcion: payload.tipoCliente.descripcion ?? null,
-        Status: payload.tipoCliente.status ?? 1,
+        Descripcion: snapshot.tipoCliente.descripcion ?? null,
+        Status: snapshot.tipoCliente.status ?? 1,
       },
     });
 
     await tx.tiposContribuyente.upsert({
-      where: { Codigo: payload.tipoContribuyente.codigo },
+      where: { Codigo: snapshot.tipoContribuyente.codigo },
       create: {
-        Codigo: payload.tipoContribuyente.codigo,
-        Descripcion: payload.tipoContribuyente.descripcion ?? null,
-        Status: payload.tipoContribuyente.status ?? 1,
+        Codigo: snapshot.tipoContribuyente.codigo,
+        Descripcion: snapshot.tipoContribuyente.descripcion ?? null,
+        Status: snapshot.tipoContribuyente.status ?? 1,
       },
       update: {
-        Descripcion: payload.tipoContribuyente.descripcion ?? null,
-        Status: payload.tipoContribuyente.status ?? 1,
+        Descripcion: snapshot.tipoContribuyente.descripcion ?? null,
+        Status: snapshot.tipoContribuyente.status ?? 1,
       },
     });
 
-    const cliente = payload.cliente;
+    const cliente = snapshot.cliente;
     await tx.clientes.upsert({
       where: { Codigo: cliente.codigo },
       create: {
@@ -1733,24 +1786,42 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async applyTrabajadorUpsertEnvelope(
+  private async applyClienteUpsertEnvelope(
     tx: MirrorSyncTransactionClient,
-    payload: WorkerUpsertEnvelope,
+    payload: ClientUpsertEnvelope,
+  ) {
+    await this.applyClienteSnapshot(tx, payload);
+  }
+
+  private async applyTrabajadorSnapshot(
+    tx: MirrorSyncTransactionClient,
+    snapshot: MirrorSyncTrabajadorSnapshot,
   ) {
     await tx.cargos.upsert({
-      where: { Codigo: payload.cargo.codigo },
+      where: { Codigo: snapshot.cargo.codigo },
       create: {
-        Codigo: payload.cargo.codigo,
-        Nombre: payload.cargo.nombre ?? payload.cargo.codigo,
-        Status: payload.cargo.status ?? 1,
+        Codigo: snapshot.cargo.codigo,
+        Nombre: snapshot.cargo.nombre ?? snapshot.cargo.codigo,
+        Status: snapshot.cargo.status ?? 1,
       },
       update: {
-        Nombre: payload.cargo.nombre ?? payload.cargo.codigo,
-        Status: payload.cargo.status ?? 1,
+        Nombre: snapshot.cargo.nombre ?? snapshot.cargo.codigo,
+        Status: snapshot.cargo.status ?? 1,
       },
     });
 
-    const trabajador = payload.trabajador;
+    const trabajador = snapshot.trabajador;
+    // schema.prisma declara FechaNacimiento/Direccion/Telefono/Celular nullable, pero
+    // el DDL real de algunos destinos (confirmado contra rocky_tienda_001_vps) los
+    // tiene NOT NULL. No son campos obligatorios de negocio, asi que si el origen
+    // los trae vacios se escribe un valor neutro en destino en vez de fallar.
+    const fechaNacimientoDestino = trabajador.fechaNacimiento
+      ? new Date(trabajador.fechaNacimiento)
+      : new Date(0);
+    const direccionDestino = trabajador.direccion ?? "";
+    const telefonoDestino = trabajador.telefono ?? "";
+    const celularDestino = trabajador.celular ?? "";
+
     await tx.trabajadores.upsert({
       where: { Cedula: trabajador.cedula },
       create: {
@@ -1759,10 +1830,10 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
         Nombre: trabajador.nombre,
         Cargo: trabajador.cargo,
         FechaIngreso: new Date(trabajador.fechaIngreso),
-        FechaNacimiento: trabajador.fechaNacimiento ? new Date(trabajador.fechaNacimiento) : null,
-        Direccion: trabajador.direccion,
-        Telefono: trabajador.telefono,
-        Celular: trabajador.celular,
+        FechaNacimiento: fechaNacimientoDestino,
+        Direccion: direccionDestino,
+        Telefono: telefonoDestino,
+        Celular: celularDestino,
         Status: trabajador.status,
         MarcajeInterDiario: trabajador.marcajeInterDiario,
         IndUsarCarnet: trabajador.indUsarCarnet,
@@ -1772,15 +1843,22 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
         Nombre: trabajador.nombre,
         Cargo: trabajador.cargo,
         FechaIngreso: new Date(trabajador.fechaIngreso),
-        FechaNacimiento: trabajador.fechaNacimiento ? new Date(trabajador.fechaNacimiento) : null,
-        Direccion: trabajador.direccion,
-        Telefono: trabajador.telefono,
-        Celular: trabajador.celular,
+        FechaNacimiento: fechaNacimientoDestino,
+        Direccion: direccionDestino,
+        Telefono: telefonoDestino,
+        Celular: celularDestino,
         Status: trabajador.status,
         MarcajeInterDiario: trabajador.marcajeInterDiario,
         IndUsarCarnet: trabajador.indUsarCarnet,
       },
     });
+  }
+
+  private async applyTrabajadorUpsertEnvelope(
+    tx: MirrorSyncTransactionClient,
+    payload: WorkerUpsertEnvelope,
+  ) {
+    await this.applyTrabajadorSnapshot(tx, payload);
   }
 
   private async applyRateUpsertEnvelope(
@@ -1899,6 +1977,35 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     await this.applyCajaUpsert(tx, payload.caja);
   }
 
+  // No sincronizamos USUARIOS (decision de negocio: solo importan Cliente,
+  // Trabajador/Vendedor, articulos y totales/caja de una venta replicada). Si el
+  // usuario original no existe en destino, se remapea al usuario semilla
+  // configurado (MIRROR_SYNC_FALLBACK_USUARIO, default "Caja"). Nunca se crea un
+  // usuario automaticamente: si el fallback tampoco existe, se falla explicito.
+  private async resolveSaleUsuario(tx: MirrorSyncTransactionClient, usuarioOriginal: string): Promise<string> {
+    const existente = await tx.usuarios.findUnique({
+      where: { CodUsuario: usuarioOriginal },
+      select: { CodUsuario: true },
+    });
+    if (existente) {
+      return existente.CodUsuario;
+    }
+
+    const fallback = this.configService.get<string>("MIRROR_SYNC_FALLBACK_USUARIO", "Caja");
+    const fallbackExiste = await tx.usuarios.findUnique({
+      where: { CodUsuario: fallback },
+      select: { CodUsuario: true },
+    });
+    if (!fallbackExiste) {
+      throw new BadRequestException(
+        `Usuario espejo "${usuarioOriginal}" no existe en destino y el fallback configurado ` +
+          `"${fallback}" (MIRROR_SYNC_FALLBACK_USUARIO) tampoco existe. No se crean usuarios automaticamente.`,
+      );
+    }
+
+    return fallbackExiste.CodUsuario;
+  }
+
   private async applySaleUpsertEnvelope(
     tx: MirrorSyncTransactionClient,
     payload: SaleUpsertEnvelope,
@@ -1914,9 +2021,21 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       await this.applyCajaUpsert(tx, payload.caja);
     }
 
+    // Igual criterio que CAJAS: CLIENTES/TRABAJADORES deben existir antes de VENTAS
+    // por sus FKs. Envelopes legacy sin snapshot (cliente/trabajador=null) no se
+    // inventan aqui — si el destino no los tiene ya, el upsert de VENTAS mas abajo
+    // fallara por FK y quedara como ERROR visible, tal como se decidio.
+    if (payload.cliente) {
+      await this.applyClienteSnapshot(tx, payload.cliente);
+    }
+    if (payload.trabajador) {
+      await this.applyTrabajadorSnapshot(tx, payload.trabajador);
+    }
+
     const sale = payload.sale;
     const numeroFactura = BigInt(sale.numeroFactura);
     const numeroOrden = BigInt(sale.numeroOrden);
+    const usuarioDestino = await this.resolveSaleUsuario(tx, sale.usuario);
 
     await tx.ventas.upsert({
       where: {
@@ -1939,7 +2058,7 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
         TotalImpuesto: sale.totalImpuesto,
         TotalCosto: sale.totalCosto,
         InterContable: sale.interContable,
-        Usuario: sale.usuario,
+        Usuario: usuarioDestino,
         Status: sale.status,
         NumeroOrden: numeroOrden,
         TotalPago: sale.totalPago,
@@ -1963,7 +2082,7 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
         TotalImpuesto: sale.totalImpuesto,
         TotalCosto: sale.totalCosto,
         InterContable: sale.interContable,
-        Usuario: sale.usuario,
+        Usuario: usuarioDestino,
         Status: sale.status,
         NumeroOrden: numeroOrden,
         TotalPago: sale.totalPago,
@@ -2533,6 +2652,36 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       movVentas: rawLines.map((item, index) => this.normalizeSaleLinePayload(item, index)),
       caja: this.normalizeOptionalCajaPayload(raw.caja),
       impresoraFiscal: this.normalizeOptionalImpresoraFiscalPayload(raw.impresoraFiscal),
+      cliente: this.normalizeOptionalClienteSnapshot(raw.cliente),
+      trabajador: this.normalizeOptionalTrabajadorSnapshot(raw.trabajador),
+    };
+  }
+
+  private normalizeOptionalClienteSnapshot(raw: unknown): MirrorSyncClientSnapshot | null {
+    if (raw == null) {
+      return null;
+    }
+
+    const value = this.asRecord(raw);
+    return {
+      cliente: this.normalizeClientePayload(value.cliente),
+      tipoCliente: this.normalizeClientTypePayload(value.tipoCliente, "Tipo de cliente espejo invalido."),
+      tipoContribuyente: this.normalizeClientTypePayload(
+        value.tipoContribuyente,
+        "Tipo de contribuyente espejo invalido.",
+      ),
+    };
+  }
+
+  private normalizeOptionalTrabajadorSnapshot(raw: unknown): MirrorSyncTrabajadorSnapshot | null {
+    if (raw == null) {
+      return null;
+    }
+
+    const value = this.asRecord(raw);
+    return {
+      trabajador: this.normalizeTrabajadorPayload(value.trabajador),
+      cargo: this.normalizeCargoPayload(value.cargo),
     };
   }
 
