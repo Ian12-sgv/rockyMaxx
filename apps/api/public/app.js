@@ -195,6 +195,21 @@ const state = {
     selectedNodeIds: [],
     jobs: [],
   },
+  priceChange: {
+    loadingMetadata: false,
+    previewLoading: false,
+    creating: false,
+    sending: false,
+    retrying: false,
+    pullingStatus: false,
+    downloadingPdf: false,
+    nodes: [],
+    mode: "SELECTED_ITEMS",
+    selectedNodeIds: [],
+    selectedItems: [],
+    preview: null,
+    batch: null,
+  },
   devReturnLookup: {
     open: false,
     loading: false,
@@ -1268,6 +1283,10 @@ function renderDesktopWorkspace() {
     return renderInventoryAdjustmentWorkspace();
   }
 
+  if (state.currentView === "cambio-precio") {
+    return renderPriceChangeWorkspace();
+  }
+
   if (state.currentView === "sucursales") {
     return renderSucursalesWorkspace();
   }
@@ -1492,6 +1511,7 @@ function renderDesktopProcesosMenu() {
         ${renderDesktopMenuLink("registrar-tasa-cambio", "Registrar tasa cambio")}
         ${renderDesktopMenuLink("borrador-devoluciones", "Borrador devoluciones")}
         ${renderDesktopMenuLink("ajuste-inventario", "Ajuste de inventario")}
+        ${userIsSystemOperator() ? renderDesktopMenuLink("cambio-precio", "Cambio de precio") : ""}
         ${renderDesktopMenuLink("cajas", "Apertura de caja")}
         ${renderDesktopMenuLink("cierre-caja", "Cierre de caja")}
         <button
@@ -8881,6 +8901,10 @@ function getDesktopBreadcrumb(view) {
     return ["Procesos", "Ajuste de inventario"];
   }
 
+  if (view === "cambio-precio") {
+    return ["Procesos", "Cambio de precio"];
+  }
+
   if (view === "cajas") {
     return ["Procesos", "Facturacion", "Apertura de caja"];
   }
@@ -8944,6 +8968,7 @@ function getDesktopViewLabelV2(view) {
     "registro-transferencia": "Registro de transferencias",
     "cargar-transferencia": "Carga de transferencias",
     "ajuste-inventario": "Ajuste de inventario",
+    "cambio-precio": "Cambio de precio",
     facturacion: "Facturacion",
     cajas: "Apertura de caja",
     "cierre-caja": "Cierre de caja",
@@ -10491,6 +10516,11 @@ function bindShellEvents() {
         return;
       }
 
+      if (nextView === "cambio-precio") {
+        await loadPriceChangeMetadata();
+        return;
+      }
+
       if (nextView === "cajas") {
         await loadCashRegisters();
         return;
@@ -10613,6 +10643,7 @@ function bindShellEvents() {
   bindTransferEvents();
   bindDevReturnEvents();
   bindAdjustmentEvents();
+  bindPriceChangeEvents();
   bindSucursalEvents();
   bindClienteEvents();
   bindProveedoresEvents();
@@ -12712,6 +12743,709 @@ function bindArticleEvents() {
       closeCatalogComboboxes();
     });
 }
+
+// ===== Cambio de Precio (Procesos) =====
+// El frontend nunca manda costos ni decide reglas de negocio: solo arma
+// { mode, destinationNodeIds, codigosBarra } y muestra lo que el backend responde
+// (preview/create/send/retry/remote-status/report.pdf). Textos de estado calcados de los
+// literales pedidos, sin inventar wording nuevo.
+
+const PRICE_CHANGE_STORE_STATUS_LABELS = {
+  PENDING_SEND: "Pendiente de envio",
+  SENT_TO_VPS: "Enviado al VPS/remoto",
+  FAILED_NETWORK: "No se logro enviar el cambio por fallo en la red",
+  WAITING_STORE_REFRESH: "Enviado al VPS, pendiente por refresco local",
+  RECEIVED_BY_STORE: "Recibido por tienda",
+  APPLYING: "Aplicando",
+  APPLIED: "Aplicado correctamente",
+  PARTIAL_APPLIED: "Aplicado parcialmente",
+  FAILED_APPLY: "No se logro aplicar en la tienda",
+};
+
+const PRICE_CHANGE_BATCH_STATUS_LABELS = {
+  DRAFT: "Borrador",
+  SENDING_TO_VPS: "Enviando",
+  SENT_TO_VPS: "Enviado al VPS/remoto",
+  PARTIAL_SENT_TO_VPS: "Enviado parcialmente",
+  WAITING_STORE_REFRESH: "Pendiente por refresco local",
+  PARTIAL_APPLIED: "Aplicado parcialmente",
+  APPLIED: "Aplicado correctamente",
+  FAILED: "Fallido",
+};
+
+function getPriceChangeStoreStatusLabel(status) {
+  return PRICE_CHANGE_STORE_STATUS_LABELS[status] || status || "-";
+}
+
+function getPriceChangeBatchStatusLabel(status) {
+  return PRICE_CHANGE_BATCH_STATUS_LABELS[status] || status || "-";
+}
+
+function getPriceChangeModeLabel(mode) {
+  return mode === "FULL_INVENTORY" ? "Todo el inventario" : "Articulos seleccionados";
+}
+
+function getPriceChangeStatusTone(status) {
+  if (status === "APPLIED") {
+    return "success";
+  }
+  if (status === "FAILED_NETWORK" || status === "FAILED_APPLY" || status === "FAILED") {
+    return "danger";
+  }
+  if (
+    status === "SENDING_TO_VPS" ||
+    status === "SENT_TO_VPS" ||
+    status === "PARTIAL_SENT_TO_VPS" ||
+    status === "WAITING_STORE_REFRESH" ||
+    status === "RECEIVED_BY_STORE" ||
+    status === "APPLYING" ||
+    status === "PARTIAL_APPLIED"
+  ) {
+    return "warning";
+  }
+  return "neutral";
+}
+
+function renderPriceChangeWorkspace() {
+  const pc = state.priceChange;
+  const mode = pc.mode || "SELECTED_ITEMS";
+  const isBusy =
+    pc.loadingMetadata ||
+    pc.previewLoading ||
+    pc.creating ||
+    pc.sending ||
+    pc.retrying ||
+    pc.pullingStatus ||
+    pc.downloadingPdf;
+
+  return `
+    <div class="modern-page price-change-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Cambio de precio"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Cambio de precio</h1>
+        </div>
+      </div>
+
+      <section class="transfer-register-shell price-change-shell">
+        ${pc.loadingMetadata ? renderLoadingState("Cargando tiendas disponibles...") : renderPriceChangeForm(pc, mode, isBusy)}
+        ${pc.preview ? renderPriceChangePreviewSummary(pc.preview) : ""}
+        ${pc.batch ? renderPriceChangeBatchSummary(pc) : ""}
+      </section>
+    </div>
+  `;
+}
+
+function renderPriceChangeForm(pc, mode, isBusy) {
+  const destinations = Array.isArray(pc.nodes) ? pc.nodes : [];
+  const selected = new Set(Array.isArray(pc.selectedNodeIds) ? pc.selectedNodeIds : []);
+  const hasDestinations = pc.selectedNodeIds.length > 0;
+  const hasItems = mode === "FULL_INVENTORY" || pc.selectedItems.length > 0;
+  const canPreview = !isBusy && hasDestinations && hasItems;
+  const canCreate = !isBusy && Boolean(pc.preview) && Number(pc.preview.totalItems || 0) > 0 && hasDestinations;
+
+  return `
+    <form id="price-change-form" class="price-change-form">
+      <div class="transfer-command-bar price-change-command-bar" role="toolbar" aria-label="Acciones de cambio de precio">
+        <button class="transfer-command-button" type="button" data-price-change-new ${isBusy ? "disabled" : ""}>
+          <span class="transfer-command-icon">+</span>
+          Nuevo lote
+        </button>
+      </div>
+
+      <fieldset class="price-change-mode-field">
+        <legend>Modo</legend>
+        <label>
+          <input type="radio" name="priceChangeMode" value="SELECTED_ITEMS" ${mode === "SELECTED_ITEMS" ? "checked" : ""} ${isBusy ? "disabled" : ""} />
+          Articulos seleccionados
+        </label>
+        <label>
+          <input type="radio" name="priceChangeMode" value="FULL_INVENTORY" ${mode === "FULL_INVENTORY" ? "checked" : ""} ${isBusy ? "disabled" : ""} />
+          Todo el inventario
+        </label>
+      </fieldset>
+
+      <div class="price-change-destinations-block">
+        <div class="inventory-bulk-toolbar">
+          <strong>Tiendas destino</strong>
+          <button class="button button-ghost" type="button" data-price-change-select-all-destinations ${destinations.length && !isBusy ? "" : "disabled"}>
+            Seleccionar todas
+          </button>
+        </div>
+        <div class="inventory-bulk-destinations price-change-destinations">
+          ${
+            destinations.length
+              ? destinations
+                  .map(
+                    (node) => `
+                      <label class="inventory-bulk-destination">
+                        <input
+                          type="checkbox"
+                          name="priceChangeDestinationNodeIds"
+                          value="${escapeHtml(node.nodeId || "")}"
+                          ${selected.has(node.nodeId) ? "checked" : ""}
+                          ${isBusy ? "disabled" : ""}
+                        />
+                        <span>
+                          <strong>${escapeHtml(node.nombre || node.sucursalCodigo || node.nodeId)}</strong>
+                          <small>${escapeHtml(node.sucursalCodigo || "-")}</small>
+                        </span>
+                      </label>
+                    `,
+                  )
+                  .join("")
+              : `<div class="empty-state price-change-empty"><h3>Sin tiendas configuradas</h3><p>Las tiendas deben existir registradas como nodo de sincronizacion.</p></div>`
+          }
+        </div>
+      </div>
+
+      ${
+        mode === "SELECTED_ITEMS"
+          ? renderPriceChangeItemsBlock(pc, isBusy)
+          : `<p class="price-change-full-inventory-notice">Se enviara todo el inventario valido de esta instancia origen. Puede ser un volumen grande de articulos.</p>`
+      }
+
+      <div class="price-change-actions">
+        <button class="button button-ghost" type="button" data-price-change-preview ${canPreview ? "" : "disabled"}>
+          ${pc.previewLoading ? "Previsualizando..." : "Previsualizar"}
+        </button>
+        <button class="button button-primary" type="button" data-price-change-create ${canCreate ? "" : "disabled"}>
+          ${pc.creating ? "Creando..." : "Crear lote"}
+        </button>
+      </div>
+    </form>
+  `;
+}
+
+function renderPriceChangeItemsBlock(pc, isBusy) {
+  const items = Array.isArray(pc.selectedItems) ? pc.selectedItems : [];
+
+  return `
+    <div class="price-change-items-block">
+      <label class="price-change-barcode-field">
+        <span>Codigo de barra</span>
+        <input type="text" id="price-change-barcode-input" maxlength="30" placeholder="Escanea o escribe el codigo y presiona Enter" ${isBusy ? "disabled" : ""} />
+      </label>
+
+      <div class="adjustment-grid-wrap price-change-items-grid-wrap">
+        <table class="adjustment-grid price-change-items-grid">
+          <thead>
+            <tr>
+              <th>Codigo Barra</th>
+              <th>Nombre</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              items.length
+                ? items
+                    .map(
+                      (item) => `
+                        <tr>
+                          <td>${escapeHtml(item.codigoBarra)}</td>
+                          <td>${escapeHtml(item.nombre || "-")}</td>
+                          <td>
+                            <button class="button button-ghost" type="button" data-price-change-remove-item="${escapeHtml(item.codigoBarra)}" ${isBusy ? "disabled" : ""}>
+                              Quitar
+                            </button>
+                          </td>
+                        </tr>
+                      `,
+                    )
+                    .join("")
+                : `<tr><td colspan="3">Sin articulos seleccionados.</td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderPriceChangePreviewSummary(preview) {
+  const items = Array.isArray(preview.items) ? preview.items : [];
+  const warnings = Array.isArray(preview.warnings) ? preview.warnings : [];
+  const sampleLimit = 20;
+  const sample = items.slice(0, sampleLimit);
+
+  return `
+    <div class="price-change-summary">
+      <h2>Previsualizacion</h2>
+      <p>Total de articulos a enviar: <strong>${escapeHtml(String(preview.totalItems ?? items.length))}</strong></p>
+      ${
+        warnings.length
+          ? `<ul class="price-change-warning-list">${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
+          : ""
+      }
+      ${
+        items.length > sample.length
+          ? `<p class="price-change-preview-note">Mostrando los primeros ${escapeHtml(String(sample.length))} de ${escapeHtml(String(items.length))} articulos. El total real se envia completo al crear el lote.</p>`
+          : ""
+      }
+      ${
+        sample.length
+          ? `
+            <div class="adjustment-grid-wrap price-change-items-grid-wrap">
+              <table class="adjustment-grid price-change-items-grid">
+                <thead>
+                  <tr>
+                    <th>Codigo Barra</th>
+                    <th>Nombre</th>
+                    <th>Costo detal</th>
+                    <th>Costo promedio</th>
+                    <th>Ultimo costo</th>
+                    <th>Costo dolar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${sample
+                    .map(
+                      (item) => `
+                        <tr>
+                          <td>${escapeHtml(item.codigoBarra)}</td>
+                          <td>${escapeHtml(item.nombre || "-")}</td>
+                          <td>${escapeHtml(item.costoInicial)}</td>
+                          <td>${escapeHtml(item.costoPromedio)}</td>
+                          <td>${escapeHtml(item.ultimoCosto)}</td>
+                          <td>${escapeHtml(item.costoDolar)}</td>
+                        </tr>
+                      `,
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+          `
+          : ""
+      }
+    </div>
+  `;
+}
+
+function renderPriceChangeBatchSummary(pc) {
+  const batch = pc.batch;
+  const stores = Array.isArray(batch.stores) ? batch.stores : [];
+  const hasFailedNetwork = stores.some((store) => store.status === "FAILED_NETWORK");
+  const isBusy = pc.sending || pc.retrying || pc.pullingStatus || pc.downloadingPdf;
+
+  return `
+    <div class="price-change-summary price-change-batch-summary">
+      <h2>Lote ${escapeHtml(batch.batchId || "")}</h2>
+      <p class="price-change-batch-meta">
+        ${renderDevReturnSyncStatusChip(getPriceChangeBatchStatusLabel(batch.status), getPriceChangeStatusTone(batch.status))}
+        <span>Modo: ${escapeHtml(getPriceChangeModeLabel(batch.mode))}</span>
+        <span>Articulos: ${escapeHtml(String(batch.totalItems ?? "-"))}</span>
+        <span>Tiendas: ${escapeHtml(String(batch.totalStores ?? stores.length))}</span>
+      </p>
+
+      <div class="price-change-actions price-change-batch-actions">
+        <button class="button button-primary" type="button" data-price-change-send ${isBusy ? "disabled" : ""}>
+          ${pc.sending ? "Enviando..." : "Enviar"}
+        </button>
+        <button class="button button-ghost" type="button" data-price-change-pull-status ${isBusy ? "disabled" : ""}>
+          ${pc.pullingStatus ? "Actualizando..." : "Actualizar estado"}
+        </button>
+        ${
+          hasFailedNetwork
+            ? `
+              <button class="button button-ghost" type="button" data-price-change-retry ${isBusy ? "disabled" : ""}>
+                ${pc.retrying ? "Reintentando..." : "Reintentar"}
+              </button>
+            `
+            : ""
+        }
+        <button class="button button-ghost" type="button" data-price-change-download-pdf ${isBusy ? "disabled" : ""}>
+          ${pc.downloadingPdf ? "Descargando..." : "Descargar PDF"}
+        </button>
+      </div>
+
+      <div class="adjustment-grid-wrap price-change-store-grid-wrap">
+        <table class="adjustment-grid price-change-store-grid">
+          <thead>
+            <tr>
+              <th>Tienda</th>
+              <th>Estado</th>
+              <th>Aplicados</th>
+              <th>No encontrados</th>
+              <th>Errores</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              stores.length
+                ? stores
+                    .map(
+                      (store) => `
+                        <tr>
+                          <td>${escapeHtml(store.destinationName || store.destinationCode || store.destinationNodeId)}</td>
+                          <td>
+                            ${renderDevReturnSyncStatusChip(getPriceChangeStoreStatusLabel(store.status), getPriceChangeStatusTone(store.status))}
+                            ${
+                              store.status === "FAILED_NETWORK" && store.lastError
+                                ? `<div class="price-change-store-error">${escapeHtml(store.lastError)}</div>`
+                                : ""
+                            }
+                          </td>
+                          <td>${escapeHtml(String(store.appliedCount ?? 0))}</td>
+                          <td>${escapeHtml(String(store.notFoundCount ?? 0))}</td>
+                          <td>${escapeHtml(String(store.errorCount ?? 0))}</td>
+                        </tr>
+                      `,
+                    )
+                    .join("")
+                : `<tr><td colspan="5">Sin tiendas destino.</td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+async function loadPriceChangeMetadata(options = {}) {
+  const { renderAfter = true } = options;
+  state.priceChange.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/transfers/sync/nodes");
+    const nodes = Array.isArray(response.nodes) ? response.nodes : [];
+    // El backend sigue siendo la autoridad (rechaza Bodega Central/Bodega 002 como
+    // destino); este filtro es solo para no ofrecerlas de entrada en el selector.
+    state.priceChange.nodes = nodes.filter((node) => String(node.tipo || "").trim().toUpperCase() === "TIENDA");
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la lista de tiendas: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.priceChange.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+function resetPriceChangeWorkspace() {
+  state.priceChange.mode = "SELECTED_ITEMS";
+  state.priceChange.selectedNodeIds = [];
+  state.priceChange.selectedItems = [];
+  state.priceChange.preview = null;
+  state.priceChange.batch = null;
+}
+
+async function addPriceChangeBarcode(rawCodigoBarra) {
+  const codigoBarra = String(rawCodigoBarra || "").trim().toUpperCase();
+  if (!codigoBarra) {
+    return;
+  }
+
+  const items = Array.isArray(state.priceChange.selectedItems) ? state.priceChange.selectedItems : [];
+  if (items.some((item) => item.codigoBarra === codigoBarra)) {
+    setFlash(`El codigo ${codigoBarra} ya esta en la lista.`, "warning");
+    render();
+    return;
+  }
+
+  let nombre = "";
+  try {
+    const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
+    const article = response.mercancia || response;
+    nombre = article?.general?.nombre || article?.nombre || "";
+  } catch (error) {
+    console.error(error);
+    // No bloquea el agregado: Previsualizar/Crear lote son quienes deciden, contra
+    // Inventario real, si el codigo existe o no (el backend nunca confia en el frontend).
+  }
+
+  state.priceChange.selectedItems = [...items, { codigoBarra, nombre }];
+  state.priceChange.preview = null;
+  render();
+}
+
+function removePriceChangeItem(codigoBarra) {
+  state.priceChange.selectedItems = (state.priceChange.selectedItems || []).filter(
+    (item) => item.codigoBarra !== codigoBarra,
+  );
+  state.priceChange.preview = null;
+  render();
+}
+
+async function previewCurrentPriceChangeBatch() {
+  const pc = state.priceChange;
+  const mode = pc.mode || "SELECTED_ITEMS";
+  const codigosBarra = (pc.selectedItems || []).map((item) => item.codigoBarra);
+
+  if (mode === "SELECTED_ITEMS" && codigosBarra.length === 0) {
+    setFlash("Agrega al menos un codigo de barra para previsualizar.", "error");
+    render();
+    return;
+  }
+
+  pc.previewLoading = true;
+  clearFlash();
+  render();
+  try {
+    // FULL_INVENTORY nunca manda codigosBarra, aunque el usuario haya tenido articulos
+    // cargados de un intento anterior en modo SELECTED_ITEMS.
+    const body = mode === "FULL_INVENTORY" ? { mode } : { mode, codigosBarra };
+    pc.preview = await apiFetch("/price-changes/preview", { method: "POST", body });
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    pc.previewLoading = false;
+    render();
+  }
+}
+
+async function createCurrentPriceChangeBatch() {
+  const pc = state.priceChange;
+  if (!pc.preview || !(Number(pc.preview.totalItems || 0) > 0)) {
+    setFlash("Genera una previsualizacion valida antes de crear el lote.", "error");
+    render();
+    return;
+  }
+  if (!pc.selectedNodeIds.length) {
+    setFlash("Selecciona al menos una tienda destino.", "error");
+    render();
+    return;
+  }
+
+  const mode = pc.mode || "SELECTED_ITEMS";
+  const body = {
+    mode,
+    destinationNodeIds: pc.selectedNodeIds,
+  };
+  if (mode === "SELECTED_ITEMS") {
+    body.codigosBarra = pc.selectedItems.map((item) => item.codigoBarra);
+  }
+
+  pc.creating = true;
+  clearFlash();
+  render();
+  try {
+    pc.batch = await apiFetch("/price-changes", { method: "POST", body });
+    pc.preview = null;
+    setFlash("Lote de cambio de precio creado.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    pc.creating = false;
+    render();
+  }
+}
+
+async function sendCurrentPriceChangeBatch() {
+  const pc = state.priceChange;
+  if (!pc.batch?.batchId) {
+    return;
+  }
+
+  pc.sending = true;
+  clearFlash();
+  render();
+  try {
+    const response = await apiFetch(`/price-changes/${encodeURIComponent(pc.batch.batchId)}/send`, {
+      method: "POST",
+    });
+    pc.batch = { ...pc.batch, status: response.status, stores: response.stores };
+    setFlash(response.message || "Envio procesado.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    pc.sending = false;
+    render();
+  }
+}
+
+async function retryCurrentPriceChangeBatch() {
+  const pc = state.priceChange;
+  if (!pc.batch?.batchId) {
+    return;
+  }
+
+  pc.retrying = true;
+  clearFlash();
+  render();
+  try {
+    // Sin destinationNodeIds: el backend reintenta TODAS las tiendas en FAILED_NETWORK.
+    const response = await apiFetch(`/price-changes/${encodeURIComponent(pc.batch.batchId)}/retry`, {
+      method: "POST",
+      body: {},
+    });
+    pc.batch = { ...pc.batch, status: response.status, stores: response.stores };
+    setFlash(response.message || "Reintento procesado.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    pc.retrying = false;
+    render();
+  }
+}
+
+async function pullCurrentPriceChangeRemoteStatus() {
+  const pc = state.priceChange;
+  if (!pc.batch?.batchId) {
+    return;
+  }
+
+  pc.pullingStatus = true;
+  clearFlash();
+  render();
+  try {
+    await apiFetch(`/price-changes/${encodeURIComponent(pc.batch.batchId)}/pull-remote-status`, {
+      method: "POST",
+    });
+    pc.batch = await apiFetch(`/price-changes/${encodeURIComponent(pc.batch.batchId)}`);
+    setFlash("Estado actualizado.", "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    pc.pullingStatus = false;
+    render();
+  }
+}
+
+async function downloadPriceChangeReportPdf() {
+  const pc = state.priceChange;
+  const batchId = pc.batch?.batchId;
+  if (!batchId) {
+    return;
+  }
+
+  pc.downloadingPdf = true;
+  clearFlash();
+  render();
+  try {
+    // El backend de Cambio de Precio devuelve un PDF binario real (application/pdf), no
+    // JSON+base64 como downloadPdfReport(): apiFetch fuerza JSON/texto, asi que aqui se
+    // usa fetch directo con el mismo header Bearer que arma apiFetch.
+    const response = await window.fetch(
+      `${API_BASE}/price-changes/${encodeURIComponent(batchId)}/report.pdf`,
+      {
+        method: "GET",
+        headers: state.token ? { Authorization: `Bearer ${state.token}` } : {},
+      },
+    );
+
+    if (!response.ok) {
+      let message = `Error ${response.status}`;
+      try {
+        const payload = await response.json();
+        message = extractMessageFromPayload(payload) || message;
+      } catch {
+        // Respuesta no-JSON (binario truncado u otro error de bajo nivel): se deja el
+        // mensaje generico.
+      }
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `cambio-precio-${batchId}.pdf`;
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      anchor.remove();
+    }, 1000);
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo descargar el PDF: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    pc.downloadingPdf = false;
+    render();
+  }
+}
+
+function bindPriceChangeEvents() {
+  document.querySelector("[data-price-change-new]")?.addEventListener("click", () => {
+    resetPriceChangeWorkspace();
+    render();
+  });
+
+  document.querySelectorAll('input[name="priceChangeMode"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!input.checked) {
+        return;
+      }
+      state.priceChange.mode = input.value;
+      state.priceChange.preview = null;
+      render();
+    });
+  });
+
+  document.querySelector("[data-price-change-select-all-destinations]")?.addEventListener("click", () => {
+    state.priceChange.selectedNodeIds = (state.priceChange.nodes || []).map((node) => node.nodeId);
+    render();
+  });
+
+  document.querySelectorAll('input[name="priceChangeDestinationNodeIds"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      state.priceChange.selectedNodeIds = Array.from(
+        document.querySelectorAll('input[name="priceChangeDestinationNodeIds"]:checked'),
+      ).map((item) => item.value);
+      // A diferencia del checkbox de inventoryBulk (cuyo boton de envio no depende de
+      // cuantas tiendas hay marcadas), aqui "Previsualizar"/"Crear lote" SI dependen de
+      // selectedNodeIds.length, asi que hace falta re-renderizar para reflejar el nuevo
+      // estado disabled/enabled de esos botones.
+      render();
+    });
+  });
+
+  const barcodeInput = document.getElementById("price-change-barcode-input");
+  barcodeInput?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    const value = barcodeInput.value;
+    barcodeInput.value = "";
+    await addPriceChangeBarcode(value);
+  });
+
+  document.querySelectorAll("[data-price-change-remove-item]").forEach((button) => {
+    button.addEventListener("click", () => {
+      removePriceChangeItem(button.getAttribute("data-price-change-remove-item") || "");
+    });
+  });
+
+  document.querySelector("[data-price-change-preview]")?.addEventListener("click", async () => {
+    await previewCurrentPriceChangeBatch();
+  });
+
+  document.querySelector("[data-price-change-create]")?.addEventListener("click", async () => {
+    await createCurrentPriceChangeBatch();
+  });
+
+  document.querySelector("[data-price-change-send]")?.addEventListener("click", async () => {
+    await sendCurrentPriceChangeBatch();
+  });
+
+  document.querySelector("[data-price-change-pull-status]")?.addEventListener("click", async () => {
+    await pullCurrentPriceChangeRemoteStatus();
+  });
+
+  document.querySelector("[data-price-change-retry]")?.addEventListener("click", async () => {
+    await retryCurrentPriceChangeBatch();
+  });
+
+  document.querySelector("[data-price-change-download-pdf]")?.addEventListener("click", async () => {
+    await downloadPriceChangeReportPdf();
+  });
+}
+
+// ===== Fin Cambio de Precio =====
 
 function bindTransferEvents() {
   document.querySelector("[data-refresh-transfers]")?.addEventListener("click", async () => {

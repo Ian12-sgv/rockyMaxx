@@ -17,6 +17,7 @@ import { ImpresorasModule } from "./impresoras/impresoras.module";
 import { InventoryModule } from "./inventory/inventory.module";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { MirrorSyncModule } from "./mirror-sync/mirror-sync.module";
+import { PriceChangesModule } from "./price-changes/price-changes.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProveedoresModule } from "./proveedores/proveedores.module";
 import { RolesModule } from "./roles/roles.module";
@@ -50,6 +51,7 @@ import { UsersModule } from "./users/users.module";
     RolesModule,
     InventoryModule,
     MaintenanceModule,
+    PriceChangesModule,
     ProveedoresModule,
     SucursalesModule,
     TiposPagoModule,

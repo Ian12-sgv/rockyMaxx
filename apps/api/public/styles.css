@@ -7134,6 +7134,119 @@ button {
   }
 }
 
+/* Cambio de Precio (Procesos) -- reutiliza .adjustment-grid*, .inventory-bulk-destination*,
+   .transfer-command-bar*, .button*, .modern-chip* y .empty-state; solo se agrega lo que
+   no tiene equivalente ya en el sistema. */
+.price-change-mode-field {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin: 4px 0 18px;
+  padding: 0;
+  border: 0;
+}
+
+.price-change-mode-field legend {
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.price-change-mode-field label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.price-change-destinations-block {
+  margin-bottom: 18px;
+}
+
+.price-change-full-inventory-notice {
+  margin: 4px 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #d8e2ec;
+  border-radius: 12px;
+  background: #f9fbfd;
+  color: #445468;
+}
+
+.price-change-items-block {
+  margin-bottom: 18px;
+}
+
+.price-change-items-grid-wrap {
+  min-height: 0;
+  max-height: 260px;
+}
+
+.price-change-store-grid-wrap {
+  min-height: 0;
+}
+
+.price-change-barcode-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 360px;
+  margin-bottom: 12px;
+}
+
+.price-change-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.price-change-summary {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #d8e2ec;
+  border-radius: 16px;
+  background: #f9fbfd;
+}
+
+.price-change-summary h2 {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+
+.price-change-warning-list {
+  margin: 8px 0;
+  padding-left: 18px;
+  color: #a3771f;
+}
+
+.price-change-preview-note {
+  margin: 6px 0 12px;
+  color: #667284;
+  font-size: 0.85rem;
+}
+
+.price-change-batch-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 6px;
+}
+
+.price-change-store-error {
+  margin-top: 4px;
+  color: #a33131;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .price-change-mode-field {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+
 /* Viewport fit: facturacion and payment form */
 .desktop-frame:has(.facturacion-page) {
   height: 100dvh;
