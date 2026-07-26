@@ -324,6 +324,12 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
     try {
       const limit = this.getPriceChangeSyncLimit();
 
+      // fetch-remote (nuevo): trae por HTTP lo pendiente desde el VPS/REMOTO real de esta
+      // tienda hacia PRICE_CHANGE_SYNC_INBOX local. Antes de este paso, pull no tenia nada
+      // que materializar en una topologia donde VPS/REMOTO vive en una base *_vps* separada.
+      const fetchRemote = await this.runPriceChangeSyncSubStep("fetch-remote", () =>
+        this.pullPendingPriceChangesFromRemoteVps(limit),
+      );
       const pull = await this.runPriceChangeSyncSubStep("pull", () =>
         this.pullPendingPriceChanges(limit),
       );
@@ -334,13 +340,14 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
         this.reportPendingPriceChangeResults(limit),
       );
 
+      const fetched = fetchRemote?.fetched ?? 0;
       const pulled = pull?.received ?? 0;
       const applied = apply?.processed ?? 0;
       const reported = report?.results.filter((item) => item.reported).length ?? 0;
 
-      if ((pull?.pulled ?? 0) > 0 || applied > 0 || (report?.processed ?? 0) > 0) {
+      if (fetched > 0 || (pull?.pulled ?? 0) > 0 || applied > 0 || (report?.processed ?? 0) > 0) {
         this.logger.log(
-          `Ciclo local de Cambio de Precio (${reason}): pull=${pull?.pulled ?? 0} (${pulled} recibido(s)); apply=${applied} batch(es); report=${report?.processed ?? 0} (${reported} reportado(s)).`,
+          `Ciclo local de Cambio de Precio (${reason}): fetch-remote=${fetched} (${fetchRemote?.imported ?? 0} importado(s)); pull=${pull?.pulled ?? 0} (${pulled} recibido(s)); apply=${applied} batch(es); report=${report?.processed ?? 0} (${reported} reportado(s)).`,
         );
       }
     } finally {
@@ -353,7 +360,7 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
   // ya persistido (apply lee filas ya materializadas por pulls previos; report lee filas ya
   // aplicadas), asi que un fallo de pull no impide aplicar/reportar lo que quedo de antes.
   private async runPriceChangeSyncSubStep<T>(
-    label: "pull" | "apply" | "report",
+    label: "fetch-remote" | "pull" | "apply" | "report",
     fn: () => Promise<T>,
   ): Promise<T | null> {
     try {
@@ -825,6 +832,98 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  // Rol LOCAL SERVICE -> rol VPS/REMOTO (nodo REMOTO real, no colocado): trae por HTTP lo
+  // pendiente desde EL PROPIO gemelo VPS de esta tienda (resuelto via SYNC_NODES, mismo
+  // ApiUrl que el ORIGEN usa para enviarle batches) y lo guarda localmente. Cierra el hueco
+  // documentado en pullPendingPriceChanges()/listPendingPriceChangeSyncForCurrentNode(): esos
+  // dos metodos SOLO leen la PRICE_CHANGE_SYNC_INBOX de esta misma base -- si el VPS/REMOTO
+  // de esta tienda vive en una base *_vps* separada (topologia real confirmada: tienda
+  // fisica = rocky_tienda_NNN, VPS = rocky_tienda_NNN_vps, conectadas solo por HTTP), esta
+  // tienda nunca veria nada sin este paso adicional.
+  //
+  // No aplica Inventario aqui -- solo hace lo mismo que haria un POST entrante real a
+  // /price-changes/sync/import (importRemotePriceChangeBatch, idempotente por GlobalId via
+  // "on conflict do nothing"). La materializacion (PRICE_CHANGE_BATCH/_ITEM/_STORE) sigue
+  // siendo responsabilidad de pullPendingPriceChanges() y la aplicacion de costos sigue
+  // siendo exclusiva de applyPendingLocalPriceChanges() -- este metodo no cambia esa
+  // separacion de responsabilidades, solo agrega el salto HTTP que faltaba antes de ella.
+  async pullPendingPriceChangesFromRemoteVps(limit = PRICE_CHANGE_DEFAULT_PULL_LIMIT) {
+    const current = this.getCurrentSourceContext();
+    if (!this.isPriceChangeLocalServiceInstance()) {
+      // Origen y representantes VPS/REMOTO (isVpsRemote=true) no tienen un "propio VPS" del
+      // cual traer nada -- no-op informativo, nunca un error, para que el ciclo automatico
+      // (Paso 8.5) no genere ruido si por alguna razon corriera fuera de una tienda fisica.
+      return {
+        skipped: true,
+        message: "Esta instancia no es una tienda LOCAL SERVICE; no hay VPS/REMOTO propio del cual traer pendientes.",
+        fetched: 0,
+        imported: 0,
+        alreadyReceived: 0,
+        failed: 0,
+        results: [],
+      };
+    }
+
+    const apiUrl = await this.resolvePriceChangeDestinationApiUrl(current.nodeId);
+    if (!apiUrl) {
+      return {
+        skipped: true,
+        message: `El nodo ${current.nodeId} no tiene ApiUrl configurada en SYNC_NODES; no se puede consultar su VPS/REMOTO.`,
+        fetched: 0,
+        imported: 0,
+        alreadyReceived: 0,
+        failed: 0,
+        results: [],
+      };
+    }
+
+    const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
+    const token = await this.loginRemotePriceChangeNode(baseUrl);
+    const response = await fetch(`${baseUrl}/api/price-changes/sync/pending?limit=${limit}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const responseBody = await this.readRemoteJson(response);
+    if (!response.ok) {
+      throw new Error(`No se pudo consultar pendientes del VPS/REMOTO: ${this.formatRemoteError(responseBody, response.status)}`);
+    }
+    const pendingRemote = this.isRecord(responseBody) && Array.isArray(responseBody.pending) ? responseBody.pending : [];
+
+    const results: Array<{ globalId: string | null; imported: boolean; alreadyReceived?: boolean; error?: string }> = [];
+    for (const rawItem of pendingRemote) {
+      if (!this.isRecord(rawItem) || !this.isRecord(rawItem.Payload)) {
+        continue;
+      }
+
+      try {
+        const importResult = await this.importRemotePriceChangeBatch(rawItem.Payload as Record<string, unknown>);
+        results.push({
+          globalId: typeof rawItem.GlobalId === "string" ? rawItem.GlobalId : null,
+          imported: importResult.imported,
+          alreadyReceived: !importResult.imported,
+        });
+      } catch (error) {
+        const message = this.extractPriceChangeErrorMessage(error);
+        this.logger.warn(`No se pudo importar localmente el pendiente remoto ${rawItem.GlobalId}: ${message}`);
+        results.push({
+          globalId: typeof rawItem.GlobalId === "string" ? rawItem.GlobalId : null,
+          imported: false,
+          error: message,
+        });
+      }
+    }
+
+    return {
+      skipped: false,
+      fetched: pendingRemote.length,
+      imported: results.filter((result) => result.imported).length,
+      alreadyReceived: results.filter((result) => result.alreadyReceived).length,
+      failed: results.filter((result) => !result.imported && !result.alreadyReceived).length,
+      results,
+    };
+  }
+
   // Rol LOCAL SERVICE: aplica en INVENTARIO local UN batch ya materializado (Paso 4).
   // Match estricto por CodigoBarra exacto (sin LIKE, sin normalizacion, sin codigo
   // interno). Nunca toca envio de resultado al VPS/remoto ni PDF/UI (eso es Paso 6+).
@@ -1001,11 +1100,43 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
     };
 
     try {
-      const receipt = await this.receivePriceChangeSyncResult(payload);
+      // Rol LOCAL SERVICE -> rol VPS/REMOTO real: reporta por HTTP hacia EL PROPIO gemelo
+      // VPS de esta tienda (resuelto via SYNC_NODES, mismo ApiUrl que ya usa el ORIGEN para
+      // enviarle batches). Corrige el mismo hueco de topologia ya cerrado para el pull
+      // (pullPendingPriceChangesFromRemoteVps): llamar this.receivePriceChangeSyncResult(...)
+      // directo asumia VPS/REMOTO colocado en la misma base, lo cual es falso quando la
+      // tienda fisica y su gemelo VPS son bases separadas (rocky_tienda_NNN vs
+      // rocky_tienda_NNN_vps) -- el resultado quedaba guardado localmente y nunca llegaba
+      // al VPS, por lo que el ORIGEN nunca lo veia via remote-status.
+      const apiUrl = await this.resolvePriceChangeDestinationApiUrl(current.nodeId);
+      if (!apiUrl) {
+        throw new Error(
+          `El nodo ${current.nodeId} no tiene ApiUrl configurada en SYNC_NODES; no se puede reportar al VPS/REMOTO.`,
+        );
+      }
+
+      const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
+      const token = await this.loginRemotePriceChangeNode(baseUrl);
+      const response = await fetch(`${baseUrl}/api/price-changes/sync/report-result`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const receipt = await this.readRemoteJson(response);
+      if (!response.ok) {
+        throw new Error(`El VPS/REMOTO rechazo el resultado del Cambio de Precio: ${this.formatRemoteError(receipt, response.status)}`);
+      }
+
       return { batchId, reported: true, globalId, receipt };
     } catch (error) {
       // No se altera nada local (PRICE_CHANGE_BATCH_ITEM_RESULT/_STORE quedan intactos);
-      // reintentar es simplemente volver a llamar este mismo metodo.
+      // reintentar es simplemente volver a llamar este mismo metodo. Idempotente del lado
+      // VPS (receivePriceChangeSyncResult hace upsert por GlobalId determinístico), asi que
+      // reportar dos veces tras un reintento nunca duplica nada.
       const message = this.extractPriceChangeErrorMessage(error);
       this.logger.warn(`No se pudo reportar el resultado de Cambio de Precio ${batchId}: ${message}`);
       return { batchId, reported: false, error: message };

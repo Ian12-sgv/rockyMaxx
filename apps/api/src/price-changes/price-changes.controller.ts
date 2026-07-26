@@ -54,6 +54,16 @@ export class PriceChangesController {
     return { pending };
   }
 
+  // Rol LOCAL SERVICE -> rol VPS/REMOTO real: trae por HTTP lo pendiente desde el propio
+  // gemelo VPS de esta tienda (topologia con bases separadas) hacia PRICE_CHANGE_SYNC_INBOX
+  // local. Paso previo a "sync/pull" cuando VPS/REMOTO no esta colocado en la misma base.
+  // Reutilizable por el timer del Paso 8.5, ademas de invocable manualmente.
+  @RequireGroups("admin", "sistema")
+  @Post("sync/pull-remote")
+  async pullRemote(@Body() priceChangeSyncPullDto: PriceChangeSyncPullDto) {
+    return this.priceChangesService.pullPendingPriceChangesFromRemoteVps(priceChangeSyncPullDto.limit);
+  }
+
   // Rol LOCAL SERVICE: dispara la recepcion local de lo pendiente (materializa
   // PRICE_CHANGE_BATCH/_ITEM/_STORE en RECEIVED_BY_STORE). Reutilizable por un futuro
   // timer, ademas de invocable manualmente.
