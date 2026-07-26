@@ -22,6 +22,8 @@ import { buildFacturacionInvoicePdf, type FacturacionInvoicePdfPayload } from ".
 const ZERO = new Prisma.Decimal(0);
 const ONE = new Prisma.Decimal(1);
 const HUNDRED = new Prisma.Decimal(100);
+const FACTURACION_PAGOS_SENTINEL_CODE = "000";
+const FACTURACION_PAGOS_SENTINEL_NAME = "NO APLICA";
 const DEFAULT_FACTURACION_COMPANY_NAME = "SENIAT";
 const DEFAULT_FACTURACION_COMPANY_DESCRIPTION = "Venta de ropa intima y deportiva para dama y caballeros, niÃƒÂ±os y niÃƒÂ±as y otro tipo de mercancia.";
 const DEFAULT_FACTURACION_COMPANY_TAX_LABEL = "RIF";
@@ -75,12 +77,17 @@ type NormalizedPaymentRow = {
   item: number;
   formaPago: string;
   monto: Prisma.Decimal;
+  documento: string;
+  lote: string;
+  banco: string;
+  puntoVenta: string;
 };
 
 type PaymentCatalogRow = {
   Codigo: number;
   Nombre: string | null;
   Status: number | null;
+  EsDolar?: boolean;
 };
 
 type CompanyPrintProfile = {
@@ -137,7 +144,7 @@ export class FacturacionService {
             }
           }
 
-          const cajaActiva = await this.findActiveCajaSession(tx);
+          const cajaActiva = await this.findActiveCajaSession(tx, payload.serieCaja);
         const cliente = await this.resolveCliente(tx, payload.clienteCodigo);
         const vendedor = await this.resolveTrabajador(tx, payload.vendedorCedula);
         const activeTax = await this.findActiveTax(tx);
@@ -201,6 +208,7 @@ export class FacturacionService {
             Codigo: "asc",
           },
         });
+        const bancosCatalog = await tx.bancos.findMany();
 
         const paymentSummary = this.validatePayments(
           normalizedPayments,
@@ -225,7 +233,7 @@ export class FacturacionService {
         const numeroFactura = await this.resolveNextInvoiceNumber(tx, cajaActiva);
         const totalCosto = normalizedItems.reduce((sum, item) => {
           const inventory = inventoryByCode.get(item.codigoBarra);
-          const unitCost = this.resolveInventoryCost(inventory);
+          const unitCost = this.resolveInventoryCost(inventory, item.priceList);
           return sum.plus(unitCost.mul(item.cantidad));
         }, ZERO).toDecimalPlaces(2);
         const headerPaymentCode = this.resolveHeaderPaymentCode(paymentSummary.paymentCodes, paymentCatalog);
@@ -265,30 +273,84 @@ export class FacturacionService {
           },
         });
 
+        const movVentasPaymentWeights = normalizedPayments.map((row) => {
+          const code = this.resolvePaymentCode(row.formaPago, paymentCatalog);
+          const montoVed = this.paymentUsesUsdAmount(row.formaPago, paymentCatalog)
+            ? this.convertUsdToBs(row.monto, tasaCambioVenta)
+            : row.monto;
+          const weight = totalVenta.greaterThan(ZERO) ? montoVed.div(totalVenta) : ZERO;
+          return { code, weight };
+        });
+
+        let movVentasItemCounter = 0;
         for (const line of normalizedItems) {
           const inventory = inventoryByCode.get(line.codigoBarra);
           const effectiveDiscountPercent = discountOverride.active ? discountOverride.percent : line.descuentoPorcentaje;
           const unitTaxAmount = ZERO;
+          const lineData = {
+            TipoLista: this.toLegacyPriceListCode(line.priceList),
+            CodigoBarra: inventory?.CodigoBarra ?? line.codigoBarra,
+            Precio: line.precio.toDecimalPlaces(2),
+            PrecioLista: this.resolveInventoryPriceForList(inventory, line.priceList).toDecimalPlaces(2),
+            Costo: this.resolveInventoryCost(inventory, line.priceList).toDecimalPlaces(2),
+            Impuesto: unitTaxAmount,
+            PorcentajeImpuesto: impuestoPorcentaje.toDecimalPlaces(2),
+            PorcentajeDescuento: effectiveDiscountPercent.toDecimalPlaces(2),
+            PrecioDetal: (inventory?.PrecioDetal ?? ZERO).toDecimalPlaces(2),
+            Regla: "",
+            IDRegla: 0,
+          };
 
-          await tx.movVentas.create({
+          let remainingCantidad = line.cantidad;
+          for (let paymentIndex = 0; paymentIndex < movVentasPaymentWeights.length; paymentIndex += 1) {
+            const isLastPayment = paymentIndex === movVentasPaymentWeights.length - 1;
+            const splitCantidad = isLastPayment
+              ? remainingCantidad
+              : line.cantidad.mul(movVentasPaymentWeights[paymentIndex].weight).toDecimalPlaces(4);
+            remainingCantidad = remainingCantidad.minus(splitCantidad);
+
+            if (splitCantidad.lessThanOrEqualTo(ZERO)) {
+              continue;
+            }
+
+            movVentasItemCounter += 1;
+            await tx.movVentas.create({
+              data: {
+                ...lineData,
+                NumeroFactura: numeroFactura,
+                Serie: cajaActiva.Serie,
+                Hora: saleDate,
+                Cantidad: splitCantidad,
+                CantidadDevuelta: ZERO,
+                Item: movVentasItemCounter,
+                FormaPago: movVentasPaymentWeights[paymentIndex].code,
+              },
+            });
+          }
+        }
+
+        for (const row of normalizedPayments) {
+          const paymentCode = this.resolvePaymentCode(row.formaPago, paymentCatalog);
+          const usesUsd = this.paymentUsesUsdAmount(row.formaPago, paymentCatalog);
+          const montoVed = usesUsd ? this.convertUsdToBs(row.monto, tasaCambioVenta) : row.monto;
+          const montoUsd = usesUsd ? row.monto : null;
+          const bancoCodigo = this.resolveBancoCode(row.banco, bancosCatalog);
+
+          await tx.pagosVenta.create({
             data: {
               NumeroFactura: numeroFactura,
               Serie: cajaActiva.Serie,
-              Hora: saleDate,
-              TipoLista: this.toLegacyPriceListCode(line.priceList),
-              CodigoBarra: inventory?.CodigoBarra ?? line.codigoBarra,
-              Precio: line.precio.toDecimalPlaces(2),
-              PrecioLista: this.resolveInventoryPriceForList(inventory, line.priceList).toDecimalPlaces(2),
-              Costo: this.resolveInventoryCost(inventory).toDecimalPlaces(2),
-              Impuesto: unitTaxAmount,
-              PorcentajeImpuesto: impuestoPorcentaje.toDecimalPlaces(2),
-              Cantidad: line.cantidad,
-              CantidadDevuelta: ZERO,
-              Item: line.item,
-              PorcentajeDescuento: effectiveDiscountPercent.toDecimalPlaces(2),
-              PrecioDetal: (inventory?.PrecioDetal ?? ZERO).toDecimalPlaces(2),
-              Regla: "",
-              IDRegla: 0,
+              Item: row.item,
+              FormaPago: paymentCode,
+              Fecha: saleDate,
+              Documento: row.documento,
+              Aprobacion: row.lote,
+              Banco: bancoCodigo,
+              PuntoVenta: FACTURACION_PAGOS_SENTINEL_CODE,
+              Monto: montoVed.toDecimalPlaces(2),
+              Status: 1,
+              JSON_Merchant: row.puntoVenta || null,
+              MontoDivisa: montoUsd ? montoUsd.toDecimalPlaces(2) : null,
             },
           });
         }
@@ -412,13 +474,25 @@ export class FacturacionService {
 
   private async ensureFacturacionInfrastructure() {
     if (!this.facturacionInfrastructurePromise) {
-      this.facturacionInfrastructurePromise = this.prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "dbo"."FACTURACION_IDEMPOTENCIA" (
-          "RequestId" VARCHAR(64) PRIMARY KEY,
-          "RespuestaJson" TEXT NULL,
-          "CreadoEn" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-      `).then(() => undefined).catch((error) => {
+      this.facturacionInfrastructurePromise = (async () => {
+        await this.prisma.$executeRawUnsafe(`
+          CREATE TABLE IF NOT EXISTS "dbo"."FACTURACION_IDEMPOTENCIA" (
+            "RequestId" VARCHAR(64) PRIMARY KEY,
+            "RespuestaJson" TEXT NULL,
+            "CreadoEn" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        await this.prisma.bancos.upsert({
+          where: { Codigo: FACTURACION_PAGOS_SENTINEL_CODE },
+          create: { Codigo: FACTURACION_PAGOS_SENTINEL_CODE, Nombre: FACTURACION_PAGOS_SENTINEL_NAME, Status: 1 },
+          update: {},
+        });
+        await this.prisma.ctaBancos.upsert({
+          where: { Codigo: FACTURACION_PAGOS_SENTINEL_CODE },
+          create: { Codigo: FACTURACION_PAGOS_SENTINEL_CODE, Nombre: FACTURACION_PAGOS_SENTINEL_NAME, Status: 1 },
+          update: {},
+        });
+      })().catch((error) => {
         this.facturacionInfrastructurePromise = null;
         throw error;
       });
@@ -477,7 +551,10 @@ export class FacturacionService {
     throw lastError || new Error("No se pudo escribir el PDF central.");
   }
 
-  private async findActiveCajaSession(tx: FacturacionTransactionClient): Promise<ActiveCajaSession> {
+  private async findActiveCajaSession(
+    tx: FacturacionTransactionClient,
+    serieCaja?: string,
+  ): Promise<ActiveCajaSession> {
     const sessions = await tx.diarioCaja.findMany({
       where: {
         Status: {
@@ -488,14 +565,29 @@ export class FacturacionService {
         caja: true,
       },
       orderBy: [{ Fecha: "desc" }, { Numero: "desc" }, { Serie: "asc" }],
-      take: 1,
     });
 
     if (!sessions.length) {
       throw new ConflictException("Debes abrir una caja antes de registrar una venta.");
     }
 
-    return sessions[0] as ActiveCajaSession;
+    const normalizedSerie = this.normalizeCode(serieCaja);
+    if (normalizedSerie) {
+      const selected = sessions.find((session) => this.normalizeCode(session.Serie) === normalizedSerie);
+      if (!selected) {
+        throw new ConflictException("Debes aperturar caja.");
+      }
+
+      return selected as ActiveCajaSession;
+    }
+
+    if (sessions.length === 1) {
+      return sessions[0] as ActiveCajaSession;
+    }
+
+    throw new ConflictException(
+      "Hay varias cajas abiertas. Selecciona la caja activa (Ctrl+1, Ctrl+2, ...) antes de facturar.",
+    );
   }
 
   private async resolveCliente(tx: FacturacionTransactionClient, codigo: string) {
@@ -784,6 +876,10 @@ export class FacturacionService {
       item: index + 1,
       formaPago,
       monto: amount,
+      documento: String(row?.documento || "").trim(),
+      lote: String(row?.lote || "").trim(),
+      banco: String(row?.banco || "").trim(),
+      puntoVenta: String(row?.puntoVenta || "").trim(),
     };
   }
 
@@ -858,10 +954,10 @@ export class FacturacionService {
   ) {
     const paymentCodes: number[] = [];
     const totalDolaresE = rows.reduce((sum, row) => {
-      return sum.plus(this.paymentUsesUsdAmount(row.formaPago) ? row.monto : ZERO);
+      return sum.plus(this.paymentUsesUsdAmount(row.formaPago, paymentCatalog) ? row.monto : ZERO);
     }, ZERO).toDecimalPlaces(2);
     const abonado = rows.reduce((sum, row) => {
-      const resolvedAmount = this.paymentUsesUsdAmount(row.formaPago)
+      const resolvedAmount = this.paymentUsesUsdAmount(row.formaPago, paymentCatalog)
         ? this.convertUsdToBs(row.monto, tasaCambio)
         : row.monto;
       const paymentCode = this.resolvePaymentCode(row.formaPago, paymentCatalog);
@@ -869,7 +965,7 @@ export class FacturacionService {
       return sum.plus(resolvedAmount);
     }, ZERO).toDecimalPlaces(2);
 
-    if (rows.some((row) => this.paymentUsesUsdAmount(row.formaPago)) && tasaCambio.lessThanOrEqualTo(ZERO)) {
+    if (rows.some((row) => this.paymentUsesUsdAmount(row.formaPago, paymentCatalog)) && tasaCambio.lessThanOrEqualTo(ZERO)) {
       throw new BadRequestException("No hay una tasa de cambio vigente para convertir el efectivo en dolares.");
     }
 
@@ -897,10 +993,10 @@ export class FacturacionService {
       const paymentCode = this.resolvePaymentCode(row.formaPago, paymentCatalog);
       const paymentItem = paymentCatalog.find((item) => item.Codigo === paymentCode);
       const label = String(paymentItem?.Nombre || row.formaPago || "").trim() || "OTRO";
-      const amountVed = this.paymentUsesUsdAmount(row.formaPago)
+      const amountVed = this.paymentUsesUsdAmount(row.formaPago, paymentCatalog)
         ? this.convertUsdToBs(row.monto, tasaCambio)
         : row.monto;
-      const amountUsd = this.paymentUsesUsdAmount(row.formaPago)
+      const amountUsd = this.paymentUsesUsdAmount(row.formaPago, paymentCatalog)
         ? row.monto
         : ZERO;
 
@@ -945,6 +1041,20 @@ export class FacturacionService {
     return matched.Codigo;
   }
 
+  private resolveBancoCode(bancoNombre: string, bancosCatalog: Array<{ Codigo: string; Nombre: string }>) {
+    const normalized = String(bancoNombre || "").trim();
+    if (!normalized) {
+      return FACTURACION_PAGOS_SENTINEL_CODE;
+    }
+
+    const matched = bancosCatalog.find((item) => this.normalizeCatalogName(item.Nombre) === this.normalizeCatalogName(normalized));
+    if (!matched) {
+      throw new BadRequestException(`El banco ${normalized} no existe en el catalogo local.`);
+    }
+
+    return matched.Codigo;
+  }
+
   private getPaymentMethodAliases(label: string) {
     switch (label) {
       case "TARJETADEDEBITO":
@@ -960,8 +1070,10 @@ export class FacturacionService {
     }
   }
 
-  private paymentUsesUsdAmount(label: string) {
-    return ["EFECTIVODOLAR", "USDT", "DOLARELECTRONICO"].includes(this.normalizeCatalogName(label));
+  private paymentUsesUsdAmount(label: string, paymentCatalog: PaymentCatalogRow[]) {
+    const normalizedLabel = this.normalizeCatalogName(label);
+    const matched = paymentCatalog.find((item) => this.normalizeCatalogName(item.Nombre) === normalizedLabel);
+    return Boolean(matched?.EsDolar);
   }
 
   private resolveSaleUsdRate(items: NormalizedSaleItem[], detailRate: Prisma.Decimal, mayorRate: Prisma.Decimal) {
@@ -980,14 +1092,12 @@ export class FacturacionService {
   }
 
   private async resolveNextInvoiceNumber(tx: FacturacionTransactionClient, cajaActiva: ActiveCajaSession) {
-    const { start, end } = this.getDayRange(cajaActiva.Fecha);
+    // Debe considerar TODAS las ventas de la Serie, no solo las del dia en que se abrio la
+    // caja: NumeroFactura+Serie es unico a nivel global, y una caja puede seguir abierta a
+    // traves de varios dias mientras se van emitiendo facturas.
     const aggregate = await tx.ventas.aggregate({
       where: {
         Serie: cajaActiva.Serie,
-        Fecha: {
-          gte: start,
-          lt: end,
-        },
       },
       _max: {
         NumeroFactura: true,
@@ -1006,9 +1116,22 @@ export class FacturacionService {
     return currentMax + 1n;
   }
 
-  private resolveInventoryCost(inventory: Inventario | undefined) {
+  private resolveInventoryCost(
+    inventory: Inventario | undefined,
+    priceList: "detal" | "mayor" | "afiliado" = "detal",
+  ) {
     if (!inventory) {
       return ZERO;
+    }
+
+    const tieredCost = priceList === "mayor"
+      ? inventory.CostoPromedio
+      : priceList === "afiliado"
+        ? inventory.UltimoCosto
+        : inventory.CostoInicial;
+
+    if (tieredCost.greaterThan(ZERO)) {
+      return tieredCost;
     }
 
     if (inventory.CostoPromedio.greaterThan(ZERO)) {
@@ -1162,14 +1285,6 @@ export class FacturacionService {
     }
 
     return compact;
-  }
-
-  private getDayRange(date: Date) {
-    const start = new Date(date.getTime());
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start.getTime());
-    end.setDate(end.getDate() + 1);
-    return { start, end };
   }
 }
 

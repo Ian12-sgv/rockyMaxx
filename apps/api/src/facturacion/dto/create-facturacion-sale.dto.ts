@@ -181,6 +181,13 @@ export class CreateFacturacionSaleDto {
   @Transform(({ value }) => toOptionalTrimmedString(value))
   declare tasaCambioMayor?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  @Type(() => String)
+  @Transform(({ value }) => toOptionalTrimmedString(value))
+  declare serieCaja?: string;
+
   @IsArray()
   @ArrayMaxSize(50)
   @ValidateNested({ each: true })

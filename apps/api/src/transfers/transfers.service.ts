@@ -1847,7 +1847,44 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException(`No existe nodo de sincronizacion para la sucursal ${row.CodigoRecibe}.`);
     }
 
-    return rows[0];
+    const destination = rows[0];
+    return {
+      ...destination,
+      ApiUrl: this.resolveTransferSyncDestinationApiUrl(destination),
+    };
+  }
+
+  private resolveTransferSyncDestinationApiUrl(node: TransferSyncNodeRow) {
+    const configuredBase = this.normalizeOptionalApiUrl(
+      this.configService.get<string>("TRANSFER_SYNC_REMOTE_API_URL", "") ||
+        this.configService.get<string>("MIRROR_SYNC_REMOTE_API_URL", ""),
+    );
+    if (!configuredBase) {
+      return this.normalizeOptionalApiUrl(node.ApiUrl);
+    }
+
+    const parsed = new URL(configuredBase);
+    parsed.pathname = parsed.pathname.replace(/\/(?:tienda|bodega)\d{3}\/?$/i, "").replace(/\/$/, "");
+    parsed.search = "";
+    parsed.hash = "";
+    const root = parsed.toString().replace(/\/$/, "");
+    const nodeId = this.normalizeSyncNodeId(node.NodeId);
+
+    if (nodeId === DEFAULT_ORIGIN_CODE || nodeId === "BODEGA001") {
+      return root;
+    }
+
+    const tienda = nodeId.match(/^TIENDA(\d+)$/);
+    if (tienda) {
+      return `${root}/tienda${tienda[1].padStart(3, "0")}`;
+    }
+
+    const bodega = nodeId.match(/^BODEGA(\d+)$/);
+    if (bodega) {
+      return `${root}/bodega${bodega[1].padStart(3, "0")}`;
+    }
+
+    return this.normalizeOptionalApiUrl(node.ApiUrl);
   }
 
   private async postTransferSyncPackage(apiUrl: string, payload: unknown) {
@@ -4355,6 +4392,11 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async inferTransferSyncRemotePathFromLocalNode() {
+    const databasePath = this.inferTransferSyncRemotePathFromDatabaseUrl();
+    if (databasePath !== null) {
+      return databasePath;
+    }
+
     const rows = await this.prisma.$queryRawUnsafe<TransferSyncNodeRow[]>(
       `
         select
@@ -4405,6 +4447,37 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     }
 
     return null;
+  }
+
+  private inferTransferSyncRemotePathFromDatabaseUrl() {
+    const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "").trim();
+    const databaseMatch = databaseUrl.match(/\/([^/?]+)(?:\?|$)/);
+    const databaseName = String(databaseMatch?.[1] || "").trim().toLowerCase();
+    if (!databaseName) {
+      return null;
+    }
+
+    if (databaseName === "rocky_maxx" || databaseName === "rocky_sync_central") {
+      return "";
+    }
+
+    const tienda = databaseName.match(/^rocky_tienda_(\d+)(?:_vps)?$/);
+    if (tienda) {
+      return `/tienda${tienda[1].padStart(3, "0")}`;
+    }
+
+    const bodega = databaseName.match(/^rocky_bodega_(\d+)(?:_vps)?$/);
+    if (bodega) {
+      return `/bodega${bodega[1].padStart(3, "0")}`;
+    }
+
+    const testNodePaths: Record<string, string> = {
+      rocky_prueba_sistemas_tienda: "/prueba-sistemas-tienda",
+      rocky_prueba_sistemas_bodega: "/prueba-sistemas-bodega",
+      rocky_prueba_analista_tienda: "/prueba-analista-tienda",
+      rocky_prueba_analista_bodega: "/prueba-analista-bodega",
+    };
+    return testNodePaths[databaseName] ?? null;
   }
 
   private apiUrlMatchesPort(apiUrl: string | null | undefined, port: number) {

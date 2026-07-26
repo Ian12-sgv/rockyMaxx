@@ -216,6 +216,7 @@ model FormaPago {
   Nombre     String?
   Status     Int?
   Orden      Int?
+  EsDolar    Boolean      @default(false)
   pagosVenta PagosVenta[]
 
   @@map("FORMAPAGO")
@@ -477,6 +478,7 @@ model MovVentas {
   PrecioDetal         Decimal
   Regla               String
   IDRegla             Int
+  FormaPago           Int?
   venta               Ventas       @relation(fields: [NumeroFactura, Serie], references: [NumeroFactura, Serie], onDelete: Cascade, onUpdate: Cascade)
   inventarioRef       Inventario   @relation(fields: [CodigoBarra], references: [CodigoBarra], onDelete: NoAction, onUpdate: Cascade)
 

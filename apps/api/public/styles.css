@@ -7134,14 +7134,34 @@ button {
   }
 }
 
-/* Cambio de Precio (Procesos) -- reutiliza .adjustment-grid*, .inventory-bulk-destination*,
-   .transfer-command-bar*, .button*, .modern-chip* y .empty-state; solo se agrega lo que
-   no tiene equivalente ya en el sistema. */
+/* Cambio de Precio (Procesos) -- reutiliza .adjustment-window/.adjustment-titlebar (mismo
+   patron compacto que Facturacion/Apertura de caja), .transfer-register-form,
+   .inventory-bulk-destination*, .adjustment-grid*, .button*, .modern-chip* y .empty-state;
+   solo se agrega lo que no tiene equivalente ya en el sistema. */
+.price-change-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.price-change-scroll {
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.price-change-form {
+  gap: 8px;
+}
+
 .price-change-mode-field {
   display: flex;
   align-items: center;
   gap: 20px;
-  margin: 4px 0 18px;
+  margin: 0;
   padding: 0;
   border: 0;
 }
@@ -7159,12 +7179,29 @@ button {
 }
 
 .price-change-destinations-block {
-  margin-bottom: 18px;
+  margin-bottom: 0;
+}
+
+.price-change-destinations-block .inventory-bulk-toolbar {
+  margin-bottom: 6px;
+}
+
+.price-change-destinations {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 0;
+  max-height: 140px;
+  overflow: auto;
+}
+
+.price-change-destinations .inventory-bulk-destination {
+  padding: 7px 9px;
+  gap: 7px;
 }
 
 .price-change-full-inventory-notice {
-  margin: 4px 0 18px;
-  padding: 12px 14px;
+  margin: 0;
+  padding: 10px 12px;
   border: 1px solid #d8e2ec;
   border-radius: 12px;
   background: #f9fbfd;
@@ -7172,44 +7209,45 @@ button {
 }
 
 .price-change-items-block {
-  margin-bottom: 18px;
+  margin-bottom: 0;
 }
 
 .price-change-items-grid-wrap {
   min-height: 0;
-  max-height: 260px;
+  max-height: 170px;
 }
 
 .price-change-store-grid-wrap {
   min-height: 0;
+  max-height: 220px;
 }
 
 .price-change-barcode-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   max-width: 360px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .price-change-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin: 14px 0;
+  margin: 0;
 }
 
 .price-change-summary {
-  margin-top: 18px;
-  padding: 18px;
+  margin-top: 0;
+  padding: 12px 14px;
   border: 1px solid #d8e2ec;
-  border-radius: 16px;
+  border-radius: 12px;
   background: #f9fbfd;
 }
 
 .price-change-summary h2 {
-  margin: 0 0 10px;
-  font-size: 1.05rem;
+  margin: 0 0 8px;
+  font-size: 0.95rem;
 }
 
 .price-change-warning-list {
@@ -7239,12 +7277,68 @@ button {
   overflow-wrap: anywhere;
 }
 
+.price-change-batch-actions {
+  margin: 0 0 10px;
+}
+
 @media (max-width: 720px) {
   .price-change-mode-field {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
+
+  .price-change-destinations {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Viewport fit: cambio de precio */
+.desktop-frame:has(.price-change-page) {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.desktop-workspace:has(.price-change-page) {
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px 10px 8px;
+}
+
+.desktop-workspace:has(.price-change-page) .modern-workspace-shell {
+  min-height: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.desktop-workspace:has(.price-change-page) .modern-workspace-shell > .flash {
+  flex: 0 0 auto;
+  margin-bottom: 6px;
+}
+
+.price-change-page {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.price-change-page .modern-breadcrumb {
+  min-height: 18px;
+  font-size: 0.8rem;
+  flex: 0 0 auto;
+}
+
+.price-change-shell {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 /* Viewport fit: facturacion and payment form */
@@ -7971,5 +8065,400 @@ button {
   .workers-history-actions .button {
     width: 100%;
     min-width: 0;
+  }
+}
+/* Facturacion: keep the operational controls inside the available viewport. */
+.desktop-workspace:has(.facturacion-page) .modern-workspace-shell {
+  min-height: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.facturacion-page,
+.facturacion-window,
+.facturacion-form {
+  min-height: 0;
+}
+
+.facturacion-window,
+.facturacion-form {
+  flex: 1 1 auto;
+}
+
+.facturacion-form {
+  height: 100%;
+}
+
+.facturacion-lines-panel {
+  min-height: 0;
+}
+
+.facturacion-grid-shell {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.facturacion-payment-dialog {
+  width: min(1240px, calc(100vw - 12px));
+  height: calc(100dvh - 12px);
+  max-height: none;
+}
+
+.facturacion-payment-shell {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.facturacion-payment-table-wrap {
+  overflow: hidden;
+}
+
+.facturacion-payment-table th,
+.facturacion-payment-table td {
+  height: 31px;
+}
+
+.facturacion-payment-table input,
+.facturacion-payment-table select {
+  min-height: 27px;
+  height: 27px;
+  padding-inline: 5px;
+}
+
+.facturacion-payment-bottom {
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 250px);
+  gap: 8px 12px;
+}
+
+.facturacion-payment-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 8px;
+}
+
+.facturacion-payment-summary-row,
+.facturacion-payment-total-row {
+  grid-template-columns: minmax(80px, 1fr) minmax(90px, 126px);
+  gap: 5px;
+}
+
+.facturacion-payment-summary-row input,
+.facturacion-payment-total-row input {
+  min-height: 27px;
+  height: 27px;
+}
+
+.facturacion-payment-side-actions,
+.facturacion-payment-actions {
+  gap: 6px;
+}
+
+.facturacion-payment-actions .button {
+  min-height: 30px;
+  padding-inline: 12px;
+}
+
+@media (max-height: 760px) {
+  .facturacion-page .modern-breadcrumb,
+  .facturacion-form > .muted,
+  .facturacion-payment-dialog > .muted {
+    display: none;
+  }
+
+  .facturacion-header-panel,
+  .facturacion-summary-panel {
+    padding-block: 5px;
+  }
+
+  .facturacion-titlebar {
+    min-height: 22px;
+    padding-block: 2px;
+  }
+
+  .facturacion-grid-table th {
+    padding-block: 3px;
+  }
+
+  .facturacion-grid-table td input {
+    min-height: 27px;
+    height: 27px;
+  }
+}
+
+@media (max-width: 900px) {
+  .desktop-frame:has(.facturacion-page) .modern-topbar,
+  .desktop-frame:has(.facturacion-page) .modern-topbar-main {
+    flex-wrap: nowrap;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .desktop-frame:has(.facturacion-page) .modern-brand {
+    flex: 0 0 auto;
+    padding: 0 8px 0 0;
+    border: 0;
+  }
+
+  .desktop-frame:has(.facturacion-page) .modern-nav {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .facturacion-payment-bottom {
+    grid-template-columns: minmax(0, 1fr) 210px;
+  }
+}
+
+@media (max-width: 700px) {
+  .facturacion-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .facturacion-summary-label,
+  .facturacion-total-caption span,
+  .facturacion-usd-row > span {
+    font-size: 0.7rem;
+  }
+
+  .facturacion-actions-panel,
+  .facturacion-actions-left {
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+
+  .facturacion-actions-left {
+    min-width: 0;
+    gap: 3px;
+  }
+
+  .facturacion-actions-panel .button {
+    min-width: 0;
+    padding-inline: 6px;
+    font-size: 0.72rem;
+  }
+
+  .facturacion-preview-button {
+    min-width: 104px;
+  }
+
+  .facturacion-payment-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .facturacion-payment-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+/* Facturacion viewport correction: reserve space for totals and actions. */
+.facturacion-titlebar {
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: clamp(0.82rem, 1.2vw, 1rem);
+  line-height: 1.1;
+}
+
+.facturacion-form {
+  gap: 4px;
+  padding: 4px 7px 5px;
+  overflow: hidden;
+}
+
+.facturacion-header-panel {
+  gap: 4px;
+  padding: 5px 8px;
+}
+
+.facturacion-field-row {
+  gap: 6px;
+}
+
+.facturacion-code-input,
+.facturacion-name-input,
+.facturacion-side-input,
+.facturacion-lookup-button {
+  min-height: 29px;
+  height: 29px;
+  padding-block: 0;
+}
+
+.facturacion-checkbox-row {
+  min-height: 20px;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.facturacion-lines-panel,
+.facturacion-grid-shell {
+  flex: 0 1 auto;
+  height: clamp(145px, calc(100dvh - 430px), 315px);
+  max-height: clamp(145px, calc(100dvh - 430px), 315px);
+}
+
+.facturacion-grid-shell {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.facturacion-grid-table th {
+  height: 25px;
+  padding: 2px 6px;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.facturacion-grid-table td,
+.facturacion-grid-table td input {
+  height: 28px;
+  min-height: 28px;
+}
+
+.facturacion-grid-table td input {
+  padding-block: 0;
+  font-size: 0.78rem;
+}
+
+.facturacion-summary-panel {
+  gap: 3px;
+  padding: 4px 8px;
+}
+
+.facturacion-summary-grid {
+  gap: 4px 8px;
+}
+
+.facturacion-summary-block,
+.facturacion-summary-total {
+  gap: 2px;
+}
+
+.facturacion-summary-label,
+.facturacion-total-caption span,
+.facturacion-usd-row > span,
+.facturacion-summary-panel > .muted {
+  font-size: 0.72rem;
+  line-height: 1.05;
+}
+
+.facturacion-summary-input-row,
+.facturacion-summary-inline-head,
+.facturacion-summary-formula,
+.facturacion-usd-row {
+  gap: 4px;
+}
+
+.facturacion-summary-panel input,
+.facturacion-total-input,
+.facturacion-usd-input,
+.facturacion-small-input {
+  min-height: 27px;
+  height: 27px;
+  padding-block: 0;
+}
+
+.facturacion-actions-panel {
+  min-height: 31px;
+  gap: 5px;
+  padding: 0;
+}
+
+.facturacion-actions-left {
+  gap: 4px;
+}
+
+.facturacion-actions-panel .button {
+  min-height: 29px;
+  height: 29px;
+  padding: 0 10px;
+  font-size: 0.76rem;
+}
+
+.facturacion-preview-button {
+  min-width: 132px;
+}
+
+.facturacion-payment-dialog {
+  gap: 4px;
+  padding: 6px 8px;
+}
+
+.facturacion-payment-header {
+  min-height: 38px;
+}
+
+.facturacion-payment-header .article-lookup-header-copy h3 {
+  font-size: 1rem;
+  line-height: 1.05;
+}
+
+.facturacion-payment-header .article-lookup-header-copy p,
+.facturacion-payment-dialog > .muted {
+  font-size: 0.7rem;
+  line-height: 1.05;
+}
+
+.facturacion-payment-shell,
+.facturacion-payment-topline {
+  gap: 4px;
+}
+
+.facturacion-payment-table-wrap {
+  min-height: 190px;
+  max-height: min(245px, calc(100dvh - 310px));
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.facturacion-payment-table th,
+.facturacion-payment-table td {
+  height: 27px;
+  padding: 1px 3px;
+}
+
+.facturacion-payment-table input,
+.facturacion-payment-table select {
+  min-height: 24px;
+  height: 24px;
+  font-size: 0.72rem;
+}
+
+.facturacion-payment-bottom {
+  gap: 5px 10px;
+}
+
+.facturacion-payment-summary {
+  gap: 3px 7px;
+}
+
+.facturacion-payment-summary-row input,
+.facturacion-payment-total-row input {
+  min-height: 25px;
+  height: 25px;
+}
+
+.facturacion-payment-actions .button {
+  min-height: 28px;
+  height: 28px;
+}
+
+@media (max-height: 650px) {
+  .facturacion-lines-panel,
+  .facturacion-grid-shell {
+    height: clamp(110px, calc(100dvh - 390px), 220px);
+    max-height: clamp(110px, calc(100dvh - 390px), 220px);
+  }
+
+  .facturacion-summary-panel > .muted,
+  .facturacion-titlebar-hints,
+  .facturacion-payment-header .article-lookup-header-copy p {
+    display: none;
+  }
+
+  .facturacion-payment-table-wrap {
+    min-height: 145px;
+    max-height: calc(100dvh - 285px);
   }
 }

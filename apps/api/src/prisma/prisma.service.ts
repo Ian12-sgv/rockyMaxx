@@ -79,6 +79,24 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       ALTER TABLE IF EXISTS dbo."DEVBORRADOR"
       ADD COLUMN IF NOT EXISTS "CodigoOrigen" VARCHAR(15)
     `);
+
+    await this.$executeRawUnsafe(`
+      ALTER TABLE IF EXISTS dbo."MOVVENTAS"
+      ADD COLUMN IF NOT EXISTS "FormaPago" INTEGER
+    `);
+
+    await this.$executeRawUnsafe(`
+      ALTER TABLE IF EXISTS dbo."FORMAPAGO"
+      ADD COLUMN IF NOT EXISTS "EsDolar" BOOLEAN NOT NULL DEFAULT false
+    `);
+
+    await this.$executeRawUnsafe(`
+      UPDATE dbo."FORMAPAGO"
+      SET "EsDolar" = true
+      WHERE "EsDolar" = false
+        AND upper(regexp_replace(COALESCE("Nombre", ''), '[^A-Za-z0-9]', '', 'g'))
+          IN ('EFECTIVODOLAR', 'DOLARELECTRONICO', 'USDT')
+    `);
   }
 
   async enableShutdownHooks(app: INestApplication) {

@@ -864,11 +864,11 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    const apiUrl = await this.resolvePriceChangeDestinationApiUrl(current.nodeId);
+    const apiUrl = await this.resolveOwnPriceChangeRemoteApiUrl(current.nodeId);
     if (!apiUrl) {
       return {
         skipped: true,
-        message: `El nodo ${current.nodeId} no tiene ApiUrl configurada en SYNC_NODES; no se puede consultar su VPS/REMOTO.`,
+        message: `No hay URL configurada (PRICE_CHANGE_REMOTE_API_URL/MIRROR_SYNC_REMOTE_API_URL) para el VPS/REMOTO propio de ${current.nodeId}.`,
         fetched: 0,
         imported: 0,
         alreadyReceived: 0,
@@ -1108,10 +1108,10 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
       // tienda fisica y su gemelo VPS son bases separadas (rocky_tienda_NNN vs
       // rocky_tienda_NNN_vps) -- el resultado quedaba guardado localmente y nunca llegaba
       // al VPS, por lo que el ORIGEN nunca lo veia via remote-status.
-      const apiUrl = await this.resolvePriceChangeDestinationApiUrl(current.nodeId);
+      const apiUrl = await this.resolveOwnPriceChangeRemoteApiUrl(current.nodeId);
       if (!apiUrl) {
         throw new Error(
-          `El nodo ${current.nodeId} no tiene ApiUrl configurada en SYNC_NODES; no se puede reportar al VPS/REMOTO.`,
+          `No hay URL configurada (PRICE_CHANGE_REMOTE_API_URL/MIRROR_SYNC_REMOTE_API_URL) para el VPS/REMOTO propio de ${current.nodeId}; no se puede reportar.`,
         );
       }
 
@@ -1758,6 +1758,24 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
     );
     const apiUrl = rows[0]?.ApiUrl;
     return apiUrl && apiUrl.trim() ? apiUrl.trim() : null;
+  }
+
+  // Rol LOCAL SERVICE: resuelve la URL del PROPIO gemelo VPS/REMOTO de esta tienda -- NO
+  // reutiliza resolvePriceChangeDestinationApiUrl(current.nodeId) (via SYNC_NODES) porque
+  // esa fila se autosobrescribe en cada arranque: ensureLocalSyncNodeRegistration
+  // (dev-returns.service.ts) hace upsert de SYNC_NODES.<mi-propio-NodeId>.ApiUrl con "como
+  // me alcanzan a MI" (ej. http://localhost:3001), no con "donde esta mi propio VPS" -- son
+  // dos conceptos distintos que hoy comparten la misma fila por nodeId. Se resuelve igual
+  // que ya hace mirror-sync (que tiene exactamente el mismo problema "cual es mi upstream
+  // propio"): variable de entorno estable, nunca escrita por ningun auto-registro.
+  private resolveOwnPriceChangeRemoteApiUrl(_ownNodeId: string) {
+    const explicit = String(this.configService.get<string>("PRICE_CHANGE_REMOTE_API_URL", "") || "").trim();
+    if (explicit) {
+      return explicit;
+    }
+
+    const mirrorFallback = String(this.configService.get<string>("MIRROR_SYNC_REMOTE_API_URL", "") || "").trim();
+    return mirrorFallback || null;
   }
 
   private buildPriceChangeGlobalId(sourceNodeId: string, batchId: string, destinationNodeId: string) {

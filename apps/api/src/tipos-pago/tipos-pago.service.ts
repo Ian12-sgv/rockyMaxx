@@ -67,6 +67,7 @@ export class TiposPagoService {
         Nombre: this.normalizeRequiredText(createTipoPagoDto.nombre, "Debes indicar el nombre del tipo de pago."),
         Status: this.resolveStatus(createTipoPagoDto.status),
         Orden: codigo,
+        EsDolar: Boolean(createTipoPagoDto.esDolar),
       },
     });
 
@@ -88,6 +89,7 @@ export class TiposPagoService {
       data: {
         Nombre: this.normalizeRequiredText(updateTipoPagoDto.nombre, "Debes indicar el nombre del tipo de pago."),
         Status: this.resolveStatus(updateTipoPagoDto.status),
+        EsDolar: Boolean(updateTipoPagoDto.esDolar),
       },
     });
 

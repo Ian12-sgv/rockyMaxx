@@ -105,6 +105,17 @@ export class CajasService {
           throw new ConflictException("Ya existe una caja para esa serie y fecha.");
         }
 
+        const openForSerie = await tx.diarioCaja.findFirst({
+          where: {
+            Serie: normalized.serie,
+            Status: { not: 2 },
+          },
+        });
+
+        if (openForSerie) {
+          throw new ConflictException("Ya existe una caja abierta con ese número de serie.");
+        }
+
         const derivedState = await this.resolveDerivedCajaState(tx, normalized.serie, normalized.fecha, 0, normalized.ultimaFactura);
         this.validateFacturaRange(normalized.facturaInicial, derivedState.status, derivedState.ultimaFactura);
 

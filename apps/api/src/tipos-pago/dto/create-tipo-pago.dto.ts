@@ -1,7 +1,16 @@
 import { Transform, Type } from "class-transformer";
-import { IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
 
 import { toOptionalInteger, toTrimmedString } from "../tipo-pago-dto.helpers";
+
+function toBooleanValue(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return ["1", "true", "si", "sí", "s", "on"].includes(normalized);
+}
 
 export class CreateTipoPagoDto {
   @IsInt()
@@ -20,4 +29,9 @@ export class CreateTipoPagoDto {
   @Min(0)
   @Transform(({ value }) => toOptionalInteger(value))
   declare status?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => toBooleanValue(value))
+  declare esDolar?: boolean;
 }

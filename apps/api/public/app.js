@@ -6,8 +6,10 @@ const CATALOG_IMPORT_EXCEL_PERMISSION_CODE = "CATALOG_IMPORT_EXCEL";
 const EXISTENCE_AUTO_REFRESH_MS = 30000;
 const FLASH_AUTO_DISMISS_MS = 2000;
 const FACTURACION_FROZEN_STORAGE_KEY = "rocky.maxx.facturacion.frozen";
+const FACTURACION_CAJA_SERIE_STORAGE_KEY = "rocky.maxx.facturacion.caja-serie";
 const FACTURACION_PRICE_LIST_ORDER = ["detal", "mayor", "afiliado"];
 const FACTURACION_IGTF_PERCENT = 3;
+const FACTURACION_ITEM_LIMIT = 25;
 const FACTURACION_PAYMENT_METHOD_OPTIONS = [
   { value: "", label: "" },
   { value: "EFECTIVO", label: "EFECTIVO" },
@@ -4070,6 +4072,7 @@ function renderFacturacionWorkspace() {
     draft,
     summary,
   );
+  const activeCajaSerie = resolveFacturacionActiveCajaSerie();
   const lineRows = items
     .map((item, index) => {
       const rowNumber = index + 1;
@@ -4105,6 +4108,7 @@ function renderFacturacionWorkspace() {
           <div class="facturacion-titlebar-hints">
             <span>(F2 - Consultar Precios)</span>
             <span>(F3 - Consultar Reglas Activas)</span>
+            <span>Caja activa: ${activeCajaSerie ? escapeHtml(activeCajaSerie) : "sin seleccionar"} (Ctrl+1..9)</span>
           </div>
         </div>
 
@@ -5858,7 +5862,7 @@ function renderCashRegistersWorkspace() {
             <div class="cash-register-history-head">
               <div>
                 <h2>Aperturas registradas</h2>
-                <p>${escapeHtml(String(state.cashRegisters.items.length || 0))} registro(s) visibles.</p>
+                <p>${escapeHtml(String(getCloseableCashRegisters().length || 0))} registro(s) visibles.</p>
               </div>
               <div class="cash-register-history-actions">
                 <label class="field">
@@ -5888,9 +5892,9 @@ function renderCashRegistersWorkspace() {
 }
 
 function renderCashRegistersTable() {
-  const items = Array.isArray(state.cashRegisters.items)
-    ? state.cashRegisters.items
-    : [];
+  // Las cajas cerradas (status 2) no se muestran aca -- la vista de Apertura es para
+  // aperturas vigentes/pendientes de cierre, no historial (eso ya lo cubre Cierre de caja).
+  const items = getCloseableCashRegisters();
   const search = normalizeSearchText(state.cashRegisters.search);
   const visibleItems = search
     ? items.filter((item) =>
@@ -5997,6 +6001,86 @@ function getCloseableCashRegisters() {
     ? state.cashRegisters.items
     : [];
   return items.filter((item) => Number(item?.status ?? 0) !== 2);
+}
+
+function getPersistedFacturacionCajaSerie() {
+  try {
+    return String(
+      window.localStorage?.getItem(FACTURACION_CAJA_SERIE_STORAGE_KEY) || "",
+    )
+      .trim()
+      .toUpperCase();
+  } catch {
+    return "";
+  }
+}
+
+function setPersistedFacturacionCajaSerie(serie) {
+  try {
+    const normalized = String(serie || "").trim().toUpperCase();
+    if (normalized) {
+      window.localStorage?.setItem(
+        FACTURACION_CAJA_SERIE_STORAGE_KEY,
+        normalized,
+      );
+    } else {
+      window.localStorage?.removeItem(FACTURACION_CAJA_SERIE_STORAGE_KEY);
+    }
+  } catch {
+    // Ignorar almacenamiento no disponible.
+  }
+}
+
+function resolveFacturacionActiveCajaSerie() {
+  const openItems = getCloseableCashRegisters();
+  const persisted = getPersistedFacturacionCajaSerie();
+  if (persisted) {
+    const stillOpen = openItems.some(
+      (item) => String(item?.serie || "").trim().toUpperCase() === persisted,
+    );
+    if (stillOpen) {
+      return persisted;
+    }
+    setPersistedFacturacionCajaSerie("");
+  }
+
+  if (openItems.length === 1) {
+    return String(openItems[0].serie || "").trim().toUpperCase();
+  }
+
+  return "";
+}
+
+function handleFacturacionCajaShortcut(event) {
+  if (
+    state.currentView !== "facturacion" ||
+    !event.ctrlKey ||
+    event.altKey ||
+    event.metaKey
+  ) {
+    return;
+  }
+
+  const digit = Number.parseInt(event.key, 10);
+  if (!Number.isInteger(digit) || digit < 1 || digit > 9) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const target = getCloseableCashRegisters().find(
+    (item) => String(item?.serie || "").trim() === String(digit),
+  );
+  if (!target) {
+    setFlash("Debes aperturar caja.", "error");
+    render();
+    return;
+  }
+
+  const serie = String(target.serie || "").trim().toUpperCase();
+  setPersistedFacturacionCajaSerie(serie);
+  setFlash(`Caja activa para facturar: Serie ${serie}.`, "success");
+  render();
 }
 
 function getCurrentTimeInputValue() {
@@ -7978,6 +8062,11 @@ function renderTiposPagoWorkspace() {
                   </label>
                 </div>
               </fieldset>
+
+              <label class="facturacion-checkbox-row">
+                <input type="checkbox" name="esDolar" ${draft.esDolar ? "checked" : ""} />
+                <span>Es dolar (detectar automaticamente en facturacion)</span>
+              </label>
             </div>
           </div>
 
@@ -8044,6 +8133,7 @@ function renderTiposPagoTable() {
             <th>Codigo</th>
             <th>Nombre</th>
             <th>Status</th>
+            <th>Dolar</th>
             <th class="sucursal-row-actions">Accion</th>
           </tr>
         </thead>
@@ -8058,6 +8148,7 @@ function renderTiposPagoTable() {
                   <td><strong>${escapeHtml(String(item.codigo || "-"))}</strong></td>
                   <td>${escapeHtml(item.nombre || "-")}</td>
                   <td>${renderTipoPagoStatusBadge(item.status)}</td>
+                  <td>${item.esDolar ? "Si" : "No"}</td>
                   <td class="sucursal-row-actions">
                     <button class="button button-ghost" type="button" data-tipo-pago-select="${escapeHtml(String(item.codigo || ""))}">
                       Abrir
@@ -10541,6 +10632,8 @@ function bindShellEvents() {
           await loadCreationMetadata({ renderAfter: false });
         }
         await loadFacturacionExchangeRate({ renderAfter: false, silent: true });
+        await loadCashRegisters({ renderAfter: false });
+        await loadTiposPago({ renderAfter: false });
         render();
         return;
       }
@@ -10675,6 +10768,11 @@ function bindShellEvents() {
 }
 
 function bindFacturacionEvents() {
+  if (!bindFacturacionEvents.cajaShortcutBound) {
+    bindFacturacionEvents.cajaShortcutBound = true;
+    document.addEventListener("keydown", handleFacturacionCajaShortcut);
+  }
+
   document.querySelectorAll("[data-facturacion-action]").forEach((button) => {
     button.addEventListener("click", async () => {
       captureFacturacionDraft();
@@ -11120,7 +11218,10 @@ function bindFacturacionEvents() {
 
   document.querySelectorAll("[data-facturacion-row-handle]").forEach((handle) => {
     const focusRowHandle = (rowNumber) => {
-      const normalizedRowNumber = Math.max(1, Math.min(rowNumber, 11));
+      const normalizedRowNumber = Math.max(
+        1,
+        Math.min(rowNumber, FACTURACION_ITEM_LIMIT),
+      );
       render();
       queueMicrotask(() => {
         const target = document.querySelector(
@@ -11158,7 +11259,7 @@ function bindFacturacionEvents() {
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        selectFacturacionLine(Math.min(rowNumber, 10));
+        selectFacturacionLine(Math.min(rowNumber, FACTURACION_ITEM_LIMIT - 1));
         focusRowHandle(rowNumber + 1);
         return;
       }
@@ -12822,16 +12923,13 @@ function renderPriceChangeWorkspace() {
     <div class="modern-page price-change-page">
       ${renderDesktopBreadcrumb(["Procesos", "Cambio de precio"])}
 
-      <div class="modern-page-header">
-        <div>
-          <h1>Cambio de precio</h1>
+      <section class="transfer-register-shell adjustment-window price-change-shell">
+        <div class="adjustment-titlebar">Cambio de precio</div>
+        <div class="price-change-scroll">
+          ${pc.loadingMetadata ? renderLoadingState("Cargando tiendas disponibles...") : renderPriceChangeForm(pc, mode, isBusy)}
+          ${pc.preview ? renderPriceChangePreviewSummary(pc.preview) : ""}
+          ${pc.batch ? renderPriceChangeBatchSummary(pc) : ""}
         </div>
-      </div>
-
-      <section class="transfer-register-shell price-change-shell">
-        ${pc.loadingMetadata ? renderLoadingState("Cargando tiendas disponibles...") : renderPriceChangeForm(pc, mode, isBusy)}
-        ${pc.preview ? renderPriceChangePreviewSummary(pc.preview) : ""}
-        ${pc.batch ? renderPriceChangeBatchSummary(pc) : ""}
       </section>
     </div>
   `;
@@ -12846,8 +12944,8 @@ function renderPriceChangeForm(pc, mode, isBusy) {
   const canCreate = !isBusy && Boolean(pc.preview) && Number(pc.preview.totalItems || 0) > 0 && hasDestinations;
 
   return `
-    <form id="price-change-form" class="price-change-form">
-      <div class="transfer-command-bar price-change-command-bar" role="toolbar" aria-label="Acciones de cambio de precio">
+    <form id="price-change-form" class="transfer-register-form adjustment-form price-change-form">
+      <div class="transfer-command-bar adjustment-command-bar price-change-command-bar" role="toolbar" aria-label="Acciones de cambio de precio">
         <button class="transfer-command-button" type="button" data-price-change-new ${isBusy ? "disabled" : ""}>
           <span class="transfer-command-icon">+</span>
           Nuevo lote
@@ -15452,9 +15550,15 @@ async function saveCashRegister() {
   }
 
   if (!draft.originalSerie) {
-    const openCashRegister = getCloseableCashRegisters()[0] || null;
-    if (openCashRegister) {
-      setFlash("Cierre primero la caja abierta antes de abrir una nueva.", "error");
+    const targetSerie = String(draft.serie || "")
+      .trim()
+      .toUpperCase();
+    const openCashRegisterForSerie =
+      getCloseableCashRegisters().find(
+        (item) => String(item?.serie || "").trim().toUpperCase() === targetSerie,
+      ) || null;
+    if (openCashRegisterForSerie) {
+      setFlash("Ya existe una caja abierta con ese número de serie.", "error");
       render();
       return;
     }
@@ -19717,6 +19821,7 @@ function createEmptyTipoPagoDraft(metadata) {
     codigo: toInputValue(defaults.codigo ?? ""),
     nombre: "",
     status: String(defaults.status ?? 1),
+    esDolar: false,
   };
 }
 
@@ -19739,6 +19844,7 @@ function readTipoPagoDraft(form) {
       : readFormFieldValue(form, "codigo", currentDraft.codigo || ""),
     nombre: readFormFieldValue(form, "nombre", currentDraft.nombre || ""),
     status: readRadioValue(form, "status", String(currentDraft.status ?? 1)),
+    esDolar: readFormCheckboxValue(form, "esDolar", Boolean(currentDraft.esDolar)),
   };
 }
 
@@ -19760,6 +19866,7 @@ function buildTipoPagoPayload(draft) {
     codigo: Number.parseInt(String(draft.codigo || "0").trim(), 10),
     nombre: String(draft.nombre || "").trim(),
     status: Number.parseInt(String(draft.status || "1"), 10) === 0 ? 0 : 1,
+    esDolar: Boolean(draft.esDolar),
   };
 }
 
@@ -19773,6 +19880,7 @@ function tipoPagoToDraft(item, metadata = state.tiposPago?.metadata) {
     codigo: toInputValue(item.codigo ?? ""),
     nombre: item.nombre || "",
     status: String(item.status ?? 1),
+    esDolar: Boolean(item.esDolar),
   };
 }
 
@@ -20557,6 +20665,7 @@ function buildFacturacionSalePayload(draft, paymentRows, exchangeRate) {
       exchangeRate?.rateBsPerUsd > 0 ? String(exchangeRate.rateBsPerUsd) : "",
     tasaCambioMayor:
       exchangeRate?.rateMayor > 0 ? String(exchangeRate.rateMayor) : "",
+    serieCaja: resolveFacturacionActiveCajaSerie(),
     items: rows,
     pagos: payments,
   };
@@ -20706,7 +20815,9 @@ function normalizeFacturacionPaymentRows(rows) {
 }
 
 function createEmptyFacturacionItems() {
-  return Array.from({ length: 11 }, () => createEmptyFacturacionLineDraft());
+  return Array.from({ length: FACTURACION_ITEM_LIMIT }, () =>
+    createEmptyFacturacionLineDraft(),
+  );
 }
 
 function createEmptyFacturacionLineDraft() {
@@ -20750,9 +20861,11 @@ function normalizeFacturacionLineDraft(line = {}) {
 
 function normalizeFacturacionItems(items) {
   const normalized = Array.isArray(items)
-    ? items.slice(0, 11).map((item) => normalizeFacturacionLineDraft(item))
+    ? items
+        .slice(0, FACTURACION_ITEM_LIMIT)
+        .map((item) => normalizeFacturacionLineDraft(item))
     : [];
-  while (normalized.length < 11) {
+  while (normalized.length < FACTURACION_ITEM_LIMIT) {
     normalized.push(createEmptyFacturacionLineDraft());
   }
   return normalized;
@@ -21701,6 +21814,18 @@ function parseFacturacionPaymentAmount(value) {
 
 function facturacionPaymentMethodUsesUsdAmount(method) {
   const normalized = normalizeFacturacionPaymentMethod(method);
+  if (!normalized) {
+    return false;
+  }
+
+  const items = Array.isArray(state.tiposPago?.items) ? state.tiposPago.items : [];
+  const matched = items.find(
+    (item) => normalizeFacturacionPaymentMethod(item?.nombre) === normalized,
+  );
+  if (matched) {
+    return Boolean(matched.esDolar);
+  }
+
   return ["EFECTIVO DOLAR", "USDT", "DOLAR ELECTRONICO"].includes(normalized);
 }
 
