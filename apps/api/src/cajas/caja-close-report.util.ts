@@ -30,6 +30,7 @@ export type CashRegisterCloseReportPaymentLine = {
 };
 
 export type CashRegisterCloseReportPayload = {
+  sucursalNombre: string;
   serie: string;
   numeroCaja: number;
   fecha: string;
@@ -63,6 +64,7 @@ export type CashRegisterGeneralCloseCostLine = {
 };
 
 export type CashRegisterGeneralCloseReportPayload = {
+  sucursalNombre: string;
   fecha: string;
   totalCajas: number;
   cajasCerradas: number;
@@ -211,7 +213,7 @@ function buildCashRegisterCloseReportLines(report: CashRegisterCloseReportPayloa
 }
 function buildCashRegisterGeneralCloseReportLines(report: CashRegisterGeneralCloseReportPayload) {
   const lines = [
-    REPORT_BRANCH_NAME,
+    toAsciiLabel(report.sucursalNombre || REPORT_BRANCH_NAME),
     "",
     `${toAsciiLabel(report.fecha || "-")}`,
     "",
@@ -231,12 +233,13 @@ function buildCashRegisterGeneralCloseReportLines(report: CashRegisterGeneralClo
 
 function buildCashRegisterCloseReportTitle(report: CashRegisterCloseReportPayload) {
   const numeroCaja = Number(report.numeroCaja || 0);
+  const branchName = toAsciiLabel(report.sucursalNombre || REPORT_BRANCH_NAME);
   const serie = toAsciiLabel(report.serie || "");
   if (!serie) {
-    return `${REPORT_BRANCH_NAME} - CAJA ${String(numeroCaja)}`;
+    return `${branchName} - CAJA ${String(numeroCaja)}`;
   }
 
-  return `${REPORT_BRANCH_NAME} - CAJA ${String(numeroCaja)} (${serie})`;
+  return `${branchName} - CAJA ${String(numeroCaja)} (${serie})`;
 }
 
 function appendPaymentBreakdownLines(

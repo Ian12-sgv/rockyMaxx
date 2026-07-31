@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Prisma, type Cajas, type FormaPago } from "@prisma/client";
 
 import {
@@ -38,6 +39,7 @@ export class CajasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mirrorSyncService: MirrorSyncService,
+    private readonly configService: ConfigService,
   ) {}
 
   async getMetadata() {
@@ -389,6 +391,7 @@ export class CajasService {
     const gananciaNetaUsd = totalGeneralUsd.minus(inventoryCost.total).toDecimalPlaces(2);
 
     const summary = {
+      sucursalNombre: await this.resolveCurrentSucursalNombre(),
       fecha: this.formatReportDate(normalizedFecha),
       totalCajas: syncedItems.length,
       cajasCerradas: syncedItems.filter((item) => Number(item.Status ?? 0) === 2).length,
@@ -467,6 +470,7 @@ export class CajasService {
       .sort((left, right) => String(left.label || "").localeCompare(String(right.label || ""), "es"));
 
     const summary = {
+      sucursalNombre: await this.resolveCurrentSucursalNombre(),
       serie: item.Serie,
       numeroCaja: Number(item.Numero || 0),
       fecha: this.formatReportDate(item.Fecha),
@@ -870,6 +874,31 @@ export class CajasService {
       },
     });
     await this.mirrorSyncService.enqueueCajaUpsertTx(tx, normalized.serie);
+  }
+
+  // Nombre real de la sucursal donde corre esta instancia, para que los reportes de caja
+  // muestren la tienda correcta en vez de un nombre fijo. Deriva el codigo desde
+  // DATABASE_URL (mismo patron que getCurrentInstanceContext en dev-returns.service.ts) y
+  // busca el nombre real en SUCURSALES; si no encuentra fila, cae a un rotulo generico en
+  // vez de fallar el reporte.
+  private async resolveCurrentSucursalNombre() {
+    const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "");
+    const databaseName = databaseUrl.match(/\/([^/?]+)(\?|$)/)?.[1] ?? "";
+    const storeMatch = databaseName.match(/rocky_tienda_(\d+)/i);
+    const warehouseMatch = databaseName.match(/rocky_bodega_(\d+)/i);
+
+    let codigo = "ORIGEN";
+    let fallback = "ROCKY MAXX";
+    if (storeMatch) {
+      codigo = storeMatch[1].padStart(3, "0");
+      fallback = `Tienda ${codigo}`;
+    } else if (warehouseMatch) {
+      codigo = `B${warehouseMatch[1].padStart(3, "0")}`;
+      fallback = `Bodega ${warehouseMatch[1].padStart(3, "0")}`;
+    }
+
+    const sucursal = await this.prisma.sucursales.findUnique({ where: { Codigo: codigo } });
+    return sucursal?.Nombre?.trim() || fallback;
   }
 
   private normalizeSerie(value: string) {

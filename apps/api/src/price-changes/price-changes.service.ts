@@ -1216,6 +1216,17 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
       result.finalStoreStatus,
     );
 
+    // Fix: mismo bug que en receivePriceChangeBatchLocally/finalizePriceChangeBatchAndStoreAfterApply,
+    // pero del lado del VPS/REMOTO -- sin esto, la fila original PRICE_CHANGE_BATCH del inbox
+    // se quedaba en 'RECEIVED' para siempre aunque ya llegara su resultado terminal, ocupando
+    // el cupo del LIMIT en listPendingPriceChangeSyncForCurrentNode (usado por GET /sync/pending)
+    // y bloqueando que la tienda viera batches nuevos genuinamente pendientes.
+    await this.prisma.$executeRawUnsafe(
+      `update dbo."PRICE_CHANGE_SYNC_INBOX" set "Status" = $2 where "GlobalId" = $1`,
+      batchInbox.GlobalId,
+      result.finalStoreStatus,
+    );
+
     return {
       received: true,
       message: "Resultado de Cambio de Precio recibido y guardado.",
@@ -2205,6 +2216,30 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
       );
 
       if (inserted.length === 0) {
+        // Auto-sanacion: si el batch ya existia localmente pero PRICE_CHANGE_SYNC_INBOX
+        // sigue en 'RECEIVED' aunque su PRICE_CHANGE_BATCH_STORE ya este en un estado
+        // terminal (rastro del bug donde el inbox nunca se actualizaba al aplicar -- ver
+        // finalizePriceChangeBatchAndStoreAfterApply), corregirlo aqui para liberar el cupo
+        // del LIMIT en el proximo ciclo en vez de quedar "zombie" para siempre.
+        const terminalStoreStatuses = new Set([
+          PRICE_CHANGE_STORE_STATUS_APPLIED,
+          PRICE_CHANGE_STORE_STATUS_PARTIAL_APPLIED,
+          PRICE_CHANGE_STORE_STATUS_FAILED_APPLY,
+        ]);
+        const storeRows = await tx.$queryRawUnsafe<Array<{ Status: string }>>(
+          `select "Status" from dbo."PRICE_CHANGE_BATCH_STORE" where "BatchId" = $1 and "DestinationNodeId" = $2`,
+          payload.batchId,
+          current.nodeId,
+        );
+        const storeStatus = storeRows[0]?.Status;
+        if (storeStatus && terminalStoreStatuses.has(storeStatus) && inboxRow.Status !== storeStatus) {
+          await tx.$executeRawUnsafe(
+            `update dbo."PRICE_CHANGE_SYNC_INBOX" set "Status" = $2 where "GlobalId" = $1`,
+            inboxRow.GlobalId,
+            storeStatus,
+          );
+        }
+
         return { globalId: payload.globalId, batchId: payload.batchId, received: false, alreadyReceived: true };
       }
 
@@ -2668,6 +2703,24 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
       `update dbo."PRICE_CHANGE_BATCH" set "Status" = $2, "UpdatedAt" = now() where "BatchId" = $1`,
       batchId,
       batchStatus,
+    );
+
+    // Fix: sin esto, PRICE_CHANGE_SYNC_INBOX se quedaba en 'RECEIVED' para siempre aunque
+    // el batch ya estuviera aplicado -- las filas "zombie" (ya resueltas pero marcadas como
+    // pendientes) llenaban el LIMIT del ciclo local (listPendingPriceChangeSyncForCurrentNode
+    // ordena por ReceivedAt asc), impidiendo que llegaran nuevos batches genuinamente
+    // pendientes una vez se acumulaban mas zombies que el limite del ciclo.
+    await this.prisma.$executeRawUnsafe(
+      `
+        update dbo."PRICE_CHANGE_SYNC_INBOX"
+        set "Status" = $3, "AppliedAt" = case when $3 in ($4, $5) then now() else "AppliedAt" end
+        where "BatchId" = $1 and "DestinationNodeId" = $2 and "EventType" = 'PRICE_CHANGE_BATCH'
+      `,
+      batchId,
+      destinationNodeId,
+      storeStatus,
+      PRICE_CHANGE_STORE_STATUS_APPLIED,
+      PRICE_CHANGE_STORE_STATUS_PARTIAL_APPLIED,
     );
   }
 
