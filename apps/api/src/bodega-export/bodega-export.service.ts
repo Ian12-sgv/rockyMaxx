@@ -25,6 +25,12 @@ type TablaBatch = {
   registros: RegistroPayload[];
 };
 
+// Un envio agrupa las tablas que comparten cursor/onSuccess (hoy solo
+// INVENTARIO, que alimenta dos entidades desde la misma lectura). Cada envio
+// viaja en su propio POST para que la falla de uno (ej. CLIENTES por
+// ArrayMaxSize) no le impida avanzar el cursor a los demas.
+type Envio = { tablas: TablaBatch[]; onSuccess: () => Promise<void> };
+
 // Extractor por tienda: lee las tablas legacy locales, arma pk_origen +
 // payload_json y hace POST hacia bodega-api cada BODEGA_SYNC_INTERVAL_MS.
 // NO calcula hash_registro (lo hace el servidor). Sigue el mismo patron de
@@ -116,66 +122,69 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     this.cycleInProgress = true;
 
     try {
-      const tablas: TablaBatch[] = [];
-      const onSuccessCallbacks: Array<() => Promise<void>> = [];
-
-      const inventario = await this.buildInventarioBatches();
-      if (inventario) {
-        tablas.push(...inventario.batches);
-        onSuccessCallbacks.push(inventario.onSuccess);
-      }
-
-      const clientes = await this.buildClientesBatchIfDue();
-      if (clientes) {
-        tablas.push(clientes.batch);
-        onSuccessCallbacks.push(clientes.onSuccess);
-      }
-
-      const windowDays = this.getWindowDays();
-
-      const ventas = await this.buildVentasBatch(windowDays);
-      if (ventas) {
-        tablas.push(ventas.batch);
-        onSuccessCallbacks.push(ventas.onSuccess);
-      }
-
-      const detalle = await this.buildVentasDetalleBatch(windowDays);
-      if (detalle) {
-        tablas.push(detalle.batch);
-        onSuccessCallbacks.push(detalle.onSuccess);
-      }
-
-      const pagos = await this.buildPagosBatch(windowDays);
-      if (pagos) {
-        tablas.push(pagos.batch);
-        onSuccessCallbacks.push(pagos.onSuccess);
-      }
-
-      const cajas = await this.buildCajasBatch(windowDays);
-      if (cajas) {
-        tablas.push(cajas.batch);
-        onSuccessCallbacks.push(cajas.onSuccess);
-      }
-
-      if (tablas.length === 0) {
+      const envios = await this.buildEnvios();
+      if (envios.length === 0) {
         return;
       }
 
-      const result = await this.postIngest(ingestUrl, { tablas });
+      let okCount = 0;
+      let failCount = 0;
 
-      for (const onSuccess of onSuccessCallbacks) {
-        await onSuccess();
+      for (const envio of envios) {
+        const entidades = envio.tablas.map((t) => t.entidadDestino).join("+");
+        try {
+          const result = await this.postIngest(ingestUrl, { tablas: envio.tablas });
+          await envio.onSuccess();
+          okCount += 1;
+          this.logger.log(
+            `Ciclo bodega-export OK (${reason}): entidades=${entidades} syncRunId=${(result as { syncRunId?: string })?.syncRunId ?? "?"} filas=${envio.tablas.reduce((n, t) => n + t.registros.length, 0)}`,
+          );
+        } catch (error) {
+          failCount += 1;
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(`Ciclo de extraccion hacia bodega fallo (${reason}) entidades=${entidades}: ${message}`);
+        }
       }
 
-      this.logger.log(
-        `Ciclo bodega-export OK (${reason}): syncRunId=${(result as { syncRunId?: string })?.syncRunId ?? "?"} tablas=${tablas.length}`,
-      );
+      if (failCount > 0) {
+        this.logger.warn(`Ciclo bodega-export con fallas (${reason}): ok=${okCount} fallidos=${failCount}`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Ciclo de extraccion hacia bodega fallo (${reason}): ${message}`);
+      this.logger.warn(`Ciclo de extraccion hacia bodega fallo (${reason}) al leer datos locales: ${message}`);
     } finally {
       this.cycleInProgress = false;
     }
+  }
+
+  private async buildEnvios(): Promise<Envio[]> {
+    const envios: Envio[] = [];
+
+    const inventario = await this.buildInventarioBatches();
+    if (inventario) {
+      envios.push({ tablas: inventario.batches, onSuccess: inventario.onSuccess });
+    }
+
+    const clientes = await this.buildClientesBatchIfDue();
+    if (clientes) {
+      envios.push({ tablas: [clientes.batch], onSuccess: clientes.onSuccess });
+    }
+
+    const windowDays = this.getWindowDays();
+
+    const ventas = await this.buildVentasBatch(windowDays);
+    if (ventas) envios.push({ tablas: [ventas.batch], onSuccess: ventas.onSuccess });
+
+    const detalle = await this.buildVentasDetalleBatch(windowDays);
+    if (detalle) envios.push({ tablas: [detalle.batch], onSuccess: detalle.onSuccess });
+
+    const pagos = await this.buildPagosBatch(windowDays);
+    if (pagos) envios.push({ tablas: [pagos.batch], onSuccess: pagos.onSuccess });
+
+    const cajas = await this.buildCajasBatch(windowDays);
+    if (cajas) envios.push({ tablas: [cajas.batch], onSuccess: cajas.onSuccess });
+
+    return envios;
   }
 
   // ---------------------------------------------------------------------
@@ -275,18 +284,35 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  // CLIENTES: snapshot completo, gateado a una vez por dia (no cada minuto).
+  // CLIENTES: snapshot completo una vez por dia, pero paginado por
+  // BATCH_LIMIT a traves de varios ciclos (igual que las demas tablas) en
+  // vez de mandar todo el catalogo en un solo POST -- con mas de 1000
+  // clientes eso violaba el ArrayMaxSize(1000) del DTO en bodega-api y
+  // fallaba con 400 en cada ciclo, sin arreglo automatico.
   private async buildClientesBatchIfDue(): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
-    const cursorKey = "CLIENTES_SNAPSHOT_DATE";
+    const dateCursorKey = "CLIENTES_SNAPSHOT_DATE";
+    const offsetCursorKey = "CLIENTES_SNAPSHOT_OFFSET";
     const today = new Date().toISOString().slice(0, 10);
-    const lastRunDate = await this.getCursor(cursorKey);
+    const lastRunDate = await this.getCursor(dateCursorKey);
 
     if (lastRunDate === today) {
       return null;
     }
 
-    const rows = await this.prisma.clientes.findMany({ take: 50000 });
+    const offsetRaw = await this.getCursor(offsetCursorKey);
+    const offset = offsetRaw ? Number(offsetRaw) : 0;
+
+    const rows = await this.prisma.clientes.findMany({
+      orderBy: { Codigo: "asc" },
+      skip: offset,
+      take: BATCH_LIMIT,
+    });
+
     if (rows.length === 0) {
+      // Se recorrio todo el catalogo hoy: marca el dia como completo y
+      // reinicia el offset para la proxima corrida diaria.
+      await this.setCursor(dateCursorKey, today);
+      await this.setCursor(offsetCursorKey, "0");
       return null;
     }
 
@@ -301,7 +327,7 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     return {
       batch: { entidadDestino: "DIM_CLIENTES_HIST", tablaOrigen: "CLIENTES", registros },
       onSuccess: async () => {
-        await this.setCursor(cursorKey, today);
+        await this.setCursor(offsetCursorKey, String(offset + rows.length));
       },
     };
   }
