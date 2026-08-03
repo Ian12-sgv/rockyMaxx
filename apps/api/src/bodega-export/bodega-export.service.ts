@@ -132,17 +132,30 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
       }
 
       const windowDays = this.getWindowDays();
-      const ventasBatch = await this.buildVentasBatch(windowDays);
-      if (ventasBatch.registros.length > 0) tablas.push(ventasBatch);
 
-      const detalleBatch = await this.buildVentasDetalleBatch(windowDays);
-      if (detalleBatch.registros.length > 0) tablas.push(detalleBatch);
+      const ventas = await this.buildVentasBatch(windowDays);
+      if (ventas) {
+        tablas.push(ventas.batch);
+        onSuccessCallbacks.push(ventas.onSuccess);
+      }
 
-      const pagosBatch = await this.buildPagosBatch(windowDays);
-      if (pagosBatch.registros.length > 0) tablas.push(pagosBatch);
+      const detalle = await this.buildVentasDetalleBatch(windowDays);
+      if (detalle) {
+        tablas.push(detalle.batch);
+        onSuccessCallbacks.push(detalle.onSuccess);
+      }
 
-      const cajasBatch = await this.buildCajasBatch(windowDays);
-      if (cajasBatch.registros.length > 0) tablas.push(cajasBatch);
+      const pagos = await this.buildPagosBatch(windowDays);
+      if (pagos) {
+        tablas.push(pagos.batch);
+        onSuccessCallbacks.push(pagos.onSuccess);
+      }
+
+      const cajas = await this.buildCajasBatch(windowDays);
+      if (cajas) {
+        tablas.push(cajas.batch);
+        onSuccessCallbacks.push(cajas.onSuccess);
+      }
 
       if (tablas.length === 0) {
         return;
@@ -298,83 +311,162 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
   }
 
   // VENTAS, MOVVENTAS, PAGOSVENTA, DIARIOCAJA no tienen columna de
-  // actualizacion confiable (ver handoff): snapshot por ventana reciente +
-  // hash server-side, con reconciliacion completa periodica fuera de este
-  // ciclo de 1 minuto (a cargo de quien opere el sistema).
-  private async buildVentasBatch(windowDays: number): Promise<TablaBatch> {
-    const windowStart = this.computeWindowStart(windowDays);
+  // actualizacion confiable (ver handoff), asi que se usa la propia columna
+  // de fecha del documento como cursor incremental (igual que INVENTARIO):
+  // arranca en windowStart la primera vez, y de ahi en adelante solo avanza
+  // hacia adelante. Sin esto, un lote con mas de BATCH_LIMIT filas en la
+  // ventana quedaba truncado para siempre (las filas mas nuevas dentro de la
+  // ventana nunca se alcanzaban a enviar).
+  private async buildVentasBatch(
+    windowDays: number,
+  ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
+    const cursorKey = "VENTAS";
+    const cursorRaw = await this.getCursor(cursorKey);
+    const cursorDate = cursorRaw ? new Date(cursorRaw) : this.computeWindowStart(windowDays);
+
     const rows = await this.prisma.ventas.findMany({
-      where: { Fecha: { gte: windowStart } },
+      where: { Fecha: { gt: cursorDate } },
       orderBy: { Fecha: "asc" },
       take: BATCH_LIMIT,
     });
+
+    if (rows.length === 0) {
+      return null;
+    }
+
     const now = new Date();
+    let maxSeen = cursorDate;
 
-    const registros = rows.map((row) => ({
-      pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie]),
-      operacion: "SNAPSHOT" as const,
-      payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie"]),
-      fechaExtraida: now.toISOString(),
-    }));
+    const registros = rows.map((row) => {
+      if (row.Fecha > maxSeen) maxSeen = row.Fecha;
+      return {
+        pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie]),
+        operacion: "SNAPSHOT" as const,
+        payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie"]),
+        fechaExtraida: now.toISOString(),
+      };
+    });
 
-    return { entidadDestino: "HECH_VENTAS_HIST", tablaOrigen: "VENTAS", registros };
+    return {
+      batch: { entidadDestino: "HECH_VENTAS_HIST", tablaOrigen: "VENTAS", registros },
+      onSuccess: async () => {
+        await this.setCursor(cursorKey, maxSeen.toISOString());
+      },
+    };
   }
 
-  private async buildVentasDetalleBatch(windowDays: number): Promise<TablaBatch> {
-    const windowStart = this.computeWindowStart(windowDays);
+  private async buildVentasDetalleBatch(
+    windowDays: number,
+  ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
+    const cursorKey = "MOVVENTAS";
+    const cursorRaw = await this.getCursor(cursorKey);
+    const cursorDate = cursorRaw ? new Date(cursorRaw) : this.computeWindowStart(windowDays);
+
     const rows = await this.prisma.movVentas.findMany({
-      where: { Hora: { gte: windowStart } },
+      where: { Hora: { gt: cursorDate } },
       orderBy: { Hora: "asc" },
       take: BATCH_LIMIT,
     });
+
+    if (rows.length === 0) {
+      return null;
+    }
+
     const now = new Date();
+    let maxSeen = cursorDate;
 
-    const registros = rows.map((row) => ({
-      pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie, row.Item]),
-      operacion: "SNAPSHOT" as const,
-      payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie", "Item"]),
-      fechaExtraida: now.toISOString(),
-    }));
+    const registros = rows.map((row) => {
+      if (row.Hora > maxSeen) maxSeen = row.Hora;
+      return {
+        pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie, row.Item]),
+        operacion: "SNAPSHOT" as const,
+        payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie", "Item"]),
+        fechaExtraida: now.toISOString(),
+      };
+    });
 
-    return { entidadDestino: "HECH_VENTAS_DETALLE_HIST", tablaOrigen: "MOVVENTAS", registros };
+    return {
+      batch: { entidadDestino: "HECH_VENTAS_DETALLE_HIST", tablaOrigen: "MOVVENTAS", registros },
+      onSuccess: async () => {
+        await this.setCursor(cursorKey, maxSeen.toISOString());
+      },
+    };
   }
 
-  private async buildPagosBatch(windowDays: number): Promise<TablaBatch> {
-    const windowStart = this.computeWindowStart(windowDays);
+  private async buildPagosBatch(
+    windowDays: number,
+  ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
+    const cursorKey = "PAGOSVENTA";
+    const cursorRaw = await this.getCursor(cursorKey);
+    const cursorDate = cursorRaw ? new Date(cursorRaw) : this.computeWindowStart(windowDays);
+
     const rows = await this.prisma.pagosVenta.findMany({
-      where: { Fecha: { gte: windowStart } },
+      where: { Fecha: { gt: cursorDate } },
       orderBy: { Fecha: "asc" },
       take: BATCH_LIMIT,
     });
+
+    if (rows.length === 0) {
+      return null;
+    }
+
     const now = new Date();
+    let maxSeen = cursorDate;
 
-    const registros = rows.map((row) => ({
-      pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie, row.Item]),
-      operacion: "SNAPSHOT" as const,
-      payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie", "Item"]),
-      fechaExtraida: now.toISOString(),
-    }));
+    const registros = rows.map((row) => {
+      if (row.Fecha > maxSeen) maxSeen = row.Fecha;
+      return {
+        pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie, row.Item]),
+        operacion: "SNAPSHOT" as const,
+        payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie", "Item"]),
+        fechaExtraida: now.toISOString(),
+      };
+    });
 
-    return { entidadDestino: "HECH_PAGOS_HIST", tablaOrigen: "PAGOSVENTA", registros };
+    return {
+      batch: { entidadDestino: "HECH_PAGOS_HIST", tablaOrigen: "PAGOSVENTA", registros },
+      onSuccess: async () => {
+        await this.setCursor(cursorKey, maxSeen.toISOString());
+      },
+    };
   }
 
-  private async buildCajasBatch(windowDays: number): Promise<TablaBatch> {
-    const windowStart = this.computeWindowStart(windowDays);
+  private async buildCajasBatch(
+    windowDays: number,
+  ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
+    const cursorKey = "DIARIOCAJA";
+    const cursorRaw = await this.getCursor(cursorKey);
+    const cursorDate = cursorRaw ? new Date(cursorRaw) : this.computeWindowStart(windowDays);
+
     const rows = await this.prisma.diarioCaja.findMany({
-      where: { Fecha: { gte: windowStart } },
+      where: { Fecha: { gt: cursorDate } },
       orderBy: { Fecha: "asc" },
       take: BATCH_LIMIT,
     });
+
+    if (rows.length === 0) {
+      return null;
+    }
+
     const now = new Date();
+    let maxSeen = cursorDate;
 
-    const registros = rows.map((row) => ({
-      pkOrigen: serializePkOrigen([row.Serie, row.Fecha]),
-      operacion: "SNAPSHOT" as const,
-      payload: buildPayload(row as unknown as Record<string, unknown>, ["Serie", "Fecha"]),
-      fechaExtraida: now.toISOString(),
-    }));
+    const registros = rows.map((row) => {
+      if (row.Fecha > maxSeen) maxSeen = row.Fecha;
+      return {
+        pkOrigen: serializePkOrigen([row.Serie, row.Fecha]),
+        operacion: "SNAPSHOT" as const,
+        payload: buildPayload(row as unknown as Record<string, unknown>, ["Serie", "Fecha"]),
+        fechaExtraida: now.toISOString(),
+      };
+    });
 
-    return { entidadDestino: "HECH_CAJAS_HIST", tablaOrigen: "DIARIOCAJA", registros };
+    return {
+      batch: { entidadDestino: "HECH_CAJAS_HIST", tablaOrigen: "DIARIOCAJA", registros },
+      onSuccess: async () => {
+        await this.setCursor(cursorKey, maxSeen.toISOString());
+      },
+    };
   }
 
   private async postIngest(url: string, body: { tablas: TablaBatch[] }) {
