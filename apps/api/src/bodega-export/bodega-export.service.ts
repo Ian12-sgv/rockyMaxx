@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { buildPayload } from "./payload.util";
@@ -230,22 +231,41 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
   // INVENTARIO alimenta DIM_ARTICULOS_HIST y HECH_INVENTARIO_HIST a la vez
   // (mismo pk_origen, mismo payload; bodega-api aplica su propia whitelist
   // por entidadDestino al calcular hash_registro).
+  //
+  // Cursor compuesto (UltimaActualizacion, CodigoBarra) en vez de solo fecha:
+  // cuando muchas filas comparten el mismo UltimaActualizacion (tipico de una
+  // carga masiva/migracion -- confirmado en tienda001, 6688 de 6703 filas con
+  // el mismo timestamp), un cursor de solo fecha con "gt" avanza tras la
+  // primera tanda y deja el resto de ese grupo inalcanzable para siempre.
+  // CodigoBarra (PK, unico) desempata dentro del mismo timestamp. Ordenar
+  // ASC en Postgres deja los NULL de UltimaActualizacion al final, asi que
+  // el barrido los alcanza una sola vez al terminar el resto.
   private async buildInventarioBatches(): Promise<{
     batches: TablaBatch[];
     onSuccess: () => Promise<void>;
   } | null> {
     const cursorKey = "INVENTARIO";
     const cursorRaw = await this.getCursor(cursorKey);
-    const cursorDate = cursorRaw ? new Date(cursorRaw) : null;
-    const isFirstRun = !cursorDate;
+    const cursor = cursorRaw ? this.parseInventarioCursor(cursorRaw) : null;
+    const isFirstRun = !cursor;
+
+    let where: Prisma.InventarioWhereInput | undefined;
+    if (cursor) {
+      where =
+        cursor.fecha !== null
+          ? {
+              OR: [
+                { UltimaActualizacion: { gt: new Date(cursor.fecha) } },
+                { UltimaActualizacion: new Date(cursor.fecha), CodigoBarra: { gt: cursor.pk } },
+                { UltimaActualizacion: null },
+              ],
+            }
+          : { UltimaActualizacion: null, CodigoBarra: { gt: cursor.pk } };
+    }
 
     const rows = await this.prisma.inventario.findMany({
-      where: cursorDate
-        ? {
-            OR: [{ UltimaActualizacion: { gt: cursorDate } }, { UltimaActualizacion: null }],
-          }
-        : undefined,
-      orderBy: { UltimaActualizacion: "asc" },
+      where,
+      orderBy: [{ UltimaActualizacion: "asc" }, { CodigoBarra: "asc" }],
       take: BATCH_LIMIT,
     });
 
@@ -255,19 +275,19 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
 
     const now = new Date();
     const operacion: Operacion = isFirstRun ? "SNAPSHOT" : "UPDATE";
-    let maxSeen: Date | null = null;
 
-    const registros = rows.map((row) => {
-      if (row.UltimaActualizacion && (!maxSeen || row.UltimaActualizacion > maxSeen)) {
-        maxSeen = row.UltimaActualizacion;
-      }
-      return {
-        pkOrigen: serializePkOrigen([row.CodigoBarra]),
-        operacion,
-        payload: buildPayload(row as unknown as Record<string, unknown>, ["CodigoBarra"]),
-        fechaExtraida: now.toISOString(),
-      };
-    });
+    const registros = rows.map((row) => ({
+      pkOrigen: serializePkOrigen([row.CodigoBarra]),
+      operacion,
+      payload: buildPayload(row as unknown as Record<string, unknown>, ["CodigoBarra"]),
+      fechaExtraida: now.toISOString(),
+    }));
+
+    const lastRow = rows[rows.length - 1];
+    const nextCursor = {
+      fecha: lastRow.UltimaActualizacion ? lastRow.UltimaActualizacion.toISOString() : null,
+      pk: lastRow.CodigoBarra,
+    };
 
     const batches: TablaBatch[] = [
       { entidadDestino: "DIM_ARTICULOS_HIST", tablaOrigen: "INVENTARIO", registros },
@@ -277,11 +297,27 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     return {
       batches,
       onSuccess: async () => {
-        if (maxSeen) {
-          await this.setCursor(cursorKey, (maxSeen as Date).toISOString());
-        }
+        await this.setCursor(cursorKey, JSON.stringify(nextCursor));
       },
     };
+  }
+
+  // Compatibilidad con el cursor viejo de INVENTARIO (antes de hoy era solo
+  // una fecha ISO en texto plano, no JSON). Si el valor guardado no parsea
+  // como el nuevo formato compuesto, se reinterpreta como { fecha: raw, pk:
+  // "" } -- eso reenvia una vez mas el grupo empatado en esa fecha (lo cual
+  // es idempotente via hash_registro en bodega-api) y de ahi en adelante ya
+  // avanza con el cursor compuesto normalmente.
+  private parseInventarioCursor(raw: string): { fecha: string | null; pk: string } {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && "pk" in parsed) {
+        return parsed as { fecha: string | null; pk: string };
+      }
+    } catch {
+      // No era JSON: cursor en formato viejo (solo fecha), cae al fallback de abajo.
+    }
+    return { fecha: raw, pk: "" };
   }
 
   // CLIENTES: snapshot completo una vez por dia, pero paginado por
