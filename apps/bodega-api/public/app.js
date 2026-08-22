@@ -3,6 +3,7 @@ const TOKEN_STORAGE_KEY = "rocky.bodega.token";
 const loginView = document.getElementById("login-view");
 const panelView = document.getElementById("panel-view");
 const loginForm = document.getElementById("login-form");
+const loginSubmitButton = loginForm.querySelector('button[type="submit"]');
 const tokenInput = document.getElementById("token-input");
 const loginFlash = document.getElementById("login-flash");
 const panelFlash = document.getElementById("panel-flash");
@@ -171,7 +172,16 @@ async function loadPanel() {
     return;
   }
 
-  setFlash(panelFlash, "Cargando resumen...", "info");
+  // Mientras no sabemos si el token sirve, seguimos mostrando #login-view --
+  // el mensaje de progreso/error tiene que ir ahi (loginFlash), no en
+  // panelFlash, porque ese contenedor esta oculto (#panel-view con
+  // hidden) hasta que showPanel() se llama mas abajo. Antes este mensaje se
+  // escribia siempre en panelFlash y quedaba invisible durante todo el
+  // intento de conexion.
+  const isLoggingIn = loginView.hidden === false;
+  const flashTarget = isLoggingIn ? loginFlash : panelFlash;
+  setFlash(flashTarget, "Conectando...", "info");
+  setFormBusy(true);
 
   let response;
   try {
@@ -179,25 +189,29 @@ async function loadPanel() {
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (error) {
-    setFlash(panelFlash, `No se pudo contactar el servidor: ${error?.message || error}`, "error");
+    setFlash(flashTarget, `No se pudo contactar el servidor: ${error?.message || error}`, "error");
+    setFormBusy(false);
     return;
   }
 
   if (response.status === 401 || response.status === 403) {
     setToken("");
     showLogin("Token invalido o expirado. Ingresalo de nuevo.");
+    setFormBusy(false);
     return;
   }
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    setFlash(panelFlash, `El servidor respondio ${response.status}: ${text || "sin detalle"}`, "error");
+    setFlash(flashTarget, `El servidor respondio ${response.status}: ${text || "sin detalle"}`, "error");
+    setFormBusy(false);
     return;
   }
 
   const data = await response.json().catch(() => null);
   if (!data) {
-    setFlash(panelFlash, "Respuesta invalida del servidor.", "error");
+    setFlash(flashTarget, "Respuesta invalida del servidor.", "error");
+    setFormBusy(false);
     return;
   }
 
@@ -206,6 +220,17 @@ async function loadPanel() {
   renderVentasTable(ventasHoyTable, data.ventasHoy);
   renderVentasTable(ventasMesTable, data.ventasMes);
   renderInventarioTable(data.inventario);
+  setFormBusy(false);
+}
+
+function setFormBusy(busy) {
+  if (loginSubmitButton) {
+    loginSubmitButton.disabled = busy;
+    loginSubmitButton.textContent = busy ? "Conectando..." : "Conectar";
+  }
+  if (refreshButton) {
+    refreshButton.disabled = busy;
+  }
 }
 
 loginForm.addEventListener("submit", (event) => {
