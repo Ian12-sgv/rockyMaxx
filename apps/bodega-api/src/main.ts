@@ -1,5 +1,7 @@
 import "reflect-metadata";
 
+import { join } from "node:path";
+
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
@@ -19,6 +21,13 @@ async function bootstrap() {
   // (ver BodegaExportService); el default de body-parser (100kb) es
   // insuficiente y provoca 413 en el primer ciclo (snapshot inicial).
   app.useBodyParser("json", { limit: "20mb" });
+
+  // Panel de solo-lectura para conectar el Cliente de escritorio directo a
+  // bodega_datos (sin pasar por ninguna tienda). Sirve public/index.html +
+  // app.js; las rutas /bodega/* y /health/api-health siguen siendo del
+  // controlador Nest, Express solo cae a estos archivos estaticos para todo
+  // lo demas (/, /app.js, /styles.css).
+  app.useStaticAssets(join(__dirname, "..", "public"));
 
   await prismaService.enableShutdownHooks(app);
 
