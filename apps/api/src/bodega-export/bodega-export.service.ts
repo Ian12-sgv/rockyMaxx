@@ -26,6 +26,12 @@ type TablaBatch = {
   registros: RegistroPayload[];
 };
 
+type IngestResult = {
+  syncRunId?: string;
+  status?: "SUCCESS" | "PARTIAL" | "FAILED";
+  errorCount?: number;
+};
+
 // Un envio agrupa las tablas que comparten cursor/onSuccess (hoy solo
 // INVENTARIO, que alimenta dos entidades desde la misma lectura). Cada envio
 // viaja en su propio POST para que la falla de uno (ej. CLIENTES por
@@ -135,10 +141,25 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
         const entidades = envio.tablas.map((t) => t.entidadDestino).join("+");
         try {
           const result = await this.postIngest(ingestUrl, { tablas: envio.tablas });
+          // bodega-api responde 200 aun cuando algunas (o todas) las filas
+          // fallaron al procesarse (status PARTIAL/FAILED, ver IngestService) --
+          // no basta con response.ok. Si no podemos confirmar errorCount=0,
+          // NO se avanza el cursor: el envio completo se reintenta en el
+          // proximo ciclo (idempotente via hash_registro del lado servidor).
+          // Sin este chequeo, filas que fallan a mitad de un lote exitoso se
+          // pierden en silencio para siempre.
+          const errorCount = result?.errorCount;
+          if (typeof errorCount !== "number" || errorCount > 0) {
+            failCount += 1;
+            this.logger.warn(
+              `Ciclo bodega-export con errores de ingesta (${reason}): entidades=${entidades} status=${result?.status ?? "desconocido"} errorCount=${errorCount ?? "desconocido"} -- cursor no avanzado, se reintentara.`,
+            );
+            continue;
+          }
           await envio.onSuccess();
           okCount += 1;
           this.logger.log(
-            `Ciclo bodega-export OK (${reason}): entidades=${entidades} syncRunId=${(result as { syncRunId?: string })?.syncRunId ?? "?"} filas=${envio.tablas.reduce((n, t) => n + t.registros.length, 0)}`,
+            `Ciclo bodega-export OK (${reason}): entidades=${entidades} syncRunId=${result?.syncRunId ?? "?"} filas=${envio.tablas.reduce((n, t) => n + t.registros.length, 0)}`,
           );
         } catch (error) {
           failCount += 1;
@@ -372,6 +393,25 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     return new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
   }
 
+  // Compatibilidad con el cursor viejo de VENTAS/MOVVENTAS/PAGOSVENTA/
+  // DIARIOCAJA (antes de hoy era solo una fecha ISO en texto plano). Si no
+  // parsea como el nuevo formato {fecha, tie}, se reinterpreta con el tie de
+  // fallback pasado por el caller -- eso reenvia una vez mas el grupo
+  // empatado en esa fecha (idempotente via hash_registro en bodega-api) y de
+  // ahi en adelante ya avanza con el cursor compuesto normalmente. Mismo
+  // patron que parseInventarioCursor.
+  private parseTupleCursor<T extends string[]>(raw: string, fallbackTie: T): { fecha: string; tie: T } {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && "fecha" in parsed && "tie" in parsed) {
+        return parsed as { fecha: string; tie: T };
+      }
+    } catch {
+      // No era JSON: cursor en formato viejo (solo fecha), cae al fallback.
+    }
+    return { fecha: raw, tie: fallbackTie };
+  }
+
   // VENTAS, MOVVENTAS, PAGOSVENTA, DIARIOCAJA no tienen columna de
   // actualizacion confiable (ver handoff), asi que se usa la propia columna
   // de fecha del documento como cursor incremental (igual que INVENTARIO):
@@ -379,16 +419,33 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
   // hacia adelante. Sin esto, un lote con mas de BATCH_LIMIT filas en la
   // ventana quedaba truncado para siempre (las filas mas nuevas dentro de la
   // ventana nunca se alcanzaban a enviar).
+  //
+  // Cursor compuesto (Fecha, PK) igual que INVENTARIO: si mas de BATCH_LIMIT
+  // filas comparten exactamente el mismo Fecha (plausible en una carga
+  // historica masiva), un cursor de solo fecha con "gt" dejaria el resto de
+  // ese grupo inalcanzable para siempre. El PK desempata dentro del mismo
+  // Fecha.
   private async buildVentasBatch(
     windowDays: number,
   ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
     const cursorKey = "VENTAS";
     const cursorRaw = await this.getCursor(cursorKey);
-    const cursorDate = cursorRaw ? new Date(cursorRaw) : this.computeWindowStart(windowDays);
+    const cursor = cursorRaw ? this.parseTupleCursor(cursorRaw, ["-1", ""]) : null;
+    const cursorDate = cursor ? new Date(cursor.fecha) : this.computeWindowStart(windowDays);
+
+    const where: Prisma.VentasWhereInput = cursor
+      ? {
+          OR: [
+            { Fecha: { gt: cursorDate } },
+            { Fecha: cursorDate, NumeroFactura: { gt: BigInt(cursor.tie[0]) } },
+            { Fecha: cursorDate, NumeroFactura: BigInt(cursor.tie[0]), Serie: { gt: cursor.tie[1] } },
+          ],
+        }
+      : { Fecha: { gt: cursorDate } };
 
     const rows = await this.prisma.ventas.findMany({
-      where: { Fecha: { gt: cursorDate } },
-      orderBy: { Fecha: "asc" },
+      where,
+      orderBy: [{ Fecha: "asc" }, { NumeroFactura: "asc" }, { Serie: "asc" }],
       take: BATCH_LIMIT,
     });
 
@@ -397,22 +454,20 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     }
 
     const now = new Date();
-    let maxSeen = cursorDate;
+    const registros = rows.map((row) => ({
+      pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie]),
+      operacion: "SNAPSHOT" as const,
+      payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie"]),
+      fechaExtraida: now.toISOString(),
+    }));
 
-    const registros = rows.map((row) => {
-      if (row.Fecha > maxSeen) maxSeen = row.Fecha;
-      return {
-        pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie]),
-        operacion: "SNAPSHOT" as const,
-        payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie"]),
-        fechaExtraida: now.toISOString(),
-      };
-    });
+    const lastRow = rows[rows.length - 1];
+    const nextCursor = { fecha: lastRow.Fecha.toISOString(), tie: [lastRow.NumeroFactura.toString(), lastRow.Serie] };
 
     return {
       batch: { entidadDestino: "HECH_VENTAS_HIST", tablaOrigen: "VENTAS", registros },
       onSuccess: async () => {
-        await this.setCursor(cursorKey, maxSeen.toISOString());
+        await this.setCursor(cursorKey, JSON.stringify(nextCursor));
       },
     };
   }
@@ -422,11 +477,28 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
     const cursorKey = "MOVVENTAS";
     const cursorRaw = await this.getCursor(cursorKey);
-    const cursorDate = cursorRaw ? new Date(cursorRaw) : this.computeWindowStart(windowDays);
+    const cursor = cursorRaw ? this.parseTupleCursor(cursorRaw, ["-1", "", "-1"]) : null;
+    const cursorDate = cursor ? new Date(cursor.fecha) : this.computeWindowStart(windowDays);
+
+    const where: Prisma.MovVentasWhereInput = cursor
+      ? {
+          OR: [
+            { Hora: { gt: cursorDate } },
+            { Hora: cursorDate, NumeroFactura: { gt: BigInt(cursor.tie[0]) } },
+            { Hora: cursorDate, NumeroFactura: BigInt(cursor.tie[0]), Serie: { gt: cursor.tie[1] } },
+            {
+              Hora: cursorDate,
+              NumeroFactura: BigInt(cursor.tie[0]),
+              Serie: cursor.tie[1],
+              Item: { gt: Number(cursor.tie[2]) },
+            },
+          ],
+        }
+      : { Hora: { gt: cursorDate } };
 
     const rows = await this.prisma.movVentas.findMany({
-      where: { Hora: { gt: cursorDate } },
-      orderBy: { Hora: "asc" },
+      where,
+      orderBy: [{ Hora: "asc" }, { NumeroFactura: "asc" }, { Serie: "asc" }, { Item: "asc" }],
       take: BATCH_LIMIT,
     });
 
@@ -435,22 +507,23 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     }
 
     const now = new Date();
-    let maxSeen = cursorDate;
+    const registros = rows.map((row) => ({
+      pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie, row.Item]),
+      operacion: "SNAPSHOT" as const,
+      payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie", "Item"]),
+      fechaExtraida: now.toISOString(),
+    }));
 
-    const registros = rows.map((row) => {
-      if (row.Hora > maxSeen) maxSeen = row.Hora;
-      return {
-        pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie, row.Item]),
-        operacion: "SNAPSHOT" as const,
-        payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie", "Item"]),
-        fechaExtraida: now.toISOString(),
-      };
-    });
+    const lastRow = rows[rows.length - 1];
+    const nextCursor = {
+      fecha: lastRow.Hora.toISOString(),
+      tie: [lastRow.NumeroFactura.toString(), lastRow.Serie, String(lastRow.Item)],
+    };
 
     return {
       batch: { entidadDestino: "HECH_VENTAS_DETALLE_HIST", tablaOrigen: "MOVVENTAS", registros },
       onSuccess: async () => {
-        await this.setCursor(cursorKey, maxSeen.toISOString());
+        await this.setCursor(cursorKey, JSON.stringify(nextCursor));
       },
     };
   }
@@ -460,11 +533,28 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
     const cursorKey = "PAGOSVENTA";
     const cursorRaw = await this.getCursor(cursorKey);
-    const cursorDate = cursorRaw ? new Date(cursorRaw) : this.computeWindowStart(windowDays);
+    const cursor = cursorRaw ? this.parseTupleCursor(cursorRaw, ["-1", "", "-1"]) : null;
+    const cursorDate = cursor ? new Date(cursor.fecha) : this.computeWindowStart(windowDays);
+
+    const where: Prisma.PagosVentaWhereInput = cursor
+      ? {
+          OR: [
+            { Fecha: { gt: cursorDate } },
+            { Fecha: cursorDate, NumeroFactura: { gt: BigInt(cursor.tie[0]) } },
+            { Fecha: cursorDate, NumeroFactura: BigInt(cursor.tie[0]), Serie: { gt: cursor.tie[1] } },
+            {
+              Fecha: cursorDate,
+              NumeroFactura: BigInt(cursor.tie[0]),
+              Serie: cursor.tie[1],
+              Item: { gt: Number(cursor.tie[2]) },
+            },
+          ],
+        }
+      : { Fecha: { gt: cursorDate } };
 
     const rows = await this.prisma.pagosVenta.findMany({
-      where: { Fecha: { gt: cursorDate } },
-      orderBy: { Fecha: "asc" },
+      where,
+      orderBy: [{ Fecha: "asc" }, { NumeroFactura: "asc" }, { Serie: "asc" }, { Item: "asc" }],
       take: BATCH_LIMIT,
     });
 
@@ -473,22 +563,23 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     }
 
     const now = new Date();
-    let maxSeen = cursorDate;
+    const registros = rows.map((row) => ({
+      pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie, row.Item]),
+      operacion: "SNAPSHOT" as const,
+      payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie", "Item"]),
+      fechaExtraida: now.toISOString(),
+    }));
 
-    const registros = rows.map((row) => {
-      if (row.Fecha > maxSeen) maxSeen = row.Fecha;
-      return {
-        pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie, row.Item]),
-        operacion: "SNAPSHOT" as const,
-        payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie", "Item"]),
-        fechaExtraida: now.toISOString(),
-      };
-    });
+    const lastRow = rows[rows.length - 1];
+    const nextCursor = {
+      fecha: lastRow.Fecha.toISOString(),
+      tie: [lastRow.NumeroFactura.toString(), lastRow.Serie, String(lastRow.Item)],
+    };
 
     return {
       batch: { entidadDestino: "HECH_PAGOS_HIST", tablaOrigen: "PAGOSVENTA", registros },
       onSuccess: async () => {
-        await this.setCursor(cursorKey, maxSeen.toISOString());
+        await this.setCursor(cursorKey, JSON.stringify(nextCursor));
       },
     };
   }
@@ -498,11 +589,20 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
     const cursorKey = "DIARIOCAJA";
     const cursorRaw = await this.getCursor(cursorKey);
-    const cursorDate = cursorRaw ? new Date(cursorRaw) : this.computeWindowStart(windowDays);
+    const cursor = cursorRaw ? this.parseTupleCursor(cursorRaw, [""]) : null;
+    const cursorDate = cursor ? new Date(cursor.fecha) : this.computeWindowStart(windowDays);
+
+    // DIARIOCAJA no tiene PK propia autonumerica: su @@id es [Serie, Fecha],
+    // asi que Serie por si solo ya desempata filas con el mismo Fecha.
+    const where: Prisma.DiarioCajaWhereInput = cursor
+      ? {
+          OR: [{ Fecha: { gt: cursorDate } }, { Fecha: cursorDate, Serie: { gt: cursor.tie[0] } }],
+        }
+      : { Fecha: { gt: cursorDate } };
 
     const rows = await this.prisma.diarioCaja.findMany({
-      where: { Fecha: { gt: cursorDate } },
-      orderBy: { Fecha: "asc" },
+      where,
+      orderBy: [{ Fecha: "asc" }, { Serie: "asc" }],
       take: BATCH_LIMIT,
     });
 
@@ -511,27 +611,25 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     }
 
     const now = new Date();
-    let maxSeen = cursorDate;
+    const registros = rows.map((row) => ({
+      pkOrigen: serializePkOrigen([row.Serie, row.Fecha]),
+      operacion: "SNAPSHOT" as const,
+      payload: buildPayload(row as unknown as Record<string, unknown>, ["Serie", "Fecha"]),
+      fechaExtraida: now.toISOString(),
+    }));
 
-    const registros = rows.map((row) => {
-      if (row.Fecha > maxSeen) maxSeen = row.Fecha;
-      return {
-        pkOrigen: serializePkOrigen([row.Serie, row.Fecha]),
-        operacion: "SNAPSHOT" as const,
-        payload: buildPayload(row as unknown as Record<string, unknown>, ["Serie", "Fecha"]),
-        fechaExtraida: now.toISOString(),
-      };
-    });
+    const lastRow = rows[rows.length - 1];
+    const nextCursor = { fecha: lastRow.Fecha.toISOString(), tie: [lastRow.Serie] };
 
     return {
       batch: { entidadDestino: "HECH_CAJAS_HIST", tablaOrigen: "DIARIOCAJA", registros },
       onSuccess: async () => {
-        await this.setCursor(cursorKey, maxSeen.toISOString());
+        await this.setCursor(cursorKey, JSON.stringify(nextCursor));
       },
     };
   }
 
-  private async postIngest(url: string, body: { tablas: TablaBatch[] }) {
+  private async postIngest(url: string, body: { tablas: TablaBatch[] }): Promise<IngestResult | null> {
     const token = this.getIngestToken();
     const response = await fetch(url, {
       method: "POST",
