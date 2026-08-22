@@ -119,36 +119,52 @@ export class ValidacionesService {
     return { ventasHoy, ventasMes, inventario };
   }
 
+  // TotalCosto en VENTAS esta en dolares (igual que TotalDolares); TotalPago/
+  // TotalMercancia estan en bolivares. TasaCambio es la tasa de ESA venta
+  // puntual (cambia con el tiempo), asi que el costo se convierte a
+  // bolivares POR FILA antes de sumar -- sumar TasaCambio y multiplicar
+  // despues mezclaria tasas de fechas distintas.
   private async ventasResumenPorPeriodo(filtroFecha: Prisma.Sql) {
     return this.prisma.$queryRaw<
       Array<{
         codigo_legacy: string;
         facturas: string;
         total_pago: string;
-        total_costo: string;
+        total_costo_bs: string;
         ganancia: string;
       }>
     >(Prisma.sql`
       SELECT
-        COALESCE(t."codigo_legacy", 'TOTAL') AS codigo_legacy,
+        COALESCE(codigo_legacy, 'TOTAL') AS codigo_legacy,
         COUNT(*)::text AS facturas,
-        COALESCE(SUM((v."payload_json" ->> 'TotalPago')::numeric), 0)::text AS total_pago,
-        COALESCE(SUM((v."payload_json" ->> 'TotalCosto')::numeric), 0)::text AS total_costo,
-        COALESCE(
-          SUM((v."payload_json" ->> 'TotalPago')::numeric) - SUM((v."payload_json" ->> 'TotalCosto')::numeric),
-          0
-        )::text AS ganancia
-      FROM "VW_HECH_VENTAS_ACTUAL" v
-      JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
-      WHERE ${filtroFecha}
-      GROUP BY GROUPING SETS ((t."codigo_legacy"), ())
+        COALESCE(SUM(total_pago), 0)::text AS total_pago,
+        COALESCE(SUM(total_costo_bs), 0)::text AS total_costo_bs,
+        COALESCE(SUM(total_pago) - SUM(total_costo_bs), 0)::text AS ganancia
+      FROM (
+        SELECT
+          t."codigo_legacy" AS codigo_legacy,
+          (v."payload_json" ->> 'TotalPago')::numeric AS total_pago,
+          (v."payload_json" ->> 'TotalCosto')::numeric * COALESCE((v."payload_json" ->> 'TasaCambio')::numeric, 1)
+            AS total_costo_bs
+        FROM "VW_HECH_VENTAS_ACTUAL" v
+        JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
+        WHERE ${filtroFecha}
+      ) filas
+      GROUP BY GROUPING SETS ((codigo_legacy), ())
       ORDER BY 1
     `);
   }
 
+  // CostoPromedio en INVENTARIO esta en dolares, igual que TotalCosto en
+  // VENTAS -- pero a diferencia de una venta, una fila de inventario no
+  // lleva una tasa de cambio propia (es un costo "vivo", no un hecho
+  // historico con su tasa del momento). Convertir a bolivares aqui
+  // requeriria traer la tabla TASA_CAMBIO a bodega_datos (no se sincroniza
+  // hoy), asi que el valor se reporta en dolares, explicito en el nombre del
+  // campo.
   private async inventarioResumen() {
     return this.prisma.$queryRaw<
-      Array<{ codigo_legacy: string; articulos: string; unidades: string; valor_costo: string }>
+      Array<{ codigo_legacy: string; articulos: string; unidades: string; valor_costo_usd: string }>
     >(Prisma.sql`
       SELECT
         COALESCE(t."codigo_legacy", 'TOTAL') AS codigo_legacy,
@@ -157,7 +173,7 @@ export class ValidacionesService {
         COALESCE(
           SUM((v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric),
           0
-        )::text AS valor_costo
+        )::text AS valor_costo_usd
       FROM "VW_HECH_INVENTARIO_ACTUAL" v
       JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
       GROUP BY GROUPING SETS ((t."codigo_legacy"), ())
