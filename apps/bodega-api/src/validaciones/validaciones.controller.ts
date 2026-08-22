@@ -54,6 +54,11 @@ export class ValidacionesController {
     return this.validacionesService.stockPorArticulo(requireCodigoTienda(codigoTienda), codigoBarra?.trim());
   }
 
+  @Get("panel-resumen")
+  async panelResumen() {
+    return this.validacionesService.panelResumen();
+  }
+
   @Get("errores-pendientes")
   async erroresPendientes(@Query("codigoTienda") codigoTienda?: string, @Query("limit") limit?: string) {
     const parsedLimit = Math.min(Math.max(parseInt(limit || "100", 10) || 100, 1), 500);

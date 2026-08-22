@@ -102,6 +102,69 @@ export class ValidacionesService {
     `);
   }
 
+  // Resumen para el panel principal (todas las tiendas juntas): ventas de
+  // hoy, ventas del mes en curso, e inventario actual valorizado a costo.
+  // Cada consulta trae una fila por tienda MAS una fila "TOTAL" agregada via
+  // GROUPING SETS ((codigo_legacy), ()) -- una sola pasada, sin sumar en el
+  // cliente.
+  async panelResumen() {
+    const [ventasHoy, ventasMes, inventario] = await Promise.all([
+      this.ventasResumenPorPeriodo(Prisma.sql`(v."payload_json" ->> 'Fecha')::date = CURRENT_DATE`),
+      this.ventasResumenPorPeriodo(
+        Prisma.sql`date_trunc('month', (v."payload_json" ->> 'Fecha')::date) = date_trunc('month', CURRENT_DATE)`,
+      ),
+      this.inventarioResumen(),
+    ]);
+
+    return { ventasHoy, ventasMes, inventario };
+  }
+
+  private async ventasResumenPorPeriodo(filtroFecha: Prisma.Sql) {
+    return this.prisma.$queryRaw<
+      Array<{
+        codigo_legacy: string;
+        facturas: string;
+        total_pago: string;
+        total_costo: string;
+        ganancia: string;
+      }>
+    >(Prisma.sql`
+      SELECT
+        COALESCE(t."codigo_legacy", 'TOTAL') AS codigo_legacy,
+        COUNT(*)::text AS facturas,
+        COALESCE(SUM((v."payload_json" ->> 'TotalPago')::numeric), 0)::text AS total_pago,
+        COALESCE(SUM((v."payload_json" ->> 'TotalCosto')::numeric), 0)::text AS total_costo,
+        COALESCE(
+          SUM((v."payload_json" ->> 'TotalPago')::numeric) - SUM((v."payload_json" ->> 'TotalCosto')::numeric),
+          0
+        )::text AS ganancia
+      FROM "VW_HECH_VENTAS_ACTUAL" v
+      JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
+      WHERE ${filtroFecha}
+      GROUP BY GROUPING SETS ((t."codigo_legacy"), ())
+      ORDER BY 1
+    `);
+  }
+
+  private async inventarioResumen() {
+    return this.prisma.$queryRaw<
+      Array<{ codigo_legacy: string; articulos: string; unidades: string; valor_costo: string }>
+    >(Prisma.sql`
+      SELECT
+        COALESCE(t."codigo_legacy", 'TOTAL') AS codigo_legacy,
+        COUNT(*)::text AS articulos,
+        COALESCE(SUM((v."payload_json" ->> 'Existencia')::numeric), 0)::text AS unidades,
+        COALESCE(
+          SUM((v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric),
+          0
+        )::text AS valor_costo
+      FROM "VW_HECH_INVENTARIO_ACTUAL" v
+      JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
+      GROUP BY GROUPING SETS ((t."codigo_legacy"), ())
+      ORDER BY 1
+    `);
+  }
+
   async erroresPendientes(codigoTienda?: string, limit = 100) {
     const filtro = codigoTienda ? Prisma.sql`WHERE t."codigo_legacy" = ${codigoTienda}` : Prisma.empty;
 
