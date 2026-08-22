@@ -1,5 +1,17 @@
 const TOKEN_STORAGE_KEY = "rocky.bodega.token";
 
+// Esta pagina puede servirse detras de un prefijo de proxy (ej.
+// "/bodega-api/") que varia segun el nginx del VPS -- un fetch a una ruta
+// que empiece con "/" ignora ese prefijo y siempre apunta a la raiz del
+// dominio. document.currentScript.src ya trae la URL absoluta REAL con la
+// que este mismo archivo se cargo (resuelta por el navegador, sin
+// ambiguedad de barra final), asi que la base de la API se deriva de ahi.
+const API_BASE = document.currentScript ? document.currentScript.src.replace(/app\.js(?:\?.*)?$/, "") : "";
+
+function apiUrl(path) {
+  return `${API_BASE}${path}`;
+}
+
 const loginView = document.getElementById("login-view");
 const panelView = document.getElementById("panel-view");
 const loginForm = document.getElementById("login-form");
@@ -185,7 +197,7 @@ async function loadPanel() {
 
   let response;
   try {
-    response = await window.fetch("/bodega/validaciones/panel-resumen", {
+    response = await window.fetch(apiUrl("bodega/validaciones/panel-resumen"), {
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (error) {
