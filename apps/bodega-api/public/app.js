@@ -216,23 +216,25 @@ function renderPanelShell() {
 
           ${renderSummaryCards()}
 
-          <section class="modern-card">
-            <div class="modern-card-head">
-              <div>
-                <h2>Ventas de hoy</h2>
+          <div class="bodega-panel-grid-2">
+            <section class="modern-card">
+              <div class="modern-card-head">
+                <div>
+                  <h2>Ventas de hoy</h2>
+                </div>
               </div>
-            </div>
-            ${renderVentasTable(state.ventasHoy)}
-          </section>
+              ${renderVentasTable(state.ventasHoy)}
+            </section>
 
-          <section class="modern-card">
-            <div class="modern-card-head">
-              <div>
-                <h2>Ventas del mes en curso</h2>
+            <section class="modern-card">
+              <div class="modern-card-head">
+                <div>
+                  <h2>Ventas del mes en curso</h2>
+                </div>
               </div>
-            </div>
-            ${renderVentasTable(state.ventasMes)}
-          </section>
+              ${renderVentasTable(state.ventasMes)}
+            </section>
+          </div>
 
           <section class="modern-card">
             <div class="modern-card-head">

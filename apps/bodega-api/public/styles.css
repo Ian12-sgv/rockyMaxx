@@ -8501,3 +8501,22 @@ button {
     max-height: calc(100dvh - 285px);
   }
 }
+/* Panel "Todas las tiendas" (bodega de datos): Ventas de hoy y Ventas del
+   mes tienen las mismas columnas, asi que van lado a lado para comparar sin
+   scroll -- Inventario se queda a ancho completo abajo por tener columnas
+   distintas. */
+.bodega-panel-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.bodega-panel-grid-2 > * {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .bodega-panel-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
