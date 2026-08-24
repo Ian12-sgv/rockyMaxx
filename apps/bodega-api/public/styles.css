@@ -8520,3 +8520,16 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+/* Esta pagina (bodega-api standalone) solo renderiza login + panel: es
+   segura de fijar al viewport para que el topbar quede fijo y unicamente
+   el contenido haga scroll, en vez de la pagina completa. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.desktop-frame {
+  height: 100vh;
+}
