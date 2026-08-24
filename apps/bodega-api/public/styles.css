@@ -2369,6 +2369,8 @@ button {
   font-size: 2.05rem;
   font-weight: 700;
   line-height: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .modern-stat-meta {
