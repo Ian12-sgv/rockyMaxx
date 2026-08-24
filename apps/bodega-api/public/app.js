@@ -199,52 +199,56 @@ function renderPanelShell() {
           </div>
         </header>
 
-        <div class="modern-page">
-          <div class="modern-page-header">
-            <div>
-              <h1>Todas las tiendas</h1>
-              <p>Ventas, costo, ganancia (en bolivares) e inventario a costo (en dolares) combinados de todas las tiendas.</p>
-            </div>
-            <div class="modern-page-actions">
-              <button class="button button-ghost" type="button" data-action="refresh" ${state.loading ? "disabled" : ""}>
-                ${state.loading ? "Actualizando..." : "Actualizar"}
-              </button>
-            </div>
-          </div>
+        <section class="desktop-workspace">
+          <div class="modern-workspace-shell">
+            ${renderFlash()}
 
-          ${renderFlash()}
-
-          ${renderSummaryCards()}
-
-          <div class="bodega-panel-grid-2">
-            <section class="modern-card">
-              <div class="modern-card-head">
+            <div class="modern-page">
+              <div class="modern-page-header">
                 <div>
-                  <h2>Ventas de hoy</h2>
+                  <h1>Todas las tiendas</h1>
+                  <p>Ventas, costo, ganancia (en bolivares) e inventario a costo (en dolares) combinados de todas las tiendas.</p>
+                </div>
+                <div class="modern-page-actions">
+                  <button class="button button-ghost" type="button" data-action="refresh" ${state.loading ? "disabled" : ""}>
+                    ${state.loading ? "Actualizando..." : "Actualizar"}
+                  </button>
                 </div>
               </div>
-              ${renderVentasTable(state.ventasHoy)}
-            </section>
 
-            <section class="modern-card">
-              <div class="modern-card-head">
-                <div>
-                  <h2>Ventas del mes en curso</h2>
+              ${renderSummaryCards()}
+
+              <div class="bodega-panel-grid-2">
+                <section class="modern-card">
+                  <div class="modern-card-head">
+                    <div>
+                      <h2>Ventas de hoy</h2>
+                    </div>
+                  </div>
+                  ${renderVentasTable(state.ventasHoy)}
+                </section>
+
+                <section class="modern-card">
+                  <div class="modern-card-head">
+                    <div>
+                      <h2>Ventas del mes en curso</h2>
+                    </div>
+                  </div>
+                  ${renderVentasTable(state.ventasMes)}
+                </section>
+              </div>
+
+              <section class="modern-card">
+                <div class="modern-card-head">
+                  <div>
+                    <h2>Inventario actual (a costo)</h2>
+                  </div>
                 </div>
-              </div>
-              ${renderVentasTable(state.ventasMes)}
-            </section>
-          </div>
-
-          <section class="modern-card">
-            <div class="modern-card-head">
-              <div>
-                <h2>Inventario actual (a costo)</h2>
-              </div>
+                ${renderInventarioTable(state.inventario)}
+              </section>
             </div>
-            ${renderInventarioTable(state.inventario)}
-          </section>
-        </div>
+          </div>
+        </section>
       </section>
     </main>
   `;
