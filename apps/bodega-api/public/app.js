@@ -214,6 +214,8 @@ function renderPanelShell() {
 
           ${renderFlash()}
 
+          ${renderSummaryCards()}
+
           <section class="modern-card">
             <div class="modern-card-head">
               <div>
@@ -243,6 +245,76 @@ function renderPanelShell() {
         </div>
       </section>
     </main>
+  `;
+}
+
+function findTotalRow(rows) {
+  return (Array.isArray(rows) ? rows : []).find((row) => row.codigo_legacy === "TOTAL") || null;
+}
+
+// Mismo componente visual que las tarjetas ejecutivas del Panel de Control
+// (getExecutiveCardItems/renderExecutiveCards en apps/api/public/app.js):
+// .modern-summary-grid con tarjetas .modern-stat-card-<tono>. Los totales
+// salen de la fila "TOTAL" que ya trae panel-resumen (agregada en SQL, no
+// se suma nada en el cliente).
+function renderSummaryCards() {
+  const ventasHoyTotal = findTotalRow(state.ventasHoy);
+  const inventarioTotal = findTotalRow(state.inventario);
+  const ganancia = toFiniteNumber(ventasHoyTotal?.ganancia);
+
+  const items = [
+    {
+      label: "Ventas de hoy",
+      value: `Bs ${formatBs(ventasHoyTotal?.total_pago)}`,
+      meta: `${escapeHtml(String(ventasHoyTotal?.facturas ?? "0"))} facturas en todas las tiendas`,
+      badge: "Todas las tiendas",
+      icon: "VH",
+      tone: "blue",
+    },
+    {
+      label: "Costo de hoy",
+      value: `Bs ${formatBs(ventasHoyTotal?.total_costo_bs)}`,
+      meta: "Costo de la mercancia vendida hoy",
+      badge: "Convertido a Bs",
+      icon: "CH",
+      tone: "sky",
+    },
+    {
+      label: "Ganancia de hoy",
+      value: `Bs ${formatBs(ventasHoyTotal?.ganancia)}`,
+      meta: "Vendido menos costo de hoy",
+      badge: ganancia >= 0 ? "Positiva" : "Negativa",
+      icon: "GH",
+      tone: ganancia >= 0 ? "green" : "gold",
+    },
+    {
+      label: "Inventario a costo",
+      value: `US$ ${formatUsd(inventarioTotal?.valor_costo_usd)}`,
+      meta: `${escapeHtml(String(inventarioTotal?.articulos ?? "0"))} articulos en todas las tiendas`,
+      badge: "En dolares",
+      icon: "IV",
+      tone: "gold",
+    },
+  ];
+
+  return `
+    <div class="modern-summary-grid">
+      ${items
+        .map(
+          (item) => `
+            <article class="modern-stat-card modern-stat-card-${item.tone}">
+              <div class="modern-stat-copy">
+                <span class="modern-stat-eyebrow">${escapeHtml(item.label)}</span>
+                <strong class="modern-stat-value">${escapeHtml(item.value)}</strong>
+                <span class="modern-stat-meta">${item.meta}</span>
+                <span class="modern-stat-badge">${escapeHtml(item.badge)}</span>
+              </div>
+              <span class="modern-stat-icon">${escapeHtml(item.icon)}</span>
+            </article>
+          `,
+        )
+        .join("")}
+    </div>
   `;
 }
 
