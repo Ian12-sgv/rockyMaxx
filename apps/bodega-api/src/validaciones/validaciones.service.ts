@@ -144,28 +144,33 @@ export class ValidacionesService {
     return { ventasHoy, ventas7Dias, ventasMes, inventario, serieDiaria, tasaCambio };
   }
 
-  // Join reutilizado: para cada linea vendida (HECH_VENTAS_DETALLE_HIST),
-  // busca el costo VIGENTE AHORA del mismo articulo en INVENTARIO -- no el
-  // costo que quedaria congelado en la venta. Es el mismo criterio que ya usa
-  // el reporte general de cierre de caja (cajas.service.ts,
+  // CTE reutilizado (costo vigente por articulo/tienda) + el JOIN contra el.
+  // Para cada linea vendida (HECH_VENTAS_DETALLE_HIST), busca el costo
+  // VIGENTE AHORA del mismo articulo en INVENTARIO -- no el costo que
+  // quedaria congelado en la venta. Es el mismo criterio que ya usa el
+  // reporte general de cierre de caja (cajas.service.ts,
   // resolveGeneralCloseInventoryUnitCost -> Inventario.CostoDolar), para que
   // "Costo de mercancia" de este panel cuadre con ese reporte.
   //
-  // JOIN normal contra una subconsulta (no LATERAL): payload_json->>'CodigoBarra'
-  // no tiene indice, asi que un LATERAL obliga a Postgres a repetir un escaneo
-  // de INVENTARIO por CADA linea vendida (con cientos/miles de lineas, eso
-  // agoto el pool de conexiones -- P2024 "Timed out fetching a new
-  // connection"). Con un JOIN normal, Postgres puede armar UNA sola tabla
-  // hash de INVENTARIO (unas pocas miles de filas) y resolver todas las
-  // lineas contra ella de una pasada.
-  private static readonly COSTO_ACTUAL_JOIN = Prisma.sql`
-    LEFT JOIN (
+  // MATERIALIZED es obligatorio aqui: sin el, Postgres NO arma una sola tabla
+  // hash de este CTE -- lo "desarma" y por cada linea vendida vuelve a
+  // recorrer INVENTARIO entero filtrando por CodigoBarra (no tiene indice
+  // funcional), un nested loop de ~N_lineas x N_articulos. Confirmado con
+  // EXPLAIN ANALYZE: sin MATERIALIZED, 40+ segundos (y agotaba el pool de
+  // conexiones de Prisma, P2024 "Timed out fetching a new connection"); con
+  // MATERIALIZED, ~200ms.
+  private static readonly COSTO_ACTUAL_CTE = Prisma.sql`
+    inv_costo AS MATERIALIZED (
       SELECT
         i."dim_tienda_id" AS dim_tienda_id,
         i."payload_json" ->> 'CodigoBarra' AS codigo_barra,
         (i."payload_json" ->> 'CostoDolar')::numeric AS costo_dolar
       FROM "VW_HECH_INVENTARIO_ACTUAL" i
-    ) inv ON inv.dim_tienda_id = d."dim_tienda_id" AND inv.codigo_barra = d."payload_json" ->> 'CodigoBarra'
+    )
+  `;
+
+  private static readonly COSTO_ACTUAL_JOIN = Prisma.sql`
+    LEFT JOIN inv_costo inv ON inv.dim_tienda_id = d."dim_tienda_id" AND inv.codigo_barra = d."payload_json" ->> 'CodigoBarra'
   `;
 
   // Cantidad neta vendida (descontando lo devuelto) por costo VIGENTE del
@@ -186,7 +191,8 @@ export class ValidacionesService {
     return this.prisma.$queryRaw<
       Array<{ fecha: string; facturas: string; total_pago: string; total_costo_bs: string; ganancia: string }>
     >(Prisma.sql`
-      WITH header AS (
+      WITH ${ValidacionesService.COSTO_ACTUAL_CTE},
+      header AS (
         SELECT
           (v."payload_json" ->> 'Fecha')::date AS fecha,
           COUNT(*) AS facturas,
@@ -261,7 +267,8 @@ export class ValidacionesService {
         ganancia: string;
       }>
     >(Prisma.sql`
-      WITH header AS (
+      WITH ${ValidacionesService.COSTO_ACTUAL_CTE},
+      header AS (
         SELECT
           t."codigo_legacy" AS codigo_legacy,
           COUNT(*) AS facturas,
