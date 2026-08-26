@@ -144,20 +144,28 @@ export class ValidacionesService {
     return { ventasHoy, ventas7Dias, ventasMes, inventario, serieDiaria, tasaCambio };
   }
 
-  // Join lateral reutilizado: para cada linea vendida (HECH_VENTAS_DETALLE_HIST),
+  // Join reutilizado: para cada linea vendida (HECH_VENTAS_DETALLE_HIST),
   // busca el costo VIGENTE AHORA del mismo articulo en INVENTARIO -- no el
   // costo que quedaria congelado en la venta. Es el mismo criterio que ya usa
   // el reporte general de cierre de caja (cajas.service.ts,
   // resolveGeneralCloseInventoryUnitCost -> Inventario.CostoDolar), para que
   // "Costo de mercancia" de este panel cuadre con ese reporte.
+  //
+  // JOIN normal contra una subconsulta (no LATERAL): payload_json->>'CodigoBarra'
+  // no tiene indice, asi que un LATERAL obliga a Postgres a repetir un escaneo
+  // de INVENTARIO por CADA linea vendida (con cientos/miles de lineas, eso
+  // agoto el pool de conexiones -- P2024 "Timed out fetching a new
+  // connection"). Con un JOIN normal, Postgres puede armar UNA sola tabla
+  // hash de INVENTARIO (unas pocas miles de filas) y resolver todas las
+  // lineas contra ella de una pasada.
   private static readonly COSTO_ACTUAL_JOIN = Prisma.sql`
-    LEFT JOIN LATERAL (
-      SELECT (i."payload_json" ->> 'CostoDolar')::numeric AS costo_dolar
+    LEFT JOIN (
+      SELECT
+        i."dim_tienda_id" AS dim_tienda_id,
+        i."payload_json" ->> 'CodigoBarra' AS codigo_barra,
+        (i."payload_json" ->> 'CostoDolar')::numeric AS costo_dolar
       FROM "VW_HECH_INVENTARIO_ACTUAL" i
-      WHERE i."dim_tienda_id" = d."dim_tienda_id"
-        AND i."payload_json" ->> 'CodigoBarra' = d."payload_json" ->> 'CodigoBarra'
-      LIMIT 1
-    ) inv ON true
+    ) inv ON inv.dim_tienda_id = d."dim_tienda_id" AND inv.codigo_barra = d."payload_json" ->> 'CodigoBarra'
   `;
 
   // Cantidad neta vendida (descontando lo devuelto) por costo VIGENTE del
