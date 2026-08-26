@@ -279,7 +279,21 @@ function convertirDesdeUsd(valorUsd) {
   return toFiniteNumber(valorUsd) * tasa;
 }
 
-function formatMoneda(valor, options = {}) {
+// IMPORTANTE: recibe el valor en su moneda ORIGEN y hace la conversion aqui
+// mismo -- no hay que convertir en el llamador. Ventas/costo/ganancia nacen
+// en bolivares (Bs), asi que esta es la version por defecto.
+function formatMoneda(valorBs, options = {}) {
+  const valor = convertirDesdeBs(valorBs);
+  if (options.compact) {
+    return state.moneda === "USD" ? `US$ ${formatUsdCompact(valor)}` : `Bs ${formatBsCompact(valor)}`;
+  }
+  return state.moneda === "USD" ? `US$ ${formatUsd(valor)}` : `Bs ${formatBs(valor)}`;
+}
+
+// Igual que formatMoneda(), pero para el unico valor que nace en dolares
+// (el inventario -- ver convertirDesdeUsd).
+function formatMonedaDesdeUsd(valorUsd, options = {}) {
+  const valor = convertirDesdeUsd(valorUsd);
   if (options.compact) {
     return state.moneda === "USD" ? `US$ ${formatUsdCompact(valor)}` : `Bs ${formatBsCompact(valor)}`;
   }
@@ -526,8 +540,6 @@ function renderSummaryCards() {
   const toneColors = { blue: "#2b6dc9", sky: "#0ea5e9", green: "#22c55e", danger: "#ab3f2f", gold: "#ba8b34" };
   const gananciaTone = ganancia >= 0 ? "green" : "danger";
 
-  const inventarioValor = state.moneda === "USD" ? totalInventario?.valor_costo_usd : convertirDesdeUsd(totalInventario?.valor_costo_usd);
-
   const items = [
     {
       label: "Vendido",
@@ -558,8 +570,8 @@ function renderSummaryCards() {
     },
     {
       label: "Inventario a costo",
-      value: formatMoneda(inventarioValor, { compact: true }),
-      exacto: formatMoneda(inventarioValor),
+      value: formatMonedaDesdeUsd(totalInventario?.valor_costo_usd, { compact: true }),
+      exacto: formatMonedaDesdeUsd(totalInventario?.valor_costo_usd),
       meta: `${escapeHtml(String(totalInventario?.articulos ?? "0"))} articulos`,
       tone: "gold",
       delta: null,
@@ -722,7 +734,7 @@ function renderInventarioRow(row, totalValor, isTotal) {
       <td>${escapeHtml(formatBs(row.unidades))}</td>
       <td>
         <div class="bodega-participacion-cell">
-          <span>${escapeHtml(formatMoneda(convertirDesdeUsd(valorUsd)))}</span>
+          <span>${escapeHtml(formatMonedaDesdeUsd(valorUsd))}</span>
           <span class="bodega-participacion-bar-track">
             <span class="bodega-participacion-bar-fill" style="width:${participacion.toFixed(1)}%"></span>
           </span>
