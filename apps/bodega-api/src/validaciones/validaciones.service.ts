@@ -108,15 +108,66 @@ export class ValidacionesService {
   // GROUPING SETS ((codigo_legacy), ()) -- una sola pasada, sin sumar en el
   // cliente.
   async panelResumen() {
-    const [ventasHoy, ventasMes, inventario] = await Promise.all([
+    const [ventasHoy, ventas7Dias, ventasMes, inventario, serieDiaria, tasaCambio] = await Promise.all([
       this.ventasResumenPorPeriodo(Prisma.sql`(v."payload_json" ->> 'Fecha')::date = CURRENT_DATE`),
+      this.ventasResumenPorPeriodo(
+        Prisma.sql`(v."payload_json" ->> 'Fecha')::date >= CURRENT_DATE - INTERVAL '6 days'`,
+      ),
       this.ventasResumenPorPeriodo(
         Prisma.sql`date_trunc('month', (v."payload_json" ->> 'Fecha')::date) = date_trunc('month', CURRENT_DATE)`,
       ),
       this.inventarioResumen(),
+      this.ventasSerieDiaria(14),
+      this.tasaCambioActual(),
     ]);
 
-    return { ventasHoy, ventasMes, inventario };
+    return { ventasHoy, ventas7Dias, ventasMes, inventario, serieDiaria, tasaCambio };
+  }
+
+  // Serie diaria (ultimos N dias) de la misma fuente/conversion que
+  // ventasResumenPorPeriodo -- alimenta las mini-graficas de tendencia y el
+  // calculo de "vs ayer" en el frontend (dia actual vs el dia anterior en
+  // este mismo arreglo, ya no hace falta una consulta aparte).
+  private async ventasSerieDiaria(dias: number) {
+    return this.prisma.$queryRaw<
+      Array<{ fecha: string; facturas: string; total_pago: string; total_costo_bs: string; ganancia: string }>
+    >(Prisma.sql`
+      SELECT
+        fecha::text AS fecha,
+        COUNT(*)::text AS facturas,
+        COALESCE(SUM(total_pago), 0)::text AS total_pago,
+        COALESCE(SUM(total_costo_bs), 0)::text AS total_costo_bs,
+        COALESCE(SUM(total_pago) - SUM(total_costo_bs), 0)::text AS ganancia
+      FROM (
+        SELECT
+          (v."payload_json" ->> 'Fecha')::date AS fecha,
+          (v."payload_json" ->> 'TotalPago')::numeric AS total_pago,
+          (v."payload_json" ->> 'TotalCosto')::numeric * COALESCE((v."payload_json" ->> 'TasaCambio')::numeric, 1)
+            AS total_costo_bs
+        FROM "VW_HECH_VENTAS_ACTUAL" v
+        WHERE (v."payload_json" ->> 'Fecha')::date >= CURRENT_DATE - (${dias - 1} * INTERVAL '1 day')
+      ) filas
+      GROUP BY fecha
+      ORDER BY fecha
+    `);
+  }
+
+  // TasaCambio no se sincroniza a bodega_datos como tabla propia (ver nota en
+  // inventarioResumen), pero cada venta ya trae la tasa vigente al momento en
+  // que se facturo -- la venta mas reciente sincronizada es entonces la mejor
+  // aproximacion disponible de "la tasa de ahora mismo" sin tener que montar
+  // un pipeline de sincronizacion nuevo solo para esto.
+  private async tasaCambioActual() {
+    const rows = await this.prisma.$queryRaw<Array<{ tasa: string; fecha: string }>>(Prisma.sql`
+      SELECT
+        (v."payload_json" ->> 'TasaCambio')::numeric::text AS tasa,
+        (v."payload_json" ->> 'Fecha') AS fecha
+      FROM "VW_HECH_VENTAS_ACTUAL" v
+      WHERE (v."payload_json" ->> 'TasaCambio') IS NOT NULL
+      ORDER BY (v."payload_json" ->> 'Fecha')::timestamp DESC
+      LIMIT 1
+    `);
+    return rows[0] || null;
   }
 
   // TotalCosto en VENTAS esta en dolares (igual que TotalDolares); TotalPago/

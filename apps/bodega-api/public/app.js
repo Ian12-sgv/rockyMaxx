@@ -18,10 +18,24 @@ const state = {
   view: "login",
   loading: false,
   flash: null,
+  periodo: "hoy",
+  moneda: "BS",
+  tiendaFiltro: "",
+  sortDir: "desc",
   ventasHoy: [],
+  ventas7Dias: [],
   ventasMes: [],
   inventario: [],
+  serieDiaria: [],
+  tasaCambio: null,
+  lastUpdated: null,
 };
+
+const PERIODOS = [
+  { key: "hoy", label: "Hoy" },
+  { key: "7dias", label: "7 dias" },
+  { key: "mes", label: "Mes" },
+];
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => {
@@ -56,6 +70,14 @@ function formatUsd(value) {
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  }).format(toFiniteNumber(value));
+}
+
+function formatPercent(value) {
+  return new Intl.NumberFormat("es-VE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    signDisplay: "exceptZero",
   }).format(toFiniteNumber(value));
 }
 
@@ -181,6 +203,183 @@ function renderLoginView() {
   `;
 }
 
+// ---- Datos derivados del estado -------------------------------------------------
+
+function getVentasPorPeriodo() {
+  if (state.periodo === "7dias") {
+    return state.ventas7Dias;
+  }
+  if (state.periodo === "mes") {
+    return state.ventasMes;
+  }
+  return state.ventasHoy;
+}
+
+function findRow(rows, codigo) {
+  return (Array.isArray(rows) ? rows : []).find((row) => row.codigo_legacy === codigo) || null;
+}
+
+function findTotalRow(rows) {
+  return findRow(rows, "TOTAL");
+}
+
+// Con filtro de tienda activo, "el total" pasa a ser la fila de esa tienda
+// (asi las tarjetas KPI y el banner de alerta reflejan la tienda elegida en
+// vez del agregado de todas).
+function getEffectiveTotalRow(rows) {
+  if (state.tiendaFiltro) {
+    return findRow(rows, state.tiendaFiltro);
+  }
+  return findTotalRow(rows);
+}
+
+function getStoreOptions() {
+  const codes = new Set();
+  (state.inventario || []).forEach((row) => {
+    if (row.codigo_legacy && row.codigo_legacy !== "TOTAL") {
+      codes.add(row.codigo_legacy);
+    }
+  });
+  return Array.from(codes).sort((a, b) => a.localeCompare(b, "es"));
+}
+
+function getTasaValor() {
+  return toFiniteNumber(state.tasaCambio?.tasa);
+}
+
+// Todas las cifras de ventas/costo/ganancia se guardan en bolivares (cada
+// venta ya trae su propia tasa historica, ver ventasResumenPorPeriodo en el
+// backend). Para mostrarlas en dolares se usa la tasa MAS RECIENTE conocida
+// -- una vista rapida "de un vistazo", no una conversion contable exacta
+// fila por fila.
+function convertirDesdeBs(valorBs) {
+  if (state.moneda !== "USD") {
+    return toFiniteNumber(valorBs);
+  }
+  const tasa = getTasaValor();
+  return tasa > 0 ? toFiniteNumber(valorBs) / tasa : 0;
+}
+
+// El inventario llega en dolares (no hay tasa por fila para existencias, ver
+// nota en inventarioResumen del backend); para bolivares se usa la misma
+// tasa mas reciente.
+function convertirDesdeUsd(valorUsd) {
+  if (state.moneda !== "BS") {
+    return toFiniteNumber(valorUsd);
+  }
+  const tasa = getTasaValor();
+  return toFiniteNumber(valorUsd) * tasa;
+}
+
+function formatMoneda(valor) {
+  return state.moneda === "USD" ? `US$ ${formatUsd(valor)}` : `Bs ${formatBs(valor)}`;
+}
+
+function calcularMargenPct(row) {
+  const vendido = toFiniteNumber(row?.total_pago);
+  const ganancia = toFiniteNumber(row?.ganancia);
+  if (vendido <= 0) {
+    return 0;
+  }
+  return (ganancia / vendido) * 100;
+}
+
+// vs-ayer (hoy) o vs-los-7-dias-anteriores (7 dias), calculado sobre la
+// misma serie diaria de 14 dias que alimenta las mini-graficas -- para "mes"
+// no hay suficiente historial (solo 14 dias) para un punto de comparacion
+// honesto, asi que no se muestra delta.
+function getDeltaPeriodo(metricKey) {
+  const serie = Array.isArray(state.serieDiaria) ? state.serieDiaria : [];
+  if (state.periodo === "hoy") {
+    if (serie.length < 2) {
+      return null;
+    }
+    const hoy = toFiniteNumber(serie[serie.length - 1][metricKey]);
+    const ayer = toFiniteNumber(serie[serie.length - 2][metricKey]);
+    if (ayer === 0) {
+      return null;
+    }
+    return { pct: ((hoy - ayer) / Math.abs(ayer)) * 100, etiqueta: "vs ayer" };
+  }
+
+  if (state.periodo === "7dias") {
+    if (serie.length < 14) {
+      return null;
+    }
+    const ultimos7 = serie.slice(-7);
+    const previos7 = serie.slice(-14, -7);
+    const sum = (arr) => arr.reduce((acc, row) => acc + toFiniteNumber(row[metricKey]), 0);
+    const actual = sum(ultimos7);
+    const previo = sum(previos7);
+    if (previo === 0) {
+      return null;
+    }
+    return { pct: ((actual - previo) / Math.abs(previo)) * 100, etiqueta: "vs semana anterior" };
+  }
+
+  return null;
+}
+
+function getSparklinePuntos(metricKey, dias = 7) {
+  const serie = Array.isArray(state.serieDiaria) ? state.serieDiaria : [];
+  return serie.slice(-dias).map((row) => toFiniteNumber(row[metricKey]));
+}
+
+// Mini-grafica de tendencia dentro de una tarjeta KPI: linea en el tono
+// "de-enfasis" (texto secundario del sistema) con el ultimo punto resaltado
+// en el color de acento de la tarjeta -- nunca la linea completa en un color
+// fuerte, para que la cifra grande siga siendo lo unico "ruidoso" de la
+// tarjeta. <title> por punto da un tooltip nativo con el valor exacto.
+function renderSparkline(puntos, toneColor) {
+  if (!Array.isArray(puntos) || puntos.length < 2) {
+    return "";
+  }
+
+  const width = 96;
+  const height = 32;
+  const padding = 4;
+  const min = Math.min(...puntos);
+  const max = Math.max(...puntos);
+  const span = max - min || 1;
+  const stepX = (width - padding * 2) / (puntos.length - 1);
+
+  const coords = puntos.map((valor, index) => {
+    const x = padding + stepX * index;
+    const y = height - padding - ((valor - min) / span) * (height - padding * 2);
+    return { x, y, valor };
+  });
+
+  const pathD = coords.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const last = coords[coords.length - 1];
+
+  const titles = coords
+    .map((point, index) => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="7" fill="transparent"><title>${escapeHtml(formatMoneda(point.valor))}</title></circle>`)
+    .join("");
+
+  return `
+    <svg class="stat-sparkline" viewBox="0 0 ${width} ${height}" aria-hidden="true" focusable="false">
+      <path d="${pathD}" fill="none" stroke="#5f6b74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.55" />
+      <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="${toneColor}" stroke="#fffaf1" stroke-width="2" />
+      ${titles}
+    </svg>
+  `;
+}
+
+function renderDelta(delta) {
+  if (!delta) {
+    return "";
+  }
+  const isUp = delta.pct >= 0;
+  return `
+    <span class="stat-delta ${isUp ? "stat-delta-up" : "stat-delta-down"}">
+      ${isUp ? "&#8599;" : "&#8600;"} ${escapeHtml(formatPercent(delta.pct))}%
+      <span class="stat-delta-label">${escapeHtml(delta.etiqueta)}</span>
+    </span>
+  `;
+}
+
+// ---- Shell principal --------------------------------------------------------
+
 function renderPanelShell() {
   return `
     <main class="desktop-shell">
@@ -207,45 +406,21 @@ function renderPanelShell() {
               <div class="modern-page-header">
                 <div>
                   <h1>Todas las tiendas</h1>
-                  <p>Ventas, costo, ganancia (en bolivares) e inventario a costo (en dolares) combinados de todas las tiendas.</p>
+                  <p>Ventas, costo, margen e inventario de todas las tiendas.</p>
                 </div>
                 <div class="modern-page-actions">
                   <button class="button button-ghost" type="button" data-action="refresh" ${state.loading ? "disabled" : ""}>
                     ${state.loading ? "Actualizando..." : "Actualizar"}
                   </button>
+                  ${state.lastUpdated ? `<span class="bodega-updated-hint">${escapeHtml(formatUpdatedHint(state.lastUpdated))}</span>` : ""}
                 </div>
               </div>
 
+              ${renderControlsBar()}
               ${renderSummaryCards()}
-
-              <div class="bodega-panel-grid-2">
-                <section class="modern-card">
-                  <div class="modern-card-head">
-                    <div>
-                      <h2>Ventas de hoy</h2>
-                    </div>
-                  </div>
-                  ${renderVentasTable(state.ventasHoy)}
-                </section>
-
-                <section class="modern-card">
-                  <div class="modern-card-head">
-                    <div>
-                      <h2>Ventas del mes en curso</h2>
-                    </div>
-                  </div>
-                  ${renderVentasTable(state.ventasMes)}
-                </section>
-              </div>
-
-              <section class="modern-card">
-                <div class="modern-card-head">
-                  <div>
-                    <h2>Inventario actual (a costo)</h2>
-                  </div>
-                </div>
-                ${renderInventarioTable(state.inventario)}
-              </section>
+              ${renderAlertBanner()}
+              ${renderDesempenoTable()}
+              ${renderInventarioSection()}
             </div>
           </div>
         </section>
@@ -254,52 +429,124 @@ function renderPanelShell() {
   `;
 }
 
-function findTotalRow(rows) {
-  return (Array.isArray(rows) ? rows : []).find((row) => row.codigo_legacy === "TOTAL") || null;
+function formatUpdatedHint(date) {
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin <= 0) {
+    return "Actualizado hace instantes";
+  }
+  if (diffMin === 1) {
+    return "Actualizado hace 1 min";
+  }
+  if (diffMin < 60) {
+    return `Actualizado hace ${diffMin} min`;
+  }
+  const diffHoras = Math.floor(diffMin / 60);
+  return `Actualizado hace ${diffHoras} h`;
+}
+
+function renderControlsBar() {
+  const storeOptions = getStoreOptions();
+  const tasa = state.tasaCambio;
+
+  return `
+    <div class="bodega-controls-bar">
+      <div class="bodega-controls-group" role="group" aria-label="Periodo">
+        ${PERIODOS.map(
+          (periodo) => `
+            <button
+              type="button"
+              class="bodega-toggle-button ${state.periodo === periodo.key ? "is-active" : ""}"
+              data-periodo="${periodo.key}"
+            >${escapeHtml(periodo.label)}</button>
+          `,
+        ).join("")}
+      </div>
+
+      <label class="bodega-select-wrap">
+        <span class="sr-only">Tienda</span>
+        <select data-tienda-filtro>
+          <option value="">Todas las tiendas</option>
+          ${storeOptions
+            .map(
+              (codigo) => `
+                <option value="${escapeHtml(codigo)}" ${state.tiendaFiltro === codigo ? "selected" : ""}>${escapeHtml(codigo)}</option>
+              `,
+            )
+            .join("")}
+        </select>
+      </label>
+
+      <div class="bodega-controls-group" role="group" aria-label="Moneda">
+        <button type="button" class="bodega-toggle-button ${state.moneda === "BS" ? "is-active" : ""}" data-moneda="BS">Bs</button>
+        <button type="button" class="bodega-toggle-button ${state.moneda === "USD" ? "is-active" : ""}" data-moneda="USD">US$</button>
+      </div>
+
+      ${
+        tasa
+          ? `<span class="bodega-tasa-hint">Tasa Bs ${escapeHtml(formatBs(tasa.tasa))} / US$ &middot; ${escapeHtml(formatFechaHora(tasa.fecha))}</span>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+function formatFechaHora(fechaIso) {
+  const date = new Date(fechaIso);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const hoy = new Date();
+  const esHoy = date.toDateString() === hoy.toDateString();
+  const hora = date.toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" });
+  return esHoy ? `hoy ${hora}` : `${date.toLocaleDateString("es-VE")} ${hora}`;
 }
 
 // Mismo componente visual que las tarjetas ejecutivas del Panel de Control
 // (getExecutiveCardItems/renderExecutiveCards en apps/api/public/app.js):
-// .modern-summary-grid con tarjetas .modern-stat-card-<tono>. Los totales
-// salen de la fila "TOTAL" que ya trae panel-resumen (agregada en SQL, no
-// se suma nada en el cliente).
+// .modern-summary-grid con tarjetas .modern-stat-card-<tono>.
 function renderSummaryCards() {
-  const ventasHoyTotal = findTotalRow(state.ventasHoy);
-  const inventarioTotal = findTotalRow(state.inventario);
-  const ganancia = toFiniteNumber(ventasHoyTotal?.ganancia);
+  const ventas = getVentasPorPeriodo();
+  const totalVentas = getEffectiveTotalRow(ventas);
+  const totalInventario = getEffectiveTotalRow(state.inventario);
+  const ganancia = toFiniteNumber(totalVentas?.ganancia);
+  const margenPct = calcularMargenPct(totalVentas);
+
+  const toneColors = { blue: "#2b6dc9", sky: "#0ea5e9", green: "#22c55e", danger: "#ab3f2f", gold: "#ba8b34" };
+  const gananciaTone = ganancia >= 0 ? "green" : "danger";
 
   const items = [
     {
-      label: "Ventas de hoy",
-      value: `Bs ${formatBs(ventasHoyTotal?.total_pago)}`,
-      meta: `${escapeHtml(String(ventasHoyTotal?.facturas ?? "0"))} facturas en todas las tiendas`,
-      badge: "Todas las tiendas",
-      icon: "VH",
+      label: "Vendido",
+      value: formatMoneda(totalVentas?.total_pago),
+      meta: `${escapeHtml(String(totalVentas?.facturas ?? "0"))} facturas${state.tiendaFiltro ? "" : " en todas las tiendas"}`,
       tone: "blue",
+      delta: getDeltaPeriodo("total_pago"),
+      puntos: getSparklinePuntos("total_pago"),
     },
     {
-      label: "Costo de hoy",
-      value: `Bs ${formatBs(ventasHoyTotal?.total_costo_bs)}`,
-      meta: "Costo de la mercancia vendida hoy",
-      badge: "Convertido a Bs",
-      icon: "CH",
+      label: "Costo de mercancia",
+      value: formatMoneda(totalVentas?.total_costo_bs),
+      meta: "Costo de lo vendido",
       tone: "sky",
+      delta: getDeltaPeriodo("total_costo_bs"),
+      puntos: getSparklinePuntos("total_costo_bs"),
     },
     {
-      label: "Ganancia de hoy",
-      value: `Bs ${formatBs(ventasHoyTotal?.ganancia)}`,
-      meta: "Vendido menos costo de hoy",
-      badge: ganancia >= 0 ? "Positiva" : "Negativa",
-      icon: "GH",
-      tone: ganancia >= 0 ? "green" : "gold",
+      label: "Ganancia",
+      value: formatMoneda(totalVentas?.ganancia),
+      meta: `Margen ${escapeHtml(formatPercent(margenPct))}%`,
+      tone: gananciaTone,
+      delta: getDeltaPeriodo("ganancia"),
+      puntos: getSparklinePuntos("ganancia"),
     },
     {
       label: "Inventario a costo",
-      value: `US$ ${formatUsd(inventarioTotal?.valor_costo_usd)}`,
-      meta: `${escapeHtml(String(inventarioTotal?.articulos ?? "0"))} articulos en todas las tiendas`,
-      badge: "En dolares",
-      icon: "IV",
+      value: formatMoneda(state.moneda === "USD" ? totalInventario?.valor_costo_usd : convertirDesdeUsd(totalInventario?.valor_costo_usd)),
+      meta: `${escapeHtml(String(totalInventario?.articulos ?? "0"))} articulos`,
       tone: "gold",
+      delta: null,
+      puntos: [],
     },
   ];
 
@@ -308,14 +555,14 @@ function renderSummaryCards() {
       ${items
         .map(
           (item) => `
-            <article class="modern-stat-card modern-stat-card-${item.tone}">
+            <article class="modern-stat-card modern-stat-card-${item.tone === "danger" ? "gold" : item.tone}">
               <div class="modern-stat-copy">
                 <span class="modern-stat-eyebrow">${escapeHtml(item.label)}</span>
-                <strong class="modern-stat-value">${escapeHtml(item.value)}</strong>
+                <strong class="modern-stat-value">${item.value}</strong>
+                ${renderDelta(item.delta)}
                 <span class="modern-stat-meta">${item.meta}</span>
-                <span class="modern-stat-badge">${escapeHtml(item.badge)}</span>
               </div>
-              <span class="modern-stat-icon">${escapeHtml(item.icon)}</span>
+              ${item.puntos.length ? renderSparkline(item.puntos, toneColors[item.tone]) : ""}
             </article>
           `,
         )
@@ -324,81 +571,151 @@ function renderSummaryCards() {
   `;
 }
 
-function renderVentasTable(rows) {
-  const items = Array.isArray(rows) ? rows : [];
-  if (!items.length) {
-    return `<div class="empty-state"><p>Sin datos todavia.</p></div>`;
+function renderAlertBanner() {
+  const ventas = getVentasPorPeriodo();
+  const total = getEffectiveTotalRow(ventas);
+  const ganancia = toFiniteNumber(total?.ganancia);
+  if (ganancia >= 0) {
+    return "";
   }
 
   return `
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Tienda</th>
-            <th>Facturas</th>
-            <th>Vendido (Bs)</th>
-            <th>Costo (Bs)</th>
-            <th>Ganancia (Bs)</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${items
-            .map((row) => {
-              const isTotal = row.codigo_legacy === "TOTAL";
-              return `
-                <tr class="${isTotal ? "is-selected-row" : ""}">
-                  <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.codigo_legacy || "-")}</td>
-                  <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
-                  <td>${escapeHtml(formatBs(row.total_pago))}</td>
-                  <td>${escapeHtml(formatBs(row.total_costo_bs))}</td>
-                  <td>${escapeHtml(formatBs(row.ganancia))}</td>
-                </tr>
-              `;
-            })
-            .join("")}
-        </tbody>
-      </table>
+    <div class="flash flash-error bodega-alert-banner">
+      <span class="flash-message">
+        El costo de la mercancia vendida supera las ventas en ${escapeHtml(formatMoneda(Math.abs(ganancia)))}.
+        Revisa las tiendas con margen en rojo en la tabla.
+      </span>
     </div>
   `;
 }
 
-function renderInventarioTable(rows) {
-  const items = Array.isArray(rows) ? rows : [];
-  if (!items.length) {
-    return `<div class="empty-state"><p>Sin datos todavia.</p></div>`;
-  }
+function renderDesempenoTable() {
+  const ventas = getVentasPorPeriodo();
+  const filas = (Array.isArray(ventas) ? ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
+  const total = findTotalRow(ventas);
+
+  const filtradas = state.tiendaFiltro ? filas.filter((row) => row.codigo_legacy === state.tiendaFiltro) : filas;
+
+  const ordenadas = [...filtradas].sort((a, b) => {
+    const diff = toFiniteNumber(a.total_pago) - toFiniteNumber(b.total_pago);
+    return state.sortDir === "asc" ? diff : -diff;
+  });
+
+  const periodoLabel = PERIODOS.find((periodo) => periodo.key === state.periodo)?.label || "Hoy";
 
   return `
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Tienda</th>
-            <th>Articulos</th>
-            <th>Unidades</th>
-            <th>Valor a costo (USD)</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${items
-            .map((row) => {
-              const isTotal = row.codigo_legacy === "TOTAL";
-              return `
-                <tr class="${isTotal ? "is-selected-row" : ""}">
-                  <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.codigo_legacy || "-")}</td>
-                  <td>${escapeHtml(String(row.articulos ?? "0"))}</td>
-                  <td>${escapeHtml(formatBs(row.unidades))}</td>
-                  <td>${escapeHtml(formatUsd(row.valor_costo_usd))}</td>
-                </tr>
-              `;
-            })
-            .join("")}
-        </tbody>
-      </table>
-    </div>
+    <section class="modern-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Desempeno por tienda</h2>
+        </div>
+        <span class="modern-chip">${escapeHtml(periodoLabel.toUpperCase())}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tienda</th>
+              <th>Facturas</th>
+              <th class="bodega-sortable-th" data-sort-vendido>
+                Vendido ${state.sortDir === "asc" ? "&#8593;" : "&#8595;"}
+              </th>
+              <th>Costo</th>
+              <th>Margen</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              ordenadas.length
+                ? ordenadas
+                    .map((row) => renderDesempenoRow(row, false))
+                    .join("")
+                : `<tr><td colspan="5"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+            }
+            ${total && !state.tiendaFiltro ? renderDesempenoRow(total, true) : ""}
+          </tbody>
+        </table>
+      </div>
+    </section>
   `;
 }
+
+function renderDesempenoRow(row, isTotal) {
+  const margenPct = calcularMargenPct(row);
+  const margenTone = Math.abs(margenPct) < 0.005 ? "neutral" : margenPct >= 0 ? "positivo" : "negativo";
+
+  return `
+    <tr class="${isTotal ? "is-selected-row" : ""}">
+      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.codigo_legacy || "-")}</td>
+      <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
+      <td>${escapeHtml(formatMoneda(row.total_pago))}</td>
+      <td>${escapeHtml(formatMoneda(row.total_costo_bs))}</td>
+      <td><span class="bodega-margen-badge bodega-margen-${margenTone}">${escapeHtml(formatPercent(margenPct))}%</span></td>
+    </tr>
+  `;
+}
+
+function renderInventarioSection() {
+  const filas = (Array.isArray(state.inventario) ? state.inventario : []).filter((row) => row.codigo_legacy !== "TOTAL");
+  const total = findTotalRow(state.inventario);
+  const totalValor = toFiniteNumber(total?.valor_costo_usd) || 1;
+
+  const filtradas = state.tiendaFiltro ? filas.filter((row) => row.codigo_legacy === state.tiendaFiltro) : filas;
+
+  return `
+    <section class="modern-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Inventario actual (a costo)</h2>
+        </div>
+        <span class="modern-chip">VALORADO EN ${state.moneda === "USD" ? "US$" : "BS"}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tienda</th>
+              <th>Articulos</th>
+              <th>Unidades</th>
+              <th>Valor a costo / Participacion</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              filtradas.length
+                ? filtradas.map((row) => renderInventarioRow(row, totalValor, false)).join("")
+                : `<tr><td colspan="4"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+            }
+            ${total && !state.tiendaFiltro ? renderInventarioRow(total, totalValor, true) : ""}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function renderInventarioRow(row, totalValor, isTotal) {
+  const valorUsd = toFiniteNumber(row.valor_costo_usd);
+  const participacion = isTotal ? 100 : Math.min(100, (valorUsd / totalValor) * 100);
+
+  return `
+    <tr class="${isTotal ? "is-selected-row" : ""}">
+      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.codigo_legacy || "-")}</td>
+      <td>${escapeHtml(String(row.articulos ?? "0"))}</td>
+      <td>${escapeHtml(formatBs(row.unidades))}</td>
+      <td>
+        <div class="bodega-participacion-cell">
+          <span>${escapeHtml(formatMoneda(convertirDesdeUsd(valorUsd)))}</span>
+          <span class="bodega-participacion-bar-track">
+            <span class="bodega-participacion-bar-fill" style="width:${participacion.toFixed(1)}%"></span>
+          </span>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+// ---- Carga de datos y eventos ------------------------------------------------
 
 async function loadPanel() {
   const token = getToken();
@@ -453,8 +770,12 @@ async function loadPanel() {
   state.loading = false;
   state.flash = null;
   state.ventasHoy = Array.isArray(data.ventasHoy) ? data.ventasHoy : [];
+  state.ventas7Dias = Array.isArray(data.ventas7Dias) ? data.ventas7Dias : [];
   state.ventasMes = Array.isArray(data.ventasMes) ? data.ventasMes : [];
   state.inventario = Array.isArray(data.inventario) ? data.inventario : [];
+  state.serieDiaria = Array.isArray(data.serieDiaria) ? data.serieDiaria : [];
+  state.tasaCambio = data.tasaCambio || null;
+  state.lastUpdated = new Date();
   render();
 }
 
@@ -481,6 +802,30 @@ function bindEvents() {
 
   document.querySelector('[data-action="refresh"]')?.addEventListener("click", () => {
     void loadPanel();
+  });
+
+  document.querySelectorAll("[data-periodo]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.periodo = button.getAttribute("data-periodo");
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-moneda]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.moneda = button.getAttribute("data-moneda");
+      render();
+    });
+  });
+
+  document.querySelector("[data-tienda-filtro]")?.addEventListener("change", (event) => {
+    state.tiendaFiltro = event.target.value || "";
+    render();
+  });
+
+  document.querySelector("[data-sort-vendido]")?.addEventListener("click", () => {
+    state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+    render();
   });
 }
 
