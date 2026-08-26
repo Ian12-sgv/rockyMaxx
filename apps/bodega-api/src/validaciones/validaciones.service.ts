@@ -116,53 +116,99 @@ export class ValidacionesService {
 
   // Resumen para el panel principal (todas las tiendas juntas): ventas de
   // hoy, ventas del mes en curso, e inventario actual valorizado a costo.
-  // Cada consulta trae una fila por tienda MAS una fila "TOTAL" agregada via
-  // GROUPING SETS ((codigo_legacy), ()) -- una sola pasada, sin sumar en el
-  // cliente.
+  // Cada consulta trae una fila por tienda MAS una fila "TOTAL".
   async panelResumen() {
-    const [ventasHoy, ventas7Dias, ventasMes, inventario, serieDiaria, tasaCambio] = await Promise.all([
-      this.ventasResumenPorPeriodo(Prisma.sql`(v."payload_json" ->> 'Fecha')::date = CURRENT_DATE`),
+    const tasaCambio = await this.tasaCambioActual();
+    const tasaValor = tasaCambio?.tasa ? Number(tasaCambio.tasa) : 1;
+
+    const [ventasHoy, ventas7Dias, ventasMes, inventario, serieDiaria] = await Promise.all([
+      this.ventasResumenPorPeriodo(
+        Prisma.sql`(v."payload_json" ->> 'Fecha')::date = CURRENT_DATE`,
+        Prisma.sql`(d."payload_json" ->> 'Hora')::date = CURRENT_DATE`,
+        tasaValor,
+      ),
       this.ventasResumenPorPeriodo(
         Prisma.sql`(v."payload_json" ->> 'Fecha')::date >= CURRENT_DATE - INTERVAL '6 days'`,
+        Prisma.sql`(d."payload_json" ->> 'Hora')::date >= CURRENT_DATE - INTERVAL '6 days'`,
+        tasaValor,
       ),
       this.ventasResumenPorPeriodo(
         Prisma.sql`date_trunc('month', (v."payload_json" ->> 'Fecha')::date) = date_trunc('month', CURRENT_DATE)`,
+        Prisma.sql`date_trunc('month', (d."payload_json" ->> 'Hora')::date) = date_trunc('month', CURRENT_DATE)`,
+        tasaValor,
       ),
       this.inventarioResumen(),
-      this.ventasSerieDiaria(14),
-      this.tasaCambioActual(),
+      this.ventasSerieDiaria(14, tasaValor),
     ]);
 
     return { ventasHoy, ventas7Dias, ventasMes, inventario, serieDiaria, tasaCambio };
   }
 
+  // Join lateral reutilizado: para cada linea vendida (HECH_VENTAS_DETALLE_HIST),
+  // busca el costo VIGENTE AHORA del mismo articulo en INVENTARIO -- no el
+  // costo que quedaria congelado en la venta. Es el mismo criterio que ya usa
+  // el reporte general de cierre de caja (cajas.service.ts,
+  // resolveGeneralCloseInventoryUnitCost -> Inventario.CostoDolar), para que
+  // "Costo de mercancia" de este panel cuadre con ese reporte.
+  private static readonly COSTO_ACTUAL_JOIN = Prisma.sql`
+    LEFT JOIN LATERAL (
+      SELECT (i."payload_json" ->> 'CostoDolar')::numeric AS costo_dolar
+      FROM "VW_HECH_INVENTARIO_ACTUAL" i
+      WHERE i."dim_tienda_id" = d."dim_tienda_id"
+        AND i."payload_json" ->> 'CodigoBarra' = d."payload_json" ->> 'CodigoBarra'
+      LIMIT 1
+    ) inv ON true
+  `;
+
+  // Cantidad neta vendida (descontando lo devuelto) por costo VIGENTE del
+  // articulo, en dolares -- igual formula que
+  // cajas.service.ts#calculateGeneralCloseInventoryCost.
+  private static readonly COSTO_ACTUAL_EXPR = Prisma.sql`
+    GREATEST(
+      (d."payload_json" ->> 'Cantidad')::numeric - COALESCE((d."payload_json" ->> 'CantidadDevuelta')::numeric, 0),
+      0
+    ) * COALESCE(inv.costo_dolar, 0)
+  `;
+
   // Serie diaria (ultimos N dias) de la misma fuente/conversion que
   // ventasResumenPorPeriodo -- alimenta las mini-graficas de tendencia y el
   // calculo de "vs ayer" en el frontend (dia actual vs el dia anterior en
   // este mismo arreglo, ya no hace falta una consulta aparte).
-  private async ventasSerieDiaria(dias: number) {
+  private async ventasSerieDiaria(dias: number, tasaValor: number) {
     return this.prisma.$queryRaw<
       Array<{ fecha: string; facturas: string; total_pago: string; total_costo_bs: string; ganancia: string }>
     >(Prisma.sql`
-      SELECT
-        fecha::text AS fecha,
-        COUNT(*)::text AS facturas,
-        COALESCE(SUM(total_pago), 0)::text AS total_pago,
-        COALESCE(SUM(total_costo_bs), 0)::text AS total_costo_bs,
-        COALESCE(SUM(total_pago) - SUM(total_costo_bs), 0)::text AS ganancia
-      FROM (
+      WITH header AS (
         SELECT
           (v."payload_json" ->> 'Fecha')::date AS fecha,
-          (v."payload_json" ->> 'TotalPago')::numeric AS total_pago,
-          (v."payload_json" ->> 'TotalCosto')::numeric * COALESCE((v."payload_json" ->> 'TasaCambio')::numeric, 1)
-            AS total_costo_bs
+          COUNT(*) AS facturas,
+          SUM((v."payload_json" ->> 'TotalPago')::numeric) AS total_pago
         FROM "VW_HECH_VENTAS_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
         WHERE (v."payload_json" ->> 'Fecha')::date >= CURRENT_DATE - (${dias - 1} * INTERVAL '1 day')
           AND ${FILTRO_TIENDAS_PANEL}
-      ) filas
-      GROUP BY fecha
-      ORDER BY fecha
+        GROUP BY 1
+      ),
+      costo AS (
+        SELECT
+          (d."payload_json" ->> 'Hora')::date AS fecha,
+          SUM(${ValidacionesService.COSTO_ACTUAL_EXPR}) AS total_costo_usd
+        FROM "VW_HECH_VENTAS_DETALLE_ACTUAL" d
+        JOIN "DIM_TIENDAS" t ON t."id" = d."dim_tienda_id"
+        ${ValidacionesService.COSTO_ACTUAL_JOIN}
+        WHERE (d."payload_json" ->> 'Hora')::date >= CURRENT_DATE - (${dias - 1} * INTERVAL '1 day')
+          AND ${FILTRO_TIENDAS_PANEL}
+        GROUP BY 1
+      )
+      SELECT
+        COALESCE(h.fecha, c.fecha)::text AS fecha,
+        COALESCE(h.facturas, 0)::text AS facturas,
+        COALESCE(h.total_pago, 0)::text AS total_pago,
+        (COALESCE(c.total_costo_usd, 0) * ${tasaValor}::numeric)::text AS total_costo_bs,
+        (COALESCE(h.total_pago, 0) - COALESCE(c.total_costo_usd, 0) * ${tasaValor}::numeric)::text AS ganancia
+      FROM header h
+      FULL OUTER JOIN costo c ON c.fecha = h.fecha
+      ORDER BY 1
     `);
   }
 
@@ -186,12 +232,18 @@ export class ValidacionesService {
     return rows[0] || null;
   }
 
-  // TotalCosto en VENTAS esta en dolares (igual que TotalDolares); TotalPago/
-  // TotalMercancia estan en bolivares. TasaCambio es la tasa de ESA venta
-  // puntual (cambia con el tiempo), asi que el costo se convierte a
-  // bolivares POR FILA antes de sumar -- sumar TasaCambio y multiplicar
-  // despues mezclaria tasas de fechas distintas.
-  private async ventasResumenPorPeriodo(filtroFecha: Prisma.Sql) {
+  // "Vendido"/"facturas" salen de la cabecera de la venta (VENTAS.TotalPago),
+  // igual que el reporte general de cierre de caja -- deberian coincidir
+  // exacto con ese reporte.
+  // "Costo de mercancia" YA NO usa VENTAS.TotalCosto (el costo que quedo
+  // congelado al momento de facturar): ahora usa el costo VIGENTE AHORA del
+  // articulo (Inventario.CostoDolar) por la cantidad neta vendida -- el mismo
+  // criterio que ya usa el reporte general de cierre de caja
+  // (cajas.service.ts#calculateGeneralCloseInventoryCost), a pedido del
+  // usuario, para que ambos reportes cuadren. Esto significa que "Costo" aqui
+  // puede moverse retroactivamente si el costo de un articulo cambia despues
+  // de la venta -- es intencional, no un bug.
+  private async ventasResumenPorPeriodo(filtroFecha: Prisma.Sql, filtroFechaDetalle: Prisma.Sql, tasaValor: number) {
     return this.prisma.$queryRaw<
       Array<{
         codigo_legacy: string;
@@ -201,23 +253,41 @@ export class ValidacionesService {
         ganancia: string;
       }>
     >(Prisma.sql`
-      SELECT
-        COALESCE(codigo_legacy, 'TOTAL') AS codigo_legacy,
-        COUNT(*)::text AS facturas,
-        COALESCE(SUM(total_pago), 0)::text AS total_pago,
-        COALESCE(SUM(total_costo_bs), 0)::text AS total_costo_bs,
-        COALESCE(SUM(total_pago) - SUM(total_costo_bs), 0)::text AS ganancia
-      FROM (
+      WITH header AS (
         SELECT
           t."codigo_legacy" AS codigo_legacy,
-          (v."payload_json" ->> 'TotalPago')::numeric AS total_pago,
-          (v."payload_json" ->> 'TotalCosto')::numeric * COALESCE((v."payload_json" ->> 'TasaCambio')::numeric, 1)
-            AS total_costo_bs
+          COUNT(*) AS facturas,
+          SUM((v."payload_json" ->> 'TotalPago')::numeric) AS total_pago
         FROM "VW_HECH_VENTAS_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
         WHERE ${filtroFecha} AND ${FILTRO_TIENDAS_PANEL}
-      ) filas
-      GROUP BY GROUPING SETS ((codigo_legacy), ())
+        GROUP BY 1
+      ),
+      costo AS (
+        SELECT
+          t."codigo_legacy" AS codigo_legacy,
+          SUM(${ValidacionesService.COSTO_ACTUAL_EXPR}) AS total_costo_usd
+        FROM "VW_HECH_VENTAS_DETALLE_ACTUAL" d
+        JOIN "DIM_TIENDAS" t ON t."id" = d."dim_tienda_id"
+        ${ValidacionesService.COSTO_ACTUAL_JOIN}
+        WHERE ${filtroFechaDetalle} AND ${FILTRO_TIENDAS_PANEL}
+        GROUP BY 1
+      ),
+      combinado AS (
+        SELECT
+          COALESCE(h.codigo_legacy, c.codigo_legacy) AS codigo_legacy,
+          COALESCE(h.facturas, 0) AS facturas,
+          COALESCE(h.total_pago, 0) AS total_pago,
+          COALESCE(c.total_costo_usd, 0) * ${tasaValor}::numeric AS total_costo_bs
+        FROM header h
+        FULL OUTER JOIN costo c ON c.codigo_legacy = h.codigo_legacy
+      )
+      SELECT codigo_legacy, facturas::text, total_pago::text, total_costo_bs::text, (total_pago - total_costo_bs)::text AS ganancia
+      FROM (
+        SELECT codigo_legacy, facturas, total_pago, total_costo_bs FROM combinado
+        UNION ALL
+        SELECT 'TOTAL', SUM(facturas), SUM(total_pago), SUM(total_costo_bs) FROM combinado
+      ) resumen
       ORDER BY 1
     `);
   }
