@@ -73,6 +73,14 @@ function formatUsd(value) {
   }).format(toFiniteNumber(value));
 }
 
+function formatBsCompact(value) {
+  return new Intl.NumberFormat("es-VE", { notation: "compact", maximumFractionDigits: 2 }).format(toFiniteNumber(value));
+}
+
+function formatUsdCompact(value) {
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(toFiniteNumber(value));
+}
+
 function formatPercent(value) {
   return new Intl.NumberFormat("es-VE", {
     minimumFractionDigits: 2,
@@ -271,7 +279,10 @@ function convertirDesdeUsd(valorUsd) {
   return toFiniteNumber(valorUsd) * tasa;
 }
 
-function formatMoneda(valor) {
+function formatMoneda(valor, options = {}) {
+  if (options.compact) {
+    return state.moneda === "USD" ? `US$ ${formatUsdCompact(valor)}` : `Bs ${formatBsCompact(valor)}`;
+  }
   return state.moneda === "USD" ? `US$ ${formatUsd(valor)}` : `Bs ${formatBs(valor)}`;
 }
 
@@ -515,10 +526,13 @@ function renderSummaryCards() {
   const toneColors = { blue: "#2b6dc9", sky: "#0ea5e9", green: "#22c55e", danger: "#ab3f2f", gold: "#ba8b34" };
   const gananciaTone = ganancia >= 0 ? "green" : "danger";
 
+  const inventarioValor = state.moneda === "USD" ? totalInventario?.valor_costo_usd : convertirDesdeUsd(totalInventario?.valor_costo_usd);
+
   const items = [
     {
       label: "Vendido",
-      value: formatMoneda(totalVentas?.total_pago),
+      value: formatMoneda(totalVentas?.total_pago, { compact: true }),
+      exacto: formatMoneda(totalVentas?.total_pago),
       meta: `${escapeHtml(String(totalVentas?.facturas ?? "0"))} facturas${state.tiendaFiltro ? "" : " en todas las tiendas"}`,
       tone: "blue",
       delta: getDeltaPeriodo("total_pago"),
@@ -526,7 +540,8 @@ function renderSummaryCards() {
     },
     {
       label: "Costo de mercancia",
-      value: formatMoneda(totalVentas?.total_costo_bs),
+      value: formatMoneda(totalVentas?.total_costo_bs, { compact: true }),
+      exacto: formatMoneda(totalVentas?.total_costo_bs),
       meta: "Costo de lo vendido",
       tone: "sky",
       delta: getDeltaPeriodo("total_costo_bs"),
@@ -534,7 +549,8 @@ function renderSummaryCards() {
     },
     {
       label: "Ganancia",
-      value: formatMoneda(totalVentas?.ganancia),
+      value: formatMoneda(totalVentas?.ganancia, { compact: true }),
+      exacto: formatMoneda(totalVentas?.ganancia),
       meta: `Margen ${escapeHtml(formatPercent(margenPct))}%`,
       tone: gananciaTone,
       delta: getDeltaPeriodo("ganancia"),
@@ -542,7 +558,8 @@ function renderSummaryCards() {
     },
     {
       label: "Inventario a costo",
-      value: formatMoneda(state.moneda === "USD" ? totalInventario?.valor_costo_usd : convertirDesdeUsd(totalInventario?.valor_costo_usd)),
+      value: formatMoneda(inventarioValor, { compact: true }),
+      exacto: formatMoneda(inventarioValor),
       meta: `${escapeHtml(String(totalInventario?.articulos ?? "0"))} articulos`,
       tone: "gold",
       delta: null,
@@ -558,7 +575,7 @@ function renderSummaryCards() {
             <article class="modern-stat-card modern-stat-card-${item.tone === "danger" ? "gold" : item.tone}">
               <div class="modern-stat-copy">
                 <span class="modern-stat-eyebrow">${escapeHtml(item.label)}</span>
-                <strong class="modern-stat-value">${item.value}</strong>
+                <strong class="modern-stat-value" title="${escapeHtml(item.exacto)}">${escapeHtml(item.value)}</strong>
                 ${renderDelta(item.delta)}
                 <span class="modern-stat-meta">${item.meta}</span>
               </div>
