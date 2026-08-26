@@ -8,13 +8,17 @@ import { PrismaService } from "../prisma/prisma.service";
 // (Prisma serializa numeric/Decimal como string). No se usa Number()/parseFloat
 // en ningun punto de este archivo.
 
-// B002 es una bodega/almacen, no una tienda de venta al publico -- se
-// sincroniza a bodega_datos como cualquier otra (DIM_TIENDAS no distingue
-// tipo de forma consistente todavia), pero no debe contar en un panel que
-// compara "desempeno por tienda". Si se agregan mas bodegas, sumar su
-// codigo_legacy aqui.
-const CODIGOS_TIENDA_EXCLUIDOS_PANEL = ["B002"];
-const FILTRO_TIENDAS_PANEL = Prisma.sql`t."codigo_legacy" NOT IN (${Prisma.join(CODIGOS_TIENDA_EXCLUIDOS_PANEL)})`;
+// Lista blanca (no negra): solo cuentan en el panel las tiendas cuyo
+// bodega-export corre DIRECTO desde su propia PC, con datos que se siguen
+// actualizando de verdad. Las demas (002-006) todavia llegan via la gemela
+// de MirrorSync en el VPS, que se desactivo por decision del usuario -- sus
+// numeros quedaron congelados en bodega_datos y mostrarlos confundiria con
+// datos "en vivo" que ya no son. B002 tampoco entra: es una bodega/almacen,
+// no una tienda de venta al publico.
+// Cuando una tienda active bodega-export directo en su propia PC (ver
+// apps/api/src/bodega-export), sumar su codigo_legacy aqui.
+const CODIGOS_TIENDA_ACTIVOS_PANEL = ["001"];
+const FILTRO_TIENDAS_PANEL = Prisma.sql`t."codigo_legacy" IN (${Prisma.join(CODIGOS_TIENDA_ACTIVOS_PANEL)})`;
 
 @Injectable()
 export class ValidacionesService {
