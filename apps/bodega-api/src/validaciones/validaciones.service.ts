@@ -8,6 +8,14 @@ import { PrismaService } from "../prisma/prisma.service";
 // (Prisma serializa numeric/Decimal como string). No se usa Number()/parseFloat
 // en ningun punto de este archivo.
 
+// B002 es una bodega/almacen, no una tienda de venta al publico -- se
+// sincroniza a bodega_datos como cualquier otra (DIM_TIENDAS no distingue
+// tipo de forma consistente todavia), pero no debe contar en un panel que
+// compara "desempeno por tienda". Si se agregan mas bodegas, sumar su
+// codigo_legacy aqui.
+const CODIGOS_TIENDA_EXCLUIDOS_PANEL = ["B002"];
+const FILTRO_TIENDAS_PANEL = Prisma.sql`t."codigo_legacy" NOT IN (${Prisma.join(CODIGOS_TIENDA_EXCLUIDOS_PANEL)})`;
+
 @Injectable()
 export class ValidacionesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -145,7 +153,9 @@ export class ValidacionesService {
           (v."payload_json" ->> 'TotalCosto')::numeric * COALESCE((v."payload_json" ->> 'TasaCambio')::numeric, 1)
             AS total_costo_bs
         FROM "VW_HECH_VENTAS_ACTUAL" v
+        JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
         WHERE (v."payload_json" ->> 'Fecha')::date >= CURRENT_DATE - (${dias - 1} * INTERVAL '1 day')
+          AND ${FILTRO_TIENDAS_PANEL}
       ) filas
       GROUP BY fecha
       ORDER BY fecha
@@ -163,7 +173,9 @@ export class ValidacionesService {
         (v."payload_json" ->> 'TasaCambio')::numeric::text AS tasa,
         (v."payload_json" ->> 'Fecha') AS fecha
       FROM "VW_HECH_VENTAS_ACTUAL" v
+      JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
       WHERE (v."payload_json" ->> 'TasaCambio') IS NOT NULL
+        AND ${FILTRO_TIENDAS_PANEL}
       ORDER BY (v."payload_json" ->> 'Fecha')::timestamp DESC
       LIMIT 1
     `);
@@ -199,7 +211,7 @@ export class ValidacionesService {
             AS total_costo_bs
         FROM "VW_HECH_VENTAS_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
-        WHERE ${filtroFecha}
+        WHERE ${filtroFecha} AND ${FILTRO_TIENDAS_PANEL}
       ) filas
       GROUP BY GROUPING SETS ((codigo_legacy), ())
       ORDER BY 1
@@ -227,6 +239,7 @@ export class ValidacionesService {
         )::text AS valor_costo_usd
       FROM "VW_HECH_INVENTARIO_ACTUAL" v
       JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
+      WHERE ${FILTRO_TIENDAS_PANEL}
       GROUP BY GROUPING SETS ((t."codigo_legacy"), ())
       ORDER BY 1
     `);
