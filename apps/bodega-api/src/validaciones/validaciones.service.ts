@@ -159,18 +159,25 @@ export class ValidacionesService {
   // EXPLAIN ANALYZE: sin MATERIALIZED, 40+ segundos (y agotaba el pool de
   // conexiones de Prisma, P2024 "Timed out fetching a new connection"); con
   // MATERIALIZED, ~200ms.
+  // CodigoBarra es la PK de INVENTARIO, asi que bodega-export la excluye del
+  // payload_json (queda solo en pk_origen, ver payload.util.ts#buildPayload y
+  // bodega-export.service.ts#buildInventarioBatches) -- "payload_json ->>
+  // 'CodigoBarra'" en INVENTARIO da NULL siempre. El cruce va por pk_origen
+  // (mismo patron que stockPorArticulo() en este archivo). TRIM en ambos
+  // lados por espacios en blanco de CodigoBarra ya conocidos en este
+  // proyecto (ver scripts/windows/migrate-local-barcodes-varchar30*).
   private static readonly COSTO_ACTUAL_CTE = Prisma.sql`
     inv_costo AS MATERIALIZED (
       SELECT
         i."dim_tienda_id" AS dim_tienda_id,
-        i."payload_json" ->> 'CodigoBarra' AS codigo_barra,
+        TRIM(i."pk_origen") AS codigo_barra,
         (i."payload_json" ->> 'CostoDolar')::numeric AS costo_dolar
       FROM "VW_HECH_INVENTARIO_ACTUAL" i
     )
   `;
 
   private static readonly COSTO_ACTUAL_JOIN = Prisma.sql`
-    LEFT JOIN inv_costo inv ON inv.dim_tienda_id = d."dim_tienda_id" AND inv.codigo_barra = d."payload_json" ->> 'CodigoBarra'
+    LEFT JOIN inv_costo inv ON inv.dim_tienda_id = d."dim_tienda_id" AND inv.codigo_barra = TRIM(d."payload_json" ->> 'CodigoBarra')
   `;
 
   // Cantidad neta vendida (descontando lo devuelto) por costo VIGENTE del
