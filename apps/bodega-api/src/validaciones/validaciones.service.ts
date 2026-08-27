@@ -120,7 +120,7 @@ export class ValidacionesService {
   // costo. Cada consulta de ventas trae una fila por tienda MAS una fila
   // "TOTAL".
   async panelResumen(desde: string, hasta: string) {
-    const tasaCambio = await this.tasaCambioActual();
+    const tasaCambio = await this.tasaCambioActual(hasta);
     const tasaValor = tasaCambio?.tasa ? Number(tasaCambio.tasa) : 1;
     const { desde: desdeAnterior, hasta: hastaAnterior } = this.calcularRangoAnterior(desde, hasta);
     const diasSerie = Math.min(this.contarDias(desde, hasta), 60);
@@ -262,10 +262,14 @@ export class ValidacionesService {
 
   // TasaCambio no se sincroniza a bodega_datos como tabla propia (ver nota en
   // inventarioResumen), pero cada venta ya trae la tasa vigente al momento en
-  // que se facturo -- la venta mas reciente sincronizada es entonces la mejor
-  // aproximacion disponible de "la tasa de ahora mismo" sin tener que montar
-  // un pipeline de sincronizacion nuevo solo para esto.
-  private async tasaCambioActual() {
+  // que se facturo -- la venta mas reciente CON FECHA <= hasta es entonces la
+  // mejor aproximacion disponible de "la tasa vigente para el rango elegido"
+  // sin tener que montar un pipeline de sincronizacion nuevo solo para esto.
+  // Antes esto ignoraba el rango y siempre traia la tasa MAS reciente de
+  // todas (aunque el usuario estuviera viendo "Mes pasado" o "Ayer") -- a
+  // pedido del usuario, ahora la tasa mostrada corresponde a la fecha que
+  // eligio, no siempre a la de hoy.
+  private async tasaCambioActual(hasta: string) {
     const rows = await this.prisma.$queryRaw<Array<{ tasa: string; fecha: string }>>(Prisma.sql`
       SELECT
         (v."payload_json" ->> 'TasaCambio')::numeric::text AS tasa,
@@ -273,6 +277,7 @@ export class ValidacionesService {
       FROM "VW_HECH_VENTAS_ACTUAL" v
       JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
       WHERE (v."payload_json" ->> 'TasaCambio') IS NOT NULL
+        AND (v."payload_json" ->> 'Fecha')::date <= ${hasta}::date
         AND ${FILTRO_TIENDAS_PANEL}
       ORDER BY (v."payload_json" ->> 'Fecha')::timestamp DESC
       LIMIT 1
