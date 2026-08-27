@@ -14,6 +14,11 @@ const hostValue = document.getElementById("host-value");
 const urlsList = document.getElementById("urls-list");
 const mirrorEnabledInput = document.getElementById("mirror-enabled");
 const mirrorUrlInput = document.getElementById("mirror-url");
+const bodegaViewEnabledInput = document.getElementById("bodega-view-enabled");
+const bodegaBaseUrlInput = document.getElementById("bodega-base-url");
+const bodegaTokenInput = document.getElementById("bodega-token");
+const bodegaFieldsRow = document.getElementById("bodega-fields-row");
+const bodegaTokenRow = document.getElementById("bodega-token-row");
 
 let currentState = null;
 let saving = false;
@@ -27,14 +32,28 @@ function syncFormInteractivity() {
   const configurationLocked = false;
   const hasProfile = Boolean(String(profileSelect.value || "").trim());
   const mirrorUrl = String(mirrorUrlInput.value || "").trim();
+  const bodegaViewEnabled = bodegaViewEnabledInput.checked;
+  const bodegaBaseUrl = String(bodegaBaseUrlInput.value || "").trim();
+  const bodegaToken = String(bodegaTokenInput.value || "").trim();
 
   profileSelect.disabled = configurationLocked || saving;
   mirrorEnabledInput.checked = true;
   mirrorEnabledInput.disabled = true;
   mirrorUrlInput.disabled = saving;
+
+  bodegaViewEnabledInput.disabled = saving;
+  bodegaBaseUrlInput.disabled = saving || !bodegaViewEnabled;
+  bodegaTokenInput.disabled = saving || !bodegaViewEnabled;
+  if (bodegaFieldsRow) bodegaFieldsRow.style.opacity = bodegaViewEnabled ? "1" : "0.5";
+  if (bodegaTokenRow) bodegaTokenRow.style.opacity = bodegaViewEnabled ? "1" : "0.5";
+
   saveButton.hidden = false;
   saveButton.textContent = configurationLocked ? "Guardar configuracion" : "Guardar configuracion";
-  saveButton.disabled = saving || !hasProfile || !mirrorUrl;
+  saveButton.disabled =
+    saving ||
+    !hasProfile ||
+    !mirrorUrl ||
+    (bodegaViewEnabled && (!bodegaBaseUrl || !bodegaToken));
   refreshButton.disabled = saving;
 }
 
@@ -82,6 +101,9 @@ function renderState(state) {
   hostValue.textContent = state?.apiHost || "-";
   mirrorEnabledInput.checked = Boolean(state?.mirrorSyncEnabled);
   mirrorUrlInput.value = state?.mirrorSyncRemoteApiUrl || "";
+  bodegaViewEnabledInput.checked = Boolean(state?.bodegaViewEnabled);
+  bodegaBaseUrlInput.value = state?.bodegaApiBaseUrl || "";
+  bodegaTokenInput.value = state?.bodegaApiToken || "";
   renderUrls(state?.urls || []);
 
   if (configForm) {
@@ -133,6 +155,10 @@ async function hydrate() {
 saveButton.addEventListener("click", async () => {
   const profileId = String(profileSelect.value || "").trim();
   const mirrorSyncRemoteApiUrl = String(mirrorUrlInput.value || "").trim();
+  const bodegaViewEnabled = bodegaViewEnabledInput.checked;
+  const bodegaApiBaseUrl = String(bodegaBaseUrlInput.value || "").trim();
+  const bodegaApiToken = String(bodegaTokenInput.value || "").trim();
+
   if (!profileId) {
     setFlash("Debes seleccionar una base de datos.", "error");
     return;
@@ -140,6 +166,11 @@ saveButton.addEventListener("click", async () => {
 
   if (!mirrorSyncRemoteApiUrl) {
     setFlash("Debes indicar la URL del VPS.", "error");
+    return;
+  }
+
+  if (bodegaViewEnabled && (!bodegaApiBaseUrl || !bodegaApiToken)) {
+    setFlash("Para conectar a bodega de datos debes indicar la URL base y el token.", "error");
     return;
   }
 
@@ -152,6 +183,9 @@ saveButton.addEventListener("click", async () => {
       profileId,
       mirrorSyncEnabled: true,
       mirrorSyncRemoteApiUrl,
+      bodegaViewEnabled,
+      bodegaApiBaseUrl,
+      bodegaApiToken,
     });
     renderState(state);
     const mirrorFlash = getRemoteMirrorFlash(state);
@@ -195,10 +229,30 @@ profileSelect.addEventListener("change", () => {
     mirrorUrlInput.value = selectedProfile.defaultMirrorSyncRemoteApiUrl;
   }
 
+  if (selectedProfile?.defaultBodegaApiBaseUrl && !String(bodegaBaseUrlInput.value || "").trim()) {
+    bodegaBaseUrlInput.value = selectedProfile.defaultBodegaApiBaseUrl;
+  }
+
+  if (selectedProfile?.defaultBodegaApiToken && !String(bodegaTokenInput.value || "").trim()) {
+    bodegaTokenInput.value = selectedProfile.defaultBodegaApiToken;
+  }
+
   syncFormInteractivity();
 });
 
 mirrorUrlInput.addEventListener("input", () => {
+  syncFormInteractivity();
+});
+
+bodegaViewEnabledInput.addEventListener("change", () => {
+  syncFormInteractivity();
+});
+
+bodegaBaseUrlInput.addEventListener("input", () => {
+  syncFormInteractivity();
+});
+
+bodegaTokenInput.addEventListener("input", () => {
   syncFormInteractivity();
 });
 

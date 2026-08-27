@@ -97,6 +97,34 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         AND upper(regexp_replace(COALESCE("Nombre", ''), '[^A-Za-z0-9]', '', 'g'))
           IN ('EFECTIVODOLAR', 'DOLARELECTRONICO', 'USDT')
     `);
+
+    // Una restauracion/migracion de base puede insertar filas con "ID" explicito
+    // sin avanzar la secuencia autoincremental, causando choques de llave duplicada
+    // en el siguiente INSERT. Se realinea en cada arranque para que se autorrepare
+    // sin depender de una correccion manual tras cada restauracion.
+    await this.$executeRawUnsafe(`
+      DO $$
+      DECLARE
+        max_id bigint;
+      BEGIN
+        SELECT MAX("ID") INTO max_id FROM dbo."TASA_CAMBIO";
+        IF max_id IS NOT NULL THEN
+          PERFORM setval(pg_get_serial_sequence('dbo."TASA_CAMBIO"', 'ID'), max_id, true);
+        END IF;
+      END $$
+    `);
+
+    await this.$executeRawUnsafe(`
+      DO $$
+      DECLARE
+        max_id bigint;
+      BEGIN
+        SELECT MAX("ID") INTO max_id FROM dbo."TASA_CAMBIO_M";
+        IF max_id IS NOT NULL THEN
+          PERFORM setval(pg_get_serial_sequence('dbo."TASA_CAMBIO_M"', 'ID'), max_id, true);
+        END IF;
+      END $$
+    `);
   }
 
   async enableShutdownHooks(app: INestApplication) {

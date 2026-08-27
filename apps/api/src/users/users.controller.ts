@@ -37,6 +37,7 @@ export class UsersController {
   }
 
   @Post()
+  @RequireGroups("sistema")
   async create(@Body() createUserDto: CreateUserDto, @CurrentUser() currentUser: UserView) {
     return {
       usuario: await this.usersService.create(createUserDto, currentUser),
@@ -44,6 +45,7 @@ export class UsersController {
   }
 
   @Patch(":codUsuario")
+  @RequireGroups("sistema")
   async update(
     @Param("codUsuario") codUsuario: string,
     @Body() updateUserDto: UpdateUserDto,
@@ -55,6 +57,7 @@ export class UsersController {
   }
 
   @Delete(":codUsuario")
+  @RequireGroups("sistema")
   async remove(@Param("codUsuario") codUsuario: string) {
     return {
       usuario: await this.usersService.remove(codUsuario),

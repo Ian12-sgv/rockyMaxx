@@ -48,6 +48,9 @@ let currentServiceProfile = null;
 let expectedApiShutdownReason = "";
 let configuredMirrorSyncEnabled = true;
 let configuredMirrorSyncRemoteApiUrl = "";
+let configuredBodegaViewEnabled = false;
+let configuredBodegaApiBaseUrl = "";
+let configuredBodegaApiToken = "";
 let serviceConfigurationLocked = false;
 let serviceConfigurationPersisted = false;
 let lastBackendDiagnostic = "";
@@ -466,6 +469,26 @@ function resolveDefaultMirrorSyncRemoteApiUrl(profile) {
   return profileUrl || processUrl;
 }
 
+// Base URL de bodega-api: si el perfil ya trae BODEGA_API_BASE_URL, se usa
+// directo. Si no, se deriva de BODEGA_INGEST_URL (perfiles como tienda001,
+// que ya exportan hacia bodega-api) quitando el sufijo "/bodega/ingest/...".
+function resolveDefaultBodegaApiBaseUrl(profile) {
+  const explicit =
+    typeof profile?.env?.BODEGA_API_BASE_URL === "string" ? profile.env.BODEGA_API_BASE_URL.trim() : "";
+  if (explicit) {
+    return explicit.replace(/\/+$/, "");
+  }
+
+  const ingestUrl = typeof profile?.env?.BODEGA_INGEST_URL === "string" ? profile.env.BODEGA_INGEST_URL.trim() : "";
+  const marker = "/bodega/ingest/";
+  const markerIndex = ingestUrl.indexOf(marker);
+  return markerIndex === -1 ? "" : ingestUrl.slice(0, markerIndex);
+}
+
+function resolveDefaultBodegaApiToken(profile) {
+  return typeof profile?.env?.INGEST_AUTH_TOKEN === "string" ? profile.env.INGEST_AUTH_TOKEN.trim() : "";
+}
+
 function parseEnvValue(rawValue) {
   let value = String(rawValue ?? "").trim();
   if (!value) {
@@ -556,6 +579,8 @@ function loadAvailableServiceProfiles() {
         apiPort,
         apiHost,
         defaultMirrorSyncRemoteApiUrl: resolveDefaultMirrorSyncRemoteApiUrl({ env }),
+        defaultBodegaApiBaseUrl: resolveDefaultBodegaApiBaseUrl({ env }),
+        defaultBodegaApiToken: resolveDefaultBodegaApiToken({ env }),
         label: formatProfileLabel(entry.name, databaseName, apiPort),
       });
     } catch (error) {
@@ -604,6 +629,20 @@ function initializeServiceProfile() {
       ? savedConfig.mirrorSyncRemoteApiUrl.trim()
       : savedProfile
         ? resolveDefaultMirrorSyncRemoteApiUrl(savedProfile)
+        : "";
+
+  configuredBodegaViewEnabled = Boolean(savedConfig.bodegaViewEnabled);
+  configuredBodegaApiBaseUrl =
+    typeof savedConfig.bodegaApiBaseUrl === "string" && savedConfig.bodegaApiBaseUrl.trim()
+      ? savedConfig.bodegaApiBaseUrl.trim()
+      : savedProfile
+        ? resolveDefaultBodegaApiBaseUrl(savedProfile)
+        : "";
+  configuredBodegaApiToken =
+    typeof savedConfig.bodegaApiToken === "string" && savedConfig.bodegaApiToken.trim()
+      ? savedConfig.bodegaApiToken.trim()
+      : savedProfile
+        ? resolveDefaultBodegaApiToken(savedProfile)
         : "";
 
   serviceConfigurationPersisted = Boolean(savedProfile);
@@ -753,6 +792,15 @@ function startApiServer() {
       ? `${apiVendorModulesDir}${delimiter}${process.env.NODE_PATH}`
       : apiVendorModulesDir,
   };
+
+  // Habilita SOLO la lectura del panel "Todas las tiendas" (BodegaPanelService
+  // en apps/api). A proposito NO toca BODEGA_SYNC_ENABLED -- activar esto
+  // nunca debe empezar a exportar los datos de este perfil hacia bodega_datos,
+  // solo permite consultarla.
+  if (configuredBodegaViewEnabled) {
+    env.BODEGA_API_BASE_URL = configuredBodegaApiBaseUrl;
+    env.INGEST_AUTH_TOKEN = configuredBodegaApiToken;
+  }
 
   if (!basename(nodeExecutable).toLowerCase().startsWith("node")) {
     env.ELECTRON_RUN_AS_NODE = "1";
@@ -932,6 +980,8 @@ function buildServiceState(errorMessage = "") {
       apiPort: profile.apiPort,
       apiHost: profile.apiHost,
       defaultMirrorSyncRemoteApiUrl: profile.defaultMirrorSyncRemoteApiUrl || "",
+      defaultBodegaApiBaseUrl: profile.defaultBodegaApiBaseUrl || "",
+      defaultBodegaApiToken: profile.defaultBodegaApiToken || "",
     })),
     currentProfile: currentServiceProfile
       ? {
@@ -941,12 +991,17 @@ function buildServiceState(errorMessage = "") {
           apiPort: currentServiceProfile.apiPort,
           apiHost: currentServiceProfile.apiHost,
           defaultMirrorSyncRemoteApiUrl: currentServiceProfile.defaultMirrorSyncRemoteApiUrl || "",
+          defaultBodegaApiBaseUrl: currentServiceProfile.defaultBodegaApiBaseUrl || "",
+          defaultBodegaApiToken: currentServiceProfile.defaultBodegaApiToken || "",
         }
       : null,
     apiPort: configuredApiPort,
     apiHost: configuredApiHost,
     mirrorSyncEnabled: configuredMirrorSyncEnabled,
     mirrorSyncRemoteApiUrl: configuredMirrorSyncRemoteApiUrl,
+    bodegaViewEnabled: configuredBodegaViewEnabled,
+    bodegaApiBaseUrl: configuredBodegaApiBaseUrl,
+    bodegaApiToken: configuredBodegaApiToken,
     remoteMirrorStatus: lastRemoteMirrorStatus,
     configurationLocked: serviceConfigurationLocked,
     configurationSaved: serviceConfigurationPersisted,
@@ -1084,10 +1139,18 @@ ipcMain.handle("service-config:save", async (_event, payload) => {
     typeof payload?.mirrorSyncRemoteApiUrl === "string"
       ? payload.mirrorSyncRemoteApiUrl.trim()
       : "";
+  const bodegaViewEnabled = Boolean(payload?.bodegaViewEnabled);
+  const bodegaApiBaseUrl =
+    typeof payload?.bodegaApiBaseUrl === "string" ? payload.bodegaApiBaseUrl.trim().replace(/\/+$/, "") : "";
+  const bodegaApiToken = typeof payload?.bodegaApiToken === "string" ? payload.bodegaApiToken.trim() : "";
   const selectedProfile = availableServiceProfiles.find((profile) => profile.id === String(profileId || ""));
 
   if (!selectedProfile) {
     throw new Error("No se encontro el perfil de base de datos seleccionado.");
+  }
+
+  if (bodegaViewEnabled && (!bodegaApiBaseUrl || !bodegaApiToken)) {
+    throw new Error("Para conectar a bodega de datos debes indicar la URL base y el token.");
   }
 
   const isInitialConfiguration = !serviceConfigurationPersisted;
@@ -1095,10 +1158,18 @@ ipcMain.handle("service-config:save", async (_event, payload) => {
   configuredMirrorSyncEnabled = true;
   configuredMirrorSyncRemoteApiUrl =
     mirrorSyncRemoteApiUrl || resolveDefaultMirrorSyncRemoteApiUrl(selectedProfile);
+  configuredBodegaViewEnabled = bodegaViewEnabled;
+  configuredBodegaApiBaseUrl = bodegaViewEnabled
+    ? bodegaApiBaseUrl || resolveDefaultBodegaApiBaseUrl(selectedProfile)
+    : "";
+  configuredBodegaApiToken = bodegaViewEnabled ? bodegaApiToken || resolveDefaultBodegaApiToken(selectedProfile) : "";
   writeServiceConfig({
     profileId: selectedProfile.id,
     mirrorSyncEnabled: true,
     mirrorSyncRemoteApiUrl: configuredMirrorSyncRemoteApiUrl,
+    bodegaViewEnabled: configuredBodegaViewEnabled,
+    bodegaApiBaseUrl: configuredBodegaApiBaseUrl,
+    bodegaApiToken: configuredBodegaApiToken,
   });
   serviceConfigurationPersisted = true;
   serviceConfigurationLocked = false;

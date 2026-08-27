@@ -259,6 +259,37 @@
             <small>Se guarda en el servicio local y no se muestra dentro del frontend operativo.</small>
           </label>
 
+          <label class="field">
+            <span>Bodega de datos (todas las tiendas)</span>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <input id="bodega-view-enabled" type="checkbox">
+              <span style="font-weight:600;color:#1d395f;">Conectar a bodega de datos en la nube</span>
+            </div>
+            <small>Solo habilita la LECTURA del panel "Todas las tiendas" en el frontend (admin/jefe/sistema). No activa el envio de datos de esta base hacia la nube.</small>
+          </label>
+
+          <label class="field" id="bodega-fields-row">
+            <span>URL base de bodega-api</span>
+            <input
+              id="bodega-base-url"
+              type="url"
+              placeholder="http://tu-vps.ejemplo.com/bodega-api"
+              style="min-height:48px;padding:0 14px;border:1px solid rgba(29, 57, 95, 0.14);border-radius:14px;background:#fffdf8;color:var(--ink);font-size:1rem;"
+            />
+          </label>
+
+          <label class="field" id="bodega-token-row">
+            <span>Token de bodega-api</span>
+            <input
+              id="bodega-token"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Token compartido de INGEST_AUTH_TOKEN"
+              style="min-height:48px;padding:0 14px;border:1px solid rgba(29, 57, 95, 0.14);border-radius:14px;background:#fffdf8;color:var(--ink);font-size:1rem;"
+            />
+            <small>El mismo token que usan las tiendas para exportar. Se guarda solo en este equipo, no llega al frontend operativo.</small>
+          </label>
+
         </div>
 
         <div id="locked-panel" class="status" hidden>

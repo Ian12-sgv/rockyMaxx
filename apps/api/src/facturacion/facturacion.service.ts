@@ -15,6 +15,7 @@ import {
 import { findContingenciaReportFormatById, getContingenciaReportFormats } from "../impresoras/contingencia-report-formats.util";
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { applyInventoryExistenceDelta, sumQuantitiesByCode } from "../shared/inventory-existence.util";
 import { UserView } from "../users/user-view.util";
 import { CreateFacturacionSaleDto, FacturacionPaymentRowDto, FacturacionSaleItemDto } from "./dto/create-facturacion-sale.dto";
 import { buildFacturacionInvoicePdf, type FacturacionInvoicePdfPayload } from "./facturacion-invoice-pdf.util";
@@ -1171,29 +1172,8 @@ export class FacturacionService {
     items: NormalizedSaleItem[],
     movementDate: Date,
   ) {
-    const totals = new Map<string, Prisma.Decimal>();
-    for (const line of items) {
-      const current = totals.get(line.codigoBarra) ?? ZERO;
-      totals.set(line.codigoBarra, current.plus(line.cantidad));
-    }
-
-    for (const [codigoBarra, quantity] of totals.entries()) {
-      const inventory = inventoryByCode.get(codigoBarra);
-      if (!inventory) {
-        continue;
-      }
-
-      await tx.inventario.update({
-        where: {
-          CodigoBarra: inventory.CodigoBarra,
-        },
-        data: {
-          Existencia: inventory.Existencia.minus(quantity),
-          FechaPrimerMovimiento: inventory.FechaPrimerMovimiento ?? movementDate,
-          UltimaActualizacion: movementDate,
-        },
-      });
-    }
+    const totals = sumQuantitiesByCode(items);
+    await applyInventoryExistenceDelta(tx, inventoryByCode, totals, movementDate, "decrease");
   }
 
   private normalizePriceList(value: string | undefined): "detal" | "mayor" | "afiliado" {

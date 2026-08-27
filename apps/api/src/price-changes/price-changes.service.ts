@@ -185,6 +185,7 @@ type PriceChangeBatchStoreRow = {
   ErrorCount: number;
   CreatedAt: Date;
   UpdatedAt: Date;
+  ReportedAt: Date | null;
 };
 
 type PriceChangeSyncPayloadItem = {
@@ -1131,6 +1132,16 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
         throw new Error(`El VPS/REMOTO rechazo el resultado del Cambio de Precio: ${this.formatRemoteError(receipt, response.status)}`);
       }
 
+      // Marca este batch como ya reportado para que reportPendingPriceChangeResults() deje
+      // de volver a seleccionarlo en el proximo ciclo (ver columna ReportedAt en
+      // ensurePriceChangeSyncSchema). Si esta actualizacion fallara, el peor caso es que se
+      // vuelva a reportar (idempotente del lado VPS), nunca que se pierda un reporte real.
+      await this.prisma.$executeRawUnsafe(
+        `update dbo."PRICE_CHANGE_BATCH_STORE" set "ReportedAt" = now() where "BatchId" = $1 and upper("DestinationNodeId") = upper($2)`,
+        batchId,
+        current.nodeId,
+      );
+
       return { batchId, reported: true, globalId, receipt };
     } catch (error) {
       // No se altera nada local (PRICE_CHANGE_BATCH_ITEM_RESULT/_STORE quedan intactos);
@@ -1145,12 +1156,17 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
 
   // Opcional: reporta TODOS los batches locales en estado terminal de este nodo.
   // Idempotente por batch (ver arriba), asi que reprocesar uno ya reportado es inofensivo.
+  //
+  // Fix: el filtro `"ReportedAt" is null` es lo que evita que, con mas de `limit` batches
+  // terminales a la vez, esta consulta siga devolviendo para siempre los mismos `limit` mas
+  // viejos (su UpdatedAt no cambia solo por reportarse) -- sin el, los batches mas nuevos
+  // nunca llegaban a su turno de reportarse aunque ya estuvieran aplicados localmente.
   async reportPendingPriceChangeResults(limit = PRICE_CHANGE_DEFAULT_PULL_LIMIT) {
     const current = this.getCurrentSourceContext();
     const terminalStores = await this.prisma.$queryRawUnsafe<Array<{ BatchId: string }>>(
       `
         select "BatchId" from dbo."PRICE_CHANGE_BATCH_STORE"
-        where upper("DestinationNodeId") = upper($1) and "Status" in ($2, $3, $4)
+        where upper("DestinationNodeId") = upper($1) and "Status" in ($2, $3, $4) and "ReportedAt" is null
         order by "UpdatedAt" asc
         limit $5
       `,
@@ -3037,6 +3053,21 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.$executeRawUnsafe(`
       create index if not exists "IX_PRICE_CHANGE_BATCH_STORE_Status"
       on dbo."PRICE_CHANGE_BATCH_STORE" ("Status", "UpdatedAt")
+    `);
+
+    // Marca cuando el rol LOCAL SERVICE reporto con exito este batch al VPS/REMOTO propio.
+    // Sin esto, reportPendingPriceChangeResults() no tiene forma de distinguir "ya reportado"
+    // de "terminal pero sin reportar": con mas de `limit` batches terminales a la vez, la
+    // consulta ordenada por UpdatedAt siempre devuelve los mismos `limit` mas viejos (su
+    // UpdatedAt no cambia al reportar), y los batches mas nuevos nunca llegan a reportarse.
+    await this.prisma.$executeRawUnsafe(`
+      alter table dbo."PRICE_CHANGE_BATCH_STORE"
+      add column if not exists "ReportedAt" timestamptz
+    `);
+
+    await this.prisma.$executeRawUnsafe(`
+      create index if not exists "IX_PRICE_CHANGE_BATCH_STORE_ReportedAt"
+      on dbo."PRICE_CHANGE_BATCH_STORE" ("ReportedAt")
     `);
 
     // Resultado por articulo por tienda. Escrita por el rol LOCAL SERVICE al aplicar; sin

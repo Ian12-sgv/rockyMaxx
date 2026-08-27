@@ -43,6 +43,10 @@ export type CashRegisterCloseReportPayload = {
   totalImpuestoVed: string;
   totalGeneralVed: string;
   totalGeneralUsd: string;
+  totalDevoluciones: number;
+  totalDevolucionesVed: string;
+  totalDevolucionesUsd: string;
+  totalVentaNetaUsd: string;
   breakdown: CashRegisterCloseReportPaymentLine[];
   generatedAt: string;
 };
@@ -61,6 +65,8 @@ export type CashRegisterGeneralCloseCostLine = {
   costoUnitarioUsd: string;
   cantidad: string;
   costoTotalUsd: string;
+  tuvoDevolucion: boolean;
+  cantidadDevuelta: string;
 };
 
 export type CashRegisterGeneralCloseReportPayload = {
@@ -76,6 +82,10 @@ export type CashRegisterGeneralCloseReportPayload = {
   totalImpuestoVed: string;
   totalGeneralVed: string;
   totalGeneralUsd: string;
+  totalDevoluciones: number;
+  totalDevolucionesVed: string;
+  totalDevolucionesUsd: string;
+  totalVentaNetaUsd: string;
   costoMercanciaUsd: string;
   gananciaNetaUsd: string;
   cajas: CashRegisterGeneralCloseCajaLine[];
@@ -205,6 +215,7 @@ function buildCashRegisterCloseReportLines(report: CashRegisterCloseReportPayloa
     `${toAsciiLabel(report.fecha || "-")}`,
     "",
     `Venta: ${formatUsdInline(report.totalGeneralUsd)}`,
+    ...buildDevolucionesReportLines(report),
     "",
   ];
 
@@ -218,6 +229,7 @@ function buildCashRegisterGeneralCloseReportLines(report: CashRegisterGeneralClo
     `${toAsciiLabel(report.fecha || "-")}`,
     "",
     `Venta: ${formatUsdInline(report.totalGeneralUsd)}`,
+    ...buildDevolucionesReportLines(report),
     "",
   ];
 
@@ -240,6 +252,23 @@ function buildCashRegisterCloseReportTitle(report: CashRegisterCloseReportPayloa
   }
 
   return `${branchName} - CAJA ${String(numeroCaja)} (${serie})`;
+}
+
+function buildDevolucionesReportLines(
+  report: Pick<
+    CashRegisterCloseReportPayload,
+    "totalDevolucionesVed" | "totalDevolucionesUsd" | "totalVentaNetaUsd"
+  >,
+) {
+  const devolucionesVed = normalizeMoneyNumber(report.totalDevolucionesVed);
+  if (devolucionesVed <= 0) {
+    return [];
+  }
+
+  return [
+    `Devoluciones: -${formatLocalizedMoney(devolucionesVed)} Bs (-${formatLocalizedMoney(report.totalDevolucionesUsd)}$) (fue devolucion)`,
+    `Venta neta: ${formatUsdInline(report.totalVentaNetaUsd)}`,
+  ];
 }
 
 function appendPaymentBreakdownLines(
@@ -275,29 +304,42 @@ function appendGeneralCloseInventoryCostLines(
 
   lines.push(
     "",
-    `Inversion: ${formatUsdInline(costoMercanciaUsd)}`,
-    `Ganancia neta: ${formatUsdInline(gananciaNetaUsd)}`,
+    `AIT: ${formatUsdInline(costoMercanciaUsd)}`,
+    `AGT: ${formatUsdInline(gananciaNetaUsd)}`,
   );
 }
 
 function formatGeneralCloseInventoryCostLines(item: CashRegisterGeneralCloseCostLine) {
   const articulo = toAsciiLabel(item?.articulo || "") || "SIN CODIGO";
   const costoUnitarioUsd = normalizeMoneyNumber(item?.costoUnitarioUsd);
-  const cantidad = normalizeMoneyNumber(item?.cantidad);
+  const cantidadNeta = normalizeMoneyNumber(item?.cantidad);
   const costoTotalUsd = normalizeMoneyNumber(item?.costoTotalUsd);
+  const cantidadDevuelta = normalizeMoneyNumber(item?.cantidadDevuelta);
+  const tuvoDevolucion = Boolean(item?.tuvoDevolucion) && cantidadDevuelta > 0;
+  // El neto ya tiene restada la devolucion: se muestra tambien el vendido bruto para
+  // que la resta (vendido - devuelto = neto) se pueda verificar a simple vista.
+  const cantidadVendida = cantidadNeta + cantidadDevuelta;
+  const devolucionNota = tuvoDevolucion
+    ? ` (vendido: ${formatQuantityInline(cantidadVendida)}, devuelto: -${formatQuantityInline(cantidadDevuelta)})`
+    : "";
 
-  if (costoUnitarioUsd <= 0 || cantidad <= 0 || costoTotalUsd <= 0) {
-    return [];
+  const lines: string[] = [];
+  if (costoUnitarioUsd > 0 && cantidadNeta > 0 && costoTotalUsd > 0) {
+    const costoUnitarioTexto = formatUsdInline(costoUnitarioUsd);
+    const cantidadTexto = formatQuantityInline(cantidadNeta);
+    const costoTotalTexto = formatUsdInline(costoTotalUsd);
+    lines.push(`Costo unitario ${articulo} = ${costoUnitarioTexto}`);
+    lines.push(`Costo ${articulo}: ${costoUnitarioTexto} x ${cantidadTexto}${devolucionNota} = ${costoTotalTexto}`);
+    return lines;
   }
 
-  const costoUnitarioTexto = formatUsdInline(costoUnitarioUsd);
-  const cantidadTexto = formatQuantityInline(cantidad);
-  const costoTotalTexto = formatUsdInline(costoTotalUsd);
+  // El articulo no tuvo venta hoy (o quedo en 0 neto), pero si tuvo una devolucion
+  // hoy de una factura de otro dia: se muestra igual para que no quede invisible.
+  if (tuvoDevolucion) {
+    lines.push(`Devolucion ${articulo}: -${formatQuantityInline(cantidadDevuelta)} und (fue devolucion)`);
+  }
 
-  return [
-    `Costo unitario ${articulo} = ${costoUnitarioTexto}`,
-    `Costo ${articulo}: ${costoUnitarioTexto} x ${cantidadTexto} = ${costoTotalTexto}`,
-  ];
+  return lines;
 }
 
 function formatPaymentBreakdownLine(payment: CashRegisterCloseReportPaymentLine) {

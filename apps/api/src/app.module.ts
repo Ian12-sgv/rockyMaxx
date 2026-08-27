@@ -6,6 +6,7 @@ import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
 import { BancosModule } from "./bancos/bancos.module";
 import { BodegaExportModule } from "./bodega-export/bodega-export.module";
+import { BodegaPanelModule } from "./bodega-panel/bodega-panel.module";
 import { CajasModule } from "./cajas/cajas.module";
 import { ClientesModule } from "./clientes/clientes.module";
 import { ComprasModule } from "./compras/compras.module";
@@ -15,6 +16,7 @@ import { FacturacionModule } from "./facturacion/facturacion.module";
 import { HealthModule } from "./health/health.module";
 import { ImpresorasModule } from "./impresoras/impresoras.module";
 import { InventoryModule } from "./inventory/inventory.module";
+import { InvoiceReturnsModule } from "./invoice-returns/invoice-returns.module";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { MirrorSyncModule } from "./mirror-sync/mirror-sync.module";
 import { PriceChangesModule } from "./price-changes/price-changes.module";
@@ -38,6 +40,7 @@ import { UsersModule } from "./users/users.module";
     AdjustmentsModule,
     BancosModule,
     BodegaExportModule,
+    BodegaPanelModule,
     CajasModule,
     HealthModule,
     ImpresorasModule,
@@ -50,6 +53,7 @@ import { UsersModule } from "./users/users.module";
     UsersModule,
     RolesModule,
     InventoryModule,
+    InvoiceReturnsModule,
     MaintenanceModule,
     PriceChangesModule,
     ProveedoresModule,

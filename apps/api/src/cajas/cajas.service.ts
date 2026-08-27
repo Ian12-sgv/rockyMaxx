@@ -339,6 +339,20 @@ export class CajasService {
         TotalDolares: true,
       },
     });
+    const devolucionesAggregate = await this.prisma.devVentas.aggregate({
+      where: {
+        Fecha: {
+          gte: start,
+          lt: end,
+        },
+      },
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        TotalMercancia: true,
+      },
+    });
 
     let mergedSummary = createEmptyCashRegisterPaymentSummary();
     const fallbackSeries = new Set<string>();
@@ -388,7 +402,10 @@ export class CajasService {
       };
     });
     const totalGeneralUsd = this.resolveGeneralCloseUsdTotal(breakdown, tasaCierreUsd);
-    const gananciaNetaUsd = totalGeneralUsd.minus(inventoryCost.total).toDecimalPlaces(2);
+    const devolucionesVed = devolucionesAggregate._sum?.TotalMercancia ?? ZERO;
+    const devolucionesUsd = tasaCierreUsd.greaterThan(ZERO) ? devolucionesVed.div(tasaCierreUsd) : ZERO;
+    const totalVentaNetaUsd = Prisma.Decimal.max(totalGeneralUsd.minus(devolucionesUsd), ZERO).toDecimalPlaces(2);
+    const gananciaNetaUsd = totalVentaNetaUsd.minus(inventoryCost.total).toDecimalPlaces(2);
 
     const summary = {
       sucursalNombre: await this.resolveCurrentSucursalNombre(),
@@ -403,6 +420,10 @@ export class CajasService {
       totalImpuestoVed: this.formatDecimal(salesAggregate._sum?.TotalImpuesto),
       totalGeneralVed: this.formatDecimal(salesAggregate._sum?.TotalPago),
       totalGeneralUsd: this.formatDecimal(totalGeneralUsd),
+      totalDevoluciones: Number(devolucionesAggregate._count?._all || 0),
+      totalDevolucionesVed: this.formatDecimal(devolucionesAggregate._sum?.TotalMercancia),
+      totalDevolucionesUsd: this.formatDecimal(devolucionesUsd),
+      totalVentaNetaUsd: this.formatDecimal(totalVentaNetaUsd),
       costoMercanciaUsd: this.formatDecimal(inventoryCost.total),
       gananciaNetaUsd: this.formatDecimal(gananciaNetaUsd),
       cajas: syncedItems.map((item) => ({
@@ -420,13 +441,15 @@ export class CajasService {
         costoUnitarioUsd: this.formatDecimal(item.costoUnitario),
         cantidad: this.formatDecimal(item.cantidad),
         costoTotalUsd: this.formatDecimal(item.costoTotal),
+        tuvoDevolucion: item.tuvoDevolucion,
+        cantidadDevuelta: this.formatDecimal(item.cantidadDevuelta),
       })),
       generatedAt: this.formatReportTimestamp(new Date()),
     };
 
     const pdf = buildCashRegisterGeneralCloseReportPdf(summary);
     return {
-      fileName: `cierre-general-${this.formatFileDate(normalizedFecha)}.pdf`,
+      fileName: `cierre-general-${this.slugifyForFileName(summary.sucursalNombre)}-${this.formatFileDate(normalizedFecha)}.pdf`,
       generatedAt: summary.generatedAt,
       summary,
       pdfBase64: pdf.toString("base64"),
@@ -454,6 +477,27 @@ export class CajasService {
         TotalDolares: true,
       },
     });
+
+    const devolucionesAggregate = await this.prisma.devVentas.aggregate({
+      where: {
+        Serie: item.Serie,
+        Fecha: {
+          gte: start,
+          lt: end,
+        },
+      },
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        TotalMercancia: true,
+      },
+    });
+    const tasaCierreUsd = await this.resolveGeneralCloseUsdRate(start, end);
+    const devolucionesVed = devolucionesAggregate._sum?.TotalMercancia ?? ZERO;
+    const devolucionesUsd = tasaCierreUsd.greaterThan(ZERO) ? devolucionesVed.div(tasaCierreUsd) : ZERO;
+    const ventaBrutaUsd = salesAggregate._sum?.TotalDolares ?? ZERO;
+    const totalVentaNetaUsd = Prisma.Decimal.max(ventaBrutaUsd.minus(devolucionesUsd), ZERO).toDecimalPlaces(2);
 
     const parsedSummary = parseCashRegisterPaymentSummary(item.ReporteZTexto);
     const fallbackBreakdown = parsedSummary.payments.length
@@ -483,6 +527,10 @@ export class CajasService {
       totalImpuestoVed: this.formatDecimal(salesAggregate._sum?.TotalImpuesto),
       totalGeneralVed: this.formatDecimal(salesAggregate._sum?.TotalPago),
       totalGeneralUsd: this.formatDecimal(salesAggregate._sum?.TotalDolares),
+      totalDevoluciones: Number(devolucionesAggregate._count?._all || 0),
+      totalDevolucionesVed: this.formatDecimal(devolucionesAggregate._sum?.TotalMercancia),
+      totalDevolucionesUsd: this.formatDecimal(devolucionesUsd),
+      totalVentaNetaUsd: this.formatDecimal(totalVentaNetaUsd),
       breakdown,
       generatedAt: this.formatReportTimestamp(new Date()),
     };
@@ -637,61 +685,116 @@ export class CajasService {
   }
 
   private async calculateGeneralCloseInventoryCost(start: Date, end: Date) {
-    const soldItems = await this.prisma.movVentas.findMany({
-      where: {
-        venta: {
-          is: {
-            Fecha: {
-              gte: start,
-              lt: end,
+    const [soldItems, returnedItems] = await Promise.all([
+      this.prisma.movVentas.findMany({
+        where: {
+          venta: {
+            is: {
+              Fecha: {
+                gte: start,
+                lt: end,
+              },
             },
           },
         },
-      },
-      select: {
-        CodigoBarra: true,
-        Cantidad: true,
-        inventarioRef: {
-          select: {
-            Referencia: true,
-            CostoDolar: true,
+        select: {
+          CodigoBarra: true,
+          Cantidad: true,
+          CantidadDevuelta: true,
+          inventarioRef: {
+            select: {
+              Referencia: true,
+              CostoDolar: true,
+            },
           },
         },
-      },
-    });
+      }),
+      // Devoluciones registradas HOY, sin importar que dia se vendio originalmente el
+      // articulo: si no se incluyen aqui, un articulo devuelto de una factura de otro dia
+      // nunca aparece en esta lista y la devolucion queda invisible para quien revisa.
+      this.prisma.movDevVentas.findMany({
+        where: {
+          devVenta: {
+            is: {
+              Fecha: {
+                gte: start,
+                lt: end,
+              },
+            },
+          },
+        },
+        select: {
+          CodigoBarra: true,
+          Cantidad: true,
+          inventarioRef: {
+            select: {
+              Referencia: true,
+              CostoDolar: true,
+            },
+          },
+        },
+      }),
+    ]);
 
     const detailsMap = new Map<string, {
       articulo: string;
       cantidad: Prisma.Decimal;
       costoUnitario: Prisma.Decimal;
       costoTotal: Prisma.Decimal;
+      cantidadDevuelta: Prisma.Decimal;
+      tuvoDevolucion: boolean;
     }>();
+
+    const resolveEntry = (articulo: string, costoUnitario: Prisma.Decimal) => {
+      const existing = detailsMap.get(articulo);
+      if (existing) {
+        return existing;
+      }
+
+      const created = {
+        articulo,
+        cantidad: ZERO,
+        costoUnitario,
+        costoTotal: ZERO,
+        cantidadDevuelta: ZERO,
+        tuvoDevolucion: false,
+      };
+      detailsMap.set(articulo, created);
+      return created;
+    };
 
     for (const item of soldItems) {
       const costoUnitario = this.resolveGeneralCloseInventoryUnitCost(item.inventarioRef);
-      const cantidad = item.Cantidad ?? ZERO;
+      // Se descuenta lo ya devuelto (historico de esa linea): ese costo no debe contar
+      // como mercancia vendida porque el articulo volvio a existencia.
+      const cantidad = Prisma.Decimal.max((item.Cantidad ?? ZERO).minus(item.CantidadDevuelta ?? ZERO), ZERO);
       if (costoUnitario.lessThanOrEqualTo(ZERO) || cantidad.lessThanOrEqualTo(ZERO)) {
         continue;
       }
 
       const articulo = String(item.inventarioRef?.Referencia || item.CodigoBarra || "").trim() || "SIN CODIGO";
+      const entry = resolveEntry(articulo, costoUnitario.toDecimalPlaces(2));
       const costoTotal = costoUnitario.mul(cantidad).toDecimalPlaces(2);
-      const existing = detailsMap.get(articulo);
-      if (existing) {
-        existing.cantidad = existing.cantidad.plus(cantidad).toDecimalPlaces(2);
-        existing.costoTotal = existing.costoTotal.plus(costoTotal).toDecimalPlaces(2);
+      entry.cantidad = entry.cantidad.plus(cantidad).toDecimalPlaces(2);
+      entry.costoTotal = entry.costoTotal.plus(costoTotal).toDecimalPlaces(2);
+    }
+
+    for (const item of returnedItems) {
+      const cantidadDevuelta = item.Cantidad ?? ZERO;
+      if (cantidadDevuelta.lessThanOrEqualTo(ZERO)) {
         continue;
       }
 
-      detailsMap.set(articulo, {
-        articulo,
-        cantidad: cantidad.toDecimalPlaces(2),
-        costoUnitario: costoUnitario.toDecimalPlaces(2),
-        costoTotal,
-      });
+      const costoUnitario = this.resolveGeneralCloseInventoryUnitCost(item.inventarioRef);
+      const articulo = String(item.inventarioRef?.Referencia || item.CodigoBarra || "").trim() || "SIN CODIGO";
+      const entry = resolveEntry(articulo, costoUnitario.toDecimalPlaces(2));
+      entry.cantidadDevuelta = entry.cantidadDevuelta.plus(cantidadDevuelta).toDecimalPlaces(2);
+      entry.tuvoDevolucion = true;
     }
 
-    const detalles = [...detailsMap.values()].sort((left, right) => left.articulo.localeCompare(right.articulo, "es"));
+    const detalles = [...detailsMap.values()]
+      .filter((item) => item.cantidad.greaterThan(ZERO) || item.tuvoDevolucion)
+      .sort((left, right) => left.articulo.localeCompare(right.articulo, "es"));
     const total = detalles.reduce((sum, item) => sum.plus(item.costoTotal), ZERO).toDecimalPlaces(2);
 
     return {
@@ -735,6 +838,17 @@ export class CajasService {
     const month = String(value.getMonth() + 1).padStart(2, "0");
     const day = String(value.getDate()).padStart(2, "0");
     return `${day}/${month}/${year}`;
+  }
+
+  private slugifyForFileName(value: string) {
+    return (
+      String(value || "")
+        .normalize("NFD")
+        .replace(/\p{Mn}/gu, "")
+        .replace(/[^a-zA-Z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .toLowerCase() || "sucursal"
+    );
   }
 
   private formatFileDate(value: Date) {

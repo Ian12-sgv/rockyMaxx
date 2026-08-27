@@ -456,8 +456,14 @@ export class UsersService {
       orderBy: { CodGrupo: "asc" },
     });
 
-    return groupInputs.map((input) => {
-      const normalizedInput = normalizeLegacyGroupCode(input);
+    // Sin deduplicar, dos inputs que normalizan al mismo grupo (ej. valores
+    // repetidos del formulario) generan dos entradas de UsuarioGrupo para el
+    // mismo (CodUsuario, CodGrupo) y el create() falla con P2002.
+    const normalizedInputs = Array.from(
+      new Set(groupInputs.map((input) => normalizeLegacyGroupCode(input))),
+    );
+
+    return normalizedInputs.map((normalizedInput) => {
       const match = groups.find((group) => {
         return (
           normalizeLegacyGroupCode(group.CodGrupo) === normalizedInput ||
@@ -466,7 +472,7 @@ export class UsersService {
       });
 
       if (!match) {
-        throw new BadRequestException(`Grupo no valido: ${input}`);
+        throw new BadRequestException(`Grupo no valido: ${normalizedInput}`);
       }
 
       return match;

@@ -54,6 +54,7 @@ export class RolesController {
   }
 
   @Post()
+  @RequireGroups("sistema")
   async create(@Body() createRoleDto: CreateRoleDto, @CurrentUser() currentUser: UserView) {
     return {
       rol: await this.rolesService.create(createRoleDto, currentUser),
@@ -61,6 +62,7 @@ export class RolesController {
   }
 
   @Patch(":codGrupo")
+  @RequireGroups("sistema")
   async update(
     @Param("codGrupo") codGrupo: string,
     @Body() updateRoleDto: UpdateRoleDto,
@@ -72,6 +74,7 @@ export class RolesController {
   }
 
   @Delete(":codGrupo")
+  @RequireGroups("sistema")
   async remove(@Param("codGrupo") codGrupo: string) {
     return {
       rol: await this.rolesService.remove(codGrupo),

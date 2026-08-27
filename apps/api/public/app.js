@@ -227,6 +227,37 @@ const state = {
     selectedCodigo: "",
     draft: createEmptySucursalDraft(),
   },
+  users: {
+    loading: false,
+    loadingGroups: false,
+    saving: false,
+    deleting: false,
+    items: [],
+    groups: [],
+    search: "",
+    selectedCodUsuario: "",
+    draft: createEmptyUserDraft(),
+  },
+  bodegaPanel: {
+    loading: false,
+    loaded: false,
+    disponible: false,
+    motivo: "",
+    rango: null, // { desde, hasta } en yyyy-MM-dd -- se inicializa a "hoy" en loadBodegaPanelResumen()
+    rangoPickerOpen: false,
+    rangoPickerModo: "dia", // "dia" | "rango"
+    rangoPickerMes: null, // { year, month } (month 0-indexado) del mes que muestra el calendario
+    rangoPickerInicio: null, // primer dia clicado en modo "rango", antes del segundo click
+    moneda: "BS",
+    tiendaFiltro: "",
+    sortDir: "desc",
+    ventas: [],
+    ventasAnterior: [],
+    inventario: [],
+    serieDiaria: [],
+    tasaCambio: null,
+    lastUpdated: null,
+  },
   clientes: {
     loading: false,
     loadingMetadata: false,
@@ -370,6 +401,7 @@ const state = {
     paymentModal: createEmptyFacturacionPaymentModalState(),
     paymentCedulaPrompt: createEmptyFacturacionPaymentCedulaPromptState(),
   },
+  invoiceReturn: createEmptyInvoiceReturnState(),
   loadingForm: false,
   submittingForm: false,
   deletingCode: "",
@@ -587,6 +619,7 @@ async function hydrateAuthenticatedState() {
   state.user = session.usuario;
   persistUser();
   await preloadAuthenticatedDesktopData();
+  void loadBodegaPanelResumen();
   state.currentView = "desktop";
   state.navigation = {
     openMenu: "",
@@ -844,15 +877,91 @@ async function hydrateAuthenticatedState() {
   state.formDraft = createEmptyDraft();
 }
 
+function getStableElementSelector(el) {
+  if (el.id) {
+    return `#${CSS.escape(el.id)}`;
+  }
+
+  const dataAttr = Array.from(el.attributes).find((attr) =>
+    attr.name.startsWith("data-"),
+  );
+  if (dataAttr) {
+    return dataAttr.value
+      ? `[${dataAttr.name}="${CSS.escape(dataAttr.value)}"]`
+      : `[${dataAttr.name}]`;
+  }
+
+  if (el.name) {
+    return `[name="${CSS.escape(el.name)}"]`;
+  }
+
+  return null;
+}
+
+function captureFocusState(container) {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !container.contains(active)) {
+    return () => {};
+  }
+
+  const selector = getStableElementSelector(active);
+  if (!selector) {
+    return () => {};
+  }
+
+  const selection =
+    "selectionStart" in active
+      ? { start: active.selectionStart, end: active.selectionEnd }
+      : null;
+
+  return () => {
+    queueMicrotask(() => {
+      const currentlyFocused = document.activeElement;
+      if (
+        currentlyFocused &&
+        currentlyFocused !== document.body &&
+        currentlyFocused !== document.documentElement
+      ) {
+        // Algo mas (ej. un modal) ya reclamo el foco explicitamente para si
+        // mismo durante este mismo render; no se lo quitamos.
+        return;
+      }
+
+      const target = document.querySelector(selector);
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      target.focus();
+      if (
+        selection &&
+        target instanceof HTMLInputElement &&
+        typeof target.setSelectionRange === "function" &&
+        typeof selection.start === "number" &&
+        typeof selection.end === "number"
+      ) {
+        try {
+          target.setSelectionRange(selection.start, selection.end);
+        } catch (_error) {
+          // Algunos tipos de input (number, email, etc.) no soportan setSelectionRange.
+        }
+      }
+    });
+  };
+}
+
 function render() {
   const app = document.getElementById("app");
   if (!app) {
     return;
   }
 
+  const restoreFocus = captureFocusState(app);
+
   if (state.booting) {
     clearExistenceAutoRefresh();
     app.innerHTML = renderBootScreen();
+    restoreFocus();
     return;
   }
 
@@ -861,6 +970,7 @@ function render() {
     app.innerHTML = renderLoginView();
     bindLoginEvents();
     bindFlashEvents();
+    restoreFocus();
     return;
   }
 
@@ -868,6 +978,7 @@ function render() {
   bindShellEvents();
   bindFlashEvents();
   syncExistenceAutoRefresh();
+  restoreFocus();
 }
 
 function renderBootScreen() {
@@ -1089,6 +1200,7 @@ function renderShellView() {
                 "Sistema",
                 `
                 ${renderDesktopMenuLink("desktop", "Panel principal")}
+                ${userCanViewBodegaPanel() ? renderDesktopMenuLink("todas-tiendas", "Todas las tiendas") : ""}
                 <button class="modern-dropdown-link" type="button" data-menu-action="logout">Cerrar sesion</button>
               `,
               )}
@@ -1111,7 +1223,7 @@ function renderShellView() {
                         "utilidades",
                         "Utilidades",
                         `
-                        ${renderDesktopMenuLink("usuarios", "Usuarios")}
+                        ${userIsSystemOperator() ? renderDesktopMenuLink("usuarios", "Usuarios") : ""}
                         ${renderDesktopMenuLink("roles", "Roles")}
                       `,
                       )
@@ -1253,6 +1365,10 @@ function renderDesktopWorkspace() {
     return renderFacturacionWorkspace();
   }
 
+  if (state.currentView === "devolucion-factura") {
+    return renderInvoiceReturnWorkspace();
+  }
+
   if (state.currentView === "compras") {
     return renderComprasWorkspace();
   }
@@ -1291,6 +1407,14 @@ function renderDesktopWorkspace() {
 
   if (state.currentView === "sucursales") {
     return renderSucursalesWorkspace();
+  }
+
+  if (state.currentView === "usuarios") {
+    return renderUsersWorkspace();
+  }
+
+  if (state.currentView === "todas-tiendas") {
+    return renderTodasTiendasWorkspace();
   }
 
   if (state.currentView === "clientes") {
@@ -1494,6 +1618,7 @@ function renderDesktopProcesosMenu() {
       <div class="modern-mega-menu">
         <div class="modern-mega-column modern-mega-column-root">
           ${renderDesktopMenuLink("facturacion", "Facturacion")}
+          ${renderDesktopMenuLink("devolucion-factura", "Devolucion de factura")}
           ${renderDesktopMenuLink("cajas", "Apertura de caja")}
           ${renderDesktopMenuLink("cierre-caja", "Cierre de caja")}
         </div>
@@ -1508,6 +1633,7 @@ function renderDesktopProcesosMenu() {
     <div class="modern-mega-menu">
       <div class="modern-mega-column modern-mega-column-root">
         ${renderDesktopMenuLink("facturacion", "Facturacion")}
+        ${renderDesktopMenuLink("devolucion-factura", "Devolucion de factura")}
         ${renderDesktopMenuLink("compras", "Compras")}
         ${renderDesktopMenuLink("impresoras", "Impresoras")}
         ${renderDesktopMenuLink("registrar-tasa-cambio", "Registrar tasa cambio")}
@@ -5511,6 +5637,469 @@ async function printFacturacionInvoice(venta, draft, paymentRows, summary) {
     pdfFileName: `factura-${String(venta?.serie || "").trim() || "sin-serie"}-${String(venta?.numeroFactura || "").trim() || "sin-numero"}.pdf`,
   });
 }
+
+function createEmptyInvoiceReturnSearch() {
+  return { serie: "", numeroFactura: "" };
+}
+
+function createEmptyInvoiceReturnState() {
+  return {
+    search: createEmptyInvoiceReturnSearch(),
+    loading: false,
+    saving: false,
+    sale: null,
+    lines: [],
+    openSales: {
+      loading: false,
+      items: [],
+    },
+  };
+}
+
+function resetInvoiceReturnState() {
+  state.invoiceReturn = createEmptyInvoiceReturnState();
+}
+
+function readInvoiceReturnSearch(form) {
+  const formData = new FormData(form);
+  return {
+    serie: String(formData.get("serie") || "").trim(),
+    numeroFactura: String(formData.get("numeroFactura") || "").trim(),
+  };
+}
+
+async function loadInvoiceReturnSale(serieInput, numeroFacturaInput) {
+  const serie = String(serieInput ?? state.invoiceReturn.search.serie ?? "").trim();
+  const numeroFactura = String(numeroFacturaInput ?? state.invoiceReturn.search.numeroFactura ?? "").trim();
+  if (!serie || !numeroFactura) {
+    setFlash("Indica la serie y el numero de factura.", "error");
+    render();
+    return;
+  }
+
+  state.invoiceReturn.loading = true;
+  render();
+
+  try {
+    const response = await apiFetch(
+      `/invoice-returns/lookup/${encodeURIComponent(serie)}/${encodeURIComponent(numeroFactura)}`,
+    );
+    state.invoiceReturn.sale = response;
+    state.invoiceReturn.lines = (response.lineas || []).map((line) => ({
+      item: line.item,
+      codigoBarra: line.codigoBarra,
+      nombre: line.nombre,
+      precio: line.precio,
+      cantidadVendida: line.cantidadVendida,
+      cantidadDevuelta: line.cantidadDevuelta,
+      disponible: line.disponible,
+    }));
+    clearFlash();
+  } catch (error) {
+    state.invoiceReturn.sale = null;
+    state.invoiceReturn.lines = [];
+    setFlash(error.message || "No se pudo cargar la factura.", "error");
+  } finally {
+    state.invoiceReturn.loading = false;
+    render();
+  }
+}
+
+function clearInvoiceReturnSale() {
+  state.invoiceReturn.sale = null;
+  state.invoiceReturn.lines = [];
+  clearFlash();
+  render();
+}
+
+async function loadInvoiceReturnOpenSales() {
+  state.invoiceReturn.openSales.loading = true;
+  render();
+
+  try {
+    const response = await apiFetch("/invoice-returns/open-sales");
+    state.invoiceReturn.openSales.items = Array.isArray(response?.items) ? response.items : [];
+  } catch (error) {
+    state.invoiceReturn.openSales.items = [];
+    setFlash(error.message || "No se pudieron cargar las ventas de caja abierta.", "error");
+  } finally {
+    state.invoiceReturn.openSales.loading = false;
+    render();
+  }
+}
+
+function filterInvoiceReturnOpenSales(items, search) {
+  const serieFilter = String(search?.serie || "").trim().toLowerCase();
+  const numeroFilter = String(search?.numeroFactura || "").trim().toLowerCase();
+
+  return (Array.isArray(items) ? items : []).filter((item) => {
+    const matchesSerie = !serieFilter || String(item.serie || "").toLowerCase().includes(serieFilter);
+    const matchesNumero =
+      !numeroFilter || String(item.numeroFactura || "").toLowerCase().includes(numeroFilter);
+    return matchesSerie && matchesNumero;
+  });
+}
+
+async function loadInvoiceReturnSaleFromOpenSale(serie, numeroFactura) {
+  if (!serie || !numeroFactura) {
+    return;
+  }
+
+  await loadInvoiceReturnSale(serie, numeroFactura);
+}
+
+function renderInvoiceReturnAndFocusSearch(fieldName) {
+  render();
+  queueMicrotask(() => {
+    const target = document.querySelector(`#invoice-return-search-form [name="${fieldName}"]`);
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+
+    target.focus();
+    const cursorAt = target.value.length;
+    if (typeof target.setSelectionRange === "function") {
+      target.setSelectionRange(cursorAt, cursorAt);
+    }
+  });
+}
+
+function getInvoiceReturnLinesToSubmit() {
+  return (state.invoiceReturn.lines || [])
+    .filter((line) => toFacturacionNumber(line.disponible || 0) > 0)
+    .map((line) => ({
+      item: line.item,
+      cantidad: String(line.disponible || "").trim(),
+    }));
+}
+
+async function submitInvoiceReturn() {
+  const sale = state.invoiceReturn.sale;
+  if (!sale) {
+    return;
+  }
+
+  const items = getInvoiceReturnLinesToSubmit();
+  if (!items.length) {
+    setFlash("Esta factura no tiene articulos disponibles para devolver.", "error");
+    render();
+    return;
+  }
+
+  state.invoiceReturn.saving = true;
+  render();
+
+  try {
+    const response = await apiFetch("/invoice-returns", {
+      method: "POST",
+      body: {
+        serie: sale.serie,
+        numeroFactura: sale.numeroFactura,
+        items,
+      },
+    });
+
+    setFlash("Devolucion registrada correctamente.", "success");
+    await printInvoiceReturnReceipt(response.devolucion, sale);
+    state.invoiceReturn.sale = null;
+    state.invoiceReturn.lines = [];
+    state.invoiceReturn.search = createEmptyInvoiceReturnSearch();
+    await loadInvoiceReturnOpenSales();
+  } catch (error) {
+    setFlash(error.message || "No se pudo registrar la devolucion.", "error");
+  } finally {
+    state.invoiceReturn.saving = false;
+    render();
+  }
+}
+
+function buildInvoiceReturnReceiptHtml(devolucion, sale) {
+  const fecha = devolucion?.fecha ? new Date(devolucion.fecha) : new Date();
+  const safeFecha = Number.isNaN(fecha.getTime()) ? new Date() : fecha;
+  const fechaLabel = formatDateOnlyDisplay(safeFecha).replace(/\//g, "-");
+  const horaLabel = new Intl.DateTimeFormat("es-VE", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(safeFecha);
+  const numeroDevolucion = String(devolucion?.numeroDevolucion || "").trim() || "-";
+  const numeroFactura = String(devolucion?.numeroFactura || sale?.numeroFactura || "").trim() || "-";
+  const clienteNombre = String(sale?.clienteNombre || "").trim() || "-";
+  const cajeroLabel =
+    String(state.user?.nombreUsuario || devolucion?.usuario || state.user?.codUsuario || "").trim() || "CAJA";
+  const companyLines = resolveFacturacionCompanyHeaderLines({});
+  const lines = [];
+
+  for (const line of companyLines) {
+    lines.push(centerTicketReceiptText(line));
+  }
+  lines.push(centerTicketReceiptText("NOTA DE DEVOLUCION"));
+  lines.push("");
+  lines.push(...formatTicketReceiptLabelValueLines("Devolucion: ", numeroDevolucion));
+  lines.push(...formatTicketReceiptLabelValueLines("Factura ref.: ", numeroFactura));
+  lines.push(...formatTicketReceiptLabelValueLines("Cliente: ", clienteNombre));
+  lines.push(...formatTicketReceiptLabelValueLines("Cajero: ", cajeroLabel));
+  lines.push(...formatTicketReceiptDualValueLines("FECHA: ", fechaLabel, "HORA: ", horaLabel));
+  if (devolucion?.motivo) {
+    lines.push(...formatTicketReceiptLabelValueLines("Motivo: ", devolucion.motivo));
+  }
+  lines.push("-".repeat(FACTURACION_TICKET_WIDTH));
+  lines.push("");
+
+  const lineas = Array.isArray(devolucion?.lineas) ? devolucion.lineas : [];
+  if (lineas.length) {
+    lineas.forEach((line) => {
+      const cantidad = toFacturacionNumber(line?.cantidad || 0);
+      const precio = toFacturacionNumber(line?.precio || 0);
+      const subtotal = cantidad * precio;
+      const nombre = String(line?.nombre || line?.codigoBarra || "ARTICULO");
+      const itemLabel = cantidad > 1 ? `${formatTransferAmount(cantidad)} x ${nombre}` : nombre;
+      lines.push(...formatTicketReceiptTwoColumnLines(itemLabel, `Bs ${formatTransferAmount(subtotal)}`));
+    });
+  } else {
+    lines.push("Sin articulos.");
+  }
+
+  lines.push("");
+  lines.push(
+    ...formatTicketReceiptTwoColumnLines(
+      "TOTAL DEVUELTO",
+      `${formatTransferAmount(toFacturacionNumber(devolucion?.totalMercancia || 0))} BsS`,
+    ),
+  );
+  lines.push("");
+  lines.push(centerTicketReceiptText("Este comprobante no representa reembolso en efectivo."));
+  const ticketText = lines.join("\n");
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8" /><title>Devolucion ${escapeHtml(numeroDevolucion)}</title><style>${buildFacturacionInvoiceTemplateStyle("default")}</style></head><body><div class="ticket"><pre class="ticket-pre">${escapeHtml(ticketText)}</pre></div></body></html>`;
+}
+
+async function printInvoiceReturnReceipt(devolucion, sale) {
+  const html = buildInvoiceReturnReceiptHtml(devolucion, sale);
+  const bridge = getRockyClientBridge();
+  if (!bridge || typeof bridge.printHtml !== "function") {
+    openBrowserPrintPreview(html);
+    return { ok: true, printerName: "", preview: true };
+  }
+  if (!state.desktopPrinting.loaded && !state.desktopPrinting.loading) {
+    await loadDesktopPrinters({ renderAfter: false, silent: true });
+  }
+  const fallbackPrinterName = getDefaultDesktopPrinterName();
+  return bridge.printHtml({
+    html,
+    printerName: fallbackPrinterName,
+    copies: 1,
+    jobTitle: `Devolucion ${String(devolucion?.numeroDevolucion || "").trim() || "Rocky Maxx"}`,
+    savePdf: true,
+    pdfFileName: `devolucion-${String(devolucion?.serie || "").trim() || "sin-serie"}-${String(devolucion?.numeroDevolucion || "").trim() || "sin-numero"}.pdf`,
+  });
+}
+
+function renderInvoiceReturnWorkspace() {
+  const invoiceReturn = state.invoiceReturn || createEmptyInvoiceReturnState();
+  const sale = invoiceReturn.sale;
+
+  return `
+    <div class="modern-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Devolucion de factura"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Devolucion de factura</h1>
+          <p>Ventas de hoy en cajas abiertas. Filtra por serie o numero, o busca directamente una factura.</p>
+        </div>
+      </div>
+
+      <section class="modern-card catalog-import-card">
+        <form id="invoice-return-search-form" class="catalog-import-form">
+          <div class="catalog-manual-grid">
+            <label class="field">
+              <span>Serie</span>
+              <input
+                type="text"
+                name="serie"
+                maxlength="20"
+                value="${escapeHtml(toInputValue(invoiceReturn.search?.serie))}"
+                placeholder="Filtra o escribe la serie exacta"
+              />
+            </label>
+            <label class="field">
+              <span>Numero de factura</span>
+              <input
+                type="text"
+                name="numeroFactura"
+                maxlength="40"
+                value="${escapeHtml(toInputValue(invoiceReturn.search?.numeroFactura))}"
+                placeholder="Filtra o escribe el numero exacto"
+              />
+            </label>
+          </div>
+          <div class="catalog-import-actions">
+            <button class="button button-primary" type="submit" ${invoiceReturn.loading ? "disabled" : ""}>
+              ${invoiceReturn.loading ? "Buscando..." : "Buscar factura exacta"}
+            </button>
+            ${sale ? `<button class="button button-ghost" type="button" data-clear-invoice-return>Nueva busqueda</button>` : ""}
+          </div>
+        </form>
+      </section>
+
+      ${invoiceReturn.loading ? renderLoadingState("Buscando factura...") : ""}
+      ${sale && !invoiceReturn.loading ? renderInvoiceReturnSalePanel(invoiceReturn) : ""}
+      ${!sale && !invoiceReturn.loading ? renderInvoiceReturnOpenSalesPanel(invoiceReturn) : ""}
+    </div>
+  `;
+}
+
+function renderInvoiceReturnOpenSalesPanel(invoiceReturn) {
+  const openSales = invoiceReturn.openSales || { loading: false, items: [] };
+  const filtered = filterInvoiceReturnOpenSales(openSales.items, invoiceReturn.search);
+
+  return `
+    <section class="modern-card catalog-import-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Ventas de hoy en cajas abiertas</h2>
+          <p>${escapeHtml(String(filtered.length))} de ${escapeHtml(String((openSales.items || []).length))} factura(s) visibles.</p>
+        </div>
+        <div class="modern-chip">${openSales.loading ? "Cargando" : "Listas"}</div>
+      </div>
+      ${openSales.loading ? renderLoadingState("Cargando ventas de caja abierta...") : renderInvoiceReturnOpenSalesTable(filtered)}
+    </section>
+  `;
+}
+
+function renderInvoiceReturnOpenSalesTable(items) {
+  if (!items.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin ventas</h3>
+        <p>No hay facturas de hoy en cajas abiertas que coincidan con el filtro.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Factura</th>
+            <th>Serie</th>
+            <th>Fecha</th>
+            <th>Cliente</th>
+            <th>Total</th>
+            <th>Estado</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map(
+              (item) => `
+                <tr>
+                  <td><strong>${escapeHtml(item.numeroFactura || "-")}</strong></td>
+                  <td>${escapeHtml(item.serie || "-")}</td>
+                  <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+                  <td>${escapeHtml(item.clienteNombre || item.cliente || "-")}</td>
+                  <td class="facturacion-cell-right">${escapeHtml(formatTransferAmount(item.totalMercancia))}</td>
+                  <td>${renderInvoiceReturnEstadoBadge(item.estado)}</td>
+                  <td>
+                    <button
+                      class="button button-ghost"
+                      type="button"
+                      data-invoice-return-open-sale="${escapeHtml(String(item.numeroFactura || ""))}"
+                      data-invoice-return-open-sale-serie="${escapeHtml(String(item.serie || ""))}"
+                    >
+                      Ver detalle
+                    </button>
+                  </td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderInvoiceReturnEstadoBadge(estado) {
+  if (estado === "finalizada") {
+    return `<span class="modern-chip modern-chip-success">Finalizada</span>`;
+  }
+
+  return `<span class="modern-chip modern-chip-warning">Pendiente</span>`;
+}
+
+function renderInvoiceReturnSalePanel(invoiceReturn) {
+  const sale = invoiceReturn.sale;
+  const lines = Array.isArray(invoiceReturn.lines) ? invoiceReturn.lines : [];
+  const isFinalizada = sale.estado === "finalizada";
+
+  return `
+    <section class="modern-card catalog-import-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Factura ${escapeHtml(String(sale.numeroFactura || "-"))} (${escapeHtml(String(sale.serie || "-"))})</h2>
+          <p>Cliente: ${escapeHtml(sale.clienteNombre || sale.cliente || "-")} - Fecha: ${escapeHtml(formatDateDisplay(sale.fecha))}</p>
+        </div>
+        ${renderInvoiceReturnEstadoBadge(sale.estado)}
+      </div>
+
+      ${
+        isFinalizada
+          ? `<div class="muted">Esta factura ya fue devuelta por completo. No quedan articulos ni cantidades disponibles para devolver.</div>`
+          : `<div class="muted">Al confirmar se devuelve la factura completa: todos los articulos con cantidad disponible.</div>`
+      }
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Codigo</th>
+              <th>Articulo</th>
+              <th>Precio</th>
+              <th>Vendida</th>
+              <th>Devuelta</th>
+              <th>Disponible</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lines
+              .map(
+                (line) => `
+                  <tr data-invoice-return-line-row="${line.item}" class="${toFacturacionNumber(line.disponible) > 0 ? "" : "muted"}">
+                    <td>${escapeHtml(String(line.item))}</td>
+                    <td>${escapeHtml(line.codigoBarra || "-")}</td>
+                    <td>${escapeHtml(line.nombre || "-")}</td>
+                    <td class="facturacion-cell-right">${escapeHtml(formatTransferAmount(line.precio))}</td>
+                    <td class="facturacion-cell-right">${escapeHtml(formatTransferAmount(line.cantidadVendida))}</td>
+                    <td class="facturacion-cell-right">${escapeHtml(formatTransferAmount(line.cantidadDevuelta))}</td>
+                    <td class="facturacion-cell-right">${escapeHtml(formatTransferAmount(line.disponible))}</td>
+                  </tr>
+                `,
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="catalog-import-actions">
+        ${
+          isFinalizada
+            ? ""
+            : `
+              <button class="button button-primary" type="button" data-confirm-invoice-return ${invoiceReturn.saving ? "disabled" : ""}>
+                ${invoiceReturn.saving ? "Registrando..." : "Confirmar devolucion completa"}
+              </button>
+            `
+        }
+        <button class="button button-ghost" type="button" data-back-invoice-return>Volver a la lista</button>
+      </div>
+    </section>
+  `;
+}
+
 function buildImpresoraFormatoContingenciaPreviewPayload(
   draft = state.impresoras.draft,
 ) {
@@ -7007,6 +7596,221 @@ function renderSucursalesTable() {
 function renderSucursalStatusBadge(status) {
   const numericStatus = Number(status ?? 1);
   return `<span class="modern-chip">${numericStatus === 0 ? "Cerrada" : "Abierta"}</span>`;
+}
+
+function renderUsersWorkspace() {
+  const draft = state.users.draft || createEmptyUserDraft();
+  const isSaving = state.users.saving;
+  const isDeleting = state.users.deleting;
+  const isBusy = isSaving || isDeleting;
+  const groups = Array.isArray(state.users.groups) ? state.users.groups : [];
+
+  return `
+    <div class="modern-page sucursales-page">
+      ${renderDesktopBreadcrumb(["Utilidades", "Usuarios"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Usuarios</h1>
+          <p>Solo el usuario sistema puede crear, modificar o eliminar usuarios y decidir que rol tiene cada uno.</p>
+        </div>
+      </div>
+
+      <div class="sucursal-command-bar" role="toolbar" aria-label="Acciones de usuarios">
+        <button class="sucursal-command-button" type="button" data-new-user ${isBusy ? "disabled" : ""}>
+          <span class="sucursal-command-icon">+</span>
+          Crear
+        </button>
+        <button class="sucursal-command-button sucursal-command-primary" type="submit" form="user-form" ${isBusy ? "disabled" : ""}>
+          <span class="sucursal-command-icon">G</span>
+          ${isSaving ? "Guardando" : "Guardar"}
+        </button>
+        <button class="sucursal-command-button" type="button" data-user-exit ${isBusy ? "disabled" : ""}>
+          <span class="sucursal-command-icon">S</span>
+          Salir
+        </button>
+      </div>
+
+      <div class="sucursal-layout">
+        <section class="modern-card modern-card-list sucursal-list-card">
+          <div class="modern-card-head">
+            <div>
+              <h2>Usuarios registrados</h2>
+              <p>${escapeHtml(String(state.users.items.length || 0))} registro(s) visibles.</p>
+            </div>
+            <div class="modern-chip">${state.users.loading ? "Cargando" : "Listos"}</div>
+          </div>
+          <div class="sucursal-search-row">
+            <label class="field">
+              <span>Buscar</span>
+              <input
+                type="search"
+                name="userBuscar"
+                data-user-search
+                value="${escapeHtml(toInputValue(state.users.search))}"
+                placeholder="Codigo, nombre o rol"
+              />
+            </label>
+            <button class="button button-ghost" type="button" data-refresh-users ${state.users.loading || isBusy ? "disabled" : ""}>
+              ${state.users.loading ? "Actualizando..." : "Actualizar"}
+            </button>
+          </div>
+          ${state.users.loading ? renderLoadingState("Cargando usuarios...") : renderUsersTable()}
+        </section>
+
+        <aside class="modern-card modern-card-editor sucursal-form-card">
+          <form id="user-form" class="sucursal-editor-form">
+            <div class="sucursal-form-title">
+              <div>
+                <span class="article-editor-eyebrow">Datos</span>
+                <h2>${draft.originalCodUsuario ? `Usuario ${escapeHtml(String(draft.originalCodUsuario))}` : "Nuevo usuario"}</h2>
+              </div>
+              ${renderSucursalStatusBadge(draft.status === "0" ? 0 : 1)}
+            </div>
+
+            <div class="sucursal-data-panel">
+              <label class="sucursal-field-row sucursal-field-code">
+                <span>Codigo de usuario</span>
+                <input
+                  type="text"
+                  name="codUsuario"
+                  value="${escapeHtml(toInputValue(draft.codUsuario))}"
+                  maxlength="15"
+                  placeholder="Codigo unico"
+                  ${draft.originalCodUsuario ? "readonly" : ""}
+                />
+              </label>
+
+              <label class="sucursal-field-row">
+                <span>Nombre</span>
+                <input
+                  type="text"
+                  name="nombreUsuario"
+                  value="${escapeHtml(toInputValue(draft.nombreUsuario))}"
+                  maxlength="50"
+                  placeholder="Nombre visible"
+                />
+              </label>
+
+              <label class="sucursal-field-row">
+                <span>${draft.originalCodUsuario ? "Nueva clave (opcional)" : "Clave"}</span>
+                <input
+                  type="password"
+                  name="password"
+                  value="${escapeHtml(toInputValue(draft.password))}"
+                  maxlength="50"
+                  autocomplete="new-password"
+                  placeholder="${draft.originalCodUsuario ? "Dejar en blanco para no cambiarla" : "Clave del usuario"}"
+                />
+              </label>
+
+              <label class="sucursal-field-row">
+                <span>Status</span>
+                <select name="status">
+                  <option value="1" ${draft.status !== "0" ? "selected" : ""}>Activo</option>
+                  <option value="0" ${draft.status === "0" ? "selected" : ""}>Inactivo</option>
+                </select>
+              </label>
+
+              <div class="sucursal-field-row">
+                <span>Roles</span>
+                <div class="user-roles-grid">
+                  ${
+                    groups.length
+                      ? groups
+                          .map(
+                            (group) => `
+                              <label class="user-role-checkbox">
+                                <input
+                                  type="checkbox"
+                                  name="grupos"
+                                  value="${escapeHtml(group.codigo)}"
+                                  ${draft.grupos.includes(group.codigo) ? "checked" : ""}
+                                />
+                                <span>${escapeHtml(group.nombre || group.codigo)}</span>
+                              </label>
+                            `,
+                          )
+                          .join("")
+                      : `<p>${state.users.loadingGroups ? "Cargando roles..." : "No hay roles disponibles."}</p>`
+                  }
+                </div>
+              </div>
+            </div>
+          </form>
+        </aside>
+      </div>
+    </div>
+  `;
+}
+
+function renderUsersTable() {
+  const items = Array.isArray(state.users.items) ? state.users.items : [];
+  const search = normalizeSearchText(state.users.search);
+  const visibleItems = search
+    ? items.filter((item) =>
+        normalizeSearchText(
+          `${item.codUsuario || ""} ${item.nombreUsuario || ""} ${(item.grupos || [])
+            .map((group) => group.nombre)
+            .join(" ")}`,
+        ).includes(search),
+      )
+    : items;
+
+  if (!visibleItems.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin usuarios</h3>
+        <p>${search ? "No hay resultados para la busqueda actual." : "No hay usuarios registrados todavia."}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Codigo</th>
+            <th>Nombre</th>
+            <th>Roles</th>
+            <th>Status</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleItems
+            .map((item) => {
+              const isSelected =
+                String(state.users.selectedCodUsuario || "") === String(item.codUsuario || "");
+
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(item.codUsuario || "-")}</strong></td>
+                  <td>${escapeHtml(item.nombreUsuario || "-")}</td>
+                  <td>${escapeHtml((item.grupos || []).map((group) => group.nombre).join(", ") || "-")}</td>
+                  <td>${renderSucursalStatusBadge(item.status)}</td>
+                  <td class="sucursal-row-actions">
+                    <button class="button button-ghost" type="button" data-user-select="${escapeHtml(item.codUsuario || "")}">
+                      Abrir
+                    </button>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-delete-user="${escapeHtml(item.codUsuario || "")}"
+                      ${state.users.deleting ? "disabled" : ""}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function renderClientesWorkspace() {
@@ -8925,6 +9729,729 @@ function renderExecutiveCards() {
   `;
 }
 
+function renderTodasTiendasWorkspace() {
+  return `
+    <div class="modern-page">
+      ${renderDesktopBreadcrumb(["Sistema", "Todas las tiendas"])}
+      ${renderBodegaPanelSection()}
+    </div>
+  `;
+}
+
+function renderBodegaPanelSection() {
+  const panel = state.bodegaPanel;
+
+  if (panel.loading && !panel.loaded) {
+    return `
+      <section class="modern-card">
+        <div class="modern-card-head">
+          <div>
+            <h2>Todas las tiendas (bodega de datos)</h2>
+            <p>Ventas, costo, ganancia e inventario combinados de todas las tiendas.</p>
+          </div>
+        </div>
+        ${renderLoadingState("Consultando bodega de datos...")}
+      </section>
+    `;
+  }
+
+  if (!panel.disponible) {
+    return `
+      <section class="modern-card">
+        <div class="modern-card-head">
+          <div>
+            <h2>Todas las tiendas (bodega de datos)</h2>
+            <p>Ventas, costo, ganancia e inventario combinados de todas las tiendas.</p>
+          </div>
+          <button class="button button-ghost" type="button" data-refresh-bodega-panel ${panel.loading ? "disabled" : ""}>
+            ${panel.loading ? "Actualizando..." : "Actualizar"}
+          </button>
+        </div>
+        <div class="empty-state">
+          <h3>Bodega de datos no disponible</h3>
+          <p>${escapeHtml(panel.motivo || "No se pudo obtener el resumen de todas las tiendas.")}</p>
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <div class="modern-page-header">
+      <div>
+        <h2>Todas las tiendas (bodega de datos)</h2>
+        <p>Ventas, costo, margen e inventario de todas las tiendas.</p>
+      </div>
+      <div class="modern-page-actions">
+        <button class="button button-ghost" type="button" data-refresh-bodega-panel ${panel.loading ? "disabled" : ""}>
+          ${panel.loading ? "Actualizando..." : "Actualizar"}
+        </button>
+        ${panel.lastUpdated ? `<span class="bodega-updated-hint">${escapeHtml(bodegaPanelFormatUpdatedHint(panel.lastUpdated))}</span>` : ""}
+      </div>
+    </div>
+
+    ${bodegaPanelRenderControlsBar(panel)}
+    ${bodegaPanelRenderSummaryCards(panel)}
+    ${bodegaPanelRenderAlertBanner(panel)}
+    ${bodegaPanelRenderDesempenoTable(panel)}
+    ${bodegaPanelRenderInventarioSection(panel)}
+  `;
+}
+
+// ---- Fechas del selector de rango ------------------------------------------
+// "Hoy" se calcula con la fecha LOCAL del navegador (getFullYear/getMonth/
+// getDate), no con toISOString() -- toISOString() siempre da la fecha en
+// UTC, y Venezuela esta 4 horas detras: entre las 8pm y medianoche hora
+// local ya es el dia siguiente en UTC, asi que "Hoy" se adelantaba un dia.
+// El resto de la aritmetica de fechas (sumar dias, etc.) SI ancla a UTC
+// medianoche adrede, porque ahi ya se trabaja sobre un yyyy-MM-dd conocido,
+// sin ambiguedad de zona horaria que resolver.
+function bodegaPanelTodayIso() {
+  const ahora = new Date();
+  const year = ahora.getFullYear();
+  const month = String(ahora.getMonth() + 1).padStart(2, "0");
+  const day = String(ahora.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function bodegaPanelAddDaysIso(iso, dias) {
+  const date = new Date(`${iso}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + dias);
+  return date.toISOString().slice(0, 10);
+}
+
+function bodegaPanelFirstDayOfMonthIso(iso) {
+  return `${iso.slice(0, 7)}-01`;
+}
+
+const BODEGA_PANEL_MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const BODEGA_PANEL_MESES_LARGOS = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+const BODEGA_PANEL_DIAS_SEMANA_CORTOS = ["lu", "ma", "mi", "ju", "vi", "sa", "do"];
+
+function bodegaPanelFormatDiaCorto(iso) {
+  const [, month, day] = iso.split("-").map(Number);
+  return `${day} ${BODEGA_PANEL_MESES_CORTOS[month - 1]}`;
+}
+
+const BODEGA_PANEL_RANGO_PRESETS = [
+  { tipo: "hoy", label: "Hoy", etiquetaDelta: "vs ayer", calc: () => ({ desde: bodegaPanelTodayIso(), hasta: bodegaPanelTodayIso() }) },
+  {
+    tipo: "ayer",
+    label: "Ayer",
+    etiquetaDelta: "vs el dia anterior",
+    calc: () => ({ desde: bodegaPanelAddDaysIso(bodegaPanelTodayIso(), -1), hasta: bodegaPanelAddDaysIso(bodegaPanelTodayIso(), -1) }),
+  },
+  {
+    tipo: "7dias",
+    label: "Ultimos 7 dias",
+    etiquetaDelta: "vs semana anterior",
+    calc: () => ({ desde: bodegaPanelAddDaysIso(bodegaPanelTodayIso(), -6), hasta: bodegaPanelTodayIso() }),
+  },
+  {
+    tipo: "30dias",
+    label: "Ultimos 30 dias",
+    etiquetaDelta: "vs periodo anterior",
+    calc: () => ({ desde: bodegaPanelAddDaysIso(bodegaPanelTodayIso(), -29), hasta: bodegaPanelTodayIso() }),
+  },
+  {
+    tipo: "mesActual",
+    label: "Mes en curso",
+    etiquetaDelta: "vs periodo anterior",
+    calc: () => ({ desde: bodegaPanelFirstDayOfMonthIso(bodegaPanelTodayIso()), hasta: bodegaPanelTodayIso() }),
+  },
+  {
+    tipo: "mesPasado",
+    label: "Mes pasado",
+    etiquetaDelta: "vs el mes anterior a ese",
+    calc: () => {
+      const hasta = bodegaPanelAddDaysIso(bodegaPanelFirstDayOfMonthIso(bodegaPanelTodayIso()), -1);
+      return { desde: bodegaPanelFirstDayOfMonthIso(hasta), hasta };
+    },
+  },
+];
+
+function bodegaPanelMatchPreset(rango) {
+  if (!rango) {
+    return null;
+  }
+  return BODEGA_PANEL_RANGO_PRESETS.find((preset) => {
+    const calculado = preset.calc();
+    return calculado.desde === rango.desde && calculado.hasta === rango.hasta;
+  }) || null;
+}
+
+function bodegaPanelFormatRangoTriggerLabel(rango) {
+  if (!rango) {
+    return "Hoy";
+  }
+  const preset = bodegaPanelMatchPreset(rango);
+  if (preset) {
+    return preset.label;
+  }
+  if (rango.desde === rango.hasta) {
+    return bodegaPanelFormatDiaCorto(rango.desde);
+  }
+  return `${bodegaPanelFormatDiaCorto(rango.desde)} - ${bodegaPanelFormatDiaCorto(rango.hasta)}`;
+}
+
+function findBodegaTotalRow(rows) {
+  return (Array.isArray(rows) ? rows : []).find((row) => row.codigo_legacy === "TOTAL") || null;
+}
+
+function findBodegaRow(rows, codigo) {
+  return (Array.isArray(rows) ? rows : []).find((row) => row.codigo_legacy === codigo) || null;
+}
+
+function bodegaPanelGetEffectiveTotalRow(panel, rows) {
+  if (panel.tiendaFiltro) {
+    return findBodegaRow(rows, panel.tiendaFiltro);
+  }
+  return findBodegaTotalRow(rows);
+}
+
+
+function bodegaPanelGetStoreOptions(panel) {
+  const codes = new Set();
+  (panel.inventario || []).forEach((row) => {
+    if (row.codigo_legacy && row.codigo_legacy !== "TOTAL") {
+      codes.add(row.codigo_legacy);
+    }
+  });
+  return Array.from(codes).sort((a, b) => a.localeCompare(b, "es"));
+}
+
+function bodegaPanelGetTasaValor(panel) {
+  return toFiniteNumber(panel.tasaCambio?.tasa);
+}
+
+function bodegaPanelConvertirDesdeBs(panel, valorBs) {
+  if (panel.moneda !== "USD") {
+    return toFiniteNumber(valorBs);
+  }
+  const tasa = bodegaPanelGetTasaValor(panel);
+  return tasa > 0 ? toFiniteNumber(valorBs) / tasa : 0;
+}
+
+function bodegaPanelConvertirDesdeUsd(panel, valorUsd) {
+  if (panel.moneda !== "BS") {
+    return toFiniteNumber(valorUsd);
+  }
+  const tasa = bodegaPanelGetTasaValor(panel);
+  return toFiniteNumber(valorUsd) * tasa;
+}
+
+// IMPORTANTE: recibe el valor en su moneda ORIGEN y hace la conversion aqui
+// mismo -- no hay que convertir en el llamador. Ventas/costo/ganancia nacen
+// en bolivares (Bs), asi que esta es la version por defecto.
+function bodegaPanelFormatMoneda(panel, valorBs, options = {}) {
+  const valor = bodegaPanelConvertirDesdeBs(panel, valorBs);
+  if (options.compact) {
+    return panel.moneda === "USD"
+      ? `US$ ${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(toFiniteNumber(valor))}`
+      : `Bs ${new Intl.NumberFormat("es-VE", { notation: "compact", maximumFractionDigits: 2 }).format(toFiniteNumber(valor))}`;
+  }
+  return panel.moneda === "USD" ? `US$ ${formatUsdReportAmount(valor)}` : `Bs ${formatTransferAmount(valor)}`;
+}
+
+// Igual que bodegaPanelFormatMoneda(), pero para el unico valor que nace en
+// dolares (el inventario -- ver bodegaPanelConvertirDesdeUsd).
+function bodegaPanelFormatMonedaDesdeUsd(panel, valorUsd, options = {}) {
+  const valor = bodegaPanelConvertirDesdeUsd(panel, valorUsd);
+  if (options.compact) {
+    return panel.moneda === "USD"
+      ? `US$ ${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(toFiniteNumber(valor))}`
+      : `Bs ${new Intl.NumberFormat("es-VE", { notation: "compact", maximumFractionDigits: 2 }).format(toFiniteNumber(valor))}`;
+  }
+  return panel.moneda === "USD" ? `US$ ${formatUsdReportAmount(valor)}` : `Bs ${formatTransferAmount(valor)}`;
+}
+
+function bodegaPanelFormatPercent(valor) {
+  return new Intl.NumberFormat("es-VE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    signDisplay: "exceptZero",
+  }).format(toFiniteNumber(valor));
+}
+
+function bodegaPanelCalcularMargenPct(row) {
+  const vendido = toFiniteNumber(row?.total_pago);
+  const ganancia = toFiniteNumber(row?.ganancia);
+  if (vendido <= 0) {
+    return 0;
+  }
+  return (ganancia / vendido) * 100;
+}
+
+function bodegaPanelFormatUpdatedHint(date) {
+  const diffMin = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (diffMin <= 0) {
+    return "Actualizado hace instantes";
+  }
+  if (diffMin === 1) {
+    return "Actualizado hace 1 min";
+  }
+  if (diffMin < 60) {
+    return `Actualizado hace ${diffMin} min`;
+  }
+  return `Actualizado hace ${Math.floor(diffMin / 60)} h`;
+}
+
+function bodegaPanelFormatFechaHora(fechaIso) {
+  const date = new Date(fechaIso);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const esHoy = date.toDateString() === new Date().toDateString();
+  const hora = date.toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" });
+  return esHoy ? `hoy ${hora}` : `${date.toLocaleDateString("es-VE")} ${hora}`;
+}
+
+// Compara el total del rango elegido contra panel.ventasAnterior (el mismo
+// rango, misma duracion en dias, inmediatamente anterior -- ya calculado por
+// el backend). La etiqueta sale del preset que coincida con el rango actual;
+// si es personalizado, queda un texto generico.
+function bodegaPanelGetDelta(panel, metricKey) {
+  const actualRow = bodegaPanelGetEffectiveTotalRow(panel, panel.ventas);
+  const previoRow = bodegaPanelGetEffectiveTotalRow(panel, panel.ventasAnterior);
+  if (!actualRow || !previoRow) {
+    return null;
+  }
+
+  const actual = toFiniteNumber(actualRow[metricKey]);
+  const previo = toFiniteNumber(previoRow[metricKey]);
+  if (previo === 0) {
+    return null;
+  }
+
+  const preset = bodegaPanelMatchPreset(panel.rango);
+  const etiqueta = preset ? preset.etiquetaDelta : "vs periodo anterior";
+  return { pct: ((actual - previo) / Math.abs(previo)) * 100, etiqueta };
+}
+
+function bodegaPanelGetSparklinePuntos(panel, metricKey, dias = 7) {
+  const serie = Array.isArray(panel.serieDiaria) ? panel.serieDiaria : [];
+  return serie.slice(-dias).map((row) => toFiniteNumber(row[metricKey]));
+}
+
+// Mini-grafica de tendencia: linea en el tono de-enfasis del sistema
+// (--ink-soft) con el ultimo punto resaltado en el color de acento de la
+// tarjeta -- ver bodega-api/public/app.js:renderSparkline() para el mismo
+// componente en la pagina independiente.
+function bodegaPanelRenderSparkline(puntos, toneColor) {
+  if (!Array.isArray(puntos) || puntos.length < 2) {
+    return "";
+  }
+
+  const width = 96;
+  const height = 32;
+  const padding = 4;
+  const min = Math.min(...puntos);
+  const max = Math.max(...puntos);
+  const span = max - min || 1;
+  const stepX = (width - padding * 2) / (puntos.length - 1);
+
+  const coords = puntos.map((valor, index) => ({
+    x: padding + stepX * index,
+    y: height - padding - ((valor - min) / span) * (height - padding * 2),
+  }));
+
+  const pathD = coords.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const last = coords[coords.length - 1];
+
+  return `
+    <svg class="stat-sparkline" viewBox="0 0 ${width} ${height}" aria-hidden="true" focusable="false">
+      <path d="${pathD}" fill="none" stroke="#5f6b74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.55" />
+      <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="${toneColor}" stroke="#fffaf1" stroke-width="2" />
+    </svg>
+  `;
+}
+
+function bodegaPanelRenderDelta(delta) {
+  if (!delta) {
+    return "";
+  }
+  const isUp = delta.pct >= 0;
+  return `
+    <span class="stat-delta ${isUp ? "stat-delta-up" : "stat-delta-down"}">
+      ${isUp ? "&#8599;" : "&#8600;"} ${escapeHtml(bodegaPanelFormatPercent(delta.pct))}%
+      <span class="stat-delta-label">${escapeHtml(delta.etiqueta)}</span>
+    </span>
+  `;
+}
+
+// ---- Selector de rango (boton + calendario desplegable) -------------------
+
+function bodegaPanelEnsureRangoPickerMes(panel) {
+  if (panel.rangoPickerMes) {
+    return;
+  }
+  const base = panel.rango?.hasta || bodegaPanelTodayIso();
+  const [year, month] = base.split("-").map(Number);
+  panel.rangoPickerMes = { year, month: month - 1 };
+}
+
+function bodegaPanelBuildCalendarMatrix(year, month) {
+  const primerDiaMes = new Date(Date.UTC(year, month, 1));
+  const ultimoDiaMes = new Date(Date.UTC(year, month + 1, 0));
+  const offsetInicio = (primerDiaMes.getUTCDay() + 6) % 7;
+  const offsetFin = (7 - ((ultimoDiaMes.getUTCDay() + 6) % 7) - 1) % 7;
+
+  const cursor = new Date(primerDiaMes);
+  cursor.setUTCDate(cursor.getUTCDate() - offsetInicio);
+  const fin = new Date(ultimoDiaMes);
+  fin.setUTCDate(fin.getUTCDate() + offsetFin);
+
+  const dias = [];
+  while (cursor.getTime() <= fin.getTime()) {
+    dias.push({
+      iso: cursor.toISOString().slice(0, 10),
+      day: cursor.getUTCDate(),
+      inCurrentMonth: cursor.getUTCMonth() === month,
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dias;
+}
+
+function bodegaPanelRenderCalendarGrid(panel) {
+  bodegaPanelEnsureRangoPickerMes(panel);
+  const { year, month } = panel.rangoPickerMes;
+  const dias = bodegaPanelBuildCalendarMatrix(year, month);
+  const hoy = bodegaPanelTodayIso();
+  const inicio = panel.rangoPickerInicio;
+  const rango = panel.rango || { desde: hoy, hasta: hoy };
+
+  return `
+    <div class="rango-calendar">
+      <div class="rango-calendar-header">
+        <button type="button" class="rango-calendar-nav" data-bodega-rango-mes-prev aria-label="Mes anterior">&#8249;</button>
+        <span class="rango-calendar-titulo">${escapeHtml(BODEGA_PANEL_MESES_LARGOS[month])} ${year}</span>
+        <button type="button" class="rango-calendar-nav" data-bodega-rango-mes-next aria-label="Mes siguiente">&#8250;</button>
+      </div>
+      <div class="rango-calendar-weekdays">
+        ${BODEGA_PANEL_DIAS_SEMANA_CORTOS.map((dia) => `<span>${dia}</span>`).join("")}
+      </div>
+      <div class="rango-calendar-grid">
+        ${dias
+          .map((dia) => {
+            let clase = "rango-calendar-day";
+            if (!dia.inCurrentMonth) {
+              clase += " is-outside";
+            }
+            if (dia.iso === hoy) {
+              clase += " is-today";
+            }
+            if (inicio) {
+              if (dia.iso === inicio) {
+                clase += " is-selected is-range-start";
+              }
+            } else if (dia.iso === rango.desde && dia.iso === rango.hasta) {
+              clase += " is-selected";
+            } else if (dia.iso === rango.desde) {
+              clase += " is-selected is-range-start";
+            } else if (dia.iso === rango.hasta) {
+              clase += " is-selected is-range-end";
+            } else if (dia.iso > rango.desde && dia.iso < rango.hasta) {
+              clase += " is-in-range";
+            }
+            return `<button type="button" class="${clase}" data-bodega-rango-dia="${dia.iso}">${dia.day}</button>`;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function bodegaPanelRenderRangoPickerPopover(panel) {
+  const rango = panel.rango || { desde: bodegaPanelTodayIso(), hasta: bodegaPanelTodayIso() };
+  const activo = bodegaPanelMatchPreset(rango);
+
+  return `
+    <div class="rango-picker-popover" data-bodega-rango-popover>
+      <div class="rango-picker-presets">
+        ${BODEGA_PANEL_RANGO_PRESETS.map(
+          (preset) => `
+            <button
+              type="button"
+              class="rango-preset-btn ${activo?.tipo === preset.tipo ? "is-active" : ""}"
+              data-bodega-rango-preset="${preset.tipo}"
+            >${escapeHtml(preset.label)}</button>
+          `,
+        ).join("")}
+      </div>
+      <div class="rango-picker-calendar-side">
+        <div class="bodega-controls-group rango-picker-modo" role="group" aria-label="Modo de seleccion">
+          <button type="button" class="bodega-toggle-button ${panel.rangoPickerModo === "dia" ? "is-active" : ""}" data-bodega-rango-modo="dia">Un dia</button>
+          <button type="button" class="bodega-toggle-button ${panel.rangoPickerModo === "rango" ? "is-active" : ""}" data-bodega-rango-modo="rango">Rango</button>
+        </div>
+        ${bodegaPanelRenderCalendarGrid(panel)}
+      </div>
+    </div>
+  `;
+}
+
+function bodegaPanelRenderRangoPicker(panel) {
+  const rango = panel.rango || { desde: bodegaPanelTodayIso(), hasta: bodegaPanelTodayIso() };
+  return `
+    <div class="rango-picker">
+      <button type="button" class="rango-picker-trigger" data-bodega-rango-toggle>
+        <span class="rango-picker-icon">&#128197;</span>
+        <span>${escapeHtml(bodegaPanelFormatRangoTriggerLabel(rango))}</span>
+        <span class="rango-picker-chevron">&#9662;</span>
+      </button>
+      ${panel.rangoPickerOpen ? bodegaPanelRenderRangoPickerPopover(panel) : ""}
+    </div>
+  `;
+}
+
+function bodegaPanelRenderControlsBar(panel) {
+  const storeOptions = bodegaPanelGetStoreOptions(panel);
+  const tasa = panel.tasaCambio;
+
+  return `
+    <div class="bodega-controls-bar">
+      ${bodegaPanelRenderRangoPicker(panel)}
+
+      <label class="bodega-select-wrap">
+        <span class="sr-only">Tienda</span>
+        <select data-bodega-tienda-filtro>
+          <option value="">Todas las tiendas</option>
+          ${storeOptions
+            .map(
+              (codigo) => `
+                <option value="${escapeHtml(codigo)}" ${panel.tiendaFiltro === codigo ? "selected" : ""}>${escapeHtml(codigo)}</option>
+              `,
+            )
+            .join("")}
+        </select>
+      </label>
+
+      <div class="bodega-controls-group" role="group" aria-label="Moneda">
+        <button type="button" class="bodega-toggle-button ${panel.moneda === "BS" ? "is-active" : ""}" data-bodega-moneda="BS">Bs</button>
+        <button type="button" class="bodega-toggle-button ${panel.moneda === "USD" ? "is-active" : ""}" data-bodega-moneda="USD">US$</button>
+      </div>
+
+      ${
+        tasa
+          ? `<span class="bodega-tasa-hint">Tasa Bs ${escapeHtml(formatTransferAmount(tasa.tasa))} / US$ &middot; ${escapeHtml(bodegaPanelFormatFechaHora(tasa.fecha))}</span>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+function bodegaPanelRenderSummaryCards(panel) {
+  const ventas = panel.ventas;
+  const totalVentas = bodegaPanelGetEffectiveTotalRow(panel, ventas);
+  const totalInventario = bodegaPanelGetEffectiveTotalRow(panel, panel.inventario);
+  const ganancia = toFiniteNumber(totalVentas?.ganancia);
+  const margenPct = bodegaPanelCalcularMargenPct(totalVentas);
+
+  const toneColors = { blue: "#2b6dc9", sky: "#0ea5e9", green: "#22c55e", danger: "#ab3f2f", gold: "#ba8b34" };
+  const gananciaTone = ganancia >= 0 ? "green" : "danger";
+
+  const items = [
+    {
+      label: "Vendido",
+      value: bodegaPanelFormatMoneda(panel, totalVentas?.total_pago),
+      meta: `${escapeHtml(String(totalVentas?.facturas ?? "0"))} facturas${panel.tiendaFiltro ? "" : " en todas las tiendas"}`,
+      tone: "blue",
+      delta: bodegaPanelGetDelta(panel, "total_pago"),
+      puntos: bodegaPanelGetSparklinePuntos(panel, "total_pago"),
+    },
+    {
+      label: "Costo de mercancia",
+      value: bodegaPanelFormatMoneda(panel, totalVentas?.total_costo_bs),
+      meta: "Costo de lo vendido",
+      tone: "sky",
+      delta: bodegaPanelGetDelta(panel, "total_costo_bs"),
+      puntos: bodegaPanelGetSparklinePuntos(panel, "total_costo_bs"),
+    },
+    {
+      label: "Ganancia",
+      value: bodegaPanelFormatMoneda(panel, totalVentas?.ganancia),
+      meta: `Margen ${escapeHtml(bodegaPanelFormatPercent(margenPct))}%`,
+      tone: gananciaTone,
+      delta: bodegaPanelGetDelta(panel, "ganancia"),
+      puntos: bodegaPanelGetSparklinePuntos(panel, "ganancia"),
+    },
+    {
+      label: "Inventario a costo",
+      value: bodegaPanelFormatMonedaDesdeUsd(panel, totalInventario?.valor_costo_usd, { compact: true }),
+      meta: `${escapeHtml(String(totalInventario?.articulos ?? "0"))} articulos`,
+      tone: "gold",
+      delta: null,
+      puntos: [],
+    },
+  ];
+
+  return `
+    <div class="modern-summary-grid">
+      ${items
+        .map(
+          (item) => `
+            <article class="modern-stat-card modern-stat-card-${item.tone === "danger" ? "gold" : item.tone}">
+              <div class="modern-stat-copy">
+                <span class="modern-stat-eyebrow">${escapeHtml(item.label)}</span>
+                <strong class="modern-stat-value">${escapeHtml(item.value)}</strong>
+                ${bodegaPanelRenderDelta(item.delta)}
+                <span class="modern-stat-meta">${item.meta}</span>
+              </div>
+              ${item.puntos.length ? bodegaPanelRenderSparkline(item.puntos, toneColors[item.tone]) : ""}
+            </article>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function bodegaPanelRenderAlertBanner(panel) {
+  const ventas = panel.ventas;
+  const total = bodegaPanelGetEffectiveTotalRow(panel, ventas);
+  const ganancia = toFiniteNumber(total?.ganancia);
+  if (ganancia >= 0) {
+    return "";
+  }
+
+  return `
+    <div class="flash flash-error bodega-alert-banner">
+      <span class="flash-message">
+        El costo de la mercancia vendida supera las ventas en ${escapeHtml(bodegaPanelFormatMoneda(panel, Math.abs(ganancia)))}.
+        Revisa las tiendas con margen en rojo en la tabla.
+      </span>
+    </div>
+  `;
+}
+
+function bodegaPanelRenderDesempenoTable(panel) {
+  const ventas = panel.ventas;
+  const filas = (Array.isArray(ventas) ? ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
+  const total = findBodegaTotalRow(ventas);
+  const filtradas = panel.tiendaFiltro ? filas.filter((row) => row.codigo_legacy === panel.tiendaFiltro) : filas;
+
+  const ordenadas = [...filtradas].sort((a, b) => {
+    const diff = toFiniteNumber(a.total_pago) - toFiniteNumber(b.total_pago);
+    return panel.sortDir === "asc" ? diff : -diff;
+  });
+
+  const periodoLabel = bodegaPanelFormatRangoTriggerLabel(panel.rango);
+
+  return `
+    <section class="modern-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Desempeno por tienda</h2>
+        </div>
+        <span class="modern-chip">${escapeHtml(periodoLabel.toUpperCase())}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tienda</th>
+              <th>Facturas</th>
+              <th class="bodega-sortable-th" data-bodega-sort-vendido>
+                Vendido ${panel.sortDir === "asc" ? "&#8593;" : "&#8595;"}
+              </th>
+              <th>Costo</th>
+              <th>Ganancia</th>
+              <th>Margen</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              ordenadas.length
+                ? ordenadas.map((row) => bodegaPanelRenderDesempenoRow(panel, row, false)).join("")
+                : `<tr><td colspan="6"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+            }
+            ${total && !panel.tiendaFiltro ? bodegaPanelRenderDesempenoRow(panel, total, true) : ""}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function bodegaPanelRenderDesempenoRow(panel, row, isTotal) {
+  const margenPct = bodegaPanelCalcularMargenPct(row);
+  const margenTone = Math.abs(margenPct) < 0.005 ? "neutral" : margenPct >= 0 ? "positivo" : "negativo";
+  const ganancia = toFiniteNumber(row.ganancia);
+  const gananciaTone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
+
+  return `
+    <tr class="${isTotal ? "is-selected-row" : ""}">
+      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.codigo_legacy || "-")}</td>
+      <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
+      <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_pago))}</td>
+      <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_costo_bs))}</td>
+      <td class="bodega-ganancia-cell bodega-ganancia-${gananciaTone}">${escapeHtml(bodegaPanelFormatMoneda(panel, row.ganancia))}</td>
+      <td><span class="bodega-margen-badge bodega-margen-${margenTone}">${escapeHtml(bodegaPanelFormatPercent(margenPct))}%</span></td>
+    </tr>
+  `;
+}
+
+function bodegaPanelRenderInventarioSection(panel) {
+  const filas = (Array.isArray(panel.inventario) ? panel.inventario : []).filter((row) => row.codigo_legacy !== "TOTAL");
+  const total = findBodegaTotalRow(panel.inventario);
+  const totalValor = toFiniteNumber(total?.valor_costo_usd) || 1;
+  const filtradas = panel.tiendaFiltro ? filas.filter((row) => row.codigo_legacy === panel.tiendaFiltro) : filas;
+
+  return `
+    <section class="modern-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Inventario actual (a costo)</h2>
+        </div>
+        <span class="modern-chip">VALORADO EN ${panel.moneda === "USD" ? "US$" : "BS"}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tienda</th>
+              <th>Articulos</th>
+              <th>Unidades</th>
+              <th>Valor a costo / Participacion</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              filtradas.length
+                ? filtradas.map((row) => bodegaPanelRenderInventarioRow(panel, row, totalValor, false)).join("")
+                : `<tr><td colspan="4"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+            }
+            ${total && !panel.tiendaFiltro ? bodegaPanelRenderInventarioRow(panel, total, totalValor, true) : ""}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function bodegaPanelRenderInventarioRow(panel, row, totalValor, isTotal) {
+  const valorUsd = toFiniteNumber(row.valor_costo_usd);
+  const participacion = isTotal ? 100 : Math.min(100, (valorUsd / totalValor) * 100);
+
+  return `
+    <tr class="${isTotal ? "is-selected-row" : ""}">
+      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.codigo_legacy || "-")}</td>
+      <td>${escapeHtml(String(row.articulos ?? "0"))}</td>
+      <td>${escapeHtml(formatTransferAmount(row.unidades))}</td>
+      <td>
+        <div class="bodega-participacion-cell">
+          <span>${escapeHtml(bodegaPanelFormatMonedaDesdeUsd(panel, valorUsd))}</span>
+          <span class="bodega-participacion-bar-track">
+            <span class="bodega-participacion-bar-fill" style="width:${participacion.toFixed(1)}%"></span>
+          </span>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
 function renderSystemFooter() {
   const host = window.location.hostname || "127.0.0.1";
 
@@ -9061,6 +10588,7 @@ function getDesktopViewLabelV2(view) {
     "ajuste-inventario": "Ajuste de inventario",
     "cambio-precio": "Cambio de precio",
     facturacion: "Facturacion",
+    "devolucion-factura": "Devolucion de factura",
     cajas: "Apertura de caja",
     "cierre-caja": "Cierre de caja",
     "borrador-devoluciones": "Borrador devoluciones",
@@ -9237,6 +10765,13 @@ function toDisplayValue(value) {
 
 function formatTransferAmount(value) {
   return new Intl.NumberFormat("es-VE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(toFiniteNumber(value));
+}
+
+function formatUsdReportAmount(value) {
+  return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(toFiniteNumber(value));
@@ -10602,6 +12137,12 @@ function bindShellEvents() {
         return;
       }
 
+      if (nextView === "devolucion-factura") {
+        resetInvoiceReturnState();
+        await loadInvoiceReturnOpenSales();
+        return;
+      }
+
       if (nextView === "ajuste-inventario") {
         await loadAdjustmentsMetadata();
         return;
@@ -10650,6 +12191,17 @@ function bindShellEvents() {
 
       if (nextView === "sucursales") {
         await loadSucursales();
+        return;
+      }
+
+      if (nextView === "usuarios") {
+        await loadUserGroups({ renderAfter: false });
+        await loadUsers();
+        return;
+      }
+
+      if (nextView === "desktop" || nextView === "todas-tiendas") {
+        await loadBodegaPanelResumen();
         return;
       }
 
@@ -10731,6 +12283,106 @@ function bindShellEvents() {
       await loadRoleAccess();
     });
 
+  document
+    .querySelector("[data-refresh-bodega-panel]")
+    ?.addEventListener("click", async () => {
+      await loadBodegaPanelResumen();
+    });
+
+  // Cierra el desplegable del calendario si el clic/Escape fue fuera de el.
+  // Registrado UNA sola vez (guardia por propiedad estatica en la funcion,
+  // mismo patron que bindFacturacionEvents.cajaShortcutBound mas abajo) --
+  // bindShellEvents() corre en cada render(), asi que sin esta guardia se
+  // irian apilando listeners duplicados en document.
+  if (!bindShellEvents.bodegaRangoOutsideBound) {
+    bindShellEvents.bodegaRangoOutsideBound = true;
+    document.addEventListener("click", () => {
+      if (state.bodegaPanel.rangoPickerOpen) {
+        state.bodegaPanel.rangoPickerOpen = false;
+        state.bodegaPanel.rangoPickerInicio = null;
+        render();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.bodegaPanel.rangoPickerOpen) {
+        state.bodegaPanel.rangoPickerOpen = false;
+        state.bodegaPanel.rangoPickerInicio = null;
+        render();
+      }
+    });
+  }
+
+  document.querySelector("[data-bodega-rango-toggle]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    state.bodegaPanel.rangoPickerOpen = !state.bodegaPanel.rangoPickerOpen;
+    if (state.bodegaPanel.rangoPickerOpen) {
+      state.bodegaPanel.rangoPickerInicio = null;
+      state.bodegaPanel.rangoPickerMes = null;
+    }
+    render();
+  });
+
+  document.querySelectorAll("[data-bodega-rango-preset]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const preset = BODEGA_PANEL_RANGO_PRESETS.find((item) => item.tipo === button.getAttribute("data-bodega-rango-preset"));
+      if (preset) {
+        bodegaPanelSeleccionarRango(preset.calc());
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-bodega-rango-modo]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.bodegaPanel.rangoPickerModo = button.getAttribute("data-bodega-rango-modo");
+      state.bodegaPanel.rangoPickerInicio = null;
+      render();
+    });
+  });
+
+  document.querySelector("[data-bodega-rango-mes-prev]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const mes = state.bodegaPanel.rangoPickerMes;
+    state.bodegaPanel.rangoPickerMes = { year: mes.month === 0 ? mes.year - 1 : mes.year, month: (mes.month + 11) % 12 };
+    render();
+  });
+
+  document.querySelector("[data-bodega-rango-mes-next]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const mes = state.bodegaPanel.rangoPickerMes;
+    state.bodegaPanel.rangoPickerMes = { year: mes.month === 11 ? mes.year + 1 : mes.year, month: (mes.month + 1) % 12 };
+    render();
+  });
+
+  document.querySelectorAll("[data-bodega-rango-dia]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      bodegaPanelSeleccionarDiaCalendario(button.getAttribute("data-bodega-rango-dia"));
+    });
+  });
+
+  document.querySelector("[data-bodega-rango-popover]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+
+  document.querySelectorAll("[data-bodega-moneda]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.bodegaPanel.moneda = button.getAttribute("data-bodega-moneda");
+      render();
+    });
+  });
+
+  document.querySelector("[data-bodega-tienda-filtro]")?.addEventListener("change", (event) => {
+    state.bodegaPanel.tiendaFiltro = event.target.value || "";
+    render();
+  });
+
+  document.querySelector("[data-bodega-sort-vendido]")?.addEventListener("click", () => {
+    state.bodegaPanel.sortDir = state.bodegaPanel.sortDir === "asc" ? "desc" : "asc";
+    render();
+  });
+
   bindArticleEvents();
   bindInventoryExistenceEvents();
   bindTransferEvents();
@@ -10738,6 +12390,7 @@ function bindShellEvents() {
   bindAdjustmentEvents();
   bindPriceChangeEvents();
   bindSucursalEvents();
+  bindUsersEvents();
   bindClienteEvents();
   bindProveedoresEvents();
   bindTrabajadorEvents();
@@ -10874,7 +12527,7 @@ function bindFacturacionEvents() {
           `Lista de precios del articulo ${selectedLineIndex + 1}: ${getFacturacionPriceListLabel(nextPriceList)}.`,
           "success",
         );
-        render();
+        focusFacturacionRowHandle(selectedLineIndex + 1);
         return;
       }
 
@@ -10893,6 +12546,33 @@ function bindFacturacionEvents() {
         "info",
       );
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-facturacion-action]").forEach((button) => {
+    button.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp"].includes(event.key)) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (event.key === "ArrowUp") {
+        focusFacturacionSelectedOrFirstRowHandle();
+        return;
+      }
+
+      const actionButtons = Array.from(
+        document.querySelectorAll("[data-facturacion-action]"),
+      );
+      const index = actionButtons.indexOf(button);
+      const target =
+        event.key === "ArrowRight"
+          ? actionButtons[index + 1]
+          : actionButtons[index - 1];
+      if (target instanceof HTMLElement) {
+        target.focus();
+      }
     });
   });
 
@@ -11217,22 +12897,6 @@ function bindFacturacionEvents() {
     });
 
   document.querySelectorAll("[data-facturacion-row-handle]").forEach((handle) => {
-    const focusRowHandle = (rowNumber) => {
-      const normalizedRowNumber = Math.max(
-        1,
-        Math.min(rowNumber, FACTURACION_ITEM_LIMIT),
-      );
-      render();
-      queueMicrotask(() => {
-        const target = document.querySelector(
-          `[data-facturacion-row-handle="${normalizedRowNumber}"]`,
-        );
-        if (target instanceof HTMLElement) {
-          target.focus();
-        }
-      });
-    };
-
     handle.addEventListener("click", (event) => {
       event.stopPropagation();
       const rowNumber = Number.parseInt(
@@ -11245,7 +12909,7 @@ function bindFacturacionEvents() {
 
       selectFacturacionLine(rowNumber - 1);
       clearFlash();
-      focusRowHandle(rowNumber);
+      focusFacturacionRowHandle(rowNumber);
     });
 
     handle.addEventListener("keydown", (event) => {
@@ -11259,25 +12923,48 @@ function bindFacturacionEvents() {
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        selectFacturacionLine(Math.min(rowNumber, FACTURACION_ITEM_LIMIT - 1));
-        focusRowHandle(rowNumber + 1);
+        if (rowNumber >= FACTURACION_ITEM_LIMIT) {
+          focusFacturacionElement('[data-facturacion-action="descuento"]');
+          return;
+        }
+        selectFacturacionLine(rowNumber);
+        focusFacturacionRowHandle(rowNumber + 1);
         return;
       }
 
       if (event.key === "ArrowUp") {
         event.preventDefault();
-        selectFacturacionLine(Math.max(rowNumber - 2, 0));
-        focusRowHandle(rowNumber - 1);
+        if (rowNumber <= 1) {
+          focusFacturacionElement("[data-facturacion-contingencia]");
+          return;
+        }
+        selectFacturacionLine(rowNumber - 2);
+        focusFacturacionRowHandle(rowNumber - 1);
         return;
       }
 
-      if (["Delete", "Del", "Supr"].includes(event.key)) {
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        focusFacturacionLineInput(rowNumber, "codigo");
+        return;
+      }
+
+      if (["Delete", "Del", "Supr", "Backspace"].includes(event.key)) {
         event.preventDefault();
         if (!removeFacturacionLine(rowNumber - 1)) {
           return;
         }
         clearFlash();
-        focusRowHandle(rowNumber);
+        focusFacturacionRowHandle(rowNumber);
+        return;
+      }
+
+      if (event.key === " " || event.key === "Spacebar") {
+        event.preventDefault();
+        selectFacturacionLine(rowNumber - 1);
+        document
+          .querySelector('[data-facturacion-action="cambiar-lista"]')
+          ?.click();
       }
     });
   });
@@ -11304,23 +12991,61 @@ function bindFacturacionEvents() {
   document
     .querySelector("[data-facturacion-cliente-codigo]")
     ?.addEventListener("keydown", async (event) => {
+      if (
+        event.key === "ArrowRight" &&
+        isFacturacionInputCaretAtEnd(event.currentTarget)
+      ) {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-open-cliente-lookup]");
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-vendedor-cedula]");
+        return;
+      }
+
       if (event.key !== "Enter") {
         return;
       }
 
       event.preventDefault();
       await resolveFacturacionClienteFromField();
+      focusFacturacionElement("[data-facturacion-vendedor-cedula]");
     });
 
   document
     .querySelector("[data-facturacion-vendedor-cedula]")
     ?.addEventListener("keydown", async (event) => {
+      if (
+        event.key === "ArrowRight" &&
+        isFacturacionInputCaretAtEnd(event.currentTarget)
+      ) {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-open-vendedor-lookup]");
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-cliente-codigo]");
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-contingencia]");
+        return;
+      }
+
       if (event.key !== "Enter") {
         return;
       }
 
       event.preventDefault();
       await resolveFacturacionTrabajadorFromField();
+      focusFacturacionElement("[data-facturacion-contingencia]");
     });
 
   document
@@ -11330,6 +13055,40 @@ function bindFacturacionEvents() {
       clearFlash();
       render();
     });
+
+  document
+    .querySelector("[data-facturacion-contingencia]")
+    ?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const checkbox = event.currentTarget;
+        if (checkbox instanceof HTMLInputElement) {
+          checkbox.checked = true;
+          checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        queueMicrotask(() => {
+          const target = document.querySelector(
+            "[data-facturacion-contingencia]",
+          );
+          if (target instanceof HTMLElement) {
+            target.focus();
+          }
+        });
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-vendedor-cedula]");
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusFacturacionSelectedOrFirstRowHandle();
+      }
+    });
+
   document
     .querySelector("[data-facturacion-open-vendedor-lookup]")
     ?.addEventListener("click", async () => {
@@ -11338,10 +13097,46 @@ function bindFacturacionEvents() {
     });
 
   document
+    .querySelector("[data-facturacion-open-vendedor-lookup]")
+    ?.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-vendedor-cedula]");
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-open-cliente-lookup]");
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-contingencia]");
+      }
+    });
+
+  document
     .querySelector("[data-facturacion-open-cliente-lookup]")
     ?.addEventListener("click", async () => {
       captureFacturacionDraft();
       await openFacturacionClientEditor();
+    });
+
+  document
+    .querySelector("[data-facturacion-open-cliente-lookup]")
+    ?.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-cliente-codigo]");
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusFacturacionElement("[data-facturacion-open-vendedor-lookup]");
+      }
     });
 
   document
@@ -11450,13 +13245,37 @@ function bindFacturacionEvents() {
 
         if (event.key === "ArrowDown") {
           event.preventDefault();
+          if (rowNumber >= FACTURACION_ITEM_LIMIT) {
+            focusFacturacionElement('[data-facturacion-action="descuento"]');
+            return;
+          }
           focusFacturacionLineInput(rowNumber + 1);
           return;
         }
 
         if (event.key === "ArrowUp") {
           event.preventDefault();
+          if (rowNumber <= 1) {
+            focusFacturacionElement("[data-facturacion-contingencia]");
+            return;
+          }
           focusFacturacionLineInput(rowNumber - 1);
+          return;
+        }
+
+        if (event.key === "ArrowRight" && isFacturacionInputCaretAtEnd(input)) {
+          event.preventDefault();
+          focusFacturacionLineInput(rowNumber, "cantidad", {
+            selectAll: false,
+            cursorPosition: "start",
+          });
+          return;
+        }
+
+        if (event.key === "ArrowLeft" && isFacturacionInputCaretAtStart(input)) {
+          event.preventDefault();
+          selectFacturacionLine(rowNumber - 1);
+          focusFacturacionRowHandle(rowNumber);
           return;
         }
 
@@ -11517,6 +13336,10 @@ function bindFacturacionEvents() {
 
         if (event.key === "ArrowDown") {
           event.preventDefault();
+          if (rowNumber >= FACTURACION_ITEM_LIMIT) {
+            focusFacturacionElement('[data-facturacion-action="descuento"]');
+            return;
+          }
           focusFacturacionLineInput(rowNumber + 1, "cantidad", {
             selectAll: false,
           });
@@ -11525,9 +13348,19 @@ function bindFacturacionEvents() {
 
         if (event.key === "ArrowUp") {
           event.preventDefault();
+          if (rowNumber <= 1) {
+            focusFacturacionElement("[data-facturacion-contingencia]");
+            return;
+          }
           focusFacturacionLineInput(rowNumber - 1, "cantidad", {
             selectAll: false,
           });
+          return;
+        }
+
+        if (event.key === "ArrowLeft" && isFacturacionInputCaretAtStart(input)) {
+          event.preventDefault();
+          focusFacturacionLineInput(rowNumber, "codigo");
           return;
         }
 
@@ -13621,6 +15454,41 @@ function bindTransferEvents() {
     });
   }
 
+  const invoiceReturnSearchForm = document.getElementById("invoice-return-search-form");
+  if (invoiceReturnSearchForm) {
+    invoiceReturnSearchForm.addEventListener("input", (event) => {
+      state.invoiceReturn.search = readInvoiceReturnSearch(invoiceReturnSearchForm);
+      const fieldName = event.target?.getAttribute?.("name") || "serie";
+      renderInvoiceReturnAndFocusSearch(fieldName);
+    });
+
+    invoiceReturnSearchForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      state.invoiceReturn.search = readInvoiceReturnSearch(invoiceReturnSearchForm);
+      await loadInvoiceReturnSale(state.invoiceReturn.search.serie, state.invoiceReturn.search.numeroFactura);
+    });
+  }
+
+  document.querySelector("[data-clear-invoice-return]")?.addEventListener("click", () => {
+    clearInvoiceReturnSale();
+  });
+
+  document.querySelector("[data-back-invoice-return]")?.addEventListener("click", () => {
+    clearInvoiceReturnSale();
+  });
+
+  document.querySelectorAll("[data-invoice-return-open-sale]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const numeroFactura = button.getAttribute("data-invoice-return-open-sale") || "";
+      const serie = button.getAttribute("data-invoice-return-open-sale-serie") || "";
+      await loadInvoiceReturnSaleFromOpenSale(serie, numeroFactura);
+    });
+  });
+
+  document.querySelector("[data-confirm-invoice-return]")?.addEventListener("click", async () => {
+    await submitInvoiceReturn();
+  });
+
   document.querySelector("[data-new-transfer]")?.addEventListener("click", () => {
     resetTransferDraft();
     clearFlash();
@@ -14184,6 +16052,81 @@ function bindSucursalEvents() {
       render();
     }
   };
+}
+
+function bindUsersEvents() {
+  document
+    .querySelector("[data-refresh-users]")
+    ?.addEventListener("click", async () => {
+      await loadUsers();
+    });
+
+  document.querySelector("[data-new-user]")?.addEventListener("click", () => {
+    resetUserDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelectorAll("[data-delete-user]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const codUsuario = button.getAttribute("data-delete-user") || "";
+      if (!codUsuario) {
+        return;
+      }
+
+      await deleteUser(codUsuario);
+    });
+  });
+
+  document.querySelector("[data-user-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+  document
+    .querySelector("[data-user-search]")
+    ?.addEventListener("input", (event) => {
+      state.users.search = event.target.value || "";
+      render();
+    });
+
+  document.querySelectorAll("[data-user-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const codUsuario = button.getAttribute("data-user-select") || "";
+      if (!codUsuario) {
+        return;
+      }
+
+      const found = (state.users.items || []).find(
+        (item) => String(item.codUsuario || "") === codUsuario,
+      );
+      if (!found) {
+        return;
+      }
+
+      state.users.selectedCodUsuario = codUsuario;
+      state.users.draft = userToDraft(found);
+      clearFlash();
+      render();
+    });
+  });
+
+  const userForm = document.getElementById("user-form");
+  if (userForm) {
+    userForm.addEventListener("input", () => {
+      captureUserDraft();
+    });
+
+    userForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureUserDraft();
+      await saveUser();
+    });
+  }
 }
 
 function bindTrabajadorEvents() {
@@ -15722,6 +17665,16 @@ async function closeCashRegister(serie, fecha, horaCierre) {
     return;
   }
 
+  const pendingFrozenDrafts = collectAllFacturacionFrozenDrafts();
+  if (pendingFrozenDrafts.length > 0) {
+    setFlash(
+      `No se puede cerrar la caja: hay ${pendingFrozenDrafts.length} factura(s) congelada(s) sin retomar en esta PC. Retomalas o descartalas antes de cerrar la caja.`,
+      "error",
+    );
+    render();
+    return;
+  }
+
   const confirmed = window.confirm(
     `Se cerrara la caja ${normalizedSerie} del ${formatDateOnlyDisplay(normalizedFecha)}. Deseas continuar?`,
   );
@@ -16745,6 +18698,115 @@ async function loadSucursalForEdit(codigo) {
   }
 }
 
+async function loadUsers(options = {}) {
+  const { renderAfter = true } = options;
+  state.users.loading = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/users");
+    state.users.items = Array.isArray(response.usuarios) ? response.usuarios : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar los usuarios: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.users.loading = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadUserGroups(options = {}) {
+  const { renderAfter = true } = options;
+  state.users.loadingGroups = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/users/groups");
+    state.users.groups = Array.isArray(response.grupos) ? response.grupos : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar los roles: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.users.loadingGroups = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function loadBodegaPanelResumen(options = {}) {
+  if (!userCanViewBodegaPanel()) {
+    return;
+  }
+
+  const { renderAfter = true } = options;
+  if (!state.bodegaPanel.rango) {
+    state.bodegaPanel.rango = { desde: bodegaPanelTodayIso(), hasta: bodegaPanelTodayIso() };
+  }
+  state.bodegaPanel.loading = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const params = new URLSearchParams({
+      desde: state.bodegaPanel.rango.desde,
+      hasta: state.bodegaPanel.rango.hasta,
+    });
+    const response = await apiFetch(`/bodega-panel/resumen?${params.toString()}`);
+    state.bodegaPanel.disponible = Boolean(response.disponible);
+    state.bodegaPanel.motivo = response.motivo || "";
+    state.bodegaPanel.ventas = Array.isArray(response.ventas) ? response.ventas : [];
+    state.bodegaPanel.ventasAnterior = Array.isArray(response.ventasAnterior) ? response.ventasAnterior : [];
+    state.bodegaPanel.inventario = Array.isArray(response.inventario) ? response.inventario : [];
+    state.bodegaPanel.serieDiaria = Array.isArray(response.serieDiaria) ? response.serieDiaria : [];
+    state.bodegaPanel.tasaCambio = response.tasaCambio || null;
+    state.bodegaPanel.lastUpdated = new Date();
+  } catch (error) {
+    console.error(error);
+    state.bodegaPanel.disponible = false;
+    state.bodegaPanel.motivo = extractErrorMessage(error);
+  } finally {
+    state.bodegaPanel.loading = false;
+    state.bodegaPanel.loaded = true;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+function bodegaPanelSeleccionarRango(rango) {
+  state.bodegaPanel.rango = rango;
+  state.bodegaPanel.rangoPickerOpen = false;
+  state.bodegaPanel.rangoPickerInicio = null;
+  state.bodegaPanel.rangoPickerMes = null;
+  void loadBodegaPanelResumen();
+}
+
+function bodegaPanelSeleccionarDiaCalendario(iso) {
+  if (state.bodegaPanel.rangoPickerModo === "dia") {
+    bodegaPanelSeleccionarRango({ desde: iso, hasta: iso });
+    return;
+  }
+
+  if (!state.bodegaPanel.rangoPickerInicio) {
+    state.bodegaPanel.rangoPickerInicio = iso;
+    render();
+    return;
+  }
+
+  const inicio = state.bodegaPanel.rangoPickerInicio;
+  const desde = inicio < iso ? inicio : iso;
+  const hasta = inicio < iso ? iso : inicio;
+  bodegaPanelSeleccionarRango({ desde, hasta });
+}
+
 async function loadClientes(options = {}) {
   const renderAfter = options.renderAfter !== false;
   state.clientes.loading = true;
@@ -17094,6 +19156,81 @@ async function deleteSucursal(codigo) {
     setFlash(extractErrorMessage(error), "error");
   } finally {
     state.sucursales.deleting = false;
+    render();
+  }
+}
+
+async function saveUser() {
+  const draft = state.users.draft || createEmptyUserDraft();
+  const isCreate = !draft.originalCodUsuario;
+
+  if (!draft.grupos.length) {
+    setFlash("Selecciona al menos un rol para el usuario.", "error");
+    render();
+    return;
+  }
+
+  state.users.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildUserPayload(draft, { isCreate });
+    const response = isCreate
+      ? await apiFetch("/users", { method: "POST", body: payload })
+      : await apiFetch(`/users/${encodeURIComponent(draft.originalCodUsuario)}`, {
+          method: "PATCH",
+          body: payload,
+        });
+
+    state.users.selectedCodUsuario = response.usuario?.codUsuario || draft.codUsuario || "";
+    state.users.draft = userToDraft(response.usuario);
+    await loadUsers({ renderAfter: false });
+    setFlash(
+      isCreate
+        ? `Usuario ${response.usuario?.codUsuario || ""} creado correctamente.`
+        : `Usuario ${response.usuario?.codUsuario || draft.originalCodUsuario} actualizado correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.users.saving = false;
+    render();
+  }
+}
+
+async function deleteUser(codUsuario) {
+  const normalizedCode = String(codUsuario || "").trim();
+  if (!normalizedCode) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Se eliminara el usuario ${normalizedCode}. Deseas continuar?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  state.users.deleting = true;
+  clearFlash();
+  render();
+
+  try {
+    await apiFetch(`/users/${encodeURIComponent(normalizedCode)}`, {
+      method: "DELETE",
+    });
+
+    resetUserDraft();
+    await loadUsers({ renderAfter: false });
+    setFlash(`Usuario ${normalizedCode} eliminado correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.users.deleting = false;
     render();
   }
 }
@@ -18712,6 +20849,82 @@ function sucursalToDraft(sucursal) {
     telefono: sucursal?.telefono || "",
     status: String(sucursal?.status ?? 1),
     porcentajeDeRedondeo: toInputValue(sucursal?.porcentajeDeRedondeo ?? "0"),
+  };
+}
+
+function resetUserDraft() {
+  state.users.selectedCodUsuario = "";
+  state.users.draft = createEmptyUserDraft();
+}
+
+function createEmptyUserDraft() {
+  return {
+    originalCodUsuario: "",
+    codUsuario: "",
+    nombreUsuario: "",
+    password: "",
+    status: "1",
+    grupos: [],
+  };
+}
+
+function captureUserDraft() {
+  const form = document.getElementById("user-form");
+  if (!form) {
+    return;
+  }
+
+  state.users.draft = readUserDraft(form);
+}
+
+function readUserDraft(form) {
+  const currentDraft = state.users.draft || createEmptyUserDraft();
+  const grupos = Array.from(
+    form.querySelectorAll('input[name="grupos"]:checked'),
+  ).map((input) => input.value);
+
+  return {
+    originalCodUsuario: currentDraft.originalCodUsuario || "",
+    codUsuario: readFormFieldValue(form, "codUsuario", currentDraft.codUsuario),
+    nombreUsuario: readFormFieldValue(form, "nombreUsuario", currentDraft.nombreUsuario),
+    password: readFormFieldValue(form, "password", currentDraft.password || ""),
+    status: readFormFieldValue(form, "status", currentDraft.status || "1"),
+    grupos,
+  };
+}
+
+function buildUserPayload(draft, options = {}) {
+  const { isCreate = false } = options;
+  const payload = {
+    status: Number.parseInt(String(draft.status ?? "1"), 10),
+    grupos: Array.isArray(draft.grupos) ? Array.from(new Set(draft.grupos)) : [],
+  };
+
+  if (isCreate) {
+    payload.codUsuario = String(draft.codUsuario || "").trim();
+  }
+
+  const nombreUsuario = String(draft.nombreUsuario || "").trim();
+  if (nombreUsuario) {
+    payload.nombreUsuario = nombreUsuario;
+  }
+
+  const password = String(draft.password || "").trim();
+  if (isCreate || password) {
+    payload.password = password;
+  }
+
+  return payload;
+}
+
+function userToDraft(usuario) {
+  return {
+    originalCodUsuario: usuario?.codUsuario || "",
+    codUsuario: usuario?.codUsuario || "",
+    nombreUsuario: usuario?.nombreUsuario || "",
+    password: "",
+    status: String(usuario?.status ?? 1),
+    grupos: Array.isArray(usuario?.grupos) ? usuario.grupos.map((group) => group.codigo) : [],
   };
 }
 
@@ -21505,6 +23718,36 @@ function writeStoredFacturacionFrozenDrafts(records) {
   }
 }
 
+// Las facturas congeladas se guardan por usuario (una clave de localStorage
+// por CodUsuario, ver buildFacturacionFrozenStorageKey). Para el cierre de
+// caja hay que revisar las de TODOS los usuarios en esta PC, no solo la del
+// usuario que esta cerrando -- de ahi que se recorran todas las claves de
+// localStorage con el prefijo en vez de leer una sola.
+function collectAllFacturacionFrozenDrafts() {
+  const prefix = `${FACTURACION_FROZEN_STORAGE_KEY}.`;
+  const drafts = [];
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key || !key.startsWith(prefix)) {
+        continue;
+      }
+      try {
+        const raw = window.localStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(parsed)) {
+          drafts.push(...parsed);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  } catch (error) {
+    console.error(error);
+  }
+  return drafts;
+}
+
 function openFacturacionDiscountAuthModal() {
   state.facturacion.discountAuth = {
     open: true,
@@ -22111,6 +24354,67 @@ function selectFacturacionLine(index) {
   state.facturacion.selectedLineIndex = index;
 }
 
+function focusFacturacionRowHandle(rowNumber) {
+  const normalizedRowNumber = Math.max(
+    1,
+    Math.min(rowNumber, FACTURACION_ITEM_LIMIT),
+  );
+  render();
+  queueMicrotask(() => {
+    const target = document.querySelector(
+      `[data-facturacion-row-handle="${normalizedRowNumber}"]`,
+    );
+    if (target instanceof HTMLElement) {
+      target.focus();
+    }
+  });
+}
+
+function focusFacturacionSelectedOrFirstRowHandle() {
+  const selectedIndex = getFacturacionSelectedLineIndex();
+  const rowNumber = selectedIndex >= 0 ? selectedIndex + 1 : 1;
+  selectFacturacionLine(rowNumber - 1);
+  focusFacturacionRowHandle(rowNumber);
+}
+
+function isFacturacionInputCaretAtStart(el) {
+  if (!(el instanceof HTMLInputElement)) {
+    return false;
+  }
+
+  // Un texto totalmente seleccionado (ej. al enfocar el campo con .select())
+  // tambien cuenta como estar en el borde izquierdo: la primera flecha debe
+  // navegar, no solo colapsar la seleccion.
+  return (
+    el.selectionStart === 0 &&
+    (el.selectionEnd === 0 || el.selectionEnd === el.value.length)
+  );
+}
+
+function isFacturacionInputCaretAtEnd(el) {
+  if (!(el instanceof HTMLInputElement)) {
+    return false;
+  }
+
+  return (
+    el.selectionEnd === el.value.length &&
+    (el.selectionStart === el.value.length || el.selectionStart === 0)
+  );
+}
+
+function focusFacturacionElement(selector) {
+  const target = document.querySelector(selector);
+  if (!(target instanceof HTMLElement) || target.disabled) {
+    return false;
+  }
+
+  target.focus();
+  if (target instanceof HTMLInputElement && target.type === "text") {
+    target.select();
+  }
+  return true;
+}
+
 function focusFacturacionLineInput(
   rowNumber,
   fieldName = "codigo",
@@ -22120,7 +24424,7 @@ function focusFacturacionLineInput(
     return;
   }
 
-  const { selectAll = fieldName === "codigo" } = options;
+  const { selectAll = fieldName === "codigo", cursorPosition = "end" } = options;
   selectFacturacionLine(rowNumber - 1);
   const selector =
     fieldName === "cantidad"
@@ -22137,7 +24441,7 @@ function focusFacturacionLineInput(
     return;
   }
 
-  const cursorAt = target.value.length;
+  const cursorAt = cursorPosition === "start" ? 0 : target.value.length;
   if (typeof target.setSelectionRange === "function") {
     target.setSelectionRange(cursorAt, cursorAt);
   }
@@ -23971,19 +26275,36 @@ function userIsSystemOperator() {
   return getCurrentUserGroupCodes().includes("SISTEMA");
 }
 
+function userCanViewBodegaPanel() {
+  return userIsSystemOperator() || getCurrentUserGroupCodes().includes("JEFE");
+}
+
 function userCanAccessView(view) {
   const normalizedView = String(view || "desktop")
     .trim()
     .toLowerCase();
+
+  if (normalizedView === "usuarios") {
+    return userIsSystemOperator();
+  }
+
+  if (normalizedView === "todas-tiendas") {
+    return userCanViewBodegaPanel();
+  }
 
   if (userCanManageAllModules()) {
     return true;
   }
 
   if (userIsCashierOperator()) {
-    return ["desktop", "facturacion", "cajas", "cierre-caja", "ayuda"].includes(
-      normalizedView,
-    );
+    return [
+      "desktop",
+      "facturacion",
+      "devolucion-factura",
+      "cajas",
+      "cierre-caja",
+      "ayuda",
+    ].includes(normalizedView);
   }
 
   return true;
