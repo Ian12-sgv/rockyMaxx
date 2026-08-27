@@ -183,11 +183,23 @@ export class ValidacionesService {
   // Cantidad neta vendida (descontando lo devuelto) por costo VIGENTE del
   // articulo, en dolares -- igual formula que
   // cajas.service.ts#calculateGeneralCloseInventoryCost.
+  //
+  // ROUND(..., 2) por LINEA (no en costo_dolar antes de multiplicar -- el
+  // reporte real solo redondea el PRODUCTO cantidad*costoUnitario, ver
+  // cajas.service.ts:777 costoTotal = costoUnitario.mul(cantidad).toDecimalPlaces(2))
+  // es necesario para cuadrar centavo a centavo con ese reporte: sumar
+  // primero con precision completa y redondear una sola vez al final da un
+  // total ligeramente distinto (diferencia de centavos) que redondear cada
+  // linea y sumar los redondeados -- confirmado contra datos reales
+  // (diferencia de USD 0.08 sobre 319 lineas antes de este cambio).
   private static readonly COSTO_ACTUAL_EXPR = Prisma.sql`
-    GREATEST(
-      (d."payload_json" ->> 'Cantidad')::numeric - COALESCE((d."payload_json" ->> 'CantidadDevuelta')::numeric, 0),
-      0
-    ) * COALESCE(inv.costo_dolar, 0)
+    ROUND(
+      GREATEST(
+        (d."payload_json" ->> 'Cantidad')::numeric - COALESCE((d."payload_json" ->> 'CantidadDevuelta')::numeric, 0),
+        0
+      ) * COALESCE(inv.costo_dolar, 0),
+      2
+    )
   `;
 
   // Serie diaria (ultimos N dias) de la misma fuente/conversion que
