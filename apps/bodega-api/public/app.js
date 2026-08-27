@@ -18,24 +18,121 @@ const state = {
   view: "login",
   loading: false,
   flash: null,
-  periodo: "hoy",
+  rango: null, // { desde, hasta } en yyyy-MM-dd -- se inicializa a "hoy" en loadPanel()
+  rangoPickerOpen: false,
+  rangoPickerModo: "dia", // "dia" | "rango"
+  rangoPickerMes: null, // { year, month } (month 0-indexado) del mes que muestra el calendario
+  rangoPickerInicio: null, // primer dia clicado en modo "rango", antes del segundo click
   moneda: "BS",
   tiendaFiltro: "",
   sortDir: "desc",
-  ventasHoy: [],
-  ventas7Dias: [],
-  ventasMes: [],
+  ventas: [],
+  ventasAnterior: [],
   inventario: [],
   serieDiaria: [],
   tasaCambio: null,
   lastUpdated: null,
 };
 
-const PERIODOS = [
-  { key: "hoy", label: "Hoy" },
-  { key: "7dias", label: "7 dias" },
-  { key: "mes", label: "Mes" },
+// ---- Fechas (todo en yyyy-MM-dd, UTC, para no arrastrar zona horaria) -----
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysIso(iso, dias) {
+  const date = new Date(`${iso}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + dias);
+  return date.toISOString().slice(0, 10);
+}
+
+function firstDayOfMonthIso(iso) {
+  return `${iso.slice(0, 7)}-01`;
+}
+
+function lastDayOfMonthIso(iso) {
+  const primerDiaMesSiguiente = addMonthsIso(firstDayOfMonthIso(iso), 1);
+  return addDaysIso(primerDiaMesSiguiente, -1);
+}
+
+function addMonthsIso(iso, meses) {
+  const [year, month] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + meses, 1));
+  return date.toISOString().slice(0, 10);
+}
+
+const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const MESES_LARGOS = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
+const DIAS_SEMANA_CORTOS = ["lu", "ma", "mi", "ju", "vi", "sa", "do"];
+
+function formatDiaCorto(iso) {
+  const [year, month, day] = iso.split("-").map(Number);
+  return `${day} ${MESES_CORTOS[month - 1]}`;
+}
+
+const RANGO_PRESETS = [
+  { tipo: "hoy", label: "Hoy", etiquetaDelta: "vs ayer", calc: () => ({ desde: todayIso(), hasta: todayIso() }) },
+  {
+    tipo: "ayer",
+    label: "Ayer",
+    etiquetaDelta: "vs el dia anterior",
+    calc: () => ({ desde: addDaysIso(todayIso(), -1), hasta: addDaysIso(todayIso(), -1) }),
+  },
+  {
+    tipo: "7dias",
+    label: "Ultimos 7 dias",
+    etiquetaDelta: "vs semana anterior",
+    calc: () => ({ desde: addDaysIso(todayIso(), -6), hasta: todayIso() }),
+  },
+  {
+    tipo: "30dias",
+    label: "Ultimos 30 dias",
+    etiquetaDelta: "vs periodo anterior",
+    calc: () => ({ desde: addDaysIso(todayIso(), -29), hasta: todayIso() }),
+  },
+  {
+    tipo: "mesActual",
+    label: "Mes en curso",
+    etiquetaDelta: "vs periodo anterior",
+    calc: () => ({ desde: firstDayOfMonthIso(todayIso()), hasta: todayIso() }),
+  },
+  {
+    tipo: "mesPasado",
+    label: "Mes pasado",
+    etiquetaDelta: "vs el mes anterior a ese",
+    calc: () => {
+      const hasta = addDaysIso(firstDayOfMonthIso(todayIso()), -1);
+      return { desde: firstDayOfMonthIso(hasta), hasta };
+    },
+  },
+];
+
+function matchPreset(rango) {
+  if (!rango) {
+    return null;
+  }
+  return RANGO_PRESETS.find((preset) => {
+    const calculado = preset.calc();
+    return calculado.desde === rango.desde && calculado.hasta === rango.hasta;
+  }) || null;
+}
+
+function formatRangoTriggerLabel(rango) {
+  if (!rango) {
+    return "Hoy";
+  }
+  const preset = matchPreset(rango);
+  if (preset) {
+    return preset.label;
+  }
+  if (rango.desde === rango.hasta) {
+    return formatDiaCorto(rango.desde);
+  }
+  return `${formatDiaCorto(rango.desde)} - ${formatDiaCorto(rango.hasta)}`;
+}
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => {
@@ -213,16 +310,6 @@ function renderLoginView() {
 
 // ---- Datos derivados del estado -------------------------------------------------
 
-function getVentasPorPeriodo() {
-  if (state.periodo === "7dias") {
-    return state.ventas7Dias;
-  }
-  if (state.periodo === "mes") {
-    return state.ventasMes;
-  }
-  return state.ventasHoy;
-}
-
 function findRow(rows, codigo) {
   return (Array.isArray(rows) ? rows : []).find((row) => row.codigo_legacy === codigo) || null;
 }
@@ -309,40 +396,27 @@ function calcularMargenPct(row) {
   return (ganancia / vendido) * 100;
 }
 
-// vs-ayer (hoy) o vs-los-7-dias-anteriores (7 dias), calculado sobre la
-// misma serie diaria de 14 dias que alimenta las mini-graficas -- para "mes"
-// no hay suficiente historial (solo 14 dias) para un punto de comparacion
-// honesto, asi que no se muestra delta.
+// Compara el total del rango elegido contra ventasAnterior (el mismo rango,
+// misma duracion en dias, inmediatamente anterior -- ya calculado por el
+// backend). La etiqueta sale del preset que coincida con el rango actual
+// (Hoy -> "vs ayer", 7 dias -> "vs semana anterior", etc.); si el rango es
+// personalizado, queda un texto generico.
 function getDeltaPeriodo(metricKey) {
-  const serie = Array.isArray(state.serieDiaria) ? state.serieDiaria : [];
-  if (state.periodo === "hoy") {
-    if (serie.length < 2) {
-      return null;
-    }
-    const hoy = toFiniteNumber(serie[serie.length - 1][metricKey]);
-    const ayer = toFiniteNumber(serie[serie.length - 2][metricKey]);
-    if (ayer === 0) {
-      return null;
-    }
-    return { pct: ((hoy - ayer) / Math.abs(ayer)) * 100, etiqueta: "vs ayer" };
+  const actualRow = getEffectiveTotalRow(state.ventas);
+  const previoRow = getEffectiveTotalRow(state.ventasAnterior);
+  if (!actualRow || !previoRow) {
+    return null;
   }
 
-  if (state.periodo === "7dias") {
-    if (serie.length < 14) {
-      return null;
-    }
-    const ultimos7 = serie.slice(-7);
-    const previos7 = serie.slice(-14, -7);
-    const sum = (arr) => arr.reduce((acc, row) => acc + toFiniteNumber(row[metricKey]), 0);
-    const actual = sum(ultimos7);
-    const previo = sum(previos7);
-    if (previo === 0) {
-      return null;
-    }
-    return { pct: ((actual - previo) / Math.abs(previo)) * 100, etiqueta: "vs semana anterior" };
+  const actual = toFiniteNumber(actualRow[metricKey]);
+  const previo = toFiniteNumber(previoRow[metricKey]);
+  if (previo === 0) {
+    return null;
   }
 
-  return null;
+  const preset = matchPreset(state.rango);
+  const etiqueta = preset ? preset.etiquetaDelta : "vs periodo anterior";
+  return { pct: ((actual - previo) / Math.abs(previo)) * 100, etiqueta };
 }
 
 function getSparklinePuntos(metricKey, dias = 7) {
@@ -470,23 +544,140 @@ function formatUpdatedHint(date) {
   return `Actualizado hace ${diffHoras} h`;
 }
 
+// ---- Selector de rango (boton + calendario desplegable) -------------------
+
+function ensureRangoPickerMes() {
+  if (state.rangoPickerMes) {
+    return;
+  }
+  const base = state.rango?.hasta || todayIso();
+  const [year, month] = base.split("-").map(Number);
+  state.rangoPickerMes = { year, month: month - 1 };
+}
+
+function buildCalendarMatrix(year, month) {
+  const primerDiaMes = new Date(Date.UTC(year, month, 1));
+  const ultimoDiaMes = new Date(Date.UTC(year, month + 1, 0));
+  // JS: 0=domingo..6=sabado. La grilla empieza en lunes, asi que se convierte
+  // a 0=lunes..6=domingo para saber cuantos dias del mes anterior hacen falta.
+  const offsetInicio = (primerDiaMes.getUTCDay() + 6) % 7;
+  const offsetFin = (7 - ((ultimoDiaMes.getUTCDay() + 6) % 7) - 1) % 7;
+
+  const cursor = new Date(primerDiaMes);
+  cursor.setUTCDate(cursor.getUTCDate() - offsetInicio);
+  const fin = new Date(ultimoDiaMes);
+  fin.setUTCDate(fin.getUTCDate() + offsetFin);
+
+  const dias = [];
+  while (cursor.getTime() <= fin.getTime()) {
+    dias.push({
+      iso: cursor.toISOString().slice(0, 10),
+      day: cursor.getUTCDate(),
+      inCurrentMonth: cursor.getUTCMonth() === month,
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dias;
+}
+
+function renderCalendarGrid() {
+  ensureRangoPickerMes();
+  const { year, month } = state.rangoPickerMes;
+  const dias = buildCalendarMatrix(year, month);
+  const hoy = todayIso();
+  const inicio = state.rangoPickerInicio;
+  const rango = state.rango || { desde: hoy, hasta: hoy };
+
+  return `
+    <div class="rango-calendar">
+      <div class="rango-calendar-header">
+        <button type="button" class="rango-calendar-nav" data-rango-mes-prev aria-label="Mes anterior">&#8249;</button>
+        <span class="rango-calendar-titulo">${escapeHtml(MESES_LARGOS[month])} ${year}</span>
+        <button type="button" class="rango-calendar-nav" data-rango-mes-next aria-label="Mes siguiente">&#8250;</button>
+      </div>
+      <div class="rango-calendar-weekdays">
+        ${DIAS_SEMANA_CORTOS.map((dia) => `<span>${dia}</span>`).join("")}
+      </div>
+      <div class="rango-calendar-grid">
+        ${dias
+          .map((dia) => {
+            let clase = "rango-calendar-day";
+            if (!dia.inCurrentMonth) {
+              clase += " is-outside";
+            }
+            if (dia.iso === hoy) {
+              clase += " is-today";
+            }
+            if (inicio) {
+              if (dia.iso === inicio) {
+                clase += " is-selected is-range-start";
+              }
+            } else if (dia.iso === rango.desde && dia.iso === rango.hasta) {
+              clase += " is-selected";
+            } else if (dia.iso === rango.desde) {
+              clase += " is-selected is-range-start";
+            } else if (dia.iso === rango.hasta) {
+              clase += " is-selected is-range-end";
+            } else if (dia.iso > rango.desde && dia.iso < rango.hasta) {
+              clase += " is-in-range";
+            }
+            return `<button type="button" class="${clase}" data-rango-dia="${dia.iso}">${dia.day}</button>`;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderRangoPickerPopover() {
+  const rango = state.rango || { desde: todayIso(), hasta: todayIso() };
+  const activo = matchPreset(rango);
+
+  return `
+    <div class="rango-picker-popover" data-rango-popover>
+      <div class="rango-picker-presets">
+        ${RANGO_PRESETS.map(
+          (preset) => `
+            <button
+              type="button"
+              class="rango-preset-btn ${activo?.tipo === preset.tipo ? "is-active" : ""}"
+              data-rango-preset="${preset.tipo}"
+            >${escapeHtml(preset.label)}</button>
+          `,
+        ).join("")}
+      </div>
+      <div class="rango-picker-calendar-side">
+        <div class="bodega-controls-group rango-picker-modo" role="group" aria-label="Modo de seleccion">
+          <button type="button" class="bodega-toggle-button ${state.rangoPickerModo === "dia" ? "is-active" : ""}" data-rango-modo="dia">Un dia</button>
+          <button type="button" class="bodega-toggle-button ${state.rangoPickerModo === "rango" ? "is-active" : ""}" data-rango-modo="rango">Rango</button>
+        </div>
+        ${renderCalendarGrid()}
+      </div>
+    </div>
+  `;
+}
+
+function renderRangoPicker() {
+  const rango = state.rango || { desde: todayIso(), hasta: todayIso() };
+  return `
+    <div class="rango-picker">
+      <button type="button" class="rango-picker-trigger" data-rango-toggle>
+        <span class="rango-picker-icon">&#128197;</span>
+        <span>${escapeHtml(formatRangoTriggerLabel(rango))}</span>
+        <span class="rango-picker-chevron">&#9662;</span>
+      </button>
+      ${state.rangoPickerOpen ? renderRangoPickerPopover() : ""}
+    </div>
+  `;
+}
+
 function renderControlsBar() {
   const storeOptions = getStoreOptions();
   const tasa = state.tasaCambio;
 
   return `
     <div class="bodega-controls-bar">
-      <div class="bodega-controls-group" role="group" aria-label="Periodo">
-        ${PERIODOS.map(
-          (periodo) => `
-            <button
-              type="button"
-              class="bodega-toggle-button ${state.periodo === periodo.key ? "is-active" : ""}"
-              data-periodo="${periodo.key}"
-            >${escapeHtml(periodo.label)}</button>
-          `,
-        ).join("")}
-      </div>
+      ${renderRangoPicker()}
 
       <label class="bodega-select-wrap">
         <span class="sr-only">Tienda</span>
@@ -531,7 +722,7 @@ function formatFechaHora(fechaIso) {
 // (getExecutiveCardItems/renderExecutiveCards en apps/api/public/app.js):
 // .modern-summary-grid con tarjetas .modern-stat-card-<tono>.
 function renderSummaryCards() {
-  const ventas = getVentasPorPeriodo();
+  const ventas = state.ventas;
   const totalVentas = getEffectiveTotalRow(ventas);
   const totalInventario = getEffectiveTotalRow(state.inventario);
   const ganancia = toFiniteNumber(totalVentas?.ganancia);
@@ -601,7 +792,7 @@ function renderSummaryCards() {
 }
 
 function renderAlertBanner() {
-  const ventas = getVentasPorPeriodo();
+  const ventas = state.ventas;
   const total = getEffectiveTotalRow(ventas);
   const ganancia = toFiniteNumber(total?.ganancia);
   if (ganancia >= 0) {
@@ -619,7 +810,7 @@ function renderAlertBanner() {
 }
 
 function renderDesempenoTable() {
-  const ventas = getVentasPorPeriodo();
+  const ventas = state.ventas;
   const filas = (Array.isArray(ventas) ? ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
   const total = findTotalRow(ventas);
 
@@ -630,7 +821,7 @@ function renderDesempenoTable() {
     return state.sortDir === "asc" ? diff : -diff;
   });
 
-  const periodoLabel = PERIODOS.find((periodo) => periodo.key === state.periodo)?.label || "Hoy";
+  const periodoLabel = formatRangoTriggerLabel(state.rango);
 
   return `
     <section class="modern-card">
@@ -758,9 +949,14 @@ async function loadPanel() {
   setFlash(state.view === "panel" ? "Actualizando..." : "Conectando...", "info");
   render();
 
+  if (!state.rango) {
+    state.rango = { desde: todayIso(), hasta: todayIso() };
+  }
+
   let response;
   try {
-    response = await window.fetch(apiUrl("bodega/validaciones/panel-resumen"), {
+    const params = new URLSearchParams({ desde: state.rango.desde, hasta: state.rango.hasta });
+    response = await window.fetch(apiUrl(`bodega/validaciones/panel-resumen?${params.toString()}`), {
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (error) {
@@ -798,9 +994,8 @@ async function loadPanel() {
   state.view = "panel";
   state.loading = false;
   state.flash = null;
-  state.ventasHoy = Array.isArray(data.ventasHoy) ? data.ventasHoy : [];
-  state.ventas7Dias = Array.isArray(data.ventas7Dias) ? data.ventas7Dias : [];
-  state.ventasMes = Array.isArray(data.ventasMes) ? data.ventasMes : [];
+  state.ventas = Array.isArray(data.ventas) ? data.ventas : [];
+  state.ventasAnterior = Array.isArray(data.ventasAnterior) ? data.ventasAnterior : [];
   state.inventario = Array.isArray(data.inventario) ? data.inventario : [];
   state.serieDiaria = Array.isArray(data.serieDiaria) ? data.serieDiaria : [];
   state.tasaCambio = data.tasaCambio || null;
@@ -833,11 +1028,58 @@ function bindEvents() {
     void loadPanel();
   });
 
-  document.querySelectorAll("[data-periodo]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.periodo = button.getAttribute("data-periodo");
+  document.querySelector("[data-rango-toggle]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    state.rangoPickerOpen = !state.rangoPickerOpen;
+    if (state.rangoPickerOpen) {
+      state.rangoPickerInicio = null;
+      state.rangoPickerMes = null;
+    }
+    render();
+  });
+
+  document.querySelectorAll("[data-rango-preset]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const preset = RANGO_PRESETS.find((item) => item.tipo === button.getAttribute("data-rango-preset"));
+      if (preset) {
+        seleccionarRango(preset.calc());
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-rango-modo]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.rangoPickerModo = button.getAttribute("data-rango-modo");
+      state.rangoPickerInicio = null;
       render();
     });
+  });
+
+  document.querySelector("[data-rango-mes-prev]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const mes = state.rangoPickerMes;
+    state.rangoPickerMes = { year: mes.month === 0 ? mes.year - 1 : mes.year, month: (mes.month + 11) % 12 };
+    render();
+  });
+
+  document.querySelector("[data-rango-mes-next]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const mes = state.rangoPickerMes;
+    state.rangoPickerMes = { year: mes.month === 11 ? mes.year + 1 : mes.year, month: (mes.month + 1) % 12 };
+    render();
+  });
+
+  document.querySelectorAll("[data-rango-dia]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      seleccionarDiaCalendario(button.getAttribute("data-rango-dia"));
+    });
+  });
+
+  document.querySelector("[data-rango-popover]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
   });
 
   document.querySelectorAll("[data-moneda]").forEach((button) => {
@@ -856,6 +1098,50 @@ function bindEvents() {
     state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
     render();
   });
+}
+
+// Cierra el desplegable si el clic fue fuera de el. Registrado UNA sola vez
+// a nivel de documento (no dentro de bindEvents, que corre en cada render())
+// para no ir apilando listeners duplicados en cada re-render.
+document.addEventListener("click", () => {
+  if (state.rangoPickerOpen) {
+    state.rangoPickerOpen = false;
+    state.rangoPickerInicio = null;
+    render();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.rangoPickerOpen) {
+    state.rangoPickerOpen = false;
+    state.rangoPickerInicio = null;
+    render();
+  }
+});
+
+function seleccionarRango(rango) {
+  state.rango = rango;
+  state.rangoPickerOpen = false;
+  state.rangoPickerInicio = null;
+  state.rangoPickerMes = null;
+  void loadPanel();
+}
+
+function seleccionarDiaCalendario(iso) {
+  if (state.rangoPickerModo === "dia") {
+    seleccionarRango({ desde: iso, hasta: iso });
+    return;
+  }
+
+  if (!state.rangoPickerInicio) {
+    state.rangoPickerInicio = iso;
+    render();
+    return;
+  }
+
+  const desde = state.rangoPickerInicio < iso ? state.rangoPickerInicio : iso;
+  const hasta = state.rangoPickerInicio < iso ? iso : state.rangoPickerInicio;
+  seleccionarRango({ desde, hasta });
 }
 
 void loadPanel();

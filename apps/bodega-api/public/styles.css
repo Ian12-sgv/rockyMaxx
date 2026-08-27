@@ -8654,6 +8654,189 @@ button {
   background: var(--accent);
 }
 
+/* Selector de rango: boton con icono de calendario que abre un desplegable
+   con atajos (Hoy/Ayer/...) a la izquierda y un calendario de mes a la
+   derecha -- mismos tonos que el resto de .bodega-*, sin paleta nueva. */
+.rango-picker {
+  position: relative;
+}
+
+.rango-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-deep);
+  background: var(--bg-paper-strong);
+  cursor: pointer;
+}
+
+.rango-picker-icon {
+  font-size: 0.9rem;
+}
+
+.rango-picker-chevron {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
+.rango-picker-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  gap: 0;
+  background: var(--bg-paper-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  min-width: 460px;
+}
+
+.rango-picker-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border-right: 1px solid var(--line);
+  min-width: 160px;
+}
+
+.rango-preset-btn {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.rango-preset-btn:hover {
+  background: var(--accent-soft);
+}
+
+.rango-preset-btn.is-active {
+  background: var(--accent);
+  color: #fffaf1;
+  font-weight: 600;
+}
+
+.rango-picker-calendar-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.rango-picker-modo {
+  align-self: flex-start;
+}
+
+.rango-calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 260px;
+}
+
+.rango-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-transform: capitalize;
+}
+
+.rango-calendar-nav {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-paper-strong);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.rango-calendar-nav:hover {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+
+.rango-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.rango-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.rango-calendar-day {
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 6px 0;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.rango-calendar-day:hover {
+  background: var(--accent-soft);
+}
+
+.rango-calendar-day.is-outside {
+  color: var(--ink-soft);
+  opacity: 0.5;
+}
+
+.rango-calendar-day.is-today {
+  box-shadow: inset 0 0 0 1px var(--accent-deep);
+}
+
+.rango-calendar-day.is-in-range {
+  background: var(--accent-soft);
+  border-radius: 0;
+}
+
+.rango-calendar-day.is-selected {
+  background: var(--accent);
+  color: #fffaf1;
+  font-weight: 600;
+}
+
+.rango-calendar-day.is-range-start {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.rango-calendar-day.is-range-end {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
 @media (max-width: 720px) {
   .bodega-controls-bar {
     flex-direction: column;
@@ -8662,6 +8845,24 @@ button {
 
   .bodega-tasa-hint {
     margin-left: 0;
+  }
+
+  .rango-picker-popover {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    flex-direction: column;
+    min-width: min(320px, 92vw);
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  .rango-picker-presets {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
   }
 }
 
