@@ -20,6 +20,41 @@ function requireCodigoTienda(codigoTienda?: string) {
   return value;
 }
 
+const MAX_RANGO_DIAS = 366;
+
+function hoyIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// desde/hasta son opcionales -- sin ellos, panel-resumen se comporta como
+// "Hoy" (compatibilidad hacia atras con el cliente viejo que no mandaba
+// rango). Cuando SI vienen, deben ser fechas validas, desde <= hasta, y no
+// abarcar mas de un anio (evita que alguien pida un rango gigante por error
+// y tumbe la consulta).
+function resolveRango(desde?: string, hasta?: string) {
+  if (!desde && !hasta) {
+    const hoy = hoyIso();
+    return { desde: hoy, hasta: hoy };
+  }
+
+  if (!desde || !FECHA_REGEX.test(desde)) {
+    throw new BadRequestException('Parametro "desde" invalido, formato esperado yyyy-MM-dd.');
+  }
+  if (!hasta || !FECHA_REGEX.test(hasta)) {
+    throw new BadRequestException('Parametro "hasta" invalido, formato esperado yyyy-MM-dd.');
+  }
+  if (desde > hasta) {
+    throw new BadRequestException('"desde" no puede ser posterior a "hasta".');
+  }
+
+  const dias = Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86400000) + 1;
+  if (dias > MAX_RANGO_DIAS) {
+    throw new BadRequestException(`El rango no puede superar ${MAX_RANGO_DIAS} dias.`);
+  }
+
+  return { desde, hasta };
+}
+
 @Controller("bodega/validaciones")
 @UseGuards(IngestAuthGuard)
 export class ValidacionesController {
@@ -55,8 +90,9 @@ export class ValidacionesController {
   }
 
   @Get("panel-resumen")
-  async panelResumen() {
-    return this.validacionesService.panelResumen();
+  async panelResumen(@Query("desde") desde?: string, @Query("hasta") hasta?: string) {
+    const rango = resolveRango(desde, hasta);
+    return this.validacionesService.panelResumen(rango.desde, rango.hasta);
   }
 
   @Get("errores-pendientes")

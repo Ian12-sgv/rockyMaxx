@@ -114,34 +114,48 @@ export class ValidacionesService {
     `);
   }
 
-  // Resumen para el panel principal (todas las tiendas juntas): ventas de
-  // hoy, ventas del mes en curso, e inventario actual valorizado a costo.
-  // Cada consulta trae una fila por tienda MAS una fila "TOTAL".
-  async panelResumen() {
+  // Resumen para el panel principal (todas las tiendas juntas): ventas del
+  // rango de fechas pedido, el mismo rango pero inmediatamente anterior (para
+  // el "vs periodo anterior" del frontend) e inventario actual valorizado a
+  // costo. Cada consulta de ventas trae una fila por tienda MAS una fila
+  // "TOTAL".
+  async panelResumen(desde: string, hasta: string) {
     const tasaCambio = await this.tasaCambioActual();
     const tasaValor = tasaCambio?.tasa ? Number(tasaCambio.tasa) : 1;
+    const { desde: desdeAnterior, hasta: hastaAnterior } = this.calcularRangoAnterior(desde, hasta);
+    const diasSerie = Math.min(this.contarDias(desde, hasta), 60);
 
-    const [ventasHoy, ventas7Dias, ventasMes, inventario, serieDiaria] = await Promise.all([
-      this.ventasResumenPorPeriodo(
-        Prisma.sql`(v."payload_json" ->> 'Fecha')::date = CURRENT_DATE`,
-        Prisma.sql`(d."payload_json" ->> 'Hora')::date = CURRENT_DATE`,
-        tasaValor,
-      ),
-      this.ventasResumenPorPeriodo(
-        Prisma.sql`(v."payload_json" ->> 'Fecha')::date >= CURRENT_DATE - INTERVAL '6 days'`,
-        Prisma.sql`(d."payload_json" ->> 'Hora')::date >= CURRENT_DATE - INTERVAL '6 days'`,
-        tasaValor,
-      ),
-      this.ventasResumenPorPeriodo(
-        Prisma.sql`date_trunc('month', (v."payload_json" ->> 'Fecha')::date) = date_trunc('month', CURRENT_DATE)`,
-        Prisma.sql`date_trunc('month', (d."payload_json" ->> 'Hora')::date) = date_trunc('month', CURRENT_DATE)`,
-        tasaValor,
-      ),
+    const [ventas, ventasAnterior, inventario, serieDiaria] = await Promise.all([
+      this.ventasResumenPorRango(desde, hasta, tasaValor),
+      this.ventasResumenPorRango(desdeAnterior, hastaAnterior, tasaValor),
       this.inventarioResumen(),
-      this.ventasSerieDiaria(14, tasaValor),
+      this.ventasSerieDiaria(hasta, diasSerie, tasaValor),
     ]);
 
-    return { ventasHoy, ventas7Dias, ventasMes, inventario, serieDiaria, tasaCambio };
+    return { ventas, ventasAnterior, inventario, serieDiaria, tasaCambio, rango: { desde, hasta } };
+  }
+
+  // Rango inmediatamente anterior, de la misma duracion (en dias) que
+  // [desde, hasta] -- ej. si el usuario elige "Ultimos 7 dias", el anterior
+  // son los 7 dias antes de esos, no un valor fijo. Calculo en JS (no SQL)
+  // para que sea facil de razonar/testear; las fechas viajan como texto
+  // yyyy-MM-dd de un lado a otro, nunca como Date con zona horaria.
+  private calcularRangoAnterior(desde: string, hasta: string) {
+    const dias = this.contarDias(desde, hasta);
+    const hastaAnteriorDate = this.sumarDias(desde, -1);
+    const desdeAnteriorDate = this.sumarDias(hastaAnteriorDate, -(dias - 1));
+    return { desde: desdeAnteriorDate, hasta: hastaAnteriorDate };
+  }
+
+  private contarDias(desde: string, hasta: string) {
+    const msPorDia = 24 * 60 * 60 * 1000;
+    return Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / msPorDia) + 1;
+  }
+
+  private sumarDias(fecha: string, dias: number) {
+    const date = new Date(`${fecha}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + dias);
+    return date.toISOString().slice(0, 10);
   }
 
   // CTE reutilizado (costo vigente por articulo/tienda) + el JOIN contra el.
@@ -202,11 +216,12 @@ export class ValidacionesService {
     )
   `;
 
-  // Serie diaria (ultimos N dias) de la misma fuente/conversion que
-  // ventasResumenPorPeriodo -- alimenta las mini-graficas de tendencia y el
-  // calculo de "vs ayer" en el frontend (dia actual vs el dia anterior en
-  // este mismo arreglo, ya no hace falta una consulta aparte).
-  private async ventasSerieDiaria(dias: number, tasaValor: number) {
+  // Serie diaria (ultimos N dias contados hacia atras desde "hasta") de la
+  // misma fuente/conversion que ventasResumenPorRango -- alimenta las
+  // mini-graficas de tendencia. "hasta" es el fin del rango que el usuario
+  // eligio (no necesariamente hoy), asi que el sparkline siempre termina en
+  // el mismo punto que el rango seleccionado.
+  private async ventasSerieDiaria(hasta: string, dias: number, tasaValor: number) {
     return this.prisma.$queryRaw<
       Array<{ fecha: string; facturas: string; total_pago: string; total_costo_bs: string; ganancia: string }>
     >(Prisma.sql`
@@ -218,7 +233,7 @@ export class ValidacionesService {
           SUM((v."payload_json" ->> 'TotalPago')::numeric) AS total_pago
         FROM "VW_HECH_VENTAS_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
-        WHERE (v."payload_json" ->> 'Fecha')::date >= CURRENT_DATE - (${dias - 1} * INTERVAL '1 day')
+        WHERE (v."payload_json" ->> 'Fecha')::date BETWEEN ${hasta}::date - (${dias - 1} * INTERVAL '1 day') AND ${hasta}::date
           AND ${FILTRO_TIENDAS_PANEL}
         GROUP BY 1
       ),
@@ -229,7 +244,7 @@ export class ValidacionesService {
         FROM "VW_HECH_VENTAS_DETALLE_ACTUAL" d
         JOIN "DIM_TIENDAS" t ON t."id" = d."dim_tienda_id"
         ${ValidacionesService.COSTO_ACTUAL_JOIN}
-        WHERE (d."payload_json" ->> 'Hora')::date >= CURRENT_DATE - (${dias - 1} * INTERVAL '1 day')
+        WHERE (d."payload_json" ->> 'Hora')::date BETWEEN ${hasta}::date - (${dias - 1} * INTERVAL '1 day') AND ${hasta}::date
           AND ${FILTRO_TIENDAS_PANEL}
         GROUP BY 1
       )
@@ -276,7 +291,7 @@ export class ValidacionesService {
   // usuario, para que ambos reportes cuadren. Esto significa que "Costo" aqui
   // puede moverse retroactivamente si el costo de un articulo cambia despues
   // de la venta -- es intencional, no un bug.
-  private async ventasResumenPorPeriodo(filtroFecha: Prisma.Sql, filtroFechaDetalle: Prisma.Sql, tasaValor: number) {
+  private async ventasResumenPorRango(desde: string, hasta: string, tasaValor: number) {
     return this.prisma.$queryRaw<
       Array<{
         codigo_legacy: string;
@@ -294,7 +309,8 @@ export class ValidacionesService {
           SUM((v."payload_json" ->> 'TotalPago')::numeric) AS total_pago
         FROM "VW_HECH_VENTAS_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
-        WHERE ${filtroFecha} AND ${FILTRO_TIENDAS_PANEL}
+        WHERE (v."payload_json" ->> 'Fecha')::date BETWEEN ${desde}::date AND ${hasta}::date
+          AND ${FILTRO_TIENDAS_PANEL}
         GROUP BY 1
       ),
       costo AS (
@@ -304,7 +320,8 @@ export class ValidacionesService {
         FROM "VW_HECH_VENTAS_DETALLE_ACTUAL" d
         JOIN "DIM_TIENDAS" t ON t."id" = d."dim_tienda_id"
         ${ValidacionesService.COSTO_ACTUAL_JOIN}
-        WHERE ${filtroFechaDetalle} AND ${FILTRO_TIENDAS_PANEL}
+        WHERE (d."payload_json" ->> 'Hora')::date BETWEEN ${desde}::date AND ${hasta}::date
+          AND ${FILTRO_TIENDAS_PANEL}
         GROUP BY 1
       ),
       combinado AS (
