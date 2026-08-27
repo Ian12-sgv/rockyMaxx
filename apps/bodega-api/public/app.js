@@ -768,7 +768,7 @@ function renderSummaryCards() {
     },
     {
       label: "Inventario a costo",
-      value: formatMonedaDesdeUsd(totalInventario?.valor_costo_usd),
+      value: formatMonedaDesdeUsd(totalInventario?.valor_costo_usd, { compact: true }),
       meta: `${escapeHtml(String(totalInventario?.articulos ?? "0"))} articulos`,
       tone: "gold",
       delta: null,
