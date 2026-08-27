@@ -11,6 +11,40 @@ const DEFAULT_WINDOW_DAYS = 30;
 const DEFAULT_STARTUP_DELAY_MS = 5000;
 const BATCH_LIMIT = 1000;
 
+// URL publica del bodega-api en el VPS -- NO es un secreto (es la misma URL
+// que ya usa el frontend standalone de bodega-api, visible para cualquiera
+// que abra esa pagina). Solo sirve como base por defecto para derivar
+// BODEGA_INGEST_URL automaticamente; BODEGA_API_BASE_URL sigue pudiendo
+// sobreescribirla si algun dia cambia.
+const DEFAULT_BODEGA_API_BASE_URL = "http://68.183.105.135/bodega-api";
+
+// Deriva el codigo de tienda ("002", "003", ...) del nombre de la base de
+// datos local (ej. "rocky_tienda_002"), para que cada instalacion se
+// reconozca sola sin tener que escribir el numero a mano en cada PC --
+// confirmado con el usuario que ese es el patron real de nombres. Si el
+// nombre no matchea (bases de desarrollo como "rocky_maxx", Bodega Central,
+// etc.) no se deriva nada y todo sigue exactamente como antes (hay que
+// configurar BODEGA_SYNC_ENABLED/BODEGA_INGEST_URL a mano, o dejarlo
+// apagado).
+//
+// Excluye explicitamente los nombres terminados en "_vps": son las bases
+// gemelas de MirrorSync en el VPS (rocky_tienda_00N_vps), no la tienda real
+// -- ya estan apagadas a mano con BODEGA_SYNC_ENABLED=false (ese valor
+// explicito manda de todas formas, ver isEnabled()), pero esta exclusion es
+// una segunda capa de seguridad para que activarse solas nunca vuelva a
+// pasar aunque ese flag se pierda algun dia.
+function resolveCodigoTiendaDesdeDatabaseUrl(databaseUrl: string): string | null {
+  const nombre = String(databaseUrl || "");
+  if (/_vps\b/i.test(nombre)) {
+    return null;
+  }
+  const match = nombre.match(/rocky_tienda_0*(\d+)/i);
+  if (!match) {
+    return null;
+  }
+  return match[1].padStart(3, "0");
+}
+
 type Operacion = "SNAPSHOT" | "INSERT" | "UPDATE" | "DELETE";
 
 type RegistroPayload = {
@@ -56,8 +90,16 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     if (!this.isEnabled()) {
-      this.logger.log("Extraccion hacia bodega de datos deshabilitada (BODEGA_SYNC_ENABLED != true).");
+      this.logger.log(
+        "Extraccion hacia bodega de datos deshabilitada (BODEGA_SYNC_ENABLED=false, o el nombre de la base de datos no coincide con el patron rocky_tienda_0NN para activarse sola).",
+      );
       return;
+    }
+
+    if (!this.getIngestToken()) {
+      this.logger.warn(
+        "Extraccion hacia bodega de datos activa pero falta INGEST_AUTH_TOKEN en el .env de esta instancia -- no se podra enviar nada hasta agregarlo.",
+      );
     }
 
     await this.ensureCursorSchema();
@@ -87,16 +129,46 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // BODEGA_SYNC_ENABLED explicito (true/false) siempre manda -- asi se puede
+  // seguir apagando una tienda especifica a mano (como se hizo con las
+  // gemelas de MirrorSync) aunque su base de datos matchee el patron. Sin
+  // ese valor, se activa solo si el nombre de la base de datos local dice a
+  // que tienda pertenece (ver resolveCodigoTiendaDesdeDatabaseUrl).
   private isEnabled() {
-    return (
-      String(this.configService.get<string>("BODEGA_SYNC_ENABLED", "") || "")
-        .trim()
-        .toLowerCase() === "true"
-    );
+    const explicit = String(this.configService.get<string>("BODEGA_SYNC_ENABLED", "") || "")
+      .trim()
+      .toLowerCase();
+    if (explicit === "true" || explicit === "false") {
+      return explicit === "true";
+    }
+    return this.resolveCodigoTienda() !== null;
   }
 
+  private resolveCodigoTienda(): string | null {
+    const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "");
+    return resolveCodigoTiendaDesdeDatabaseUrl(databaseUrl);
+  }
+
+  // BODEGA_INGEST_URL explicito siempre manda (compatibilidad con tienda001,
+  // que ya lo tiene configurado a mano). Si no esta, se arma solo con la
+  // base publica de bodega-api (BODEGA_API_BASE_URL si esta configurada,
+  // si no la default) mas el codigo de tienda derivado del nombre de la
+  // base de datos.
   private getIngestUrl() {
-    return String(this.configService.get<string>("BODEGA_INGEST_URL", "") || "").trim();
+    const explicit = String(this.configService.get<string>("BODEGA_INGEST_URL", "") || "").trim();
+    if (explicit) {
+      return explicit;
+    }
+
+    const codigoTienda = this.resolveCodigoTienda();
+    if (!codigoTienda) {
+      return "";
+    }
+
+    const baseUrl =
+      String(this.configService.get<string>("BODEGA_API_BASE_URL", "") || "").trim().replace(/\/+$/, "") ||
+      DEFAULT_BODEGA_API_BASE_URL;
+    return `${baseUrl}/bodega/ingest/${codigoTienda}`;
   }
 
   private getIngestToken() {
