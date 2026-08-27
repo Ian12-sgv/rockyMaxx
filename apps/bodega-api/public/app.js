@@ -847,6 +847,7 @@ function renderDesempenoTable() {
                 Vendido ${state.sortDir === "asc" ? "&#8593;" : "&#8595;"}
               </th>
               <th>Costo</th>
+              <th>Ganancia</th>
               <th>Margen</th>
             </tr>
           </thead>
@@ -856,7 +857,7 @@ function renderDesempenoTable() {
                 ? ordenadas
                     .map((row) => renderDesempenoRow(row, false))
                     .join("")
-                : `<tr><td colspan="5"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                : `<tr><td colspan="6"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
             }
             ${total && !state.tiendaFiltro ? renderDesempenoRow(total, true) : ""}
           </tbody>
@@ -869,6 +870,8 @@ function renderDesempenoTable() {
 function renderDesempenoRow(row, isTotal) {
   const margenPct = calcularMargenPct(row);
   const margenTone = Math.abs(margenPct) < 0.005 ? "neutral" : margenPct >= 0 ? "positivo" : "negativo";
+  const ganancia = toFiniteNumber(row.ganancia);
+  const gananciaTone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
@@ -876,6 +879,7 @@ function renderDesempenoRow(row, isTotal) {
       <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
       <td>${escapeHtml(formatMoneda(row.total_pago))}</td>
       <td>${escapeHtml(formatMoneda(row.total_costo_bs))}</td>
+      <td class="bodega-ganancia-cell bodega-ganancia-${gananciaTone}">${escapeHtml(formatMoneda(row.ganancia))}</td>
       <td><span class="bodega-margen-badge bodega-margen-${margenTone}">${escapeHtml(formatPercent(margenPct))}%</span></td>
     </tr>
   `;

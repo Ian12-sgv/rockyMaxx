@@ -8632,6 +8632,22 @@ button {
   color: var(--gold);
 }
 
+.bodega-ganancia-cell {
+  font-weight: 600;
+}
+
+.bodega-ganancia-positivo {
+  color: var(--success);
+}
+
+.bodega-ganancia-negativo {
+  color: var(--danger);
+}
+
+.bodega-ganancia-neutral {
+  color: var(--gold);
+}
+
 .bodega-participacion-cell {
   display: flex;
   flex-direction: column;
