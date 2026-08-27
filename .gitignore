@@ -11,6 +11,7 @@ apps/api/.env
 apps/api/.env.tienda*
 !apps/api/.env.tienda*.example
 apps/api/.env.bodega*
+apps/desktop-service/bodega-default-token.json
 .npm-cache/
 *.log
 lovable-reference.png

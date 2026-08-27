@@ -28,7 +28,8 @@
       "config.html",
       "config-renderer.js",
       "start-electron.js",
-      "package.json"
+      "package.json",
+      "bodega-default-token.json"
     ],
     "extraResources": [
       {

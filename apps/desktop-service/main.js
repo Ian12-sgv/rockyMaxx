@@ -348,6 +348,43 @@ function buildRemoteHealthUrl(apiUrl) {
   return `${normalized}/api/health`;
 }
 
+// Token compartido de bodega-export, para que las tiendas que activan la
+// exportacion sola (por el nombre de su base de datos, ver
+// bodega-export.service.ts) no tengan que escribir INGEST_AUTH_TOKEN a mano
+// en su .env. A proposito NO vive en un archivo con codigo fuente (nunca se
+// sube a git, ver .gitignore) -- solo queda embebido en el instalador ya
+// compilado, igual que si el usuario lo hubiera escrito a mano en cada PC.
+// Si el archivo no existe (ej. alguien clona el repo sin este archivo local),
+// simplemente no hay fallback y sigue haciendo falta configurarlo a mano,
+// como era antes de este cambio -- nunca rompe el arranque.
+let cachedBodegaDefaultToken = null;
+
+function loadBodegaDefaultToken() {
+  if (cachedBodegaDefaultToken !== null) {
+    return cachedBodegaDefaultToken;
+  }
+
+  const candidates = [
+    join(__dirname, "bodega-default-token.json"),
+    join(process.resourcesPath || "", "bodega-default-token.json"),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (candidate && existsSync(candidate)) {
+        const parsed = JSON.parse(readFileSync(candidate, "utf8"));
+        cachedBodegaDefaultToken = String(parsed?.INGEST_AUTH_TOKEN || "").trim();
+        return cachedBodegaDefaultToken;
+      }
+    } catch (error) {
+      writeRuntimeLog(`No se pudo leer bodega-default-token.json: ${error.message}`);
+    }
+  }
+
+  cachedBodegaDefaultToken = "";
+  return cachedBodegaDefaultToken;
+}
+
 function resolveApiRuntimeDir() {
   const candidates = [
     join(__dirname, "..", "api"),
@@ -800,6 +837,20 @@ function startApiServer() {
   if (configuredBodegaViewEnabled) {
     env.BODEGA_API_BASE_URL = configuredBodegaApiBaseUrl;
     env.INGEST_AUTH_TOKEN = configuredBodegaApiToken;
+  }
+
+  // Respaldo de INGEST_AUTH_TOKEN para bodega-export: si este perfil no trae
+  // su propio token (ni en su .env, ni por el bloque de arriba), se usa el
+  // token compartido embebido en el instalador -- asi tiendas 002-006 solo
+  // necesitan que su nombre de base de datos siga el patron rocky_tienda_00N
+  // (bodega-export.service.ts activa/arma la URL sola) sin escribir nada a
+  // mano. NUNCA pisa un token que el perfil ya trae explicito (tienda001
+  // sigue usando el suyo, sin cambios).
+  if (!env.INGEST_AUTH_TOKEN) {
+    const defaultToken = loadBodegaDefaultToken();
+    if (defaultToken) {
+      env.INGEST_AUTH_TOKEN = defaultToken;
+    }
   }
 
   if (!basename(nodeExecutable).toLowerCase().startsWith("node")) {
