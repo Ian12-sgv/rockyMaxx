@@ -22,8 +22,14 @@ function requireCodigoTienda(codigoTienda?: string) {
 
 const MAX_RANGO_DIAS = 366;
 
+// Fecha de HOY en hora de Venezuela, sin importar en que zona horaria este
+// configurado el sistema operativo del servidor -- new Date().toISOString()
+// siempre da la fecha en UTC, y Venezuela esta 4 horas detras (entre las
+// 8pm y medianoche hora local ya es el dia siguiente en UTC), asi que
+// calcularlo asi adelantaba "Hoy" un dia. en-CA formatea como yyyy-MM-dd
+// directamente.
 function hoyIso() {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Caracas" }).format(new Date());
 }
 
 // desde/hasta son opcionales -- sin ellos, panel-resumen se comporta como

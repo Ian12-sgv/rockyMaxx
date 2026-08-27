@@ -34,10 +34,20 @@ const state = {
   lastUpdated: null,
 };
 
-// ---- Fechas (todo en yyyy-MM-dd, UTC, para no arrastrar zona horaria) -----
-
+// ---- Fechas (todo en yyyy-MM-dd) -------------------------------------------
+// "Hoy" se calcula con la fecha LOCAL del navegador (getFullYear/getMonth/
+// getDate), no con toISOString() -- toISOString() siempre da la fecha en
+// UTC, y Venezuela esta 4 horas detras: entre las 8pm y medianoche hora
+// local ya es el dia siguiente en UTC, asi que "Hoy" se adelantaba un dia.
+// El resto de la aritmetica de fechas (sumar dias, etc.) SI ancla a UTC
+// medianoche adrede, porque ahi ya se trabaja sobre un yyyy-MM-dd conocido,
+// sin ambiguedad de zona horaria que resolver.
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const ahora = new Date();
+  const year = ahora.getFullYear();
+  const month = String(ahora.getMonth() + 1).padStart(2, "0");
+  const day = String(ahora.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function addDaysIso(iso, dias) {
