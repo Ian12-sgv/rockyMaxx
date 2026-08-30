@@ -251,6 +251,7 @@ const state = {
     moneda: "BS",
     tiendaFiltro: "",
     sortDir: "desc",
+    balanceVisible: false,
     ventas: [],
     ventasAnterior: [],
     inventario: [],
@@ -9794,6 +9795,7 @@ function renderBodegaPanelSection() {
     ${bodegaPanelRenderAlertBanner(panel)}
     ${bodegaPanelRenderDesempenoTable(panel)}
     ${bodegaPanelRenderInventarioSection(panel)}
+    ${panel.balanceVisible ? bodegaPanelRenderBalanceSection(panel) : ""}
   `;
 }
 
@@ -10233,6 +10235,10 @@ function bodegaPanelRenderControlsBar(panel) {
         <button type="button" class="bodega-toggle-button ${panel.moneda === "USD" ? "is-active" : ""}" data-bodega-moneda="USD">US$</button>
       </div>
 
+      <button type="button" class="button button-ghost bodega-balance-toggle ${panel.balanceVisible ? "is-active" : ""}" data-bodega-balance-toggle>
+        Balance
+      </button>
+
       ${
         tasa
           ? `<span class="bodega-tasa-hint">Tasa Bs ${escapeHtml(formatTransferAmount(tasa.tasa))} / US$ &middot; ${escapeHtml(bodegaPanelFormatFechaHora(tasa.fecha))}</span>`
@@ -10449,6 +10455,117 @@ function bodegaPanelRenderInventarioRow(panel, row, totalValor, isTotal) {
         </div>
       </td>
     </tr>
+  `;
+}
+
+// Balance: lo unico que se puede calcular con certeza hoy a partir de
+// bodega_datos. Activos = inventario a costo actual; Resultado del periodo =
+// ganancia acumulada (vendido - costo) del rango seleccionado. A proposito
+// NO incluye cuentas por cobrar/pagar, deudas ni efectivo de caja/banco --
+// mostrar un cero ahi seria enganoso, ya que esos datos no se sincronizan
+// hoy a bodega_datos. Reusa panel.inventario/panel.ventas ya cargados -- no
+// dispara ninguna consulta nueva.
+function bodegaPanelRenderBalanceSection(panel) {
+  const filasInventarioBase = (Array.isArray(panel.inventario) ? panel.inventario : []).filter(
+    (row) => row.codigo_legacy !== "TOTAL",
+  );
+  const totalInventario = bodegaPanelGetEffectiveTotalRow(panel, panel.inventario);
+  const filasInventario = panel.tiendaFiltro
+    ? filasInventarioBase.filter((row) => row.codigo_legacy === panel.tiendaFiltro)
+    : filasInventarioBase;
+  const filasVentasBase = (Array.isArray(panel.ventas) ? panel.ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
+  const totalVentas = bodegaPanelGetEffectiveTotalRow(panel, panel.ventas);
+  const filasVentas = panel.tiendaFiltro
+    ? filasVentasBase.filter((row) => row.codigo_legacy === panel.tiendaFiltro)
+    : filasVentasBase;
+  const periodoLabel = bodegaPanelFormatRangoTriggerLabel(panel.rango);
+
+  return `
+    <section class="modern-card bodega-balance-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Balance</h2>
+          <p>Lo unico que se puede calcular con certeza hoy: inventario a costo y ganancia acumulada del periodo. No incluye cuentas por cobrar/pagar, deudas ni efectivo de caja/banco -- eso no se sincroniza todavia.</p>
+        </div>
+        <span class="modern-chip">${escapeHtml(periodoLabel.toUpperCase())}</span>
+      </div>
+      <div class="bodega-balance-grid">
+        <div class="bodega-balance-block">
+          <h3>Activos &mdash; Inventario a costo</h3>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tienda</th>
+                  <th>Valor a costo</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  filasInventario.length
+                    ? filasInventario
+                        .map(
+                          (row) => `
+                            <tr>
+                              <td>${escapeHtml(row.codigo_legacy || "-")}</td>
+                              <td>${escapeHtml(bodegaPanelFormatMonedaDesdeUsd(panel, row.valor_costo_usd))}</td>
+                            </tr>
+                          `,
+                        )
+                        .join("")
+                    : `<tr><td colspan="2"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                }
+                ${
+                  totalInventario && !panel.tiendaFiltro
+                    ? `<tr class="is-selected-row"><td><strong>TOTAL</strong></td><td>${escapeHtml(bodegaPanelFormatMonedaDesdeUsd(panel, totalInventario.valor_costo_usd))}</td></tr>`
+                    : ""
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="bodega-balance-block">
+          <h3>Resultado del periodo &mdash; Ganancia acumulada</h3>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tienda</th>
+                  <th>Ganancia</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  filasVentas.length
+                    ? filasVentas
+                        .map((row) => {
+                          const ganancia = toFiniteNumber(row.ganancia);
+                          const tone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
+                          return `
+                            <tr>
+                              <td>${escapeHtml(row.codigo_legacy || "-")}</td>
+                              <td class="bodega-ganancia-cell bodega-ganancia-${tone}">${escapeHtml(bodegaPanelFormatMoneda(panel, row.ganancia))}</td>
+                            </tr>
+                          `;
+                        })
+                        .join("")
+                    : `<tr><td colspan="2"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                }
+                ${
+                  totalVentas && !panel.tiendaFiltro
+                    ? (() => {
+                        const ganancia = toFiniteNumber(totalVentas.ganancia);
+                        const tone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
+                        return `<tr class="is-selected-row"><td><strong>TOTAL</strong></td><td class="bodega-ganancia-cell bodega-ganancia-${tone}"><strong>${escapeHtml(bodegaPanelFormatMoneda(panel, totalVentas.ganancia))}</strong></td></tr>`;
+                      })()
+                    : ""
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
   `;
 }
 
@@ -12380,6 +12497,11 @@ function bindShellEvents() {
 
   document.querySelector("[data-bodega-sort-vendido]")?.addEventListener("click", () => {
     state.bodegaPanel.sortDir = state.bodegaPanel.sortDir === "asc" ? "desc" : "asc";
+    render();
+  });
+
+  document.querySelector("[data-bodega-balance-toggle]")?.addEventListener("click", () => {
+    state.bodegaPanel.balanceVisible = !state.bodegaPanel.balanceVisible;
     render();
   });
 

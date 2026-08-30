@@ -961,12 +961,18 @@ function renderInventarioRow(row, totalValor, isTotal) {
 // state.inventario/state.ventas ya cargados -- no dispara ninguna consulta
 // nueva al servidor.
 function renderBalanceSection() {
-  const filasInventario = (Array.isArray(state.inventario) ? state.inventario : []).filter(
+  const filasInventarioBase = (Array.isArray(state.inventario) ? state.inventario : []).filter(
     (row) => row.codigo_legacy !== "TOTAL",
   );
-  const totalInventario = findTotalRow(state.inventario);
-  const filasVentas = (Array.isArray(state.ventas) ? state.ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
-  const totalVentas = findTotalRow(state.ventas);
+  const totalInventario = getEffectiveTotalRow(state.inventario);
+  const filasInventario = state.tiendaFiltro
+    ? filasInventarioBase.filter((row) => row.codigo_legacy === state.tiendaFiltro)
+    : filasInventarioBase;
+  const filasVentasBase = (Array.isArray(state.ventas) ? state.ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
+  const totalVentas = getEffectiveTotalRow(state.ventas);
+  const filasVentas = state.tiendaFiltro
+    ? filasVentasBase.filter((row) => row.codigo_legacy === state.tiendaFiltro)
+    : filasVentasBase;
   const periodoLabel = formatRangoTriggerLabel(state.rango);
 
   return `
@@ -1005,7 +1011,7 @@ function renderBalanceSection() {
                     : `<tr><td colspan="2"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
                 }
                 ${
-                  totalInventario
+                  totalInventario && !state.tiendaFiltro
                     ? `<tr class="is-selected-row"><td><strong>TOTAL</strong></td><td>${escapeHtml(formatMonedaDesdeUsd(totalInventario.valor_costo_usd))}</td></tr>`
                     : ""
                 }
@@ -1041,7 +1047,7 @@ function renderBalanceSection() {
                     : `<tr><td colspan="2"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
                 }
                 ${
-                  totalVentas
+                  totalVentas && !state.tiendaFiltro
                     ? (() => {
                         const ganancia = toFiniteNumber(totalVentas.ganancia);
                         const tone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
