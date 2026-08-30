@@ -515,8 +515,12 @@ function renderPanelShell() {
             <div class="modern-page">
               <div class="modern-page-header">
                 <div>
-                  <h1>Todas las tiendas</h1>
-                  <p>Ventas, costo, margen e inventario de todas las tiendas.</p>
+                  <h1>${state.balanceVisible ? "Balance" : "Todas las tiendas"}</h1>
+                  <p>${
+                    state.balanceVisible
+                      ? "Activos y resultado del periodo, calculados con certeza a partir de bodega de datos."
+                      : "Ventas, costo, margen e inventario de todas las tiendas."
+                  }</p>
                 </div>
                 <div class="modern-page-actions">
                   <button class="button button-ghost" type="button" data-action="refresh" ${state.loading ? "disabled" : ""}>
@@ -527,11 +531,16 @@ function renderPanelShell() {
               </div>
 
               ${renderControlsBar()}
-              ${renderSummaryCards()}
-              ${renderAlertBanner()}
-              ${renderDesempenoTable()}
-              ${renderInventarioSection()}
-              ${state.balanceVisible ? renderBalanceSection() : ""}
+              ${
+                state.balanceVisible
+                  ? renderBalanceSection()
+                  : `
+                    ${renderSummaryCards()}
+                    ${renderAlertBanner()}
+                    ${renderDesempenoTable()}
+                    ${renderInventarioSection()}
+                  `
+              }
             </div>
           </div>
         </section>

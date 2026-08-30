@@ -9779,8 +9779,12 @@ function renderBodegaPanelSection() {
   return `
     <div class="modern-page-header">
       <div>
-        <h2>Todas las tiendas (bodega de datos)</h2>
-        <p>Ventas, costo, margen e inventario de todas las tiendas.</p>
+        <h2>${panel.balanceVisible ? "Balance" : "Todas las tiendas (bodega de datos)"}</h2>
+        <p>${
+          panel.balanceVisible
+            ? "Activos y resultado del periodo, calculados con certeza a partir de bodega de datos."
+            : "Ventas, costo, margen e inventario de todas las tiendas."
+        }</p>
       </div>
       <div class="modern-page-actions">
         <button class="button button-ghost" type="button" data-refresh-bodega-panel ${panel.loading ? "disabled" : ""}>
@@ -9791,11 +9795,16 @@ function renderBodegaPanelSection() {
     </div>
 
     ${bodegaPanelRenderControlsBar(panel)}
-    ${bodegaPanelRenderSummaryCards(panel)}
-    ${bodegaPanelRenderAlertBanner(panel)}
-    ${bodegaPanelRenderDesempenoTable(panel)}
-    ${bodegaPanelRenderInventarioSection(panel)}
-    ${panel.balanceVisible ? bodegaPanelRenderBalanceSection(panel) : ""}
+    ${
+      panel.balanceVisible
+        ? bodegaPanelRenderBalanceSection(panel)
+        : `
+          ${bodegaPanelRenderSummaryCards(panel)}
+          ${bodegaPanelRenderAlertBanner(panel)}
+          ${bodegaPanelRenderDesempenoTable(panel)}
+          ${bodegaPanelRenderInventarioSection(panel)}
+        `
+    }
   `;
 }
 

@@ -8845,7 +8845,7 @@ button {
 }
 
 .bodega-balance-toggle {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .bodega-balance-toggle.is-active {
