@@ -9174,7 +9174,9 @@ button {
   position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+  min-width: 92px;
   padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -9193,7 +9195,9 @@ button {
 }
 
 .bodega-tienda-pill-check {
-  display: none;
+  display: inline-block;
+  width: 12px;
+  visibility: hidden;
 }
 
 .bodega-tienda-pill:has(input:checked) {
@@ -9203,7 +9207,7 @@ button {
 }
 
 .bodega-tienda-pill:has(input:checked) .bodega-tienda-pill-check {
-  display: inline;
+  visibility: visible;
 }
 
 .bodega-checkbox-inline {
