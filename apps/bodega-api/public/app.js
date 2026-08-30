@@ -1112,7 +1112,7 @@ function renderMovimientoForm(tipo) {
     <form class="bodega-movimiento-form" data-balance-form="${tipo}">
       <div class="bodega-movimiento-form-row">
         <label>
-          <span>Monto (Bs)</span>
+          <span>Monto (${state.moneda === "USD" ? "US$" : "Bs"})</span>
           <input type="number" step="0.01" min="0.01" name="monto" placeholder="0,00" required>
         </label>
         <label>
@@ -1391,13 +1391,13 @@ function bindEvents() {
 async function submitMovimientoForm(form) {
   const tipo = form.getAttribute("data-balance-form");
   const formData = new FormData(form);
-  const monto = Number(formData.get("monto"));
+  const montoIngresado = Number(formData.get("monto"));
   const descripcion = String(formData.get("descripcion") || "").trim();
   const fecha = String(formData.get("fecha") || "");
   const esOperativo = formData.get("esOperativo") === "on";
   const codigosTienda = formData.getAll("codigosTienda").map((value) => String(value));
 
-  if (!monto || monto <= 0) {
+  if (!montoIngresado || montoIngresado <= 0) {
     state.balanceFormError = "El monto debe ser mayor a 0.";
     render();
     return;
@@ -1411,6 +1411,20 @@ async function submitMovimientoForm(form) {
     state.balanceFormError = "Selecciona al menos una tienda.";
     render();
     return;
+  }
+
+  // El backend guarda el monto en bolivares (mismo criterio que
+  // Ventas.TotalPago). Si la vista esta en US$, el usuario tipeo dolares --
+  // se convierte a Bs con la tasa vigente antes de enviarlo.
+  let monto = montoIngresado;
+  if (state.moneda === "USD") {
+    const tasa = getTasaValor();
+    if (!(tasa > 0)) {
+      state.balanceFormError = "No hay tasa de cambio disponible para convertir el monto a bolivares.";
+      render();
+      return;
+    }
+    monto = montoIngresado * tasa;
   }
 
   state.balanceFormSaving = true;
