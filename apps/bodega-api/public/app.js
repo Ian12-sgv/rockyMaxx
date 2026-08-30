@@ -1128,7 +1128,7 @@ function renderMovimientoForm(tipo) {
         <span>Tienda(s)</span>
         <div class="bodega-movimiento-tiendas-list">
           <label class="bodega-tienda-pill">
-            <input type="checkbox" data-balance-todas-tiendas>
+            <input type="checkbox" data-balance-todas-tiendas checked>
             <span class="bodega-tienda-pill-check">&check;</span>
             Todas
           </label>
@@ -1136,7 +1136,7 @@ function renderMovimientoForm(tipo) {
             .map(
               (codigo) => `
                 <label class="bodega-tienda-pill">
-                  <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}" data-balance-tienda-pill>
+                  <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}" data-balance-tienda-pill checked>
                   <span class="bodega-tienda-pill-check">&check;</span>
                   ${escapeHtml(codigo)}
                 </label>

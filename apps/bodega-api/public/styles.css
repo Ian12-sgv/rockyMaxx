@@ -9137,14 +9137,21 @@ button {
   justify-content: space-between;
 }
 
-.bodega-movimiento-form label,
-.bodega-movimiento-form .bodega-movimiento-tiendas {
+.bodega-movimiento-form label {
   display: flex;
   flex-direction: column;
   gap: 4px;
   font-size: 0.82rem;
   color: var(--ink-soft);
   flex: 1 1 160px;
+}
+
+.bodega-movimiento-tiendas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
 }
 
 .bodega-movimiento-form-full {
