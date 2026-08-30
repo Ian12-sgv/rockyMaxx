@@ -29,6 +29,15 @@ export type CrearMovimientoInput = {
   registradoPor?: string;
 };
 
+export type ActualizarMovimientoInput = {
+  esOperativo: boolean;
+  monto: number;
+  descripcion: string;
+  fecha: string;
+  codigosTienda: string[];
+  registradoPor?: string;
+};
+
 // Proxy autenticado hacia bodega-api: reutiliza BODEGA_INGEST_URL/
 // INGEST_AUTH_TOKEN (ya configurados en esta instancia para bodega-export)
 // en vez de pedir variables de entorno nuevas. El token nunca llega al
@@ -136,6 +145,30 @@ export class BodegaPanelService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`No se pudo crear movimiento de balance: ${message}`);
+      return { ok: false, motivo: `No se pudo contactar bodega-api: ${message}` };
+    }
+  }
+
+  async actualizarMovimiento(id: string, input: ActualizarMovimientoInput): Promise<{ ok: boolean; motivo?: string }> {
+    const conexion = this.resolveConexion();
+    if (!conexion.ok) {
+      return { ok: false, motivo: conexion.motivo };
+    }
+
+    try {
+      const response = await fetch(`${conexion.baseUrl}/bodega/balance-movimientos/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${conexion.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        return { ok: false, motivo: `bodega-api respondio ${response.status}: ${text || "sin detalle"}` };
+      }
+      return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`No se pudo actualizar movimiento de balance: ${message}`);
       return { ok: false, motivo: `No se pudo contactar bodega-api: ${message}` };
     }
   }

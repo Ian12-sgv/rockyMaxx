@@ -256,6 +256,7 @@ const state = {
     balanceFormAbierto: null, // "ingreso" | "egreso" | null
     balanceFormSaving: false,
     balanceFormError: null,
+    balanceEditando: null, // movimiento completo (de balanceMovimientos) mientras se edita, o null
     ventas: [],
     ventasAnterior: [],
     inventario: [],
@@ -10599,6 +10600,7 @@ function bodegaPanelRenderMovimientosBlock(panel, tipo, movimientos, total) {
                       </div>
                       <div class="bodega-movimiento-row-amount">
                         <strong>${escapeHtml(bodegaPanelFormatMoneda(panel, mov.monto))}</strong>
+                        <button type="button" class="bodega-movimiento-edit" data-bodega-balance-editar="${escapeHtml(mov.id)}" title="Editar">&#9998;</button>
                         <button type="button" class="bodega-movimiento-delete" data-bodega-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">&times;</button>
                       </div>
                     </div>
@@ -10618,29 +10620,34 @@ function bodegaPanelRenderMovimientosBlock(panel, tipo, movimientos, total) {
 
 function bodegaPanelRenderMovimientoForm(panel, tipo) {
   const storeOptions = bodegaPanelGetStoreOptions(panel);
+  const editando = panel.balanceEditando && panel.balanceEditando.tipo === tipo ? panel.balanceEditando : null;
+  const tiendasSeleccionadas = editando ? editando.codigos_tienda || [] : storeOptions;
+  const todasSeleccionadas = storeOptions.every((codigo) => tiendasSeleccionadas.includes(codigo));
+  const montoPrefill = editando ? bodegaPanelConvertirDesdeBs(panel, editando.monto) : null;
 
   return `
-    <form class="bodega-movimiento-form" data-bodega-balance-form="${tipo}">
+    <form class="bodega-movimiento-form" data-bodega-balance-form="${tipo}" data-bodega-balance-edit-id="${editando ? escapeHtml(editando.id) : ""}">
+      ${editando ? `<p class="bodega-movimiento-form-editing">Editando movimiento &mdash; <button type="button" class="bodega-movimiento-cancel-edit" data-bodega-balance-cancelar-edicion>cancelar edicion</button></p>` : ""}
       <div class="bodega-movimiento-form-row">
         <label>
           <span>Monto (${panel.moneda === "USD" ? "US$" : "Bs"})</span>
-          <input type="number" step="0.01" min="0.01" name="monto" placeholder="0.00" required>
+          <input type="number" step="0.01" min="0.01" name="monto" placeholder="0.00" value="${montoPrefill !== null ? escapeHtml(String(montoPrefill)) : ""}" required>
         </label>
         <label>
           <span>Fecha</span>
-          <input type="date" name="fecha" value="${escapeHtml(bodegaPanelTodayIso())}" required>
+          <input type="date" name="fecha" value="${escapeHtml(editando ? editando.fecha : bodegaPanelTodayIso())}" required>
         </label>
       </div>
       <p class="bodega-movimiento-form-hint">Sin puntos de miles: escribe 1000 (no 1.000). Usa punto solo para decimales, ej. 1000.50.</p>
       <label class="bodega-movimiento-form-full">
         <span>Descripcion</span>
-        <input type="text" name="descripcion" maxlength="300" placeholder="Ej. pago de flete" required>
+        <input type="text" name="descripcion" maxlength="300" placeholder="Ej. pago de flete" value="${escapeHtml(editando ? editando.descripcion || "" : "")}" required>
       </label>
       <div class="bodega-movimiento-tiendas">
         <span>Tienda(s)</span>
         <div class="bodega-movimiento-tiendas-list">
           <label class="bodega-tienda-pill">
-            <input type="checkbox" data-bodega-balance-todas-tiendas checked>
+            <input type="checkbox" data-bodega-balance-todas-tiendas ${todasSeleccionadas ? "checked" : ""}>
             <span class="bodega-tienda-pill-check">&check;</span>
             Todas
           </label>
@@ -10648,7 +10655,7 @@ function bodegaPanelRenderMovimientoForm(panel, tipo) {
             .map(
               (codigo) => `
                 <label class="bodega-tienda-pill">
-                  <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}" data-bodega-balance-tienda-pill checked>
+                  <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}" data-bodega-balance-tienda-pill ${tiendasSeleccionadas.includes(codigo) ? "checked" : ""}>
                   <span class="bodega-tienda-pill-check">&check;</span>
                   ${escapeHtml(codigo)}
                 </label>
@@ -10659,12 +10666,12 @@ function bodegaPanelRenderMovimientoForm(panel, tipo) {
       </div>
       <div class="bodega-movimiento-form-row bodega-movimiento-form-footer">
         <label class="bodega-checkbox-inline bodega-movimiento-operativo">
-          <input type="checkbox" name="esOperativo">
+          <input type="checkbox" name="esOperativo" ${editando && editando.es_operativo ? "checked" : ""}>
           <span class="bodega-operativo-dot"></span>
           Es operativo
         </label>
         <button type="submit" class="button button-primary" ${panel.balanceFormSaving ? "disabled" : ""}>
-          ${panel.balanceFormSaving ? "Guardando..." : "Guardar"}
+          ${panel.balanceFormSaving ? "Guardando..." : editando ? "Guardar cambios" : "Guardar"}
         </button>
       </div>
       ${panel.balanceFormError ? `<p class="bodega-movimiento-form-error">${escapeHtml(panel.balanceFormError)}</p>` : ""}
@@ -12614,6 +12621,27 @@ function bindShellEvents() {
     button.addEventListener("click", () => {
       const tipo = button.getAttribute("data-bodega-balance-form-toggle");
       state.bodegaPanel.balanceFormAbierto = state.bodegaPanel.balanceFormAbierto === tipo ? null : tipo;
+      state.bodegaPanel.balanceFormError = null;
+      state.bodegaPanel.balanceEditando = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-bodega-balance-editar]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.getAttribute("data-bodega-balance-editar");
+      const mov = (state.bodegaPanel.balanceMovimientos || []).find((item) => item.id === id);
+      if (!mov) return;
+      state.bodegaPanel.balanceFormAbierto = mov.tipo;
+      state.bodegaPanel.balanceEditando = mov;
+      state.bodegaPanel.balanceFormError = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-bodega-balance-cancelar-edicion]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.bodegaPanel.balanceEditando = null;
       state.bodegaPanel.balanceFormError = null;
       render();
     });
@@ -19067,6 +19095,7 @@ async function loadBodegaPanelResumen(options = {}) {
 
 async function bodegaPanelSubmitMovimientoForm(form) {
   const tipo = form.getAttribute("data-bodega-balance-form");
+  const editId = form.getAttribute("data-bodega-balance-edit-id") || "";
   const formData = new FormData(form);
   const montoIngresado = Number(formData.get("monto"));
   const descripcion = String(formData.get("descripcion") || "").trim();
@@ -19108,11 +19137,17 @@ async function bodegaPanelSubmitMovimientoForm(form) {
   state.bodegaPanel.balanceFormError = null;
   render();
 
+  const editando = Boolean(editId);
   try {
-    const response = await apiFetch("/bodega-panel/balance-movimientos", {
-      method: "POST",
-      body: { tipo, esOperativo, monto, descripcion, fecha, codigosTienda },
-    });
+    const response = await apiFetch(
+      editando ? `/bodega-panel/balance-movimientos/${encodeURIComponent(editId)}` : "/bodega-panel/balance-movimientos",
+      {
+        method: editando ? "PATCH" : "POST",
+        body: editando
+          ? { esOperativo, monto, descripcion, fecha, codigosTienda }
+          : { tipo, esOperativo, monto, descripcion, fecha, codigosTienda },
+      },
+    );
     if (!response.ok) {
       state.bodegaPanel.balanceFormError = response.motivo || "No se pudo guardar el movimiento.";
       state.bodegaPanel.balanceFormSaving = false;
@@ -19128,6 +19163,7 @@ async function bodegaPanelSubmitMovimientoForm(form) {
 
   state.bodegaPanel.balanceFormSaving = false;
   state.bodegaPanel.balanceFormAbierto = null;
+  state.bodegaPanel.balanceEditando = null;
   await loadBodegaPanelResumen();
 }
 

@@ -31,6 +31,7 @@ const state = {
   balanceFormAbierto: null, // "ingreso" | "egreso" | null
   balanceFormSaving: false,
   balanceFormError: null,
+  balanceEditando: null, // movimiento completo (de balanceMovimientos) mientras se edita, o null
   ventas: [],
   ventasAnterior: [],
   inventario: [],
@@ -1088,6 +1089,7 @@ function renderMovimientosBlock(tipo, movimientos, total) {
                       </div>
                       <div class="bodega-movimiento-row-amount">
                         <strong>${escapeHtml(formatMoneda(mov.monto))}</strong>
+                        <button type="button" class="bodega-movimiento-edit" data-balance-editar="${escapeHtml(mov.id)}" title="Editar">&#9998;</button>
                         <button type="button" class="bodega-movimiento-delete" data-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">&times;</button>
                       </div>
                     </div>
@@ -1107,29 +1109,34 @@ function renderMovimientosBlock(tipo, movimientos, total) {
 
 function renderMovimientoForm(tipo) {
   const storeOptions = getStoreOptions();
+  const editando = state.balanceEditando && state.balanceEditando.tipo === tipo ? state.balanceEditando : null;
+  const tiendasSeleccionadas = editando ? editando.codigos_tienda || [] : storeOptions;
+  const todasSeleccionadas = storeOptions.every((codigo) => tiendasSeleccionadas.includes(codigo));
+  const montoPrefill = editando ? convertirDesdeBs(editando.monto) : null;
 
   return `
-    <form class="bodega-movimiento-form" data-balance-form="${tipo}">
+    <form class="bodega-movimiento-form" data-balance-form="${tipo}" data-balance-edit-id="${editando ? escapeHtml(editando.id) : ""}">
+      ${editando ? `<p class="bodega-movimiento-form-editing">Editando movimiento &mdash; <button type="button" class="bodega-movimiento-cancel-edit" data-balance-cancelar-edicion>cancelar edicion</button></p>` : ""}
       <div class="bodega-movimiento-form-row">
         <label>
           <span>Monto (${state.moneda === "USD" ? "US$" : "Bs"})</span>
-          <input type="number" step="0.01" min="0.01" name="monto" placeholder="0.00" required>
+          <input type="number" step="0.01" min="0.01" name="monto" placeholder="0.00" value="${montoPrefill !== null ? escapeHtml(String(montoPrefill)) : ""}" required>
         </label>
         <label>
           <span>Fecha</span>
-          <input type="date" name="fecha" value="${escapeHtml(todayIso())}" required>
+          <input type="date" name="fecha" value="${escapeHtml(editando ? editando.fecha : todayIso())}" required>
         </label>
       </div>
       <p class="bodega-movimiento-form-hint">Sin puntos de miles: escribe 1000 (no 1.000). Usa punto solo para decimales, ej. 1000.50.</p>
       <label class="bodega-movimiento-form-full">
         <span>Descripcion</span>
-        <input type="text" name="descripcion" maxlength="300" placeholder="Ej. pago de flete" required>
+        <input type="text" name="descripcion" maxlength="300" placeholder="Ej. pago de flete" value="${escapeHtml(editando ? editando.descripcion || "" : "")}" required>
       </label>
       <div class="bodega-movimiento-tiendas">
         <span>Tienda(s)</span>
         <div class="bodega-movimiento-tiendas-list">
           <label class="bodega-tienda-pill">
-            <input type="checkbox" data-balance-todas-tiendas checked>
+            <input type="checkbox" data-balance-todas-tiendas ${todasSeleccionadas ? "checked" : ""}>
             <span class="bodega-tienda-pill-check">&check;</span>
             Todas
           </label>
@@ -1137,7 +1144,7 @@ function renderMovimientoForm(tipo) {
             .map(
               (codigo) => `
                 <label class="bodega-tienda-pill">
-                  <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}" data-balance-tienda-pill checked>
+                  <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}" data-balance-tienda-pill ${tiendasSeleccionadas.includes(codigo) ? "checked" : ""}>
                   <span class="bodega-tienda-pill-check">&check;</span>
                   ${escapeHtml(codigo)}
                 </label>
@@ -1148,12 +1155,12 @@ function renderMovimientoForm(tipo) {
       </div>
       <div class="bodega-movimiento-form-row bodega-movimiento-form-footer">
         <label class="bodega-checkbox-inline bodega-movimiento-operativo">
-          <input type="checkbox" name="esOperativo">
+          <input type="checkbox" name="esOperativo" ${editando && editando.es_operativo ? "checked" : ""}>
           <span class="bodega-operativo-dot"></span>
           Es operativo
         </label>
         <button type="submit" class="button button-primary" ${state.balanceFormSaving ? "disabled" : ""}>
-          ${state.balanceFormSaving ? "Guardando..." : "Guardar"}
+          ${state.balanceFormSaving ? "Guardando..." : editando ? "Guardar cambios" : "Guardar"}
         </button>
       </div>
       ${state.balanceFormError ? `<p class="bodega-movimiento-form-error">${escapeHtml(state.balanceFormError)}</p>` : ""}
@@ -1349,6 +1356,27 @@ function bindEvents() {
       const tipo = button.getAttribute("data-balance-form-toggle");
       state.balanceFormAbierto = state.balanceFormAbierto === tipo ? null : tipo;
       state.balanceFormError = null;
+      state.balanceEditando = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-balance-editar]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.getAttribute("data-balance-editar");
+      const mov = (state.balanceMovimientos || []).find((item) => item.id === id);
+      if (!mov) return;
+      state.balanceFormAbierto = mov.tipo;
+      state.balanceEditando = mov;
+      state.balanceFormError = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-balance-cancelar-edicion]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.balanceEditando = null;
+      state.balanceFormError = null;
       render();
     });
   });
@@ -1391,6 +1419,7 @@ function bindEvents() {
 
 async function submitMovimientoForm(form) {
   const tipo = form.getAttribute("data-balance-form");
+  const editId = form.getAttribute("data-balance-edit-id") || "";
   const formData = new FormData(form);
   const montoIngresado = Number(formData.get("monto"));
   const descripcion = String(formData.get("descripcion") || "").trim();
@@ -1433,12 +1462,20 @@ async function submitMovimientoForm(form) {
   render();
 
   const token = getToken();
+  const editando = Boolean(editId);
   try {
-    const response = await window.fetch(apiUrl("bodega/balance-movimientos"), {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ tipo, esOperativo, monto, descripcion, fecha, codigosTienda }),
-    });
+    const response = await window.fetch(
+      apiUrl(editando ? `bodega/balance-movimientos/${encodeURIComponent(editId)}` : "bodega/balance-movimientos"),
+      {
+        method: editando ? "PATCH" : "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(
+          editando
+            ? { esOperativo, monto, descripcion, fecha, codigosTienda }
+            : { tipo, esOperativo, monto, descripcion, fecha, codigosTienda },
+        ),
+      },
+    );
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       state.balanceFormError = `No se pudo guardar: ${text || response.status}`;
@@ -1455,6 +1492,7 @@ async function submitMovimientoForm(form) {
 
   state.balanceFormSaving = false;
   state.balanceFormAbierto = null;
+  state.balanceEditando = null;
   await loadPanel();
 }
 

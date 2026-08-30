@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { BadRequestException } from "@nestjs/common";
 
 import { IngestAuthGuard } from "../auth/ingest-auth.guard";
@@ -68,6 +68,32 @@ export class BalanceController {
     }
     return this.balanceService.crearMovimiento({
       tipo: body.tipo,
+      esOperativo: Boolean(body.esOperativo),
+      monto: Number(body.monto),
+      descripcion: body.descripcion,
+      fecha: body.fecha,
+      codigosTienda: body.codigosTienda,
+      registradoPor: body.registradoPor,
+    });
+  }
+
+  @Patch(":id")
+  async actualizar(
+    @Param("id") id: string,
+    @Body()
+    body: {
+      esOperativo?: boolean;
+      monto: number;
+      descripcion: string;
+      fecha: string;
+      codigosTienda: string[];
+      registradoPor?: string;
+    },
+  ) {
+    if (!body?.fecha || !FECHA_REGEX.test(body.fecha)) {
+      throw new BadRequestException('"fecha" invalida, formato esperado yyyy-MM-dd.');
+    }
+    return this.balanceService.actualizarMovimiento(id, {
       esOperativo: Boolean(body.esOperativo),
       monto: Number(body.monto),
       descripcion: body.descripcion,

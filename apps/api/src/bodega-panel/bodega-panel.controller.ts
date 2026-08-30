@@ -1,9 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 
 import { RequireGroups } from "../auth/decorators/require-groups.decorator";
 import { GroupsGuard } from "../auth/guards/groups.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { BodegaPanelService, CrearMovimientoInput } from "./bodega-panel.service";
+import { ActualizarMovimientoInput, BodegaPanelService, CrearMovimientoInput } from "./bodega-panel.service";
 
 // Panel de todas las tiendas (bodega_datos): solo el rol "jefe" puede
 // verlo. GroupsGuard siempre deja pasar a "sistema" ademas (bypass
@@ -32,6 +32,11 @@ export class BodegaPanelController {
   @Post("balance-movimientos")
   async crearMovimiento(@Body() body: CrearMovimientoInput) {
     return this.bodegaPanelService.crearMovimiento(body);
+  }
+
+  @Patch("balance-movimientos/:id")
+  async actualizarMovimiento(@Param("id") id: string, @Body() body: ActualizarMovimientoInput) {
+    return this.bodegaPanelService.actualizarMovimiento(id, body);
   }
 
   @Delete("balance-movimientos/:id")
