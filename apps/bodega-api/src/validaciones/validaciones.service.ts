@@ -10,14 +10,18 @@ import { PrismaService } from "../prisma/prisma.service";
 
 // Lista blanca (no negra): solo cuentan en el panel las tiendas cuyo
 // bodega-export corre DIRECTO desde su propia PC, con datos que se siguen
-// actualizando de verdad. Las demas (002-006) todavia llegan via la gemela
-// de MirrorSync en el VPS, que se desactivo por decision del usuario -- sus
+// actualizando de verdad. Las demas todavia llegan via la gemela de
+// MirrorSync en el VPS, que se desactivo por decision del usuario -- sus
 // numeros quedaron congelados en bodega_datos y mostrarlos confundiria con
 // datos "en vivo" que ya no son. B002 tampoco entra: es una bodega/almacen,
 // no una tienda de venta al publico.
-// Cuando una tienda active bodega-export directo en su propia PC (ver
-// apps/api/src/bodega-export), sumar su codigo_legacy aqui.
-const CODIGOS_TIENDA_ACTIVOS_PANEL = ["001"];
+// 006: 3.1.9 instalado 30/08/2026, confirmado con ETL_SYNC_RUNS que ya esta
+// insertando registros frescos ese mismo dia (activacion automatica por
+// nombre de base de datos, ver bodega-export.service.ts).
+// Cuando otra tienda active bodega-export directo en su propia PC, sumar su
+// codigo_legacy aqui (verificar primero en ETL_SYNC_RUNS que este
+// insertando algo reciente, no solo que el registro exista).
+const CODIGOS_TIENDA_ACTIVOS_PANEL = ["001", "006"];
 const FILTRO_TIENDAS_PANEL = Prisma.sql`t."codigo_legacy" IN (${Prisma.join(CODIGOS_TIENDA_ACTIVOS_PANEL)})`;
 
 @Injectable()
