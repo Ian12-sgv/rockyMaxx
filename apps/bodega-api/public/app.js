@@ -522,7 +522,7 @@ function renderPanelShell() {
                   <h1>${state.balanceVisible ? "Balance" : "Todas las tiendas"}</h1>
                   <p>${
                     state.balanceVisible
-                      ? "Activos y resultado del periodo, calculados con certeza a partir de bodega de datos."
+                      ? "Ingresos y egresos registrados a mano, por tienda o varias a la vez."
                       : "Ventas, costo, margen e inventario de todas las tiendas."
                   }</p>
                 </div>
@@ -974,112 +974,12 @@ function renderInventarioRow(row, totalValor, isTotal) {
 // state.inventario/state.ventas ya cargados -- no dispara ninguna consulta
 // nueva al servidor.
 function renderBalanceSection() {
-  const filasInventarioBase = (Array.isArray(state.inventario) ? state.inventario : []).filter(
-    (row) => row.codigo_legacy !== "TOTAL",
-  );
-  const totalInventario = getEffectiveTotalRow(state.inventario);
-  const filasInventario = state.tiendaFiltro
-    ? filasInventarioBase.filter((row) => row.codigo_legacy === state.tiendaFiltro)
-    : filasInventarioBase;
-  const filasVentasBase = (Array.isArray(state.ventas) ? state.ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
-  const totalVentas = getEffectiveTotalRow(state.ventas);
-  const filasVentas = state.tiendaFiltro
-    ? filasVentasBase.filter((row) => row.codigo_legacy === state.tiendaFiltro)
-    : filasVentasBase;
-  const periodoLabel = formatRangoTriggerLabel(state.rango);
-
   return `
     <section class="modern-card bodega-balance-card">
       <div class="modern-card-head">
         <div>
-          <h2>Balance</h2>
-          <p>Lo unico que se puede calcular con certeza hoy: inventario a costo y ganancia acumulada del periodo. No incluye cuentas por cobrar/pagar, deudas ni efectivo de caja/banco -- eso no se sincroniza todavia.</p>
-        </div>
-        <span class="modern-chip">${escapeHtml(periodoLabel.toUpperCase())}</span>
-      </div>
-      <div class="bodega-balance-grid">
-        <div class="bodega-balance-block">
-          <h3>Activos &mdash; Inventario a costo</h3>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Tienda</th>
-                  <th>Valor a costo</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${
-                  filasInventario.length
-                    ? filasInventario
-                        .map(
-                          (row) => `
-                            <tr>
-                              <td>${escapeHtml(row.codigo_legacy || "-")}</td>
-                              <td>${escapeHtml(formatMonedaDesdeUsd(row.valor_costo_usd))}</td>
-                            </tr>
-                          `,
-                        )
-                        .join("")
-                    : `<tr><td colspan="2"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
-                }
-                ${
-                  totalInventario && !state.tiendaFiltro
-                    ? `<tr class="is-selected-row"><td><strong>TOTAL</strong></td><td>${escapeHtml(formatMonedaDesdeUsd(totalInventario.valor_costo_usd))}</td></tr>`
-                    : ""
-                }
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="bodega-balance-block">
-          <h3>Resultado del periodo &mdash; Ganancia acumulada</h3>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Tienda</th>
-                  <th>Ganancia</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${
-                  filasVentas.length
-                    ? filasVentas
-                        .map((row) => {
-                          const ganancia = toFiniteNumber(row.ganancia);
-                          const tone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
-                          return `
-                            <tr>
-                              <td>${escapeHtml(row.codigo_legacy || "-")}</td>
-                              <td class="bodega-ganancia-cell bodega-ganancia-${tone}">${escapeHtml(formatMoneda(row.ganancia))}</td>
-                            </tr>
-                          `;
-                        })
-                        .join("")
-                    : `<tr><td colspan="2"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
-                }
-                ${
-                  totalVentas && !state.tiendaFiltro
-                    ? (() => {
-                        const ganancia = toFiniteNumber(totalVentas.ganancia);
-                        const tone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
-                        return `<tr class="is-selected-row"><td><strong>TOTAL</strong></td><td class="bodega-ganancia-cell bodega-ganancia-${tone}"><strong>${escapeHtml(formatMoneda(totalVentas.ganancia))}</strong></td></tr>`;
-                      })()
-                    : ""
-                }
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="modern-card bodega-balance-card">
-      <div class="modern-card-head">
-        <div>
           <h2>Ingresos y egresos</h2>
-          <p>Registrados a mano, aparte de la ganancia de ventas -- no se suman al Resultado del periodo de arriba.</p>
+          <p>Registrados a mano por tienda o varias tiendas a la vez -- no se mezclan con la ganancia calculada de ventas menos costo.</p>
         </div>
       </div>
       <div class="bodega-balance-grid">
