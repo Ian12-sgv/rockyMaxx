@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
 import { AppController } from "./app.controller";
+import { BalanceModule } from "./balance/balance.module";
 import { DimTiendasModule } from "./dim-tiendas/dim-tiendas.module";
 import { EtlModule } from "./etl/etl.module";
 import { IngestModule } from "./ingest/ingest.module";
@@ -19,6 +20,7 @@ import { ValidacionesModule } from "./validaciones/validaciones.module";
     EtlModule,
     IngestModule,
     ValidacionesModule,
+    BalanceModule,
   ],
   controllers: [AppController],
 })

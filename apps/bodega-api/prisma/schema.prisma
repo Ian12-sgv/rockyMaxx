@@ -36,6 +36,7 @@ model DimTiendas {
   syncRuns          EtlSyncRuns[]
   syncErrors        EtlSyncErrors[]
   watermarks        EtlWatermarks[]
+  balanceMovimientos BalanceMovimientoTienda[]
 
   @@map("DIM_TIENDAS")
 }
@@ -271,4 +272,41 @@ model EtlWatermarks {
 
   @@unique([dimTiendaId, entidadDestino], map: "uq_etl_watermarks_tienda_entidad")
   @@map("ETL_WATERMARKS")
+}
+
+// Ingresos/egresos registrados a mano desde el panel "Balance" -- no vienen
+// de ningun ETL, los carga un usuario del panel. Vista aparte de la
+// ganancia calculada de ventas-costo (no se mezclan): esto es dinero que
+// entro o salio fuera del flujo normal de venta (aportes, prestamos,
+// alquiler, nomina, etc.). Un mismo movimiento puede aplicar a varias
+// tiendas a la vez (tabla puente BalanceMovimientoTienda) -- el monto NO
+// se multiplica por tienda, es un solo monto compartido entre las tiendas
+// seleccionadas.
+model BalanceMovimiento {
+  id            String   @id @default(uuid()) @db.Uuid
+  tipo          String   @map("tipo") @db.VarChar(10) // "ingreso" | "egreso"
+  esOperativo   Boolean  @default(false) @map("es_operativo")
+  monto         Decimal  @map("monto") @db.Decimal(18, 2)
+  descripcion   String   @map("descripcion") @db.VarChar(300)
+  fecha         DateTime @map("fecha") @db.Date
+  registradoPor String?  @map("registrado_por") @db.VarChar(120)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tiendas BalanceMovimientoTienda[]
+
+  @@index([fecha, tipo], map: "ix_balance_movimientos_fecha_tipo")
+  @@map("BALANCE_MOVIMIENTOS")
+}
+
+model BalanceMovimientoTienda {
+  id           String @id @default(uuid()) @db.Uuid
+  movimientoId String @map("movimiento_id") @db.Uuid
+  dimTiendaId  String @map("dim_tienda_id") @db.Uuid
+
+  movimiento BalanceMovimiento @relation(fields: [movimientoId], references: [id], onDelete: Cascade)
+  dimTienda  DimTiendas        @relation(fields: [dimTiendaId], references: [id])
+
+  @@unique([movimientoId, dimTiendaId], map: "uq_balance_mov_tienda")
+  @@index([dimTiendaId], map: "ix_balance_mov_tienda_tienda")
+  @@map("BALANCE_MOVIMIENTOS_TIENDAS")
 }

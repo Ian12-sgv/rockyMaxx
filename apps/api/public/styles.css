@@ -8872,8 +8872,91 @@ button {
 }
 
 .bodega-balance-block h3 {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 1rem;
+}
+
+.bodega-movimientos-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.bodega-movimiento-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-paper-strong);
+}
+
+.bodega-movimiento-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.bodega-movimiento-form label,
+.bodega-movimiento-form .bodega-movimiento-tiendas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  flex: 1 1 160px;
+}
+
+.bodega-movimiento-form-full {
+  flex: 1 1 100%;
+}
+
+.bodega-movimiento-form input[type="number"],
+.bodega-movimiento-form input[type="date"],
+.bodega-movimiento-form input[type="text"] {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  background: var(--bg-paper);
+  color: var(--ink);
+}
+
+.bodega-movimiento-tiendas-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.bodega-checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--ink);
+  flex: none;
+}
+
+.bodega-movimiento-operativo {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  align-self: flex-end;
+}
+
+.bodega-movimiento-form-error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--danger, #ab3f2f);
+}
+
+.bodega-movimiento-form-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 @media (max-width: 900px) {

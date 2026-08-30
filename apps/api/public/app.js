@@ -252,6 +252,10 @@ const state = {
     tiendaFiltro: "",
     sortDir: "desc",
     balanceVisible: false,
+    balanceMovimientos: [],
+    balanceFormAbierto: null, // "ingreso" | "egreso" | null
+    balanceFormSaving: false,
+    balanceFormError: null,
     ventas: [],
     ventasAnterior: [],
     inventario: [],
@@ -10575,6 +10579,152 @@ function bodegaPanelRenderBalanceSection(panel) {
         </div>
       </div>
     </section>
+
+    <section class="modern-card bodega-balance-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Ingresos y egresos</h2>
+          <p>Registrados a mano, aparte de la ganancia de ventas -- no se suman al Resultado del periodo de arriba.</p>
+        </div>
+      </div>
+      <div class="bodega-balance-grid">
+        ${bodegaPanelRenderMovimientosBlock(panel, "ingreso")}
+        ${bodegaPanelRenderMovimientosBlock(panel, "egreso")}
+      </div>
+    </section>
+  `;
+}
+
+function bodegaPanelFiltrarMovimientos(panel, tipo) {
+  const lista = Array.isArray(panel.balanceMovimientos) ? panel.balanceMovimientos : [];
+  return lista
+    .filter((mov) => mov.tipo === tipo)
+    .filter(
+      (mov) => !panel.tiendaFiltro || (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.includes(panel.tiendaFiltro)),
+    );
+}
+
+function bodegaPanelSumarMontos(movimientos, soloOperativos) {
+  return movimientos
+    .filter((mov) => !soloOperativos || mov.es_operativo)
+    .reduce((acc, mov) => acc + toFiniteNumber(mov.monto), 0);
+}
+
+function bodegaPanelRenderMovimientosBlock(panel, tipo) {
+  const titulo = tipo === "ingreso" ? "Ingresos" : "Egresos";
+  const movimientos = bodegaPanelFiltrarMovimientos(panel, tipo);
+  const total = bodegaPanelSumarMontos(movimientos, false);
+  const totalOperativo = bodegaPanelSumarMontos(movimientos, true);
+  const formAbierto = panel.balanceFormAbierto === tipo;
+
+  return `
+    <div class="bodega-balance-block">
+      <div class="bodega-movimientos-head">
+        <h3>${titulo}</h3>
+        <button type="button" class="button button-ghost" data-bodega-balance-form-toggle="${tipo}">
+          ${formAbierto ? "Cancelar" : "+ Agregar"}
+        </button>
+      </div>
+      ${formAbierto ? bodegaPanelRenderMovimientoForm(panel, tipo) : ""}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Tienda(s)</th>
+              <th>Operativo</th>
+              <th>Descripcion</th>
+              <th>Monto</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              movimientos.length
+                ? movimientos
+                    .map(
+                      (mov) => `
+                        <tr>
+                          <td>${escapeHtml(bodegaPanelFormatDiaCorto(mov.fecha))}</td>
+                          <td>${escapeHtml((mov.codigos_tienda || []).join(", "))}</td>
+                          <td>${mov.es_operativo ? "Si" : "No"}</td>
+                          <td>${escapeHtml(mov.descripcion || "-")}</td>
+                          <td>${escapeHtml(bodegaPanelFormatMoneda(panel, mov.monto))}</td>
+                          <td>
+                            <button type="button" class="button button-ghost" data-bodega-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">
+                              &times;
+                            </button>
+                          </td>
+                        </tr>
+                      `,
+                    )
+                    .join("")
+                : `<tr><td colspan="6"><div class="empty-state"><p>Sin ${titulo.toLowerCase()} registrados en este periodo.</p></div></td></tr>`
+            }
+            <tr class="is-selected-row">
+              <td colspan="4">
+                <strong>TOTAL${totalOperativo > 0 ? ` &middot; operativo: ${escapeHtml(bodegaPanelFormatMoneda(panel, totalOperativo))}` : ""}</strong>
+              </td>
+              <td colspan="2"><strong>${escapeHtml(bodegaPanelFormatMoneda(panel, total))}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function bodegaPanelRenderMovimientoForm(panel, tipo) {
+  const storeOptions = bodegaPanelGetStoreOptions(panel);
+
+  return `
+    <form class="bodega-movimiento-form" data-bodega-balance-form="${tipo}">
+      <div class="bodega-movimiento-form-row">
+        <label>
+          <span>Monto (Bs)</span>
+          <input type="number" step="0.01" min="0.01" name="monto" required>
+        </label>
+        <label>
+          <span>Fecha</span>
+          <input type="date" name="fecha" value="${escapeHtml(bodegaPanelTodayIso())}" required>
+        </label>
+      </div>
+      <label class="bodega-movimiento-form-full">
+        <span>Descripcion</span>
+        <input type="text" name="descripcion" maxlength="300" required>
+      </label>
+      <div class="bodega-movimiento-form-row">
+        <div class="bodega-movimiento-tiendas">
+          <span>Tienda(s)</span>
+          <div class="bodega-movimiento-tiendas-list">
+            <label class="bodega-checkbox-inline">
+              <input type="checkbox" data-bodega-balance-todas-tiendas>
+              Todas
+            </label>
+            ${storeOptions
+              .map(
+                (codigo) => `
+                  <label class="bodega-checkbox-inline">
+                    <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}">
+                    ${escapeHtml(codigo)}
+                  </label>
+                `,
+              )
+              .join("")}
+          </div>
+        </div>
+        <label class="bodega-checkbox-inline bodega-movimiento-operativo">
+          <input type="checkbox" name="esOperativo">
+          Es operativo
+        </label>
+      </div>
+      ${panel.balanceFormError ? `<p class="bodega-movimiento-form-error">${escapeHtml(panel.balanceFormError)}</p>` : ""}
+      <div class="bodega-movimiento-form-actions">
+        <button type="submit" class="button button-primary" ${panel.balanceFormSaving ? "disabled" : ""}>
+          ${panel.balanceFormSaving ? "Guardando..." : "Guardar"}
+        </button>
+      </div>
+    </form>
   `;
 }
 
@@ -12511,7 +12661,41 @@ function bindShellEvents() {
 
   document.querySelector("[data-bodega-balance-toggle]")?.addEventListener("click", () => {
     state.bodegaPanel.balanceVisible = !state.bodegaPanel.balanceVisible;
+    state.bodegaPanel.balanceFormAbierto = null;
+    state.bodegaPanel.balanceFormError = null;
     render();
+  });
+
+  document.querySelectorAll("[data-bodega-balance-form-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const tipo = button.getAttribute("data-bodega-balance-form-toggle");
+      state.bodegaPanel.balanceFormAbierto = state.bodegaPanel.balanceFormAbierto === tipo ? null : tipo;
+      state.bodegaPanel.balanceFormError = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-bodega-balance-todas-tiendas]").forEach((checkbox) => {
+    checkbox.addEventListener("change", (event) => {
+      const form = event.target.closest("form");
+      const marcado = event.target.checked;
+      form?.querySelectorAll('input[name="codigosTienda"]').forEach((input) => {
+        input.checked = marcado;
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-bodega-balance-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void bodegaPanelSubmitMovimientoForm(form);
+    });
+  });
+
+  document.querySelectorAll("[data-bodega-balance-eliminar]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void bodegaPanelEliminarMovimiento(button.getAttribute("data-bodega-balance-eliminar"));
+    });
   });
 
   bindArticleEvents();
@@ -18903,6 +19087,19 @@ async function loadBodegaPanelResumen(options = {}) {
     console.error(error);
     state.bodegaPanel.disponible = false;
     state.bodegaPanel.motivo = extractErrorMessage(error);
+  }
+
+  try {
+    const movParams = new URLSearchParams({
+      desde: state.bodegaPanel.rango.desde,
+      hasta: state.bodegaPanel.rango.hasta,
+    });
+    const movResponse = await apiFetch(`/bodega-panel/balance-movimientos?${movParams.toString()}`);
+    state.bodegaPanel.balanceMovimientos =
+      movResponse.disponible && Array.isArray(movResponse.movimientos) ? movResponse.movimientos : [];
+  } catch (error) {
+    console.error(error);
+    state.bodegaPanel.balanceMovimientos = [];
   } finally {
     state.bodegaPanel.loading = false;
     state.bodegaPanel.loaded = true;
@@ -18910,6 +19107,79 @@ async function loadBodegaPanelResumen(options = {}) {
       render();
     }
   }
+}
+
+async function bodegaPanelSubmitMovimientoForm(form) {
+  const tipo = form.getAttribute("data-bodega-balance-form");
+  const formData = new FormData(form);
+  const monto = Number(formData.get("monto"));
+  const descripcion = String(formData.get("descripcion") || "").trim();
+  const fecha = String(formData.get("fecha") || "");
+  const esOperativo = formData.get("esOperativo") === "on";
+  const codigosTienda = formData.getAll("codigosTienda").map((value) => String(value));
+
+  if (!monto || monto <= 0) {
+    state.bodegaPanel.balanceFormError = "El monto debe ser mayor a 0.";
+    render();
+    return;
+  }
+  if (!descripcion) {
+    state.bodegaPanel.balanceFormError = "La descripcion es requerida.";
+    render();
+    return;
+  }
+  if (!codigosTienda.length) {
+    state.bodegaPanel.balanceFormError = "Selecciona al menos una tienda.";
+    render();
+    return;
+  }
+
+  state.bodegaPanel.balanceFormSaving = true;
+  state.bodegaPanel.balanceFormError = null;
+  render();
+
+  try {
+    const response = await apiFetch("/bodega-panel/balance-movimientos", {
+      method: "POST",
+      body: { tipo, esOperativo, monto, descripcion, fecha, codigosTienda },
+    });
+    if (!response.ok) {
+      state.bodegaPanel.balanceFormError = response.motivo || "No se pudo guardar el movimiento.";
+      state.bodegaPanel.balanceFormSaving = false;
+      render();
+      return;
+    }
+  } catch (error) {
+    state.bodegaPanel.balanceFormError = extractErrorMessage(error);
+    state.bodegaPanel.balanceFormSaving = false;
+    render();
+    return;
+  }
+
+  state.bodegaPanel.balanceFormSaving = false;
+  state.bodegaPanel.balanceFormAbierto = null;
+  await loadBodegaPanelResumen();
+}
+
+async function bodegaPanelEliminarMovimiento(id) {
+  if (!id || !window.confirm("Eliminar este movimiento?")) {
+    return;
+  }
+  try {
+    const response = await apiFetch(`/bodega-panel/balance-movimientos/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      setFlash(response.motivo || "No se pudo eliminar el movimiento.", "error");
+      render();
+      return;
+    }
+  } catch (error) {
+    setFlash(extractErrorMessage(error), "error");
+    render();
+    return;
+  }
+  await loadBodegaPanelResumen();
 }
 
 function bodegaPanelSeleccionarRango(rango) {

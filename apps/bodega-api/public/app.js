@@ -27,6 +27,10 @@ const state = {
   tiendaFiltro: "",
   sortDir: "desc",
   balanceVisible: false,
+  balanceMovimientos: [],
+  balanceFormAbierto: null, // "ingreso" | "egreso" | null
+  balanceFormSaving: false,
+  balanceFormError: null,
   ventas: [],
   ventasAnterior: [],
   inventario: [],
@@ -1070,6 +1074,153 @@ function renderBalanceSection() {
         </div>
       </div>
     </section>
+
+    <section class="modern-card bodega-balance-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Ingresos y egresos</h2>
+          <p>Registrados a mano, aparte de la ganancia de ventas -- no se suman al Resultado del periodo de arriba.</p>
+        </div>
+      </div>
+      <div class="bodega-balance-grid">
+        ${renderMovimientosBlock("ingreso")}
+        ${renderMovimientosBlock("egreso")}
+      </div>
+    </section>
+  `;
+}
+
+function filtrarMovimientos(tipo) {
+  const lista = Array.isArray(state.balanceMovimientos) ? state.balanceMovimientos : [];
+  return lista
+    .filter((mov) => mov.tipo === tipo)
+    .filter(
+      (mov) =>
+        !state.tiendaFiltro || (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.includes(state.tiendaFiltro)),
+    );
+}
+
+function sumarMontos(movimientos, soloOperativos) {
+  return movimientos
+    .filter((mov) => !soloOperativos || mov.es_operativo)
+    .reduce((acc, mov) => acc + toFiniteNumber(mov.monto), 0);
+}
+
+function renderMovimientosBlock(tipo) {
+  const titulo = tipo === "ingreso" ? "Ingresos" : "Egresos";
+  const movimientos = filtrarMovimientos(tipo);
+  const total = sumarMontos(movimientos, false);
+  const totalOperativo = sumarMontos(movimientos, true);
+  const formAbierto = state.balanceFormAbierto === tipo;
+
+  return `
+    <div class="bodega-balance-block">
+      <div class="bodega-movimientos-head">
+        <h3>${titulo}</h3>
+        <button type="button" class="button button-ghost" data-balance-form-toggle="${tipo}">
+          ${formAbierto ? "Cancelar" : "+ Agregar"}
+        </button>
+      </div>
+      ${formAbierto ? renderMovimientoForm(tipo) : ""}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Tienda(s)</th>
+              <th>Operativo</th>
+              <th>Descripcion</th>
+              <th>Monto</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              movimientos.length
+                ? movimientos
+                    .map(
+                      (mov) => `
+                        <tr>
+                          <td>${escapeHtml(formatDiaCorto(mov.fecha))}</td>
+                          <td>${escapeHtml((mov.codigos_tienda || []).join(", "))}</td>
+                          <td>${mov.es_operativo ? "Si" : "No"}</td>
+                          <td>${escapeHtml(mov.descripcion || "-")}</td>
+                          <td>${escapeHtml(formatMoneda(mov.monto))}</td>
+                          <td>
+                            <button type="button" class="button button-ghost" data-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">
+                              &times;
+                            </button>
+                          </td>
+                        </tr>
+                      `,
+                    )
+                    .join("")
+                : `<tr><td colspan="6"><div class="empty-state"><p>Sin ${titulo.toLowerCase()} registrados en este periodo.</p></div></td></tr>`
+            }
+            <tr class="is-selected-row">
+              <td colspan="4">
+                <strong>TOTAL${totalOperativo > 0 ? ` &middot; operativo: ${escapeHtml(formatMoneda(totalOperativo))}` : ""}</strong>
+              </td>
+              <td colspan="2"><strong>${escapeHtml(formatMoneda(total))}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderMovimientoForm(tipo) {
+  const storeOptions = getStoreOptions();
+
+  return `
+    <form class="bodega-movimiento-form" data-balance-form="${tipo}">
+      <div class="bodega-movimiento-form-row">
+        <label>
+          <span>Monto (Bs)</span>
+          <input type="number" step="0.01" min="0.01" name="monto" required>
+        </label>
+        <label>
+          <span>Fecha</span>
+          <input type="date" name="fecha" value="${escapeHtml(todayIso())}" required>
+        </label>
+      </div>
+      <label class="bodega-movimiento-form-full">
+        <span>Descripcion</span>
+        <input type="text" name="descripcion" maxlength="300" required>
+      </label>
+      <div class="bodega-movimiento-form-row">
+        <div class="bodega-movimiento-tiendas">
+          <span>Tienda(s)</span>
+          <div class="bodega-movimiento-tiendas-list">
+            <label class="bodega-checkbox-inline">
+              <input type="checkbox" data-balance-todas-tiendas>
+              Todas
+            </label>
+            ${storeOptions
+              .map(
+                (codigo) => `
+                  <label class="bodega-checkbox-inline">
+                    <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}">
+                    ${escapeHtml(codigo)}
+                  </label>
+                `,
+              )
+              .join("")}
+          </div>
+        </div>
+        <label class="bodega-checkbox-inline bodega-movimiento-operativo">
+          <input type="checkbox" name="esOperativo">
+          Es operativo
+        </label>
+      </div>
+      ${state.balanceFormError ? `<p class="bodega-movimiento-form-error">${escapeHtml(state.balanceFormError)}</p>` : ""}
+      <div class="bodega-movimiento-form-actions">
+        <button type="submit" class="button button-primary" ${state.balanceFormSaving ? "disabled" : ""}>
+          ${state.balanceFormSaving ? "Guardando..." : "Guardar"}
+        </button>
+      </div>
+    </form>
   `;
 }
 
@@ -1092,11 +1243,17 @@ async function loadPanel() {
   }
 
   let response;
+  let movimientosResponse;
   try {
     const params = new URLSearchParams({ desde: state.rango.desde, hasta: state.rango.hasta });
-    response = await window.fetch(apiUrl(`bodega/validaciones/panel-resumen?${params.toString()}`), {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    [response, movimientosResponse] = await Promise.all([
+      window.fetch(apiUrl(`bodega/validaciones/panel-resumen?${params.toString()}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      window.fetch(apiUrl(`bodega/balance-movimientos?${params.toString()}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    ]);
   } catch (error) {
     state.loading = false;
     setFlash(`No se pudo contactar el servidor: ${error?.message || error}`, "error");
@@ -1138,6 +1295,12 @@ async function loadPanel() {
   state.serieDiaria = Array.isArray(data.serieDiaria) ? data.serieDiaria : [];
   state.tasaCambio = data.tasaCambio || null;
   state.lastUpdated = new Date();
+  try {
+    state.balanceMovimientos =
+      movimientosResponse && movimientosResponse.ok ? await movimientosResponse.json() : [];
+  } catch (error) {
+    state.balanceMovimientos = [];
+  }
   render();
 }
 
@@ -1239,8 +1402,121 @@ function bindEvents() {
 
   document.querySelector("[data-balance-toggle]")?.addEventListener("click", () => {
     state.balanceVisible = !state.balanceVisible;
+    state.balanceFormAbierto = null;
+    state.balanceFormError = null;
     render();
   });
+
+  document.querySelectorAll("[data-balance-form-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const tipo = button.getAttribute("data-balance-form-toggle");
+      state.balanceFormAbierto = state.balanceFormAbierto === tipo ? null : tipo;
+      state.balanceFormError = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-balance-todas-tiendas]").forEach((checkbox) => {
+    checkbox.addEventListener("change", (event) => {
+      const form = event.target.closest("form");
+      const marcado = event.target.checked;
+      form?.querySelectorAll('input[name="codigosTienda"]').forEach((input) => {
+        input.checked = marcado;
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-balance-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void submitMovimientoForm(form);
+    });
+  });
+
+  document.querySelectorAll("[data-balance-eliminar]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void eliminarMovimiento(button.getAttribute("data-balance-eliminar"));
+    });
+  });
+}
+
+async function submitMovimientoForm(form) {
+  const tipo = form.getAttribute("data-balance-form");
+  const formData = new FormData(form);
+  const monto = Number(formData.get("monto"));
+  const descripcion = String(formData.get("descripcion") || "").trim();
+  const fecha = String(formData.get("fecha") || "");
+  const esOperativo = formData.get("esOperativo") === "on";
+  const codigosTienda = formData.getAll("codigosTienda").map((value) => String(value));
+
+  if (!monto || monto <= 0) {
+    state.balanceFormError = "El monto debe ser mayor a 0.";
+    render();
+    return;
+  }
+  if (!descripcion) {
+    state.balanceFormError = "La descripcion es requerida.";
+    render();
+    return;
+  }
+  if (!codigosTienda.length) {
+    state.balanceFormError = "Selecciona al menos una tienda.";
+    render();
+    return;
+  }
+
+  state.balanceFormSaving = true;
+  state.balanceFormError = null;
+  render();
+
+  const token = getToken();
+  try {
+    const response = await window.fetch(apiUrl("bodega/balance-movimientos"), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo, esOperativo, monto, descripcion, fecha, codigosTienda }),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      state.balanceFormError = `No se pudo guardar: ${text || response.status}`;
+      state.balanceFormSaving = false;
+      render();
+      return;
+    }
+  } catch (error) {
+    state.balanceFormError = `No se pudo contactar el servidor: ${error?.message || error}`;
+    state.balanceFormSaving = false;
+    render();
+    return;
+  }
+
+  state.balanceFormSaving = false;
+  state.balanceFormAbierto = null;
+  await loadPanel();
+}
+
+async function eliminarMovimiento(id) {
+  if (!id || !window.confirm("Eliminar este movimiento?")) {
+    return;
+  }
+  const token = getToken();
+  try {
+    const response = await window.fetch(apiUrl(`bodega/balance-movimientos/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      setFlash(`No se pudo eliminar: ${text || response.status}`, "error");
+      render();
+      return;
+    }
+  } catch (error) {
+    setFlash(`No se pudo contactar el servidor: ${error?.message || error}`, "error");
+    render();
+    return;
+  }
+  await loadPanel();
 }
 
 // Cierra el desplegable si el clic fue fuera de el. Registrado UNA sola vez
