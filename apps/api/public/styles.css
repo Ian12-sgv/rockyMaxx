@@ -9212,8 +9212,10 @@ button {
   flex: none;
 }
 
-.bodega-movimiento-operativo {
+.bodega-movimiento-form-footer .bodega-movimiento-operativo {
   flex: 0 0 auto;
+  margin-right: auto;
+  justify-content: flex-start;
 }
 
 .bodega-movimiento-operativo input {
