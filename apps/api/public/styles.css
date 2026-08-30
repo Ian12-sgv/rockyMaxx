@@ -8867,8 +8867,9 @@ button {
   gap: 10px;
   padding: 18px;
   border-radius: var(--radius-md, 14px);
-  border: 1px solid var(--line);
-  background: var(--bg-paper);
+  border: 1px solid rgba(40, 70, 104, 0.1);
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(31, 53, 83, 0.06);
   min-width: 0;
 }
 
@@ -8950,8 +8951,9 @@ button {
   gap: 12px;
   padding: 16px;
   border-radius: var(--radius-md, 14px);
-  border: 1px solid var(--line);
-  background: var(--bg-paper);
+  border: 1px solid rgba(40, 70, 104, 0.1);
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(31, 53, 83, 0.06);
 }
 
 .bodega-movimientos-card-head {
@@ -8991,7 +8993,7 @@ button {
   height: 20px;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--bg-paper-strong);
+  background: #f2f4f7;
   color: var(--ink-soft);
   font-size: 0.75rem;
   font-weight: 600;
@@ -9003,13 +9005,13 @@ button {
   padding: 7px 16px;
   font-size: 0.82rem;
   font-weight: 600;
-  background: var(--bg-paper);
+  background: #ffffff;
   color: var(--ink);
   cursor: pointer;
 }
 
 .bodega-movimientos-toggle-btn.is-open {
-  background: var(--bg-paper-strong);
+  background: #f2f4f7;
 }
 
 .bodega-movimientos-empty {
@@ -9114,7 +9116,7 @@ button {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--bg-paper-strong);
+  background: #f7f8fa;
 }
 
 .bodega-movimiento-form-row {
@@ -9157,7 +9159,7 @@ button {
   padding: 7px 10px;
   font: inherit;
   font-size: 0.85rem;
-  background: var(--bg-paper);
+  background: #ffffff;
   color: var(--ink);
 }
 
@@ -9175,7 +9177,7 @@ button {
   padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: var(--bg-paper);
+  background: #ffffff;
   font-size: 0.8rem;
   color: var(--ink);
   cursor: pointer;
