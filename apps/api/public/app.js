@@ -10659,6 +10659,7 @@ function bodegaPanelRenderMovimientoForm(panel, tipo) {
       <div class="bodega-movimiento-form-row bodega-movimiento-form-footer">
         <label class="bodega-checkbox-inline bodega-movimiento-operativo">
           <input type="checkbox" name="esOperativo">
+          <span class="bodega-operativo-dot"></span>
           Es operativo
         </label>
         <button type="submit" class="button button-primary" ${panel.balanceFormSaving ? "disabled" : ""}>

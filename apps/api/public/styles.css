@@ -9216,6 +9216,27 @@ button {
   flex: 0 0 auto;
 }
 
+.bodega-movimiento-operativo input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.bodega-operativo-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: transparent;
+  flex: none;
+}
+
+.bodega-movimiento-operativo:has(input:checked) .bodega-operativo-dot {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
 .bodega-movimiento-form-error {
   margin: 0;
   font-size: 0.82rem;
