@@ -10624,13 +10624,14 @@ function bodegaPanelRenderMovimientoForm(panel, tipo) {
       <div class="bodega-movimiento-form-row">
         <label>
           <span>Monto (${panel.moneda === "USD" ? "US$" : "Bs"})</span>
-          <input type="number" step="0.01" min="0.01" name="monto" placeholder="0,00" required>
+          <input type="number" step="0.01" min="0.01" name="monto" placeholder="0.00" required>
         </label>
         <label>
           <span>Fecha</span>
           <input type="date" name="fecha" value="${escapeHtml(bodegaPanelTodayIso())}" required>
         </label>
       </div>
+      <p class="bodega-movimiento-form-hint">Sin puntos de miles: escribe 1000 (no 1.000). Usa punto solo para decimales, ej. 1000.50.</p>
       <label class="bodega-movimiento-form-full">
         <span>Descripcion</span>
         <input type="text" name="descripcion" maxlength="300" placeholder="Ej. pago de flete" required>

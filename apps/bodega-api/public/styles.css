@@ -9261,6 +9261,12 @@ button {
   color: var(--danger, #ab3f2f);
 }
 
+.bodega-movimiento-form-hint {
+  margin: -4px 0 0;
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+
 @media (max-width: 900px) {
   .bodega-balance-kpi-grid,
   .bodega-movimientos-grid {
