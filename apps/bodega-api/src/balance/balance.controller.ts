@@ -55,6 +55,7 @@ export class BalanceController {
     @Body()
     body: {
       tipo: "ingreso" | "egreso";
+      moneda: "BS" | "USD";
       esOperativo?: boolean;
       monto: number;
       descripcion: string;
@@ -68,6 +69,7 @@ export class BalanceController {
     }
     return this.balanceService.crearMovimiento({
       tipo: body.tipo,
+      moneda: body.moneda,
       esOperativo: Boolean(body.esOperativo),
       monto: Number(body.monto),
       descripcion: body.descripcion,
@@ -82,6 +84,7 @@ export class BalanceController {
     @Param("id") id: string,
     @Body()
     body: {
+      moneda: "BS" | "USD";
       esOperativo?: boolean;
       monto: number;
       descripcion: string;
@@ -94,6 +97,7 @@ export class BalanceController {
       throw new BadRequestException('"fecha" invalida, formato esperado yyyy-MM-dd.');
     }
     return this.balanceService.actualizarMovimiento(id, {
+      moneda: body.moneda,
       esOperativo: Boolean(body.esOperativo),
       monto: Number(body.monto),
       descripcion: body.descripcion,

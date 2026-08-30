@@ -5,6 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 
 export type CrearMovimientoInput = {
   tipo: "ingreso" | "egreso";
+  moneda: "BS" | "USD";
   esOperativo: boolean;
   monto: number;
   descripcion: string;
@@ -14,6 +15,7 @@ export type CrearMovimientoInput = {
 };
 
 export type ActualizarMovimientoInput = {
+  moneda: "BS" | "USD";
   esOperativo: boolean;
   monto: number;
   descripcion: string;
@@ -41,6 +43,7 @@ export class BalanceService {
     return rows.map((row) => ({
       id: row.id,
       tipo: row.tipo,
+      moneda: row.moneda,
       es_operativo: row.esOperativo,
       monto: row.monto.toString(),
       descripcion: row.descripcion,
@@ -60,6 +63,7 @@ export class BalanceService {
     const creado = await this.prisma.balanceMovimiento.create({
       data: {
         tipo: input.tipo,
+        moneda: input.moneda,
         esOperativo: Boolean(input.esOperativo),
         monto: new Prisma.Decimal(input.monto),
         descripcion: input.descripcion.trim(),
@@ -87,6 +91,7 @@ export class BalanceService {
       this.prisma.balanceMovimiento.update({
         where: { id },
         data: {
+          moneda: input.moneda,
           esOperativo: Boolean(input.esOperativo),
           monto: new Prisma.Decimal(input.monto),
           descripcion: input.descripcion.trim(),
@@ -111,7 +116,10 @@ export class BalanceService {
     return { ok: true };
   }
 
-  private validarCamposComunes(input: { monto: number; descripcion: string; codigosTienda: string[] }) {
+  private validarCamposComunes(input: { moneda: string; monto: number; descripcion: string; codigosTienda: string[] }) {
+    if (input.moneda !== "BS" && input.moneda !== "USD") {
+      throw new BadRequestException('"moneda" debe ser "BS" o "USD".');
+    }
     if (!Number.isFinite(input.monto) || input.monto <= 0) {
       throw new BadRequestException('"monto" debe ser un numero mayor a 0.');
     }

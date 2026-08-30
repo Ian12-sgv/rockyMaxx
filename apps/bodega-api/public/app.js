@@ -998,10 +998,17 @@ function renderInventarioRow(row, totalValor, isTotal) {
 // efectivo, cuando en realidad simplemente no lo estamos midiendo. Reusa
 // state.inventario/state.ventas ya cargados -- no dispara ninguna consulta
 // nueva al servidor.
+// Los montos de Balance NO se convierten con la tasa -- cada movimiento
+// se guarda en la moneda con la que se tipeo (state.moneda al momento de
+// guardar) y se muestra tal cual. El toggle Bs/US$ actua como FILTRO aqui
+// (a pedido del usuario, para no mezclar montos en bolivares con montos en
+// dolares en el mismo total), a diferencia del resto del panel (ventas,
+// inventario) donde el mismo toggle SI convierte con la tasa.
 function filtrarMovimientos(tipo) {
   const lista = Array.isArray(state.balanceMovimientos) ? state.balanceMovimientos : [];
   return lista
     .filter((mov) => mov.tipo === tipo)
+    .filter((mov) => (mov.moneda || "BS") === state.moneda)
     .filter(
       (mov) =>
         !state.tiendaFiltro || (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.includes(state.tiendaFiltro)),
@@ -1012,6 +1019,10 @@ function sumarMontos(movimientos, soloOperativos) {
   return movimientos
     .filter((mov) => !soloOperativos || mov.es_operativo)
     .reduce((acc, mov) => acc + toFiniteNumber(mov.monto), 0);
+}
+
+function formatMontoSinConvertir(valor) {
+  return state.moneda === "USD" ? `US$ ${formatUsd(toFiniteNumber(valor))}` : `Bs ${formatBs(toFiniteNumber(valor))}`;
 }
 
 function renderBalanceSection() {
@@ -1029,7 +1040,7 @@ function renderBalanceSection() {
           <span class="bodega-balance-kpi-label">INGRESOS</span>
           <span class="bodega-balance-kpi-icon">${renderIcon("trending-up")}</span>
         </div>
-        <strong class="bodega-balance-kpi-value">${escapeHtml(formatMoneda(totalIngresos))}</strong>
+        <strong class="bodega-balance-kpi-value">${escapeHtml(formatMontoSinConvertir(totalIngresos))}</strong>
         <span class="bodega-balance-kpi-meta">${ingresos.length} registro(s)</span>
       </article>
       <article class="bodega-balance-kpi-card bodega-balance-kpi-egreso">
@@ -1037,7 +1048,7 @@ function renderBalanceSection() {
           <span class="bodega-balance-kpi-label">EGRESOS</span>
           <span class="bodega-balance-kpi-icon">${renderIcon("trending-down")}</span>
         </div>
-        <strong class="bodega-balance-kpi-value">${escapeHtml(formatMoneda(totalEgresos))}</strong>
+        <strong class="bodega-balance-kpi-value">${escapeHtml(formatMontoSinConvertir(totalEgresos))}</strong>
         <span class="bodega-balance-kpi-meta">${egresos.length} registro(s)</span>
       </article>
       <article class="bodega-balance-kpi-card bodega-balance-kpi-neto">
@@ -1045,7 +1056,7 @@ function renderBalanceSection() {
           <span class="bodega-balance-kpi-label">BALANCE NETO</span>
           <span class="bodega-balance-kpi-icon">${renderIcon("scale")}</span>
         </div>
-        <strong class="bodega-balance-kpi-value bodega-balance-kpi-value-${netoTone}">${escapeHtml(formatMoneda(neto))}</strong>
+        <strong class="bodega-balance-kpi-value bodega-balance-kpi-value-${netoTone}">${escapeHtml(formatMontoSinConvertir(neto))}</strong>
         <span class="bodega-balance-kpi-meta">${neto >= 0 ? "A favor" : "En contra"} en el periodo</span>
       </article>
     </div>
@@ -1088,7 +1099,7 @@ function renderMovimientosBlock(tipo, movimientos, total) {
                         </span>
                       </div>
                       <div class="bodega-movimiento-row-amount">
-                        <strong>${escapeHtml(formatMoneda(mov.monto))}</strong>
+                        <strong>${escapeHtml(formatMontoSinConvertir(mov.monto))}</strong>
                         <button type="button" class="bodega-movimiento-edit" data-balance-editar="${escapeHtml(mov.id)}" title="Editar">&#9998;</button>
                         <button type="button" class="bodega-movimiento-delete" data-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">&times;</button>
                       </div>
@@ -1101,7 +1112,7 @@ function renderMovimientosBlock(tipo, movimientos, total) {
       }
       <div class="bodega-movimientos-total">
         <span>TOTAL</span>
-        <strong>${escapeHtml(formatMoneda(total))}</strong>
+        <strong>${escapeHtml(formatMontoSinConvertir(total))}</strong>
       </div>
     </div>
   `;
@@ -1112,7 +1123,7 @@ function renderMovimientoForm(tipo) {
   const editando = state.balanceEditando && state.balanceEditando.tipo === tipo ? state.balanceEditando : null;
   const tiendasSeleccionadas = editando ? editando.codigos_tienda || [] : storeOptions;
   const todasSeleccionadas = storeOptions.every((codigo) => tiendasSeleccionadas.includes(codigo));
-  const montoPrefill = editando ? convertirDesdeBs(editando.monto) : null;
+  const montoPrefill = editando ? toFiniteNumber(editando.monto) : null;
 
   return `
     <form class="bodega-movimiento-form" data-balance-form="${tipo}" data-balance-edit-id="${editando ? escapeHtml(editando.id) : ""}">
@@ -1443,19 +1454,13 @@ async function submitMovimientoForm(form) {
     return;
   }
 
-  // El backend guarda el monto en bolivares (mismo criterio que
-  // Ventas.TotalPago). Si la vista esta en US$, el usuario tipeo dolares --
-  // se convierte a Bs con la tasa vigente antes de enviarlo.
-  let monto = montoIngresado;
-  if (state.moneda === "USD") {
-    const tasa = getTasaValor();
-    if (!(tasa > 0)) {
-      state.balanceFormError = "No hay tasa de cambio disponible para convertir el monto a bolivares.";
-      render();
-      return;
-    }
-    monto = montoIngresado * tasa;
-  }
+  // El monto se guarda tal cual se tipeo, en la moneda que este activa en
+  // el toggle Bs/US$ -- sin convertir. A proposito: el usuario no quiere
+  // que un monto cargado en bolivares aparezca convertido al ver en
+  // dolares (ni viceversa); el toggle filtra por moneda en vez de
+  // convertir, a diferencia del resto del panel.
+  const monto = montoIngresado;
+  const moneda = state.moneda;
 
   state.balanceFormSaving = true;
   state.balanceFormError = null;
@@ -1471,8 +1476,8 @@ async function submitMovimientoForm(form) {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify(
           editando
-            ? { esOperativo, monto, descripcion, fecha, codigosTienda }
-            : { tipo, esOperativo, monto, descripcion, fecha, codigosTienda },
+            ? { moneda, esOperativo, monto, descripcion, fecha, codigosTienda }
+            : { tipo, moneda, esOperativo, monto, descripcion, fecha, codigosTienda },
         ),
       },
     );

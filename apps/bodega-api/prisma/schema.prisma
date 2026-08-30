@@ -285,6 +285,7 @@ model EtlWatermarks {
 model BalanceMovimiento {
   id            String   @id @default(uuid()) @db.Uuid
   tipo          String   @map("tipo") @db.VarChar(10) // "ingreso" | "egreso"
+  moneda        String   @default("BS") @map("moneda") @db.VarChar(3) // "BS" | "USD" -- el monto se guarda tal cual se tipeo, sin convertir
   esOperativo   Boolean  @default(false) @map("es_operativo")
   monto         Decimal  @map("monto") @db.Decimal(18, 2)
   descripcion   String   @map("descripcion") @db.VarChar(300)

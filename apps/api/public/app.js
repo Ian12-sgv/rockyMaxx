@@ -10510,10 +10510,17 @@ function bodegaPanelRenderBalanceIcon(icon) {
   }
 }
 
+// Los montos de Balance NO se convierten con la tasa -- cada movimiento se
+// guarda en la moneda con la que se tipeo (panel.moneda al momento de
+// guardar) y se muestra tal cual. El toggle Bs/US$ actua como FILTRO aqui
+// (a pedido del usuario, para no mezclar montos en bolivares con montos en
+// dolares en el mismo total), a diferencia del resto del panel (ventas,
+// inventario) donde el mismo toggle SI convierte con la tasa.
 function bodegaPanelFiltrarMovimientos(panel, tipo) {
   const lista = Array.isArray(panel.balanceMovimientos) ? panel.balanceMovimientos : [];
   return lista
     .filter((mov) => mov.tipo === tipo)
+    .filter((mov) => (mov.moneda || "BS") === panel.moneda)
     .filter(
       (mov) => !panel.tiendaFiltro || (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.includes(panel.tiendaFiltro)),
     );
@@ -10523,6 +10530,12 @@ function bodegaPanelSumarMontos(movimientos, soloOperativos) {
   return movimientos
     .filter((mov) => !soloOperativos || mov.es_operativo)
     .reduce((acc, mov) => acc + toFiniteNumber(mov.monto), 0);
+}
+
+function bodegaPanelFormatMontoSinConvertir(panel, valor) {
+  return panel.moneda === "USD"
+    ? `US$ ${formatUsdReportAmount(toFiniteNumber(valor))}`
+    : `Bs ${formatTransferAmount(toFiniteNumber(valor))}`;
 }
 
 function bodegaPanelRenderBalanceSection(panel) {
@@ -10540,7 +10553,7 @@ function bodegaPanelRenderBalanceSection(panel) {
           <span class="bodega-balance-kpi-label">INGRESOS</span>
           <span class="bodega-balance-kpi-icon">${bodegaPanelRenderBalanceIcon("trending-up")}</span>
         </div>
-        <strong class="bodega-balance-kpi-value">${escapeHtml(bodegaPanelFormatMoneda(panel, totalIngresos))}</strong>
+        <strong class="bodega-balance-kpi-value">${escapeHtml(bodegaPanelFormatMontoSinConvertir(panel, totalIngresos))}</strong>
         <span class="bodega-balance-kpi-meta">${ingresos.length} registro(s)</span>
       </article>
       <article class="bodega-balance-kpi-card bodega-balance-kpi-egreso">
@@ -10548,7 +10561,7 @@ function bodegaPanelRenderBalanceSection(panel) {
           <span class="bodega-balance-kpi-label">EGRESOS</span>
           <span class="bodega-balance-kpi-icon">${bodegaPanelRenderBalanceIcon("trending-down")}</span>
         </div>
-        <strong class="bodega-balance-kpi-value">${escapeHtml(bodegaPanelFormatMoneda(panel, totalEgresos))}</strong>
+        <strong class="bodega-balance-kpi-value">${escapeHtml(bodegaPanelFormatMontoSinConvertir(panel, totalEgresos))}</strong>
         <span class="bodega-balance-kpi-meta">${egresos.length} registro(s)</span>
       </article>
       <article class="bodega-balance-kpi-card bodega-balance-kpi-neto">
@@ -10556,7 +10569,7 @@ function bodegaPanelRenderBalanceSection(panel) {
           <span class="bodega-balance-kpi-label">BALANCE NETO</span>
           <span class="bodega-balance-kpi-icon">${bodegaPanelRenderBalanceIcon("scale")}</span>
         </div>
-        <strong class="bodega-balance-kpi-value bodega-balance-kpi-value-${netoTone}">${escapeHtml(bodegaPanelFormatMoneda(panel, neto))}</strong>
+        <strong class="bodega-balance-kpi-value bodega-balance-kpi-value-${netoTone}">${escapeHtml(bodegaPanelFormatMontoSinConvertir(panel, neto))}</strong>
         <span class="bodega-balance-kpi-meta">${neto >= 0 ? "A favor" : "En contra"} en el periodo</span>
       </article>
     </div>
@@ -10599,7 +10612,7 @@ function bodegaPanelRenderMovimientosBlock(panel, tipo, movimientos, total) {
                         </span>
                       </div>
                       <div class="bodega-movimiento-row-amount">
-                        <strong>${escapeHtml(bodegaPanelFormatMoneda(panel, mov.monto))}</strong>
+                        <strong>${escapeHtml(bodegaPanelFormatMontoSinConvertir(panel, mov.monto))}</strong>
                         <button type="button" class="bodega-movimiento-edit" data-bodega-balance-editar="${escapeHtml(mov.id)}" title="Editar">&#9998;</button>
                         <button type="button" class="bodega-movimiento-delete" data-bodega-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">&times;</button>
                       </div>
@@ -10612,7 +10625,7 @@ function bodegaPanelRenderMovimientosBlock(panel, tipo, movimientos, total) {
       }
       <div class="bodega-movimientos-total">
         <span>TOTAL</span>
-        <strong>${escapeHtml(bodegaPanelFormatMoneda(panel, total))}</strong>
+        <strong>${escapeHtml(bodegaPanelFormatMontoSinConvertir(panel, total))}</strong>
       </div>
     </div>
   `;
@@ -10623,7 +10636,7 @@ function bodegaPanelRenderMovimientoForm(panel, tipo) {
   const editando = panel.balanceEditando && panel.balanceEditando.tipo === tipo ? panel.balanceEditando : null;
   const tiendasSeleccionadas = editando ? editando.codigos_tienda || [] : storeOptions;
   const todasSeleccionadas = storeOptions.every((codigo) => tiendasSeleccionadas.includes(codigo));
-  const montoPrefill = editando ? bodegaPanelConvertirDesdeBs(panel, editando.monto) : null;
+  const montoPrefill = editando ? toFiniteNumber(editando.monto) : null;
 
   return `
     <form class="bodega-movimiento-form" data-bodega-balance-form="${tipo}" data-bodega-balance-edit-id="${editando ? escapeHtml(editando.id) : ""}">
@@ -19119,19 +19132,11 @@ async function bodegaPanelSubmitMovimientoForm(form) {
     return;
   }
 
-  // El backend guarda el monto en bolivares (mismo criterio que
-  // Ventas.TotalPago). Si la vista esta en US$, el usuario tipeo dolares --
-  // se convierte a Bs con la tasa vigente antes de enviarlo.
-  let monto = montoIngresado;
-  if (state.bodegaPanel.moneda === "USD") {
-    const tasa = bodegaPanelGetTasaValor(state.bodegaPanel);
-    if (!(tasa > 0)) {
-      state.bodegaPanel.balanceFormError = "No hay tasa de cambio disponible para convertir el monto a bolivares.";
-      render();
-      return;
-    }
-    monto = montoIngresado * tasa;
-  }
+  // El monto se guarda tal cual se tipeo, en la moneda que este activa en
+  // el toggle Bs/US$ -- sin convertir. El toggle filtra por moneda en vez
+  // de convertir (a diferencia del resto del panel).
+  const monto = montoIngresado;
+  const moneda = state.bodegaPanel.moneda;
 
   state.bodegaPanel.balanceFormSaving = true;
   state.bodegaPanel.balanceFormError = null;
@@ -19144,8 +19149,8 @@ async function bodegaPanelSubmitMovimientoForm(form) {
       {
         method: editando ? "PATCH" : "POST",
         body: editando
-          ? { esOperativo, monto, descripcion, fecha, codigosTienda }
-          : { tipo, esOperativo, monto, descripcion, fecha, codigosTienda },
+          ? { moneda, esOperativo, monto, descripcion, fecha, codigosTienda }
+          : { tipo, moneda, esOperativo, monto, descripcion, fecha, codigosTienda },
       },
     );
     if (!response.ok) {

@@ -21,6 +21,7 @@ export type BodegaPanelMovimientosResultado = {
 
 export type CrearMovimientoInput = {
   tipo: "ingreso" | "egreso";
+  moneda: "BS" | "USD";
   esOperativo: boolean;
   monto: number;
   descripcion: string;
@@ -30,6 +31,7 @@ export type CrearMovimientoInput = {
 };
 
 export type ActualizarMovimientoInput = {
+  moneda: "BS" | "USD";
   esOperativo: boolean;
   monto: number;
   descripcion: string;
