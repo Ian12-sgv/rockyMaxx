@@ -8854,34 +8854,257 @@ button {
   border-color: var(--accent);
 }
 
-.bodega-balance-card > .modern-card-head p {
-  margin: 4px 0 0;
-  font-size: 0.82rem;
-  color: var(--ink-soft);
-  max-width: 640px;
+.bodega-balance-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
-.bodega-balance-grid {
+.bodega-balance-kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--radius-md, 14px);
+  border: 1px solid var(--line);
+  background: var(--bg-paper);
+  min-width: 0;
+}
+
+.bodega-balance-kpi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bodega-balance-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.bodega-balance-kpi-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  flex: none;
+}
+
+.bodega-balance-kpi-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.bodega-balance-kpi-ingreso .bodega-balance-kpi-icon {
+  background: rgba(34, 197, 94, 0.14);
+  color: #16a34a;
+}
+
+.bodega-balance-kpi-egreso .bodega-balance-kpi-icon {
+  background: rgba(171, 63, 47, 0.14);
+  color: #ab3f2f;
+}
+
+.bodega-balance-kpi-neto .bodega-balance-kpi-icon {
+  background: rgba(14, 165, 233, 0.14);
+  color: #0ea5e9;
+}
+
+.bodega-balance-kpi-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.bodega-balance-kpi-value-positivo {
+  color: #16a34a;
+}
+
+.bodega-balance-kpi-value-negativo {
+  color: #ab3f2f;
+}
+
+.bodega-balance-kpi-meta {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.bodega-movimientos-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
-.bodega-balance-grid > * {
+.bodega-movimientos-grid > * {
   min-width: 0;
 }
 
-.bodega-balance-block h3 {
-  margin: 0;
-  font-size: 1rem;
+.bodega-movimientos-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-md, 14px);
+  border: 1px solid var(--line);
+  background: var(--bg-paper);
 }
 
-.bodega-movimientos-head {
+.bodega-movimientos-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+}
+
+.bodega-movimientos-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bodega-movimientos-card-title h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.bodega-movimientos-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #16a34a;
+}
+
+.bodega-movimientos-card-egreso .bodega-movimientos-dot {
+  background: #ab3f2f;
+}
+
+.bodega-movimientos-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-paper-strong);
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.bodega-movimientos-toggle-btn {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: var(--bg-paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.bodega-movimientos-toggle-btn.is-open {
+  background: var(--bg-paper-strong);
+}
+
+.bodega-movimientos-empty {
+  padding: 24px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.bodega-movimientos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.bodega-movimiento-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bodega-movimiento-row:last-child {
+  border-bottom: none;
+}
+
+.bodega-movimiento-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bodega-movimiento-desc {
+  font-size: 0.85rem;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bodega-movimiento-meta {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.bodega-movimiento-row-amount {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.bodega-movimiento-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bodega-movimiento-delete:hover {
+  background: rgba(171, 63, 47, 0.12);
+  color: #ab3f2f;
+}
+
+.bodega-movimientos-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.bodega-movimientos-card-ingreso .bodega-movimientos-total strong {
+  color: #16a34a;
+}
+
+.bodega-movimientos-card-egreso .bodega-movimientos-total strong {
+  color: #ab3f2f;
 }
 
 .bodega-movimiento-form {
@@ -8889,7 +9112,6 @@ button {
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  margin-bottom: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--bg-paper-strong);
@@ -8899,6 +9121,11 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.bodega-movimiento-form-footer {
+  align-items: center;
+  justify-content: space-between;
 }
 
 .bodega-movimiento-form label,
@@ -8930,7 +9157,43 @@ button {
 .bodega-movimiento-tiendas-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
+  gap: 8px;
+}
+
+.bodega-tienda-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-paper);
+  font-size: 0.8rem;
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+}
+
+.bodega-tienda-pill input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.bodega-tienda-pill-check {
+  display: none;
+}
+
+.bodega-tienda-pill:has(input:checked) {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fffaf1;
+}
+
+.bodega-tienda-pill:has(input:checked) .bodega-tienda-pill-check {
+  display: inline;
 }
 
 .bodega-checkbox-inline {
@@ -8944,8 +9207,6 @@ button {
 
 .bodega-movimiento-operativo {
   flex: 0 0 auto;
-  justify-content: flex-end;
-  align-self: flex-end;
 }
 
 .bodega-movimiento-form-error {
@@ -8954,13 +9215,9 @@ button {
   color: var(--danger, #ab3f2f);
 }
 
-.bodega-movimiento-form-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
 @media (max-width: 900px) {
-  .bodega-balance-grid {
+  .bodega-balance-kpi-grid,
+  .bodega-movimientos-grid {
     grid-template-columns: 1fr;
   }
 }

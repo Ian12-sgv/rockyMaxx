@@ -249,6 +249,30 @@ function renderIcon(icon) {
           <path d="m9.5 12 1.6 1.7 3.4-3.7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" />
         </svg>
       `;
+    case "trending-up":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M3 17l6-6 4 4 8-8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" />
+          <path d="M15 6h6v6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" />
+        </svg>
+      `;
+    case "trending-down":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M3 7l6 6 4-4 8 8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" />
+          <path d="M15 18h6v-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" />
+        </svg>
+      `;
+    case "scale":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 3v18M8 21h8M5 7h14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" />
+          <path
+            d="M5 7 2.5 12.5a2.7 2.7 0 0 0 5 0L5 7ZM19 7l-2.5 5.5a2.7 2.7 0 0 0 5 0L19 7Z"
+            fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+          />
+        </svg>
+      `;
     default:
       return "";
   }
@@ -973,23 +997,6 @@ function renderInventarioRow(row, totalValor, isTotal) {
 // efectivo, cuando en realidad simplemente no lo estamos midiendo. Reusa
 // state.inventario/state.ventas ya cargados -- no dispara ninguna consulta
 // nueva al servidor.
-function renderBalanceSection() {
-  return `
-    <section class="modern-card bodega-balance-card">
-      <div class="modern-card-head">
-        <div>
-          <h2>Ingresos y egresos</h2>
-          <p>Registrados a mano por tienda o varias tiendas a la vez -- no se mezclan con la ganancia calculada de ventas menos costo.</p>
-        </div>
-      </div>
-      <div class="bodega-balance-grid">
-        ${renderMovimientosBlock("ingreso")}
-        ${renderMovimientosBlock("egreso")}
-      </div>
-    </section>
-  `;
-}
-
 function filtrarMovimientos(tipo) {
   const lista = Array.isArray(state.balanceMovimientos) ? state.balanceMovimientos : [];
   return lista
@@ -1006,65 +1013,93 @@ function sumarMontos(movimientos, soloOperativos) {
     .reduce((acc, mov) => acc + toFiniteNumber(mov.monto), 0);
 }
 
-function renderMovimientosBlock(tipo) {
+function renderBalanceSection() {
+  const ingresos = filtrarMovimientos("ingreso");
+  const egresos = filtrarMovimientos("egreso");
+  const totalIngresos = sumarMontos(ingresos, false);
+  const totalEgresos = sumarMontos(egresos, false);
+  const neto = totalIngresos - totalEgresos;
+  const netoTone = neto >= 0 ? "positivo" : "negativo";
+
+  return `
+    <div class="bodega-balance-kpi-grid">
+      <article class="bodega-balance-kpi-card bodega-balance-kpi-ingreso">
+        <div class="bodega-balance-kpi-head">
+          <span class="bodega-balance-kpi-label">INGRESOS</span>
+          <span class="bodega-balance-kpi-icon">${renderIcon("trending-up")}</span>
+        </div>
+        <strong class="bodega-balance-kpi-value">${escapeHtml(formatMoneda(totalIngresos))}</strong>
+        <span class="bodega-balance-kpi-meta">${ingresos.length} registro(s)</span>
+      </article>
+      <article class="bodega-balance-kpi-card bodega-balance-kpi-egreso">
+        <div class="bodega-balance-kpi-head">
+          <span class="bodega-balance-kpi-label">EGRESOS</span>
+          <span class="bodega-balance-kpi-icon">${renderIcon("trending-down")}</span>
+        </div>
+        <strong class="bodega-balance-kpi-value">${escapeHtml(formatMoneda(totalEgresos))}</strong>
+        <span class="bodega-balance-kpi-meta">${egresos.length} registro(s)</span>
+      </article>
+      <article class="bodega-balance-kpi-card bodega-balance-kpi-neto">
+        <div class="bodega-balance-kpi-head">
+          <span class="bodega-balance-kpi-label">BALANCE NETO</span>
+          <span class="bodega-balance-kpi-icon">${renderIcon("scale")}</span>
+        </div>
+        <strong class="bodega-balance-kpi-value bodega-balance-kpi-value-${netoTone}">${escapeHtml(formatMoneda(neto))}</strong>
+        <span class="bodega-balance-kpi-meta">${neto >= 0 ? "A favor" : "En contra"} en el periodo</span>
+      </article>
+    </div>
+
+    <div class="bodega-movimientos-grid">
+      ${renderMovimientosBlock("ingreso", ingresos, totalIngresos)}
+      ${renderMovimientosBlock("egreso", egresos, totalEgresos)}
+    </div>
+  `;
+}
+
+function renderMovimientosBlock(tipo, movimientos, total) {
   const titulo = tipo === "ingreso" ? "Ingresos" : "Egresos";
-  const movimientos = filtrarMovimientos(tipo);
-  const total = sumarMontos(movimientos, false);
-  const totalOperativo = sumarMontos(movimientos, true);
   const formAbierto = state.balanceFormAbierto === tipo;
 
   return `
-    <div class="bodega-balance-block">
-      <div class="bodega-movimientos-head">
-        <h3>${titulo}</h3>
-        <button type="button" class="button button-ghost" data-balance-form-toggle="${tipo}">
-          ${formAbierto ? "Cancelar" : "+ Agregar"}
+    <div class="bodega-movimientos-card bodega-movimientos-card-${tipo}">
+      <div class="bodega-movimientos-card-head">
+        <div class="bodega-movimientos-card-title">
+          <span class="bodega-movimientos-dot"></span>
+          <h3>${titulo}</h3>
+          <span class="bodega-movimientos-count">${movimientos.length}</span>
+        </div>
+        <button type="button" class="bodega-movimientos-toggle-btn ${formAbierto ? "is-open" : ""}" data-balance-form-toggle="${tipo}">
+          ${formAbierto ? "&times; Cancelar" : "+ Agregar"}
         </button>
       </div>
       ${formAbierto ? renderMovimientoForm(tipo) : ""}
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Tienda(s)</th>
-              <th>Operativo</th>
-              <th>Descripcion</th>
-              <th>Monto</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-              movimientos.length
-                ? movimientos
-                    .map(
-                      (mov) => `
-                        <tr>
-                          <td>${escapeHtml(formatDiaCorto(mov.fecha))}</td>
-                          <td>${escapeHtml((mov.codigos_tienda || []).join(", "))}</td>
-                          <td>${mov.es_operativo ? "Si" : "No"}</td>
-                          <td>${escapeHtml(mov.descripcion || "-")}</td>
-                          <td>${escapeHtml(formatMoneda(mov.monto))}</td>
-                          <td>
-                            <button type="button" class="button button-ghost" data-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">
-                              &times;
-                            </button>
-                          </td>
-                        </tr>
-                      `,
-                    )
-                    .join("")
-                : `<tr><td colspan="6"><div class="empty-state"><p>Sin ${titulo.toLowerCase()} registrados en este periodo.</p></div></td></tr>`
-            }
-            <tr class="is-selected-row">
-              <td colspan="4">
-                <strong>TOTAL${totalOperativo > 0 ? ` &middot; operativo: ${escapeHtml(formatMoneda(totalOperativo))}` : ""}</strong>
-              </td>
-              <td colspan="2"><strong>${escapeHtml(formatMoneda(total))}</strong></td>
-            </tr>
-          </tbody>
-        </table>
+      ${
+        movimientos.length
+          ? `<div class="bodega-movimientos-list">
+              ${movimientos
+                .map(
+                  (mov) => `
+                    <div class="bodega-movimiento-row">
+                      <div class="bodega-movimiento-row-main">
+                        <span class="bodega-movimiento-desc">${escapeHtml(mov.descripcion || "-")}</span>
+                        <span class="bodega-movimiento-meta">
+                          ${escapeHtml(formatDiaCorto(mov.fecha))} &middot; ${escapeHtml((mov.codigos_tienda || []).join(", "))}${mov.es_operativo ? " &middot; Operativo" : ""}
+                        </span>
+                      </div>
+                      <div class="bodega-movimiento-row-amount">
+                        <strong>${escapeHtml(formatMoneda(mov.monto))}</strong>
+                        <button type="button" class="bodega-movimiento-delete" data-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">&times;</button>
+                      </div>
+                    </div>
+                  `,
+                )
+                .join("")}
+            </div>`
+          : `<div class="bodega-movimientos-empty">Sin ${titulo.toLowerCase()} registrados en este periodo.</div>`
+      }
+      <div class="bodega-movimientos-total">
+        <span>TOTAL</span>
+        <strong>${escapeHtml(formatMoneda(total))}</strong>
       </div>
     </div>
   `;
@@ -1078,7 +1113,7 @@ function renderMovimientoForm(tipo) {
       <div class="bodega-movimiento-form-row">
         <label>
           <span>Monto (Bs)</span>
-          <input type="number" step="0.01" min="0.01" name="monto" required>
+          <input type="number" step="0.01" min="0.01" name="monto" placeholder="0,00" required>
         </label>
         <label>
           <span>Fecha</span>
@@ -1087,39 +1122,39 @@ function renderMovimientoForm(tipo) {
       </div>
       <label class="bodega-movimiento-form-full">
         <span>Descripcion</span>
-        <input type="text" name="descripcion" maxlength="300" required>
+        <input type="text" name="descripcion" maxlength="300" placeholder="Ej. pago de flete" required>
       </label>
-      <div class="bodega-movimiento-form-row">
-        <div class="bodega-movimiento-tiendas">
-          <span>Tienda(s)</span>
-          <div class="bodega-movimiento-tiendas-list">
-            <label class="bodega-checkbox-inline">
-              <input type="checkbox" data-balance-todas-tiendas>
-              Todas
-            </label>
-            ${storeOptions
-              .map(
-                (codigo) => `
-                  <label class="bodega-checkbox-inline">
-                    <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}">
-                    ${escapeHtml(codigo)}
-                  </label>
-                `,
-              )
-              .join("")}
-          </div>
+      <div class="bodega-movimiento-tiendas">
+        <span>Tienda(s)</span>
+        <div class="bodega-movimiento-tiendas-list">
+          <label class="bodega-tienda-pill">
+            <input type="checkbox" data-balance-todas-tiendas>
+            <span class="bodega-tienda-pill-check">&check;</span>
+            Todas
+          </label>
+          ${storeOptions
+            .map(
+              (codigo) => `
+                <label class="bodega-tienda-pill">
+                  <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}" data-balance-tienda-pill>
+                  <span class="bodega-tienda-pill-check">&check;</span>
+                  ${escapeHtml(codigo)}
+                </label>
+              `,
+            )
+            .join("")}
         </div>
+      </div>
+      <div class="bodega-movimiento-form-row bodega-movimiento-form-footer">
         <label class="bodega-checkbox-inline bodega-movimiento-operativo">
           <input type="checkbox" name="esOperativo">
           Es operativo
         </label>
-      </div>
-      ${state.balanceFormError ? `<p class="bodega-movimiento-form-error">${escapeHtml(state.balanceFormError)}</p>` : ""}
-      <div class="bodega-movimiento-form-actions">
         <button type="submit" class="button button-primary" ${state.balanceFormSaving ? "disabled" : ""}>
           ${state.balanceFormSaving ? "Guardando..." : "Guardar"}
         </button>
       </div>
+      ${state.balanceFormError ? `<p class="bodega-movimiento-form-error">${escapeHtml(state.balanceFormError)}</p>` : ""}
     </form>
   `;
 }
@@ -1323,6 +1358,18 @@ function bindEvents() {
       form?.querySelectorAll('input[name="codigosTienda"]').forEach((input) => {
         input.checked = marcado;
       });
+    });
+  });
+
+  document.querySelectorAll("[data-balance-tienda-pill]").forEach((checkbox) => {
+    checkbox.addEventListener("change", (event) => {
+      const form = event.target.closest("form");
+      if (!form) return;
+      const pills = form.querySelectorAll('input[name="codigosTienda"]');
+      const todas = form.querySelector("[data-balance-todas-tiendas]");
+      if (todas) {
+        todas.checked = Array.from(pills).every((input) => input.checked);
+      }
     });
   });
 
