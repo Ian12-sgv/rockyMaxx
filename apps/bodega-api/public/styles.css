@@ -8853,6 +8853,44 @@ button {
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
+.bodega-balance-toggle {
+  margin-left: auto;
+}
+
+.bodega-balance-toggle.is-active {
+  background: var(--accent);
+  color: #fffaf1;
+  border-color: var(--accent);
+}
+
+.bodega-balance-card > .modern-card-head p {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  max-width: 640px;
+}
+
+.bodega-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.bodega-balance-grid > * {
+  min-width: 0;
+}
+
+.bodega-balance-block h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+@media (max-width: 900px) {
+  .bodega-balance-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 720px) {
   .bodega-controls-bar {
     flex-direction: column;

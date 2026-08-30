@@ -26,6 +26,7 @@ const state = {
   moneda: "BS",
   tiendaFiltro: "",
   sortDir: "desc",
+  balanceVisible: false,
   ventas: [],
   ventasAnterior: [],
   inventario: [],
@@ -530,6 +531,7 @@ function renderPanelShell() {
               ${renderAlertBanner()}
               ${renderDesempenoTable()}
               ${renderInventarioSection()}
+              ${state.balanceVisible ? renderBalanceSection() : ""}
             </div>
           </div>
         </section>
@@ -707,6 +709,10 @@ function renderControlsBar() {
         <button type="button" class="bodega-toggle-button ${state.moneda === "BS" ? "is-active" : ""}" data-moneda="BS">Bs</button>
         <button type="button" class="bodega-toggle-button ${state.moneda === "USD" ? "is-active" : ""}" data-moneda="USD">US$</button>
       </div>
+
+      <button type="button" class="button button-ghost bodega-balance-toggle ${state.balanceVisible ? "is-active" : ""}" data-balance-toggle>
+        Balance
+      </button>
 
       ${
         tasa
@@ -945,6 +951,113 @@ function renderInventarioRow(row, totalValor, isTotal) {
   `;
 }
 
+// Balance con lo que se puede calcular con certeza a partir de bodega_datos:
+// el inventario a costo (activo real) y la ganancia acumulada del periodo
+// elegido (resultado, no un "activo" contable formal). NO incluye cuentas
+// por cobrar/pagar, deudas ni el efectivo real de caja/banco -- esos datos
+// no se sincronizan hoy a bodega_datos, y mostrar un cero ahi seria peor que
+// no mostrar la fila: daria la impresion de que la tienda no tiene deudas ni
+// efectivo, cuando en realidad simplemente no lo estamos midiendo. Reusa
+// state.inventario/state.ventas ya cargados -- no dispara ninguna consulta
+// nueva al servidor.
+function renderBalanceSection() {
+  const filasInventario = (Array.isArray(state.inventario) ? state.inventario : []).filter(
+    (row) => row.codigo_legacy !== "TOTAL",
+  );
+  const totalInventario = findTotalRow(state.inventario);
+  const filasVentas = (Array.isArray(state.ventas) ? state.ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
+  const totalVentas = findTotalRow(state.ventas);
+  const periodoLabel = formatRangoTriggerLabel(state.rango);
+
+  return `
+    <section class="modern-card bodega-balance-card">
+      <div class="modern-card-head">
+        <div>
+          <h2>Balance</h2>
+          <p>Lo unico que se puede calcular con certeza hoy: inventario a costo y ganancia acumulada del periodo. No incluye cuentas por cobrar/pagar, deudas ni efectivo de caja/banco -- eso no se sincroniza todavia.</p>
+        </div>
+        <span class="modern-chip">${escapeHtml(periodoLabel.toUpperCase())}</span>
+      </div>
+      <div class="bodega-balance-grid">
+        <div class="bodega-balance-block">
+          <h3>Activos &mdash; Inventario a costo</h3>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tienda</th>
+                  <th>Valor a costo</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  filasInventario.length
+                    ? filasInventario
+                        .map(
+                          (row) => `
+                            <tr>
+                              <td>${escapeHtml(row.codigo_legacy || "-")}</td>
+                              <td>${escapeHtml(formatMonedaDesdeUsd(row.valor_costo_usd))}</td>
+                            </tr>
+                          `,
+                        )
+                        .join("")
+                    : `<tr><td colspan="2"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                }
+                ${
+                  totalInventario
+                    ? `<tr class="is-selected-row"><td><strong>TOTAL</strong></td><td>${escapeHtml(formatMonedaDesdeUsd(totalInventario.valor_costo_usd))}</td></tr>`
+                    : ""
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="bodega-balance-block">
+          <h3>Resultado del periodo &mdash; Ganancia acumulada</h3>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tienda</th>
+                  <th>Ganancia</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  filasVentas.length
+                    ? filasVentas
+                        .map((row) => {
+                          const ganancia = toFiniteNumber(row.ganancia);
+                          const tone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
+                          return `
+                            <tr>
+                              <td>${escapeHtml(row.codigo_legacy || "-")}</td>
+                              <td class="bodega-ganancia-cell bodega-ganancia-${tone}">${escapeHtml(formatMoneda(row.ganancia))}</td>
+                            </tr>
+                          `;
+                        })
+                        .join("")
+                    : `<tr><td colspan="2"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                }
+                ${
+                  totalVentas
+                    ? (() => {
+                        const ganancia = toFiniteNumber(totalVentas.ganancia);
+                        const tone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
+                        return `<tr class="is-selected-row"><td><strong>TOTAL</strong></td><td class="bodega-ganancia-cell bodega-ganancia-${tone}"><strong>${escapeHtml(formatMoneda(totalVentas.ganancia))}</strong></td></tr>`;
+                      })()
+                    : ""
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 // ---- Carga de datos y eventos ------------------------------------------------
 
 async function loadPanel() {
@@ -1106,6 +1219,11 @@ function bindEvents() {
 
   document.querySelector("[data-sort-vendido]")?.addEventListener("click", () => {
     state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+    render();
+  });
+
+  document.querySelector("[data-balance-toggle]")?.addEventListener("click", () => {
+    state.balanceVisible = !state.balanceVisible;
     render();
   });
 }
