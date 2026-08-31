@@ -32,6 +32,7 @@ const state = {
   balanceFormSaving: false,
   balanceFormError: null,
   balanceEditando: null, // movimiento completo (de balanceMovimientos) mientras se edita, o null
+  balanceOperativoFiltro: "todos", // "todos" | "operativo" | "no-operativo"
   ventas: [],
   ventasAnterior: [],
   inventario: [],
@@ -753,6 +754,18 @@ function renderControlsBar() {
       </button>
 
       ${
+        state.balanceVisible
+          ? `
+            <div class="bodega-controls-group" role="group" aria-label="Operativo">
+              <button type="button" class="bodega-toggle-button ${state.balanceOperativoFiltro === "todos" ? "is-active" : ""}" data-balance-operativo-filtro="todos">Todos</button>
+              <button type="button" class="bodega-toggle-button ${state.balanceOperativoFiltro === "operativo" ? "is-active" : ""}" data-balance-operativo-filtro="operativo">Operativo</button>
+              <button type="button" class="bodega-toggle-button ${state.balanceOperativoFiltro === "no-operativo" ? "is-active" : ""}" data-balance-operativo-filtro="no-operativo">No operativo</button>
+            </div>
+          `
+          : ""
+      }
+
+      ${
         tasa
           ? `<span class="bodega-tasa-hint">Tasa Bs ${escapeHtml(formatBs(tasa.tasa))} / US$ &middot; ${escapeHtml(formatFechaHora(tasa.fecha))}</span>`
           : ""
@@ -1012,7 +1025,12 @@ function filtrarMovimientos(tipo) {
     .filter(
       (mov) =>
         !state.tiendaFiltro || (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.includes(state.tiendaFiltro)),
-    );
+    )
+    .filter((mov) => {
+      if (state.balanceOperativoFiltro === "operativo") return mov.es_operativo;
+      if (state.balanceOperativoFiltro === "no-operativo") return !mov.es_operativo;
+      return true;
+    });
 }
 
 function sumarMontos(movimientos, soloOperativos) {
@@ -1341,6 +1359,13 @@ function bindEvents() {
   document.querySelectorAll("[data-moneda]").forEach((button) => {
     button.addEventListener("click", () => {
       state.moneda = button.getAttribute("data-moneda");
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-balance-operativo-filtro]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.balanceOperativoFiltro = button.getAttribute("data-balance-operativo-filtro");
       render();
     });
   });

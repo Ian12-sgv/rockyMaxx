@@ -257,6 +257,7 @@ const state = {
     balanceFormSaving: false,
     balanceFormError: null,
     balanceEditando: null, // movimiento completo (de balanceMovimientos) mientras se edita, o null
+    balanceOperativoFiltro: "todos", // "todos" | "operativo" | "no-operativo"
     ventas: [],
     ventasAnterior: [],
     inventario: [],
@@ -10254,6 +10255,18 @@ function bodegaPanelRenderControlsBar(panel) {
       </button>
 
       ${
+        panel.balanceVisible
+          ? `
+            <div class="bodega-controls-group" role="group" aria-label="Operativo">
+              <button type="button" class="bodega-toggle-button ${panel.balanceOperativoFiltro === "todos" ? "is-active" : ""}" data-bodega-balance-operativo-filtro="todos">Todos</button>
+              <button type="button" class="bodega-toggle-button ${panel.balanceOperativoFiltro === "operativo" ? "is-active" : ""}" data-bodega-balance-operativo-filtro="operativo">Operativo</button>
+              <button type="button" class="bodega-toggle-button ${panel.balanceOperativoFiltro === "no-operativo" ? "is-active" : ""}" data-bodega-balance-operativo-filtro="no-operativo">No operativo</button>
+            </div>
+          `
+          : ""
+      }
+
+      ${
         tasa
           ? `<span class="bodega-tasa-hint">Tasa Bs ${escapeHtml(formatTransferAmount(tasa.tasa))} / US$ &middot; ${escapeHtml(bodegaPanelFormatFechaHora(tasa.fecha))}</span>`
           : ""
@@ -10523,7 +10536,12 @@ function bodegaPanelFiltrarMovimientos(panel, tipo) {
     .filter((mov) => (mov.moneda || "BS") === panel.moneda)
     .filter(
       (mov) => !panel.tiendaFiltro || (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.includes(panel.tiendaFiltro)),
-    );
+    )
+    .filter((mov) => {
+      if (panel.balanceOperativoFiltro === "operativo") return mov.es_operativo;
+      if (panel.balanceOperativoFiltro === "no-operativo") return !mov.es_operativo;
+      return true;
+    });
 }
 
 function bodegaPanelSumarMontos(movimientos, soloOperativos) {
@@ -12609,6 +12627,13 @@ function bindShellEvents() {
   document.querySelectorAll("[data-bodega-moneda]").forEach((button) => {
     button.addEventListener("click", () => {
       state.bodegaPanel.moneda = button.getAttribute("data-bodega-moneda");
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-bodega-balance-operativo-filtro]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.bodegaPanel.balanceOperativoFiltro = button.getAttribute("data-bodega-balance-operativo-filtro");
       render();
     });
   });
