@@ -18,10 +18,17 @@ import { PrismaService } from "../prisma/prisma.service";
 // 006: 3.1.9 instalado 30/08/2026, confirmado con ETL_SYNC_RUNS que ya esta
 // insertando registros frescos ese mismo dia (activacion automatica por
 // nombre de base de datos, ver bodega-export.service.ts).
+// 002/003/004/005: confirmado 31/08/2026 con ETL_SYNC_RUNS -- sync activo y
+// reciente (mismo dia) desde database_name sin sufijo "_vps", con cientos/
+// miles de runs acumulados desde el 22/08/2026 y error_count=0 (005 tuvo 5
+// errores de idempotencia el 26/08, benignos y ya resueltos). Se verifico
+// ademas que las gemelas de MirrorSync en el VPS para estas 4 tiendas
+// tienen BODEGA_SYNC_ENABLED=false, asi que esta actividad es 100% de la
+// PC real de cada tienda.
 // Cuando otra tienda active bodega-export directo en su propia PC, sumar su
 // codigo_legacy aqui (verificar primero en ETL_SYNC_RUNS que este
 // insertando algo reciente, no solo que el registro exista).
-const CODIGOS_TIENDA_ACTIVOS_PANEL = ["001", "006"];
+const CODIGOS_TIENDA_ACTIVOS_PANEL = ["001", "002", "003", "004", "005", "006"];
 const FILTRO_TIENDAS_PANEL = Prisma.sql`t."codigo_legacy" IN (${Prisma.join(CODIGOS_TIENDA_ACTIVOS_PANEL)})`;
 
 @Injectable()
