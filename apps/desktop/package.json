@@ -7,7 +7,8 @@
   "main": "main.js",
   "scripts": {
     "start": "node start-electron.js",
-    "dist:win": "electron-builder --win nsis"
+    "dist:win": "electron-builder --win nsis",
+    "dist:win:ali": "electron-builder --win nsis --config electron-builder.ali.json"
   },
   "devDependencies": {
     "electron": "41.2.1",

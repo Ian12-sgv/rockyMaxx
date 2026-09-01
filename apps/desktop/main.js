@@ -11,9 +11,18 @@ const dialog = typeof electronModule === "string" ? null : electronModule.dialog
 const ipcMain = typeof electronModule === "string" ? null : electronModule.ipcMain;
 const shell = typeof electronModule === "string" ? null : electronModule.shell;
 
+// El nombre visible de la app (titulo de ventana, app.setName(), carpeta de
+// userData) sale del productName empaquetado -- electron-builder lo
+// sobreescribe por build via "extraMetadata", asi que el mismo main.js sirve
+// para el Cliente normal y para variantes con otra marca (ej. ClienteALI)
+// sin tocar codigo, cada una con su propia identidad/config separada.
+const packageJson = require("./package.json");
+const APP_DISPLAY_NAME = packageJson.productName || "Rocky Maxx Cliente";
+const APP_LOG_SLUG = APP_DISPLAY_NAME.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "rocky-maxx-cliente";
+
 const DEFAULT_SERVER_URL = "http://127.0.0.1:3000";
 const CLIENT_LOG_DIR = join(process.env.TEMP || process.cwd(), "rocky-maxx");
-const CLIENT_LOG_PATH = join(CLIENT_LOG_DIR, "desktop-client.log");
+const CLIENT_LOG_PATH = join(CLIENT_LOG_DIR, `desktop-client-${APP_LOG_SLUG}.log`);
 
 let mainWindow = null;
 let configWindow = null;
@@ -65,7 +74,7 @@ if (!singleInstanceLock) {
   process.exit(0);
 }
 
-app.setName("Rocky Maxx Cliente");
+app.setName(APP_DISPLAY_NAME);
 
 function normalizeServerUrl(value) {
   let normalized = String(value || "").trim();
@@ -362,7 +371,7 @@ function createMainWindow(serverUrl) {
     height: 920,
     minWidth: 1100,
     minHeight: 760,
-    title: "Rocky Maxx Cliente",
+    title: APP_DISPLAY_NAME,
     autoHideMenuBar: true,
     backgroundColor: "#f5ead4",
     show: false,
@@ -397,7 +406,7 @@ function createMainWindow(serverUrl) {
   mainWindow.webContents.on("did-fail-load", (_event, code, description, validatedUrl) => {
     writeRuntimeLog(`FallÃƒÂ³ la carga del cliente. url=${validatedUrl} code=${code} description=${description}`);
     dialog.showErrorBox(
-      "Rocky Maxx Cliente",
+      APP_DISPLAY_NAME,
       `No se pudo abrir el servidor configurado.\n\n${description}\n\nSe abrirÃƒÂ¡ la configuraciÃƒÂ³n del cliente.`,
     );
     if (mainWindow) {
@@ -447,7 +456,7 @@ async function openConfigWindow(options = {}) {
     height: 640,
     minWidth: 680,
     minHeight: 560,
-    title: "Configurar Rocky Maxx Cliente",
+    title: `Configurar ${APP_DISPLAY_NAME}`,
     autoHideMenuBar: true,
     backgroundColor: "#f5ead4",
     show: false,
@@ -844,6 +853,7 @@ ipcMain.handle("client-config:get", async () => {
   const config = loadClientConfig();
   return {
     serverUrl: config.serverUrl,
+    appDisplayName: APP_DISPLAY_NAME,
   };
 });
 
@@ -948,7 +958,7 @@ app.whenReady().then(async () => {
   });
 }).catch((error) => {
   writeRuntimeLog(`Fallo el arranque del cliente: ${error.stack || error.message}`);
-  dialog.showErrorBox("Rocky Maxx Cliente", `No se pudo iniciar el cliente.\n\n${error.message}`);
+  dialog.showErrorBox(APP_DISPLAY_NAME, `No se pudo iniciar el cliente.\n\n${error.message}`);
   app.quit();
 });
 

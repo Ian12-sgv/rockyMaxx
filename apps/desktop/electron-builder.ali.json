@@ -1,0 +1,38 @@
+{
+  "appId": "com.rockymaxx.client.ali",
+  "productName": "ClienteALI",
+  "executableName": "ClienteALI",
+  "electronVersion": "41.2.1",
+  "asar": true,
+  "extraMetadata": {
+    "name": "cliente-ali",
+    "productName": "ClienteALI"
+  },
+  "directories": {
+    "output": "../../dist/desktop-client-ali"
+  },
+  "files": [
+    "main.js",
+    "preload.js",
+    "config.html",
+    "config-renderer.js",
+    "start-electron.js",
+    "package.json"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": false,
+    "runAfterFinish": true
+  }
+}

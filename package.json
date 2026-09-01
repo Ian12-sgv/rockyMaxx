@@ -16,6 +16,7 @@
     "desktop:start:direct": "npm run start --workspace=@sistema-arabe/desktop",
     "desktop:dist": "npm run client:dist",
     "client:dist": "npm run dist:win --workspace=@sistema-arabe/desktop",
+    "client:dist:ali": "npm run dist:win:ali --workspace=@sistema-arabe/desktop",
     "installer:start": "npm run start --workspace=@sistema-arabe/desktop-installer",
     "installer:dist": "npm run dist:win --workspace=@sistema-arabe/desktop-installer",
     "service:prepare-runtime": "node scripts/prepare-desktop-runtime.cjs --target apps/desktop-service",

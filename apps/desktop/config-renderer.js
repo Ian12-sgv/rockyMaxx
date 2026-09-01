@@ -51,6 +51,9 @@ async function hydrate() {
   currentServerUrl = normalizeUrl(config?.serverUrl || "");
   serverUrlInput.value = currentServerUrl;
   invalidateConnectionVerification();
+  if (config?.appDisplayName) {
+    document.title = `Configurar ${config.appDisplayName}`;
+  }
 }
 
 window.rockyClient.onState((payload) => {
