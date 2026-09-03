@@ -23,6 +23,8 @@ async function bootstrap() {
 
   app.setGlobalPrefix("api");
   app.enableCors();
+  app.useBodyParser("json", { limit: "20mb" });
+  app.useBodyParser("urlencoded", { limit: "20mb", extended: true });
   if (publicPath) {
     app.useStaticAssets(publicPath);
   }

@@ -37,6 +37,7 @@ const TRANSFER_SYNC_STATUS_ERROR = "ERROR";
 const DEFAULT_TRANSFER_SYNC_AUTO_RETRY_INTERVAL_MS = 30_000;
 const DEFAULT_TRANSFER_SYNC_AUTO_RETRY_STARTUP_DELAY_MS = 5_000;
 const DEFAULT_TRANSFER_SYNC_AUTO_RETRY_LIMIT = 25;
+const DEFAULT_TRANSFER_SYNC_MAX_ATTEMPTS = 10;
 const INVENTORY_BULK_STATUS_PENDING = "PENDING";
 const INVENTORY_BULK_STATUS_RUNNING = "RUNNING";
 const INVENTORY_BULK_STATUS_COMPLETED = "COMPLETED";
@@ -1467,9 +1468,16 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       if (pushSync.processed > 0 || pullSync.processed > 0) {
         const sent = pushSync.results.filter((item) => item.status === TRANSFER_SYNC_STATUS_SENT).length;
         const pending = pushSync.results.filter((item) => item.status === TRANSFER_SYNC_STATUS_PENDING).length;
+        const failed = pushSync.results.filter((item) => item.status === TRANSFER_SYNC_STATUS_ERROR).length;
         this.logger.log(
-          `Reintento automatico de transferencias (${reason}): push=${pushSync.processed} (${sent} enviado(s), ${pending} pendiente(s)); pull=${pullSync.processed} (${pullSync.imported} importado(s), ${pullSync.applied} aplicado(s)).`,
+          `Reintento automatico de transferencias (${reason}): push=${pushSync.processed} (${sent} enviado(s), ${pending} pendiente(s), ${failed} con error definitivo); pull=${pullSync.processed} (${pullSync.imported} importado(s), ${pullSync.applied} aplicado(s)).`,
         );
+
+        if (failed > 0) {
+          this.logger.error(
+            `${failed} transferencia(s) dejaron de reintentarse automaticamente por errores repetidos. Revisar GET /transfers/sync/outbox?status=ERROR.`,
+          );
+        }
       }
     } catch (error) {
       this.logger.error(
@@ -1753,17 +1761,25 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
         });
       } catch (error) {
         const message = this.extractSyncErrorMessage(error);
-        this.logger.warn(`No se pudo sincronizar ${row.GlobalId}: ${message}`);
-        await this.updateTransferSyncOutboxStatus(
-          row.GlobalId,
-          TRANSFER_SYNC_STATUS_PENDING,
-          message,
-        );
+        const attemptsSoFar = row.Attempts + 1;
+        const maxAttempts = this.getTransferSyncMaxAttempts();
+        const nextStatus =
+          attemptsSoFar >= maxAttempts ? TRANSFER_SYNC_STATUS_ERROR : TRANSFER_SYNC_STATUS_PENDING;
+
+        if (nextStatus === TRANSFER_SYNC_STATUS_ERROR) {
+          this.logger.error(
+            `Dejando de reintentar ${row.GlobalId} tras ${attemptsSoFar} intentos fallidos: ${message}`,
+          );
+        } else {
+          this.logger.warn(`No se pudo sincronizar ${row.GlobalId}: ${message}`);
+        }
+
+        await this.updateTransferSyncOutboxStatus(row.GlobalId, nextStatus, message);
         results.push({
           globalId: row.GlobalId,
           numero: row.Numero,
           codigoRecibe: row.CodigoRecibe,
-          status: TRANSFER_SYNC_STATUS_PENDING,
+          status: nextStatus,
           error: message,
         });
       }
@@ -4333,6 +4349,13 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     return this.readPositiveIntegerConfig(
       "TRANSFER_SYNC_AUTO_RETRY_LIMIT",
       DEFAULT_TRANSFER_SYNC_AUTO_RETRY_LIMIT,
+    );
+  }
+
+  private getTransferSyncMaxAttempts() {
+    return this.readPositiveIntegerConfig(
+      "TRANSFER_SYNC_MAX_ATTEMPTS",
+      DEFAULT_TRANSFER_SYNC_MAX_ATTEMPTS,
     );
   }
 

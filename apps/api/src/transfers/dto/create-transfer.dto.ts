@@ -1,5 +1,6 @@
 import { Transform, Type } from "class-transformer";
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsDate,
@@ -11,6 +12,8 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+
+export const MAX_TRANSFER_ITEMS = 500;
 
 import {
   toOptionalInteger,
@@ -125,6 +128,9 @@ export class CreateTransferDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(MAX_TRANSFER_ITEMS, {
+    message: `Esta transferencia supera el maximo de ${MAX_TRANSFER_ITEMS} articulos. Dividela en varias transferencias mas pequenas.`,
+  })
   @ValidateNested({ each: true })
   @Type(() => CreateTransferLineDto)
   declare items?: CreateTransferLineDto[];
