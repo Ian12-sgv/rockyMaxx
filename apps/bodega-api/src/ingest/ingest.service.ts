@@ -164,6 +164,35 @@ export class IngestService {
         });
       }
 
+      // El indice unico es (tienda, tabla, pk, hash). Si el valor de este
+      // registro ya paso por este mismo estado antes (ej. un conteo de
+      // inventario que sube y baja entre los mismos numeros), ya existe una
+      // fila con este hash exacto marcada esActual=false -- crear otra
+      // chocaria con el indice. En ese caso se reactiva esa fila en vez de
+      // duplicarla.
+      const existingWithHash = await delegate.findFirst({
+        where: { dimTiendaId: tienda.id, tablaOrigen, pkOrigen: registro.pkOrigen, hashRegistro: hash },
+      });
+
+      if (existingWithHash) {
+        await delegate.update({
+          where: { id: existingWithHash.id },
+          data: {
+            codigoTiendaLegacy: tienda.codigoLegacy,
+            operacion: registro.operacion,
+            payloadJson: registro.payload as Prisma.InputJsonValue,
+            esActual: true,
+            validoDesde: now,
+            validoHasta: null,
+            syncRunId: runId,
+            fechaExtraida: new Date(registro.fechaExtraida),
+            fechaCargada: now,
+          },
+        });
+
+        return { outcome: (current ? "UPDATED" : "INSERTED") as UpsertOutcome, hash };
+      }
+
       await delegate.create({
         data: {
           dimTiendaId: tienda.id,
