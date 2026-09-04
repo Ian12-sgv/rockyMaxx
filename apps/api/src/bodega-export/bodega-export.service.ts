@@ -10,6 +10,14 @@ const DEFAULT_INTERVAL_MS = 60000;
 const DEFAULT_WINDOW_DAYS = 30;
 const DEFAULT_STARTUP_DELAY_MS = 5000;
 const BATCH_LIMIT = 1000;
+// fetch() no tiene timeout por defecto -- si el VPS se pone lento (o la red
+// falla a medias, sin cortar la conexion), la peticion puede quedar
+// esperando indefinidamente. cycleInProgress no se libera hasta que
+// postIngest() termine, asi que UNA sola peticion colgada congela TODO el
+// ciclo de exportacion para siempre (sin error, sin log) hasta que esa
+// peticion por fin resuelva o falle. Con este limite, se corta sola y el
+// ciclo se reintenta en el siguiente tick en vez de quedar muerto.
+const INGEST_REQUEST_TIMEOUT_MS = 20000;
 
 // URL publica del bodega-api en el VPS -- NO es un secreto (es la misma URL
 // que ya usa el frontend standalone de bodega-api, visible para cualquiera
@@ -703,20 +711,33 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
 
   private async postIngest(url: string, body: { tablas: TablaBatch[] }): Promise<IngestResult | null> {
     const token = this.getIngestToken();
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), INGEST_REQUEST_TIMEOUT_MS);
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`bodega-api respondio ${response.status}: ${text || "sin detalle"}`);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`bodega-api respondio ${response.status}: ${text || "sin detalle"}`);
+      }
+
+      return response.json().catch(() => null);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(`bodega-api no respondio en ${INGEST_REQUEST_TIMEOUT_MS}ms (timeout).`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return response.json().catch(() => null);
   }
 }
