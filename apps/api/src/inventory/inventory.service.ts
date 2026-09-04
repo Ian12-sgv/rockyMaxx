@@ -1107,6 +1107,11 @@ export class InventoryService {
   }
 
   private canCreateArticlesInCurrentInstance() {
+    const override = String(this.configService.get<string>("INVENTORY_MAIN_WAREHOUSE", "") || "").trim();
+    if (override) {
+      return ["1", "true", "yes", "si", "sí"].includes(override.toLowerCase());
+    }
+
     const databaseName = this.getCurrentDatabaseName();
     return databaseName.toLowerCase() === "rocky_maxx";
   }
