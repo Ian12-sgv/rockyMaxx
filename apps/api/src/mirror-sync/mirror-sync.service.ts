@@ -4,6 +4,12 @@ import { Prisma } from "@prisma/client";
 
 import { type InventoryWithRelations, inventoryInclude } from "../inventory/inventory-view.util";
 import { PrismaService } from "../prisma/prisma.service";
+import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
+
+// mirrorSyncRetryInProgress no se libera hasta que termine el ciclo, asi que
+// una peticion sin timeout puede congelarlo para siempre (mismo problema
+// que tenia bodega-export). Ver fetch-with-timeout.util.ts.
+const MIRROR_SYNC_REQUEST_TIMEOUT_MS = 20000;
 
 const MIRROR_SYNC_SCHEMA_VERSION = 1;
 const MIRROR_SYNC_STATUS_PENDING = "PENDING";
@@ -2333,14 +2339,18 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async sendMirrorSyncPackage(baseUrl: string, token: string, payload: MirrorSyncEnvelope) {
-    return fetch(`${baseUrl}/api/mirror-sync/import`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    return fetchWithTimeout(
+      `${baseUrl}/api/mirror-sync/import`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+      MIRROR_SYNC_REQUEST_TIMEOUT_MS,
+    );
   }
 
   private async getRemoteMirrorAuthToken(baseUrl: string, forceRefresh = false) {
@@ -2409,16 +2419,20 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       ),
     );
 
-    const response = await fetch(`${baseUrl}/api/auth/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      `${baseUrl}/api/auth/login`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          usuario,
+          password,
+        }),
       },
-      body: JSON.stringify({
-        usuario,
-        password,
-      }),
-    });
+      MIRROR_SYNC_REQUEST_TIMEOUT_MS,
+    );
 
     if (!response.ok) {
       const body = await this.readResponseBody(response);

@@ -20,6 +20,12 @@ import { FindTransferSyncOutboxDto, PushTransferSyncDto, RegisterTransferSyncNod
 import { UpdateTransferDto } from "./dto/update-transfer.dto";
 import { toTransferDetailView, toTransferListItemView, transferInclude } from "./transfer-view.util";
 import { PrismaService } from "../prisma/prisma.service";
+import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
+
+// Sin timeout, una peticion colgada hacia el nodo remoto puede congelar todo
+// el ciclo de reintento automatico de transferencias. Ver
+// fetch-with-timeout.util.ts.
+const TRANSFER_SYNC_REQUEST_TIMEOUT_MS = 20000;
 
 const DEFAULT_TRANSFER_LOT = "TR_AUTO";
 const DEFAULT_TRANSFER_LOT_DESCRIPTION = "Lote automatico para transferencias";
@@ -655,12 +661,16 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
 
     const limit = pushTransferSyncDto.limit ?? 50;
     const token = await this.loginRemoteSyncNode(remoteApiUrl);
-    const response = await fetch(`${remoteApiUrl}/api/transfers/sync/inbox/export?limit=${limit}`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${token}`,
+    const response = await fetchWithTimeout(
+      `${remoteApiUrl}/api/transfers/sync/inbox/export?limit=${limit}`,
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
       },
-    });
+      TRANSFER_SYNC_REQUEST_TIMEOUT_MS,
+    );
     const responseBody = await this.readRemoteJson(response);
 
     if (!response.ok || !this.isRecord(responseBody) || !Array.isArray(responseBody.items)) {
@@ -1359,14 +1369,18 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   private async postInventoryBulkBatch(apiUrl: string, jobId: string, items: unknown[]) {
     const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
     const token = await this.loginRemoteSyncNode(baseUrl);
-    const response = await fetch(`${baseUrl}/api/transfers/inventory-bulk/import`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      `${baseUrl}/api/transfers/inventory-bulk/import`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ jobId, items }),
       },
-      body: JSON.stringify({ jobId, items }),
-    });
+      TRANSFER_SYNC_REQUEST_TIMEOUT_MS,
+    );
     const responseBody = await this.readRemoteJson(response);
     if (!response.ok) {
       throw new ConflictException(
@@ -1906,14 +1920,18 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   private async postTransferSyncPackage(apiUrl: string, payload: unknown) {
     const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
     const token = await this.loginRemoteSyncNode(baseUrl);
-    const response = await fetch(`${baseUrl}/api/transfers/sync/import`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      `${baseUrl}/api/transfers/sync/import`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+      TRANSFER_SYNC_REQUEST_TIMEOUT_MS,
+    );
 
     const responseBody = await this.readRemoteJson(response);
     if (!response.ok) {
@@ -1930,13 +1948,17 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     let lastStatus = 401;
 
     for (const candidate of this.getRemoteSyncCredentialCandidates()) {
-      const response = await fetch(`${baseUrl}/api/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetchWithTimeout(
+        `${baseUrl}/api/auth/login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(candidate),
         },
-        body: JSON.stringify(candidate),
-      });
+        TRANSFER_SYNC_REQUEST_TIMEOUT_MS,
+      );
       const body = await this.readRemoteJson(response);
 
       if (response.ok && this.isRecord(body) && typeof body.accessToken === "string") {

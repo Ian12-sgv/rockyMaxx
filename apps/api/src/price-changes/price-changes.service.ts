@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 
 import { UserView } from "../users/user-view.util";
 import { PrismaService } from "../prisma/prisma.service";
+import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
 import { CreatePriceChangeBatchDto } from "./dto/create-price-change-batch.dto";
 import { PreviewPriceChangeBatchDto } from "./dto/preview-price-change-batch.dto";
 import { PRICE_CHANGE_MODE_FULL_INVENTORY, PRICE_CHANGE_MODE_SELECTED_ITEMS, PriceChangeMode } from "./dto/price-change-mode";
@@ -19,6 +20,10 @@ import {
 // Rol ORIGEN: unicos nodos autorizados a crear un batch (Decision 2). "BODEGA001" se
 // mantiene como alias defensivo de la bodega central, igual que en transfers.service.ts
 // (Riesgo #2 del plan) aunque el nodo se identifique hoy como "ORIGEN".
+// Sin timeout, una peticion colgada hacia el VPS puede congelar el ciclo de
+// sincronizacion de cambios de precio. Ver fetch-with-timeout.util.ts.
+const PRICE_CHANGE_SYNC_REQUEST_TIMEOUT_MS = 20000;
+
 const PRICE_CHANGE_ORIGIN_NODE_IDS = new Set(["ORIGEN", "BODEGA001", "BODEGA002"]);
 const DEFAULT_WAREHOUSE_NODE_ID = "ORIGEN";
 
@@ -880,10 +885,14 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
 
     const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
     const token = await this.loginRemotePriceChangeNode(baseUrl);
-    const response = await fetch(`${baseUrl}/api/price-changes/sync/pending?limit=${limit}`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await fetchWithTimeout(
+      `${baseUrl}/api/price-changes/sync/pending?limit=${limit}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      PRICE_CHANGE_SYNC_REQUEST_TIMEOUT_MS,
+    );
 
     const responseBody = await this.readRemoteJson(response);
     if (!response.ok) {
@@ -1118,14 +1127,18 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
 
       const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
       const token = await this.loginRemotePriceChangeNode(baseUrl);
-      const response = await fetch(`${baseUrl}/api/price-changes/sync/report-result`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const response = await fetchWithTimeout(
+        `${baseUrl}/api/price-changes/sync/report-result`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+        PRICE_CHANGE_SYNC_REQUEST_TIMEOUT_MS,
+      );
 
       const receipt = await this.readRemoteJson(response);
       if (!response.ok) {
@@ -2007,14 +2020,18 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
   private async postPriceChangeSyncPackage(apiUrl: string, payload: unknown) {
     const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
     const token = await this.loginRemotePriceChangeNode(baseUrl);
-    const response = await fetch(`${baseUrl}/api/price-changes/sync/import`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      `${baseUrl}/api/price-changes/sync/import`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+      PRICE_CHANGE_SYNC_REQUEST_TIMEOUT_MS,
+    );
 
     const responseBody = await this.readRemoteJson(response);
     if (!response.ok) {
@@ -2029,11 +2046,15 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
     let lastStatus = 401;
 
     for (const candidate of this.getPriceChangeRemoteCredentialCandidates()) {
-      const response = await fetch(`${baseUrl}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(candidate),
-      });
+      const response = await fetchWithTimeout(
+        `${baseUrl}/api/auth/login`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(candidate),
+        },
+        PRICE_CHANGE_SYNC_REQUEST_TIMEOUT_MS,
+      );
       const body = await this.readRemoteJson(response);
 
       if (response.ok && this.isRecord(body) && typeof body.accessToken === "string") {
@@ -2808,10 +2829,14 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
   private async fetchPriceChangeRemoteStatus(apiUrl: string, batchId: string) {
     const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
     const token = await this.loginRemotePriceChangeNode(baseUrl);
-    const response = await fetch(`${baseUrl}/api/price-changes/${batchId}/remote-status`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await fetchWithTimeout(
+      `${baseUrl}/api/price-changes/${batchId}/remote-status`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      PRICE_CHANGE_SYNC_REQUEST_TIMEOUT_MS,
+    );
 
     const responseBody = await this.readRemoteJson(response);
     if (!response.ok) {

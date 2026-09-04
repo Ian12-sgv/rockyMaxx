@@ -13,9 +13,14 @@ import { Prisma, type Inventario } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { UserView } from "../users/user-view.util";
+import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
 import { ApproveDevReturnDto } from "./dto/approve-dev-return.dto";
 import { CreateDevDraftDto, CreateDevDraftLineDto } from "./dto/create-dev-draft.dto";
 import { FindDevDraftsDto } from "./dto/find-dev-drafts.dto";
+
+// Sin timeout, una peticion colgada hacia el nodo remoto puede congelar el
+// ciclo de sincronizacion de devoluciones. Ver fetch-with-timeout.util.ts.
+const DEV_RETURN_SYNC_REQUEST_TIMEOUT_MS = 20000;
 
 const ZERO = new Prisma.Decimal(0);
 const DEFAULT_WAREHOUSE_CODE = "ORIGEN";
@@ -1065,12 +1070,16 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const token = await this.loginRemoteNode(remoteApiUrl);
-    const response = await fetch(`${remoteApiUrl}/api/dev-returns/sync/inbox/export?limit=${effectiveLimit}`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${token}`,
+    const response = await fetchWithTimeout(
+      `${remoteApiUrl}/api/dev-returns/sync/inbox/export?limit=${effectiveLimit}`,
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
       },
-    });
+      DEV_RETURN_SYNC_REQUEST_TIMEOUT_MS,
+    );
     const responseBody = await this.readRemoteJson(response);
 
     if (!response.ok || !this.isRecord(responseBody) || !Array.isArray(responseBody.items)) {
@@ -3034,14 +3043,18 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
   private async postSyncPackage(apiUrl: string, payload: unknown) {
     const baseUrl = this.normalizeRequiredApiUrl(apiUrl);
     const token = await this.loginRemoteNode(baseUrl);
-    const response = await fetch(`${baseUrl}/api/dev-returns/sync/import`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      `${baseUrl}/api/dev-returns/sync/import`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+      DEV_RETURN_SYNC_REQUEST_TIMEOUT_MS,
+    );
 
     const responseBody = await this.readRemoteJson(response);
     if (!response.ok) {
@@ -3058,13 +3071,17 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     let lastStatus = 401;
 
     for (const candidate of this.getRemoteSyncCredentialCandidates()) {
-      const response = await fetch(`${baseUrl}/api/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetchWithTimeout(
+        `${baseUrl}/api/auth/login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(candidate),
         },
-        body: JSON.stringify(candidate),
-      });
+        DEV_RETURN_SYNC_REQUEST_TIMEOUT_MS,
+      );
       const body = await this.readRemoteJson(response);
 
       if (response.ok && this.isRecord(body) && typeof body.accessToken === "string") {

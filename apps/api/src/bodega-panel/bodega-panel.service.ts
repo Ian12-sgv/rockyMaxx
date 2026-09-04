@@ -1,7 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
+import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
+
 const INGEST_URL_MARKER = "/bodega/ingest/";
+// Sin timeout, una peticion colgada hacia bodega-api dejaria la peticion del
+// navegador esperando indefinidamente. Ver fetch-with-timeout.util.ts.
+const BODEGA_PANEL_REQUEST_TIMEOUT_MS = 20000;
 
 export type BodegaPanelResumen = {
   disponible: boolean;
@@ -77,9 +82,11 @@ export class BodegaPanelService {
         params.set("hasta", hasta);
       }
       const query = params.toString();
-      const response = await fetch(`${baseUrl}/bodega/validaciones/panel-resumen${query ? `?${query}` : ""}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetchWithTimeout(
+        `${baseUrl}/bodega/validaciones/panel-resumen${query ? `?${query}` : ""}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+        BODEGA_PANEL_REQUEST_TIMEOUT_MS,
+      );
 
       if (!response.ok) {
         const text = await response.text().catch(() => "");
@@ -110,9 +117,11 @@ export class BodegaPanelService {
       if (hasta) params.set("hasta", hasta);
       if (codigoTienda) params.set("codigoTienda", codigoTienda);
       const query = params.toString();
-      const response = await fetch(`${conexion.baseUrl}/bodega/balance-movimientos${query ? `?${query}` : ""}`, {
-        headers: { Authorization: `Bearer ${conexion.token}` },
-      });
+      const response = await fetchWithTimeout(
+        `${conexion.baseUrl}/bodega/balance-movimientos${query ? `?${query}` : ""}`,
+        { headers: { Authorization: `Bearer ${conexion.token}` } },
+        BODEGA_PANEL_REQUEST_TIMEOUT_MS,
+      );
       if (!response.ok) {
         const text = await response.text().catch(() => "");
         return { disponible: false, motivo: `bodega-api respondio ${response.status}: ${text || "sin detalle"}` };
@@ -133,11 +142,15 @@ export class BodegaPanelService {
     }
 
     try {
-      const response = await fetch(`${conexion.baseUrl}/bodega/balance-movimientos`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${conexion.token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
+      const response = await fetchWithTimeout(
+        `${conexion.baseUrl}/bodega/balance-movimientos`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${conexion.token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+        BODEGA_PANEL_REQUEST_TIMEOUT_MS,
+      );
       if (!response.ok) {
         const text = await response.text().catch(() => "");
         return { ok: false, motivo: `bodega-api respondio ${response.status}: ${text || "sin detalle"}` };
@@ -158,11 +171,15 @@ export class BodegaPanelService {
     }
 
     try {
-      const response = await fetch(`${conexion.baseUrl}/bodega/balance-movimientos/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${conexion.token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
+      const response = await fetchWithTimeout(
+        `${conexion.baseUrl}/bodega/balance-movimientos/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${conexion.token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+        BODEGA_PANEL_REQUEST_TIMEOUT_MS,
+      );
       if (!response.ok) {
         const text = await response.text().catch(() => "");
         return { ok: false, motivo: `bodega-api respondio ${response.status}: ${text || "sin detalle"}` };
@@ -182,10 +199,14 @@ export class BodegaPanelService {
     }
 
     try {
-      const response = await fetch(`${conexion.baseUrl}/bodega/balance-movimientos/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${conexion.token}` },
-      });
+      const response = await fetchWithTimeout(
+        `${conexion.baseUrl}/bodega/balance-movimientos/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${conexion.token}` },
+        },
+        BODEGA_PANEL_REQUEST_TIMEOUT_MS,
+      );
       if (!response.ok) {
         const text = await response.text().catch(() => "");
         return { ok: false, motivo: `bodega-api respondio ${response.status}: ${text || "sin detalle"}` };
