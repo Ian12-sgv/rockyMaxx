@@ -23,8 +23,8 @@ model DimTiendas {
   databaseName String?  @map("database_name") @db.VarChar(120)
   apiPath      String?  @map("api_path") @db.VarChar(120)
   activa       Boolean  @default(true) @map("activa")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   articulosHist     DimArticulosHist[]
   clientesHist      DimClientesHist[]
@@ -51,11 +51,11 @@ model DimArticulosHist {
   hashRegistro       String    @map("hash_registro") @db.VarChar(64)
   payloadJson        Json      @map("payload_json")
   esActual           Boolean   @default(true) @map("es_actual")
-  validoDesde        DateTime  @default(now()) @map("valido_desde")
-  validoHasta        DateTime? @map("valido_hasta")
+  validoDesde        DateTime  @default(now()) @map("valido_desde") @db.Timestamptz(6)
+  validoHasta        DateTime? @map("valido_hasta") @db.Timestamptz(6)
   syncRunId          String    @map("sync_run_id") @db.Uuid
-  fechaExtraida      DateTime  @map("fecha_extraida")
-  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+  fechaExtraida      DateTime  @map("fecha_extraida") @db.Timestamptz(6)
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada") @db.Timestamptz(6)
 
   dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
   syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
@@ -75,11 +75,11 @@ model DimClientesHist {
   hashRegistro       String    @map("hash_registro") @db.VarChar(64)
   payloadJson        Json      @map("payload_json")
   esActual           Boolean   @default(true) @map("es_actual")
-  validoDesde        DateTime  @default(now()) @map("valido_desde")
-  validoHasta        DateTime? @map("valido_hasta")
+  validoDesde        DateTime  @default(now()) @map("valido_desde") @db.Timestamptz(6)
+  validoHasta        DateTime? @map("valido_hasta") @db.Timestamptz(6)
   syncRunId          String    @map("sync_run_id") @db.Uuid
-  fechaExtraida      DateTime  @map("fecha_extraida")
-  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+  fechaExtraida      DateTime  @map("fecha_extraida") @db.Timestamptz(6)
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada") @db.Timestamptz(6)
 
   dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
   syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
@@ -99,11 +99,11 @@ model HechInventarioHist {
   hashRegistro       String    @map("hash_registro") @db.VarChar(64)
   payloadJson        Json      @map("payload_json")
   esActual           Boolean   @default(true) @map("es_actual")
-  validoDesde        DateTime  @default(now()) @map("valido_desde")
-  validoHasta        DateTime? @map("valido_hasta")
+  validoDesde        DateTime  @default(now()) @map("valido_desde") @db.Timestamptz(6)
+  validoHasta        DateTime? @map("valido_hasta") @db.Timestamptz(6)
   syncRunId          String    @map("sync_run_id") @db.Uuid
-  fechaExtraida      DateTime  @map("fecha_extraida")
-  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+  fechaExtraida      DateTime  @map("fecha_extraida") @db.Timestamptz(6)
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada") @db.Timestamptz(6)
 
   dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
   syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
@@ -123,11 +123,11 @@ model HechVentasHist {
   hashRegistro       String    @map("hash_registro") @db.VarChar(64)
   payloadJson        Json      @map("payload_json")
   esActual           Boolean   @default(true) @map("es_actual")
-  validoDesde        DateTime  @default(now()) @map("valido_desde")
-  validoHasta        DateTime? @map("valido_hasta")
+  validoDesde        DateTime  @default(now()) @map("valido_desde") @db.Timestamptz(6)
+  validoHasta        DateTime? @map("valido_hasta") @db.Timestamptz(6)
   syncRunId          String    @map("sync_run_id") @db.Uuid
-  fechaExtraida      DateTime  @map("fecha_extraida")
-  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+  fechaExtraida      DateTime  @map("fecha_extraida") @db.Timestamptz(6)
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada") @db.Timestamptz(6)
 
   dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
   syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
@@ -147,11 +147,11 @@ model HechVentasDetalleHist {
   hashRegistro       String    @map("hash_registro") @db.VarChar(64)
   payloadJson        Json      @map("payload_json")
   esActual           Boolean   @default(true) @map("es_actual")
-  validoDesde        DateTime  @default(now()) @map("valido_desde")
-  validoHasta        DateTime? @map("valido_hasta")
+  validoDesde        DateTime  @default(now()) @map("valido_desde") @db.Timestamptz(6)
+  validoHasta        DateTime? @map("valido_hasta") @db.Timestamptz(6)
   syncRunId          String    @map("sync_run_id") @db.Uuid
-  fechaExtraida      DateTime  @map("fecha_extraida")
-  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+  fechaExtraida      DateTime  @map("fecha_extraida") @db.Timestamptz(6)
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada") @db.Timestamptz(6)
 
   dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
   syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
@@ -171,11 +171,11 @@ model HechPagosHist {
   hashRegistro       String    @map("hash_registro") @db.VarChar(64)
   payloadJson        Json      @map("payload_json")
   esActual           Boolean   @default(true) @map("es_actual")
-  validoDesde        DateTime  @default(now()) @map("valido_desde")
-  validoHasta        DateTime? @map("valido_hasta")
+  validoDesde        DateTime  @default(now()) @map("valido_desde") @db.Timestamptz(6)
+  validoHasta        DateTime? @map("valido_hasta") @db.Timestamptz(6)
   syncRunId          String    @map("sync_run_id") @db.Uuid
-  fechaExtraida      DateTime  @map("fecha_extraida")
-  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+  fechaExtraida      DateTime  @map("fecha_extraida") @db.Timestamptz(6)
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada") @db.Timestamptz(6)
 
   dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
   syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
@@ -195,11 +195,11 @@ model HechCajasHist {
   hashRegistro       String    @map("hash_registro") @db.VarChar(64)
   payloadJson        Json      @map("payload_json")
   esActual           Boolean   @default(true) @map("es_actual")
-  validoDesde        DateTime  @default(now()) @map("valido_desde")
-  validoHasta        DateTime? @map("valido_hasta")
+  validoDesde        DateTime  @default(now()) @map("valido_desde") @db.Timestamptz(6)
+  validoHasta        DateTime? @map("valido_hasta") @db.Timestamptz(6)
   syncRunId          String    @map("sync_run_id") @db.Uuid
-  fechaExtraida      DateTime  @map("fecha_extraida")
-  fechaCargada       DateTime  @default(now()) @map("fecha_cargada")
+  fechaExtraida      DateTime  @map("fecha_extraida") @db.Timestamptz(6)
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada") @db.Timestamptz(6)
 
   dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
   syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
@@ -213,8 +213,8 @@ model EtlSyncRuns {
   id                    String    @id @default(uuid()) @db.Uuid
   dimTiendaId           String    @map("dim_tienda_id") @db.Uuid
   codigoTiendaLegacy    String    @map("codigo_tienda_legacy") @db.VarChar(20)
-  startedAt             DateTime  @default(now()) @map("started_at")
-  finishedAt            DateTime? @map("finished_at")
+  startedAt             DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt            DateTime? @map("finished_at") @db.Timestamptz(6)
   status                String    @default("RUNNING") @map("status") @db.VarChar(20)
   tablasProcesadas      Json      @default("[]") @map("tablas_procesadas")
   registrosLeidos       Int       @default(0) @map("registros_leidos")
@@ -247,7 +247,7 @@ model EtlSyncErrors {
   pkOrigen           String?  @map("pk_origen") @db.VarChar(200)
   errorMessage       String   @map("error_message") @db.Text
   payloadJson        Json?    @map("payload_json")
-  createdAt          DateTime @default(now()) @map("created_at")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
   dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
@@ -264,9 +264,9 @@ model EtlWatermarks {
   entidadDestino     String    @map("entidad_destino") @db.VarChar(60)
   tablaOrigen        String    @map("tabla_origen") @db.VarChar(60)
   lastPkOrigen       String?   @map("last_pk_origen") @db.VarChar(200)
-  lastUpdatedAt      DateTime? @map("last_updated_at")
+  lastUpdatedAt      DateTime? @map("last_updated_at") @db.Timestamptz(6)
   lastHash           String?   @map("last_hash") @db.VarChar(64)
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   dimTienda DimTiendas @relation(fields: [dimTiendaId], references: [id])
 
@@ -291,7 +291,7 @@ model BalanceMovimiento {
   descripcion   String   @map("descripcion") @db.VarChar(300)
   fecha         DateTime @map("fecha") @db.Date
   registradoPor String?  @map("registrado_por") @db.VarChar(120)
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tiendas BalanceMovimientoTienda[]
 
