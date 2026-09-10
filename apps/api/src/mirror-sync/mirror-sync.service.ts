@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { type InventoryWithRelations, inventoryInclude } from "../inventory/inventory-view.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
+import { syncHealthRegistry } from "../shared/sync-health.registry";
 
 // mirrorSyncRetryInProgress no se libera hasta que termine el ciclo, asi que
 // una peticion sin timeout puede congelarlo para siempre (mismo problema
@@ -981,6 +982,7 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.mirrorSyncRetryInProgress = true;
+    syncHealthRegistry.recordAttempt("mirror-sync");
     try {
       const limit = this.getMirrorSyncRetryLimit();
       const maxBatches = this.getMirrorSyncRetryMaxBatches();
@@ -1016,8 +1018,11 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
           `Replica espejo (${reason}): lotes=${batches}, procesados=${processed}, enviados=${sent}, reintentados=${pending}, restantes=${remaining}.`,
         );
       }
+      syncHealthRegistry.recordSuccess("mirror-sync", `procesados=${processed} enviados=${sent}`);
     } catch (error) {
-      this.logger.warn(`Fallo el reintento automatico de replica espejo: ${this.extractErrorMessage(error)}`);
+      const message = this.extractErrorMessage(error);
+      syncHealthRegistry.recordError("mirror-sync", message);
+      this.logger.warn(`Fallo el reintento automatico de replica espejo: ${message}`);
     } finally {
       this.mirrorSyncRetryInProgress = false;
     }

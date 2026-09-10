@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { UserView } from "../users/user-view.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
+import { syncHealthRegistry } from "../shared/sync-health.registry";
 import { CreatePriceChangeBatchDto } from "./dto/create-price-change-batch.dto";
 import { PreviewPriceChangeBatchDto } from "./dto/preview-price-change-batch.dto";
 import { PRICE_CHANGE_MODE_FULL_INVENTORY, PRICE_CHANGE_MODE_SELECTED_ITEMS, PriceChangeMode } from "./dto/price-change-mode";
@@ -369,10 +370,15 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
     label: "fetch-remote" | "pull" | "apply" | "report",
     fn: () => Promise<T>,
   ): Promise<T | null> {
+    const healthKey = `price-changes:${label}`;
+    syncHealthRegistry.recordAttempt(healthKey);
     try {
-      return await fn();
+      const result = await fn();
+      syncHealthRegistry.recordSuccess(healthKey);
+      return result;
     } catch (error) {
       const message = this.extractPriceChangeErrorMessage(error);
+      syncHealthRegistry.recordError(healthKey, message);
       this.logger.warn(`Ciclo local de Cambio de Precio: fallo el subpaso ${label}: ${message}`);
       return null;
     }

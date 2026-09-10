@@ -11,6 +11,7 @@ import { CajasModule } from "./cajas/cajas.module";
 import { ClientesModule } from "./clientes/clientes.module";
 import { ComprasModule } from "./compras/compras.module";
 import { DevReturnsModule } from "./dev-returns/dev-returns.module";
+import { DiagnosticoPushModule } from "./diagnostico-push/diagnostico-push.module";
 import { ExchangeRatesModule } from "./exchange-rates/exchange-rates.module";
 import { FacturacionModule } from "./facturacion/facturacion.module";
 import { HealthModule } from "./health/health.module";
@@ -48,6 +49,7 @@ import { UsersModule } from "./users/users.module";
     ClientesModule,
     ComprasModule,
     DevReturnsModule,
+    DiagnosticoPushModule,
     ExchangeRatesModule,
     FacturacionModule,
     UsersModule,

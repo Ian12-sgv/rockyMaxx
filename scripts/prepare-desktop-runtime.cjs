@@ -1,10 +1,12 @@
-const { cpSync, existsSync, mkdirSync, readdirSync, rmSync } = require("node:fs");
+const { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync } = require("node:fs");
 const { spawnSync } = require("node:child_process");
 const { dirname, join, relative, sep } = require("node:path");
 
 const rootDir = join(__dirname, "..");
 const targetArgIndex = process.argv.findIndex((value) => value === "--target");
 const targetRelativePath = targetArgIndex >= 0 ? process.argv[targetArgIndex + 1] : "apps/desktop-service";
+const editionArgIndex = process.argv.findIndex((value) => value === "--edition");
+const edition = editionArgIndex >= 0 ? process.argv[editionArgIndex + 1] : "";
 const desktopDir = join(rootDir, targetRelativePath);
 const bundleDir = join(desktopDir, ".bundle");
 const apiBundleDir = join(bundleDir, "api");
@@ -109,6 +111,10 @@ function main() {
 
   if (!existsSync(join(apiBundleDir, ".env")) && existsSync(join(rootDir, ".env"))) {
     cpSync(join(rootDir, ".env"), join(apiBundleDir, ".env"), { force: true });
+  }
+
+  if (edition) {
+    appendFileSync(join(apiBundleDir, ".env"), `\nAPP_EDITION=${edition}\n`, "utf8");
   }
 
   if (existsSync(join(rootDir, "apps", "api", "package.json"))) {

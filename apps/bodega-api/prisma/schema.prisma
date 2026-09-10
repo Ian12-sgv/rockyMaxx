@@ -37,8 +37,25 @@ model DimTiendas {
   syncErrors        EtlSyncErrors[]
   watermarks        EtlWatermarks[]
   balanceMovimientos BalanceMovimientoTienda[]
+  diagnostico        NodoDiagnostico?
 
   @@map("DIM_TIENDAS")
+}
+
+// Ultimo snapshot de salud de sincronizacion que cada tienda empuja
+// periodicamente (ver DiagnosticoPushService en apps/api). Permite ver
+// desde afuera cual subsistema (bodega-export, mirror-sync, transfers,
+// dev-returns, price-changes) dejo de avanzar, sin depender de que alguien
+// copie a mano el log local de la tienda.
+model NodoDiagnostico {
+  id              String   @id @default(uuid()) @db.Uuid
+  dimTiendaId     String   @unique @map("dim_tienda_id") @db.Uuid
+  diagnosticoJson Json     @map("diagnostico_json")
+  actualizadoEn   DateTime @map("actualizado_en") @db.Timestamptz(6)
+
+  dimTienda DimTiendas @relation(fields: [dimTiendaId], references: [id])
+
+  @@map("NODO_DIAGNOSTICO")
 }
 
 model DimArticulosHist {

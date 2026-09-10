@@ -1,0 +1,66 @@
+$PrinterName = "Rocky Tiqueadora Generica"
+
+function Resolve-UsbPrinterPort {
+  $devices = Get-CimInstance Win32_PnPEntity | Where-Object {
+    $_.PNPDeviceID -like 'USBPRINT\*' -or $_.DeviceID -like 'USBPRINT\*'
+  }
+
+  foreach ($device in $devices) {
+    $match = [regex]::Match([string]$device.PNPDeviceID, 'USB\d{3}', 'IgnoreCase')
+    if (-not $match.Success) {
+      $match = [regex]::Match([string]$device.DeviceID, 'USB\d{3}', 'IgnoreCase')
+    }
+    if ($match.Success) {
+      return $match.Value.ToUpperInvariant()
+    }
+  }
+
+  throw "No se detecto un dispositivo USBPRINT con puerto USBxxx. Conecta la tiqueadora primero."
+}
+
+$PortName = Resolve-UsbPrinterPort
+$driverInf = Join-Path $env:windir 'INF\ntprint.inf'
+
+if (-not (Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue)) {
+  rundll32 printui.dll,PrintUIEntry /if /b $PrinterName /f $driverInf /r $PortName /m "Generic / Text Only"
+  Start-Sleep -Seconds 4
+}
+
+$testPath = Join-Path $env:USERPROFILE 'Downloads\rocky-pos-test.txt'
+@"
+ROCKY MAXX
+PRUEBA GENERAL DE TIQUEADORA
+--------------------------------
+Esta impresion se envio por Generic / Text Only
+Puerto: $PortName
+Cola: $PrinterName
+--------------------------------
+Si este ticket salio, la configuracion general funciona.
+"@ | Set-Content -Path $testPath -Encoding ASCII
+
+Get-Content $testPath | Out-Printer -Name $PrinterName
+
+Get-Printer -Name $PrinterName | Select-Object Name, DriverName, PortName
+
+
+
+
+
+
+
+
+---------------------------------------------------------------
+
+
+
+powershell -ExecutionPolicy Bypass -File "C:\Users\ianbo\Downloads\rocky-install-generic-ticket-printer.ps1"
+
+-------------------------------------------------
+
+powershell -ExecutionPolicy Bypass -File "H:\sistema arabe\scripts\windows\install-detected-ticket-printer-generic.ps1"
+
+
+--------------------------
+
+
+

@@ -21,3 +21,20 @@ dist/
 api-deps.json
 backups/
 herramientas/ejecutables/
+
+# Handoff con credenciales del VPS en texto plano -- nunca a git (ver
+# memoria "reference-rocky-maxx-docs").
+CONTEXTO.md
+
+# Respaldos de base de datos (dumps SQL/binarios pesados, no son codigo).
+database-backups/
+
+# Carpeta de scratch temporal.
+tmp/
+
+# .rar/carpetas sueltas con instaladores .exe de cientos de MB -- superan
+# el limite de tamano de archivo de GitHub y no son codigo fuente.
+scripts/windows.rar
+scripts/windows/nuevas funciones a la base de datos.rar
+scripts/windows/nuevas funciones a la base de datos/
+

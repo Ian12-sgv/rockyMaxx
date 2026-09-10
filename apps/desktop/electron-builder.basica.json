@@ -1,0 +1,38 @@
+{
+  "appId": "com.rockymaxx.client.basica",
+  "productName": "Rocky Maxx Cliente Basica",
+  "executableName": "RockyMaxxClienteBasica",
+  "electronVersion": "41.2.1",
+  "asar": true,
+  "extraMetadata": {
+    "name": "rocky-maxx-cliente-basica",
+    "productName": "Rocky Maxx Cliente Basica"
+  },
+  "directories": {
+    "output": "../../dist/basica"
+  },
+  "files": [
+    "main.js",
+    "preload.js",
+    "config.html",
+    "config-renderer.js",
+    "start-electron.js",
+    "package.json"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": false,
+    "runAfterFinish": true
+  }
+}

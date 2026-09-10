@@ -1,13 +1,14 @@
 {
   "name": "@sistema-arabe/desktop-service",
-  "version": "3.1.10",
+  "version": "3.1.12",
   "private": true,
   "description": "Servicio local Rocky Maxx para la PC principal.",
   "author": "OpenAI Codex",
   "main": "main.js",
   "scripts": {
     "start": "node start-electron.js",
-    "dist:win": "electron-builder --win nsis"
+    "dist:win": "electron-builder --win nsis",
+    "dist:win:basica": "electron-builder --win nsis --config electron-builder.basica.json"
   },
   "devDependencies": {
     "electron": "41.2.1",

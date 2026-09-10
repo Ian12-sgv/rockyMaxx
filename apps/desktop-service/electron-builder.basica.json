@@ -1,0 +1,45 @@
+{
+  "appId": "com.rockymaxx.localservice.basica",
+  "productName": "Rocky Maxx Servicio Basica",
+  "executableName": "RockyMaxxServicioBasica",
+  "electronVersion": "41.2.1",
+  "asar": true,
+  "extraMetadata": {
+    "name": "rocky-maxx-servicio-basica",
+    "productName": "Rocky Maxx Servicio Basica"
+  },
+  "directories": {
+    "output": "../../dist/basica"
+  },
+  "files": [
+    "main.js",
+    "preload.js",
+    "config.html",
+    "config-renderer.js",
+    "start-electron.js",
+    "package.json",
+    "bodega-default-token.json"
+  ],
+  "extraResources": [
+    {
+      "from": ".bundle/api",
+      "to": "api"
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": false,
+    "runAfterFinish": true
+  }
+}

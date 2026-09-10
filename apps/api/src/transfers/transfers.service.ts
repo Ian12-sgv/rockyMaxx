@@ -21,6 +21,7 @@ import { UpdateTransferDto } from "./dto/update-transfer.dto";
 import { toTransferDetailView, toTransferListItemView, transferInclude } from "./transfer-view.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
+import { syncHealthRegistry } from "../shared/sync-health.registry";
 
 // Sin timeout, una peticion colgada hacia el nodo remoto puede congelar todo
 // el ciclo de reintento automatico de transferencias. Ver
@@ -1470,6 +1471,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.transferSyncAutoRetryInProgress = true;
+    syncHealthRegistry.recordAttempt("transfers");
 
     try {
       const pushSync = await this.pushPendingTransferSync({
@@ -1493,7 +1495,13 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
           );
         }
       }
+      syncHealthRegistry.recordSuccess(
+        "transfers",
+        `push=${pushSync.processed} pull=${pullSync.processed}`,
+      );
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      syncHealthRegistry.recordError("transfers", message);
       this.logger.error(
         `Fallo el reintento automatico de sincronizacion de transferencias (${reason}).`,
         error instanceof Error ? error.stack : undefined,

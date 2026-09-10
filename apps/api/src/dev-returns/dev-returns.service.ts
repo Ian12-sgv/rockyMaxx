@@ -14,6 +14,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
 import { UserView } from "../users/user-view.util";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
+import { syncHealthRegistry } from "../shared/sync-health.registry";
 import { ApproveDevReturnDto } from "./dto/approve-dev-return.dto";
 import { CreateDevDraftDto, CreateDevDraftLineDto } from "./dto/create-dev-draft.dto";
 import { FindDevDraftsDto } from "./dto/find-dev-drafts.dto";
@@ -2833,6 +2834,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.devReturnSyncAutoRetryInProgress = true;
+    syncHealthRegistry.recordAttempt("dev-returns");
 
     try {
       const pushSync = await this.pushPendingSync(this.getDevReturnSyncAutoRetryLimit());
@@ -2845,7 +2847,13 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
           `Reintento automatico de devoluciones (${reason}): push=${pushSync.processed} (${sent} enviado(s), ${pending} pendiente(s)); pull=${pullSync.processed} (${pullSync.imported} importado(s)).`,
         );
       }
+      syncHealthRegistry.recordSuccess(
+        "dev-returns",
+        `push=${pushSync.processed} pull=${pullSync.processed}`,
+      );
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      syncHealthRegistry.recordError("dev-returns", message);
       this.logger.error(
         `Fallo el reintento automatico de sincronizacion de devoluciones (${reason}).`,
         error instanceof Error ? error.stack : undefined,

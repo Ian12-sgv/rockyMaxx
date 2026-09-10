@@ -1,6 +1,6 @@
 {
   "name": "@sistema-arabe/desktop",
-  "version": "3.1.10",
+  "version": "3.1.12",
   "private": true,
   "description": "Cliente de escritorio Rocky Maxx para conectarse al servicio local de la red.",
   "author": "OpenAI Codex",
@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node start-electron.js",
     "dist:win": "electron-builder --win nsis",
-    "dist:win:ali": "electron-builder --win nsis --config electron-builder.ali.json"
+    "dist:win:ali": "electron-builder --win nsis --config electron-builder.ali.json",
+    "dist:win:basica": "electron-builder --win nsis --config electron-builder.basica.json"
   },
   "devDependencies": {
     "electron": "41.2.1",

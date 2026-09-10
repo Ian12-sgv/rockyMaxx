@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
+import { syncHealthRegistry } from "../shared/sync-health.registry";
 import { buildPayload } from "./payload.util";
 import { serializePkOrigen } from "./pk-origen.util";
 
@@ -193,23 +194,39 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     return Math.trunc(raw);
   }
 
-  private async runCycle(reason: "startup" | "interval") {
-    if (this.cycleInProgress || !this.isEnabled()) {
-      return;
+  // Endpoint "forzar" (ver bodega-export.controller.ts) llama a runCycle con
+  // reason="manual" para poder disparar un intento inmediato desde un
+  // script local (ej. cuando alguien acaba de arreglar la red de la tienda
+  // y no quiere esperar hasta 1 minuto al proximo ciclo automatico). El
+  // resultado le dice al que lo llamo si de verdad arranco algo o por que
+  // no (ya habia un ciclo en curso, esta deshabilitado, etc.) en vez de
+  // fallar en silencio como hacen los ciclos automaticos.
+  async forzarCicloManual(): Promise<{ started: boolean; motivo?: string }> {
+    return this.runCycle("manual");
+  }
+
+  private async runCycle(reason: "startup" | "interval" | "manual"): Promise<{ started: boolean; motivo?: string }> {
+    if (this.cycleInProgress) {
+      return { started: false, motivo: "Ya hay un ciclo de bodega-export en curso." };
+    }
+    if (!this.isEnabled()) {
+      return { started: false, motivo: "La extraccion hacia bodega de datos esta deshabilitada en esta instancia." };
     }
 
     const ingestUrl = this.getIngestUrl();
     if (!ingestUrl) {
       this.logger.warn("BODEGA_SYNC_ENABLED=true pero BODEGA_INGEST_URL no esta configurado.");
-      return;
+      return { started: false, motivo: "BODEGA_INGEST_URL no esta configurado." };
     }
 
     this.cycleInProgress = true;
+    syncHealthRegistry.recordAttempt("bodega-export");
 
     try {
       const envios = await this.buildEnvios();
       if (envios.length === 0) {
-        return;
+        syncHealthRegistry.recordSuccess("bodega-export", "sin envios pendientes");
+        return { started: true, motivo: "No habia nada pendiente por enviar." };
       }
 
       let okCount = 0;
@@ -217,6 +234,13 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
 
       for (const envio of envios) {
         const entidades = envio.tablas.map((t) => t.entidadDestino).join("+");
+        // Clave por tabla ORIGEN (VENTAS, INVENTARIO, CLIENTES...) en vez de
+        // por entidad destino: son los nombres que reconoce quien opera la
+        // tienda, y el script de diagnostico local (forzar-sync-bodega.ps1 /
+        // desatascar-servicio-local.ps1) los busca por este nombre.
+        const origenesUnicos = Array.from(new Set(envio.tablas.map((t) => t.tablaOrigen)));
+        const healthKey = `bodega-export:${origenesUnicos.join("+")}`;
+        syncHealthRegistry.recordAttempt(healthKey);
         try {
           const result = await this.postIngest(ingestUrl, { tablas: envio.tablas });
           // bodega-api responde 200 aun cuando algunas (o todas) las filas
@@ -229,19 +253,26 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
           const errorCount = result?.errorCount;
           if (typeof errorCount !== "number" || errorCount > 0) {
             failCount += 1;
+            const detalle = `status=${result?.status ?? "desconocido"} errorCount=${errorCount ?? "desconocido"}`;
+            syncHealthRegistry.recordError(healthKey, `${detalle} -- cursor no avanzado`);
             this.logger.warn(
-              `Ciclo bodega-export con errores de ingesta (${reason}): entidades=${entidades} status=${result?.status ?? "desconocido"} errorCount=${errorCount ?? "desconocido"} -- cursor no avanzado, se reintentara.`,
+              `Ciclo bodega-export con errores de ingesta (${reason}): entidades=${entidades} ${detalle} -- cursor no avanzado, se reintentara.`,
             );
             continue;
           }
           await envio.onSuccess();
           okCount += 1;
+          syncHealthRegistry.recordSuccess(
+            healthKey,
+            `filas=${envio.tablas.reduce((n, t) => n + t.registros.length, 0)} syncRunId=${result?.syncRunId ?? "?"}`,
+          );
           this.logger.log(
             `Ciclo bodega-export OK (${reason}): entidades=${entidades} syncRunId=${result?.syncRunId ?? "?"} filas=${envio.tablas.reduce((n, t) => n + t.registros.length, 0)}`,
           );
         } catch (error) {
           failCount += 1;
           const message = error instanceof Error ? error.message : String(error);
+          syncHealthRegistry.recordError(healthKey, message);
           this.logger.warn(`Ciclo de extraccion hacia bodega fallo (${reason}) entidades=${entidades}: ${message}`);
         }
       }
@@ -249,9 +280,17 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
       if (failCount > 0) {
         this.logger.warn(`Ciclo bodega-export con fallas (${reason}): ok=${okCount} fallidos=${failCount}`);
       }
+      if (okCount > 0 && failCount === 0) {
+        syncHealthRegistry.recordSuccess("bodega-export", `ok=${okCount}`);
+      } else if (failCount > 0) {
+        syncHealthRegistry.recordError("bodega-export", `ok=${okCount} fallidos=${failCount}`);
+      }
+      return { started: true, motivo: `ok=${okCount} fallidos=${failCount}` };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      syncHealthRegistry.recordError("bodega-export", `fallo al leer datos locales: ${message}`);
       this.logger.warn(`Ciclo de extraccion hacia bodega fallo (${reason}) al leer datos locales: ${message}`);
+      return { started: true, motivo: `Fallo al leer datos locales: ${message}` };
     } finally {
       this.cycleInProgress = false;
     }
