@@ -311,6 +311,7 @@ export class ValidacionesService {
     return this.prisma.$queryRaw<
       Array<{
         codigo_legacy: string;
+        nombre: string | null;
         facturas: string;
         total_pago: string;
         total_costo_bs: string;
@@ -321,39 +322,42 @@ export class ValidacionesService {
       header AS (
         SELECT
           t."codigo_legacy" AS codigo_legacy,
+          t."nombre" AS nombre,
           COUNT(*) AS facturas,
           SUM((v."payload_json" ->> 'TotalPago')::numeric) AS total_pago
         FROM "VW_HECH_VENTAS_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
         WHERE (v."payload_json" ->> 'Fecha')::date BETWEEN ${desde}::date AND ${hasta}::date
           AND ${FILTRO_TIENDAS_PANEL}
-        GROUP BY 1
+        GROUP BY 1, 2
       ),
       costo AS (
         SELECT
           t."codigo_legacy" AS codigo_legacy,
+          t."nombre" AS nombre,
           SUM(${ValidacionesService.COSTO_ACTUAL_EXPR}) AS total_costo_usd
         FROM "VW_HECH_VENTAS_DETALLE_ACTUAL" d
         JOIN "DIM_TIENDAS" t ON t."id" = d."dim_tienda_id"
         ${ValidacionesService.COSTO_ACTUAL_JOIN}
         WHERE (d."payload_json" ->> 'Hora')::date BETWEEN ${desde}::date AND ${hasta}::date
           AND ${FILTRO_TIENDAS_PANEL}
-        GROUP BY 1
+        GROUP BY 1, 2
       ),
       combinado AS (
         SELECT
           COALESCE(h.codigo_legacy, c.codigo_legacy) AS codigo_legacy,
+          COALESCE(h.nombre, c.nombre) AS nombre,
           COALESCE(h.facturas, 0) AS facturas,
           COALESCE(h.total_pago, 0) AS total_pago,
           COALESCE(c.total_costo_usd, 0) * ${tasaValor}::numeric AS total_costo_bs
         FROM header h
         FULL OUTER JOIN costo c ON c.codigo_legacy = h.codigo_legacy
       )
-      SELECT codigo_legacy, facturas::text, total_pago::text, total_costo_bs::text, (total_pago - total_costo_bs)::text AS ganancia
+      SELECT codigo_legacy, nombre, facturas::text, total_pago::text, total_costo_bs::text, (total_pago - total_costo_bs)::text AS ganancia
       FROM (
-        SELECT codigo_legacy, facturas, total_pago, total_costo_bs FROM combinado
+        SELECT codigo_legacy, nombre, facturas, total_pago, total_costo_bs FROM combinado
         UNION ALL
-        SELECT 'TOTAL', SUM(facturas), SUM(total_pago), SUM(total_costo_bs) FROM combinado
+        SELECT 'TOTAL', NULL, SUM(facturas), SUM(total_pago), SUM(total_costo_bs) FROM combinado
       ) resumen
       ORDER BY 1
     `);
@@ -368,10 +372,11 @@ export class ValidacionesService {
   // campo.
   private async inventarioResumen() {
     return this.prisma.$queryRaw<
-      Array<{ codigo_legacy: string; articulos: string; unidades: string; valor_costo_usd: string }>
+      Array<{ codigo_legacy: string; nombre: string | null; articulos: string; unidades: string; valor_costo_usd: string }>
     >(Prisma.sql`
       SELECT
         COALESCE(t."codigo_legacy", 'TOTAL') AS codigo_legacy,
+        CASE WHEN GROUPING(t."codigo_legacy") = 1 THEN NULL ELSE MAX(t."nombre") END AS nombre,
         COUNT(*)::text AS articulos,
         COALESCE(SUM((v."payload_json" ->> 'Existencia')::numeric), 0)::text AS unidades,
         COALESCE(

@@ -379,6 +379,21 @@ function getStoreOptions() {
   return Array.from(codes).sort((a, b) => a.localeCompare(b, "es"));
 }
 
+// Nombre real de la tienda para mostrar en pantalla (dropdown, etc.) -- el
+// codigo (001, 002...) sigue siendo el value real usado para filtrar/pedir
+// datos al backend, esto es solo la etiqueta visible. Busca en cualquiera de
+// las listas que ya trae el backend con "nombre" (ventas o inventario);
+// si no lo encuentra (dato viejo en cache, tienda sin nombre cargado en
+// DIM_TIENDAS), cae de vuelta al codigo.
+function getNombreTienda(codigo) {
+  if (!codigo) {
+    return codigo;
+  }
+  const filas = [...(state.ventas || []), ...(state.inventario || [])];
+  const fila = filas.find((row) => row.codigo_legacy === codigo && row.nombre);
+  return fila?.nombre || codigo;
+}
+
 function getTasaValor() {
   return toFiniteNumber(state.tasaCambio?.tasa);
 }
@@ -737,7 +752,7 @@ function renderControlsBar() {
           ${storeOptions
             .map(
               (codigo) => `
-                <option value="${escapeHtml(codigo)}" ${state.tiendaFiltro === codigo ? "selected" : ""}>${escapeHtml(codigo)}</option>
+                <option value="${escapeHtml(codigo)}" ${state.tiendaFiltro === codigo ? "selected" : ""}>${escapeHtml(getNombreTienda(codigo))}</option>
               `,
             )
             .join("")}
@@ -932,7 +947,7 @@ function renderDesempenoRow(row, isTotal) {
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.codigo_legacy || "-")}</td>
+      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
       <td>${escapeHtml(formatMoneda(row.total_pago))}</td>
       <td>${escapeHtml(formatMoneda(row.total_costo_bs))}</td>
@@ -987,7 +1002,7 @@ function renderInventarioRow(row, totalValor, isTotal) {
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.codigo_legacy || "-")}</td>
+      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.articulos ?? "0"))}</td>
       <td>${escapeHtml(formatBs(row.unidades))}</td>
       <td>
