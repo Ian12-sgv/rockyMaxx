@@ -978,7 +978,6 @@ function renderInventarioSection() {
             <tr>
               <th>Tienda</th>
               <th>Articulos</th>
-              <th>Unidades</th>
               <th>Valor a costo / Participacion</th>
             </tr>
           </thead>
@@ -986,7 +985,7 @@ function renderInventarioSection() {
             ${
               filtradas.length
                 ? filtradas.map((row) => renderInventarioRow(row, totalValor, false)).join("")
-                : `<tr><td colspan="4"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                : `<tr><td colspan="3"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
             }
             ${total && !state.tiendaFiltro ? renderInventarioRow(total, totalValor, true) : ""}
           </tbody>
@@ -1004,7 +1003,6 @@ function renderInventarioRow(row, totalValor, isTotal) {
     <tr class="${isTotal ? "is-selected-row" : ""}">
       <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.articulos ?? "0"))}</td>
-      <td>${escapeHtml(formatBs(row.unidades))}</td>
       <td>
         <div class="bodega-participacion-cell">
           <span>${escapeHtml(formatMonedaDesdeUsd(valorUsd))}</span>
