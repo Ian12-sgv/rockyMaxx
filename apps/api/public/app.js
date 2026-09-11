@@ -131,6 +131,14 @@ const state = {
     selectedNumero: null,
     receiptNumero: null,
     draft: createEmptyTransferDraft(),
+    lineLookup: {
+      open: false,
+      loading: false,
+      lineIndex: -1,
+      search: "",
+      items: [],
+      activeIndex: -1,
+    },
   },
   devReturns: {
     loadingMetadata: false,
@@ -1267,6 +1275,7 @@ function renderShellView() {
       ${renderArticleLookupModal()}
       ${renderAdjustmentLookupModal()}
       ${renderTransferLookupModal()}
+      ${renderTransferLineLookupModal()}
       ${renderInventoryBulkTransferModal()}
       ${renderDevReturnLookupModal()}
       ${renderImpuestosLookupModal()}
@@ -4077,6 +4086,7 @@ function renderTransferLinesEditor(draft, options = {}) {
                     <input
                       type="text"
                       name="referencia"
+                      data-transfer-referencia-input="${index}"
                       value="${escapeHtml(toInputValue(line.referencia))}"
                       maxlength="30"
                       placeholder="Referencia"
@@ -4130,6 +4140,83 @@ function renderTransferLinesEditor(draft, options = {}) {
         </tbody>
       </table>
     </div>
+  `;
+}
+
+function renderTransferLineLookupModal() {
+  const lookup = state.transfers.lineLookup;
+  if (!lookup?.open) {
+    return "";
+  }
+
+  const items = Array.isArray(lookup.items) ? lookup.items : [];
+  const activeIndex = Number.isInteger(lookup.activeIndex) ? lookup.activeIndex : -1;
+  const totalLabel = `Coincidencias (${escapeHtml(String(items.length))} Registros)`;
+
+  return `
+    <div class="article-lookup-overlay transfer-line-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-transfer-line-lookup-close aria-label="Cerrar buscador"></button>
+      <section class="article-lookup-dialog transfer-line-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="transfer-line-lookup-title" tabindex="-1" data-transfer-line-lookup-dialog>
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Articulos</p>
+            <h3 id="transfer-line-lookup-title">${totalLabel}</h3>
+            <p>Selecciona el articulo correcto para esta linea de la transferencia.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">${escapeHtml(String(items.length))} registros</span>
+            <button class="article-command-button" type="button" data-transfer-line-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          items.length === 0
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Sin coincidencias</h3>
+                <p>No se encontraron articulos para la busqueda actual.</p>
+              </div>
+            `
+            : `
+              <div class="table-wrap article-lookup-table-wrap transfer-line-lookup-table-wrap">
+                <table class="data-table article-lookup-table transfer-line-lookup-table">
+                  <thead>
+                    <tr>
+                      <th>Codigo Barra</th>
+                      <th>Referencia</th>
+                      <th>Marca</th>
+                      <th>Nombre</th>
+                      <th>Existencia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${items.map((item, index) => renderTransferLineLookupRow(item, index, index === activeIndex)).join("")}
+                  </tbody>
+                </table>
+              </div>
+            `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderTransferLineLookupRow(item, index, isActive) {
+  return `
+    <tr
+      class="article-lookup-row ${isActive ? "article-lookup-row-active" : ""}"
+      data-transfer-line-lookup-select="${escapeHtml(String(index))}"
+      tabindex="0"
+      aria-selected="${isActive ? "true" : "false"}"
+    >
+      <td><strong>${escapeHtml(item.codigoBarra || "-")}</strong></td>
+      <td>${escapeHtml(item.referencia || "-")}</td>
+      <td>${escapeHtml(item.general?.marca?.nombre || item.general?.marca?.codigo || "-")}</td>
+      <td>${escapeHtml(item.general?.nombre || item.nombre || "-")}</td>
+      <td>${escapeHtml(toInputValue(item.inventario?.existenciaActual ?? ""))}</td>
+    </tr>
   `;
 }
 
@@ -15869,14 +15956,107 @@ function bindTransferEvents() {
 
       event.preventDefault();
       const index = Number.parseInt(input.getAttribute("data-transfer-barcode-input") || "-1", 10);
-      const codigoBarra = String(input.value || "").trim();
-      if (index < 0 || !codigoBarra) {
+      if (index < 0) {
         return;
       }
 
-      await fillTransferLineFromInventory(index, codigoBarra);
+      await resolveTransferLineFromField(index, input.value);
     });
   });
+
+  document.querySelectorAll("[data-transfer-referencia-input]").forEach((input) => {
+    input.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      const index = Number.parseInt(input.getAttribute("data-transfer-referencia-input") || "-1", 10);
+      if (index < 0) {
+        return;
+      }
+
+      await resolveTransferLineFromField(index, input.value);
+    });
+  });
+
+  document.querySelectorAll("[data-transfer-line-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeTransferLineLookupModal();
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-transfer-line-lookup-select]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const selectedIndex = Number.parseInt(row.getAttribute("data-transfer-line-lookup-select") || "", 10);
+      if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+        return;
+      }
+
+      const lookup = state.transfers.lineLookup;
+      const selected = (lookup.items || [])[selectedIndex];
+      if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+        return;
+      }
+
+      applyArticleToTransferLine(lookup.lineIndex, selected);
+      closeTransferLineLookupModal();
+      clearFlash();
+      advanceTransferLineFocus(lookup.lineIndex);
+    });
+  });
+
+  const transferLineLookupDialog = document.querySelector("[data-transfer-line-lookup-dialog]");
+  if (transferLineLookupDialog instanceof HTMLElement) {
+    queueMicrotask(() => {
+      transferLineLookupDialog.focus();
+    });
+
+    transferLineLookupDialog.addEventListener("keydown", (event) => {
+      const lookup = state.transfers.lineLookup;
+      const items = Array.isArray(lookup?.items) ? lookup.items : [];
+      if (!lookup?.open || !items.length) {
+        return;
+      }
+
+      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0 ? lookup.activeIndex : 0;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.transfers.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex + 1) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.transfers.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex - 1 + items.length) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const selected = items[currentIndex];
+        if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+          return;
+        }
+
+        applyArticleToTransferLine(lookup.lineIndex, selected);
+        closeTransferLineLookupModal();
+        clearFlash();
+        advanceTransferLineFocus(lookup.lineIndex);
+        return;
+      }
+    });
+  }
 
   document.querySelectorAll("[data-transfer-load-receipt]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -20035,38 +20215,133 @@ async function loadTransferForReceipt(numero) {
   }
 }
 
-async function fillTransferLineFromInventory(index, codigoBarra) {
-  captureTransferDraft();
+function focusTransferLineInput(index) {
+  if (!Number.isInteger(index) || index < 0) {
+    return;
+  }
+
+  const target = document.querySelector(`[data-transfer-barcode-input="${index}"]`);
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+
+  target.focus();
+  target.select?.();
+}
+
+function advanceTransferLineFocus(index) {
   const draft = state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
-  const items = Array.isArray(draft.items) && draft.items.length ? [...draft.items] : [createEmptyTransferLineDraft()];
+  const items = Array.isArray(draft.items) ? draft.items : [];
+  const nextIndex = index + 1;
 
-  try {
-    const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
-    const article = response.mercancia || response;
-    const currentLine = items[index] || createEmptyTransferLineDraft();
-    const preserveCorrectionReference = Boolean(draft.correccion);
-
-    items[index] = {
-      ...currentLine,
-      codigoBarra: article.codigoBarra || codigoBarra,
-      referencia: preserveCorrectionReference
-        ? currentLine.referencia || article.referencia || ""
-        : article.referencia || currentLine.referencia || "",
-      articuloNombre: article.general?.nombre || article.nombre || currentLine.articuloNombre || "",
-      existenciaActual: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaActual ?? ""),
-      existenciaLote: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaLote ?? ""),
-      valor: toInputValue(article.inventario?.costos?.ultimo ?? currentLine.valor ?? ""),
-    };
-
+  if (nextIndex >= items.length) {
     state.transfers.draft = {
       ...draft,
-      items,
+      items: [...items, createEmptyTransferLineDraft()],
     };
+  }
+
+  render();
+  queueMicrotask(() => {
+    focusTransferLineInput(nextIndex);
+  });
+}
+
+function applyArticleToTransferLine(index, article) {
+  const draft = state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
+  const items = Array.isArray(draft.items) && draft.items.length ? [...draft.items] : [createEmptyTransferLineDraft()];
+  const currentLine = items[index] || createEmptyTransferLineDraft();
+  const preserveCorrectionReference = Boolean(draft.correccion);
+
+  items[index] = {
+    ...currentLine,
+    codigoBarra: article.codigoBarra || currentLine.codigoBarra || "",
+    referencia: preserveCorrectionReference
+      ? currentLine.referencia || article.referencia || ""
+      : article.referencia || currentLine.referencia || "",
+    articuloNombre: article.general?.nombre || article.nombre || currentLine.articuloNombre || "",
+    existenciaActual: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaActual ?? ""),
+    existenciaLote: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaLote ?? ""),
+    valor: toInputValue(article.inventario?.costos?.ultimo ?? currentLine.valor ?? ""),
+  };
+
+  state.transfers.draft = {
+    ...draft,
+    items,
+  };
+}
+
+function openTransferLineLookupModal(lineIndex, searchValue, items) {
+  state.transfers.lineLookup = {
+    open: true,
+    loading: false,
+    lineIndex,
+    search: searchValue,
+    items: Array.isArray(items) ? items : [],
+    activeIndex: Array.isArray(items) && items.length ? 0 : -1,
+  };
+}
+
+function closeTransferLineLookupModal() {
+  state.transfers.lineLookup = {
+    open: false,
+    loading: false,
+    lineIndex: -1,
+    search: "",
+    items: [],
+    activeIndex: -1,
+  };
+}
+
+async function resolveTransferLineFromField(index, rawSearchValue) {
+  const searchValue = String(rawSearchValue || "").trim();
+  if (!searchValue) {
+    return;
+  }
+
+  captureTransferDraft();
+
+  try {
+    const params = new URLSearchParams();
+    params.set("buscar", searchValue);
+    params.set("limit", "25");
+
+    const response = await apiFetch(`/inventory?${params.toString()}`);
+    const itemsFound = Array.isArray(response.data) ? response.data : [];
+    const normalizedSearch = searchValue.toUpperCase();
+    const exactMatch = itemsFound.find((item) => {
+      const codigoBarra = String(item.codigoBarra || "").trim().toUpperCase();
+      const referencia = String(item.referencia || "").trim().toUpperCase();
+      return codigoBarra === normalizedSearch || referencia === normalizedSearch;
+    });
+
+    if (!itemsFound.length) {
+      throw new Error("ARTICULO_NOT_FOUND");
+    }
+
+    if (exactMatch) {
+      applyArticleToTransferLine(index, exactMatch);
+      closeTransferLineLookupModal();
+      clearFlash();
+      advanceTransferLineFocus(index);
+      return;
+    }
+
+    if (itemsFound.length === 1) {
+      applyArticleToTransferLine(index, itemsFound[0]);
+      closeTransferLineLookupModal();
+      clearFlash();
+      advanceTransferLineFocus(index);
+      return;
+    }
+
+    openTransferLineLookupModal(index, searchValue, itemsFound);
     clearFlash();
+    render();
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar el articulo ${codigoBarra}: ${extractErrorMessage(error)}`, "error");
-  } finally {
+    closeTransferLineLookupModal();
+    setFlash(`No se encontro un articulo para ${searchValue}.`, "error");
     render();
   }
 }

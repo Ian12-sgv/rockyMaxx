@@ -3951,11 +3951,28 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     const inventoryByCode = new Map(inventoryItems.map((item) => [item.CodigoBarra, item]));
     const now = new Date();
 
+    const insufficientStock: string[] = [];
     for (const [codigoBarra, delta] of deltaByBarcode.entries()) {
       const article = inventoryByCode.get(codigoBarra);
       if (!article) {
         throw new NotFoundException(`No se encontro el articulo ${codigoBarra} en inventario.`);
       }
+
+      if (delta.greaterThan(0) && article.Existencia.lessThan(delta)) {
+        insufficientStock.push(
+          `${codigoBarra} - ${article.Nombre} (disponible ${article.Existencia.toString()}, solicitado ${delta.toString()})`,
+        );
+      }
+    }
+
+    if (insufficientStock.length > 0) {
+      throw new BadRequestException(
+        `No hay stock suficiente para enviar. Revisa el o los articulos antes de continuar: ${insufficientStock.join("; ")}.`,
+      );
+    }
+
+    for (const [codigoBarra, delta] of deltaByBarcode.entries()) {
+      const article = inventoryByCode.get(codigoBarra)!;
 
       let nextExistence = article.Existencia;
       if (delta.greaterThan(0)) {
