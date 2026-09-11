@@ -404,6 +404,10 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     batches: TablaBatch[];
     onSuccess: () => Promise<void>;
   } | null> {
+    if (this.isVpsMirrorInstance()) {
+      return this.buildInventarioBatchesPorRecepcion();
+    }
+
     const cursorKey = "INVENTARIO";
     const cursorRaw = await this.getCursor(cursorKey);
     const cursor = cursorRaw ? this.parseInventarioCursor(cursorRaw) : null;
@@ -446,6 +450,94 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     const lastRow = rows[rows.length - 1];
     const nextCursor = {
       fecha: lastRow.UltimaActualizacion ? lastRow.UltimaActualizacion.toISOString() : null,
+      pk: lastRow.CodigoBarra,
+    };
+
+    const batches: TablaBatch[] = [
+      { entidadDestino: "DIM_ARTICULOS_HIST", tablaOrigen: "INVENTARIO", registros },
+      { entidadDestino: "HECH_INVENTARIO_HIST", tablaOrigen: "INVENTARIO", registros },
+    ];
+
+    return {
+      batches,
+      onSuccess: async () => {
+        await this.setCursor(cursorKey, JSON.stringify(nextCursor));
+      },
+    };
+  }
+
+  // Variante para bases gemelas del VPS -- mismo motivo que
+  // buildVentasBatchPorRecepcion: INVENTARIO."UltimaActualizacion" tambien
+  // sale del reloj de la caja de la tienda. El cursor usa en cambio
+  // COALESCE(MIRROR_SYNC_INBOX."ReceivedAt", "UltimaActualizacion"), y
+  // reproduce exactamente las mismas 3 ramas de la version original (con
+  // cursor y fecha real, con cursor pero todavia en el grupo sin fecha, y
+  // sin cursor) para no cambiar el comportamiento para articulos que nunca
+  // tuvieron "UltimaActualizacion".
+  private async buildInventarioBatchesPorRecepcion(): Promise<{
+    batches: TablaBatch[];
+    onSuccess: () => Promise<void>;
+  } | null> {
+    const cursorKey = "INVENTARIO";
+    const cursorRaw = await this.getCursor(cursorKey);
+    const cursor = cursorRaw ? this.parseInventarioCursor(cursorRaw) : null;
+    const isFirstRun = !cursor;
+
+    const ultimoReciboCte = Prisma.sql`
+      WITH ultimo_recibo AS (
+        SELECT "EntityKey", MAX("ReceivedAt") AS "ReceivedAt"
+        FROM dbo."MIRROR_SYNC_INBOX"
+        WHERE "EntityType" = 'INVENTORY'
+        GROUP BY "EntityKey"
+      )
+    `;
+    const baseSelect = Prisma.sql`
+      SELECT inv.*, COALESCE(r."ReceivedAt", inv."UltimaActualizacion") AS "__cursorTs"
+      FROM dbo."INVENTARIO" inv
+      LEFT JOIN ultimo_recibo r ON r."EntityKey" = inv."CodigoBarra"
+    `;
+
+    let whereClause = Prisma.empty;
+    if (cursor && cursor.fecha !== null) {
+      const cursorTs = new Date(cursor.fecha);
+      whereClause = Prisma.sql`
+        WHERE COALESCE(r."ReceivedAt", inv."UltimaActualizacion") > ${cursorTs}
+           OR (COALESCE(r."ReceivedAt", inv."UltimaActualizacion") = ${cursorTs} AND inv."CodigoBarra" > ${cursor.pk})
+           OR COALESCE(r."ReceivedAt", inv."UltimaActualizacion") IS NULL
+      `;
+    } else if (cursor && cursor.fecha === null) {
+      whereClause = Prisma.sql`
+        WHERE COALESCE(r."ReceivedAt", inv."UltimaActualizacion") IS NULL AND inv."CodigoBarra" > ${cursor.pk}
+      `;
+    }
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{ CodigoBarra: string; __cursorTs: Date | null; [key: string]: unknown }>
+    >(Prisma.sql`
+      ${ultimoReciboCte}
+      ${baseSelect}
+      ${whereClause}
+      ORDER BY "__cursorTs" ASC NULLS LAST, inv."CodigoBarra" ASC
+      LIMIT ${BATCH_LIMIT}
+    `);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const now = new Date();
+    const operacion: Operacion = isFirstRun ? "SNAPSHOT" : "UPDATE";
+
+    const registros = rows.map((row) => ({
+      pkOrigen: serializePkOrigen([row.CodigoBarra]),
+      operacion,
+      payload: buildPayload(row as unknown as Record<string, unknown>, ["CodigoBarra", "__cursorTs"]),
+      fechaExtraida: now.toISOString(),
+    }));
+
+    const lastRow = rows[rows.length - 1];
+    const nextCursor = {
+      fecha: lastRow.__cursorTs ? new Date(lastRow.__cursorTs).toISOString() : null,
       pk: lastRow.CodigoBarra,
     };
 
