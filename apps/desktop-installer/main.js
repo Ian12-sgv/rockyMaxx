@@ -104,6 +104,13 @@ const REMOTE_NODES = [
     localDatabaseName: "rocky_bodega_002",
   },
   {
+    id: "bodega003",
+    label: "Bodega Rockymaxx",
+    baseUrl: "http://68.183.105.135/bodega003",
+    remoteDatabaseName: "rocky_bodega_003_vps",
+    localDatabaseName: "rocky_bodega_003",
+  },
+  {
     id: "sistemas-tienda",
     label: "Prueba Sistemas - Tienda",
     baseUrl: "http://68.183.105.135/prueba-sistemas-tienda",

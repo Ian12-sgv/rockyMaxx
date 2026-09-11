@@ -233,12 +233,14 @@ export class UsersService {
     const password = this.configService.get<string>("AUTH_BOOTSTRAP_ADMIN_PASSWORD")?.trim();
     const name = this.configService.get<string>("AUTH_BOOTSTRAP_ADMIN_NAME")?.trim();
     const requestedGroup = this.configService.get<string>("AUTH_BOOTSTRAP_ADMIN_GROUP", "admin");
+    const requestedGroupName =
+      this.configService.get<string>("AUTH_BOOTSTRAP_ADMIN_GROUP_NAME", "Administrador")?.trim() || "Administrador";
 
     if (!username || !password) {
       return;
     }
 
-    const [group] = await this.resolveGroups([requestedGroup]);
+    const group = await this.ensureBasicGroup(requestedGroup, requestedGroupName);
     const existingUser = await this.prisma.usuarios.findFirst({
       where: {
         CodUsuario: {
