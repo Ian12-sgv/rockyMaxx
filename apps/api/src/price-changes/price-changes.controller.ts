@@ -11,16 +11,24 @@ import { PriceChangeSyncPullDto } from "./dto/price-change-sync-pull.dto";
 import { RetryPriceChangeBatchDto } from "./dto/retry-price-change-batch.dto";
 import { PriceChangesService } from "./price-changes.service";
 
-// Rol ORIGEN por defecto (creacion/preview/envio/reintento). Restringido a "sistema",
+// Rol ORIGEN por defecto (creacion/preview/envio/reintento). Restringido a "sistema"/"admin",
 // igual que la transferencia masiva de inventario (transfers.controller.ts:41-54), porque
 // el origen permitido es Bodega Central/Bodega 002, no operacion de caja/tienda.
 // El endpoint sync/import (rol VPS/REMOTO) tiene su propio override de grupos mas abajo,
 // igual patron que inventory-bulk/import en transfers.controller.ts:56-60.
 @UseGuards(JwtAuthGuard, GroupsGuard)
-@RequireGroups("sistema")
+@RequireGroups("sistema", "admin")
 @Controller("price-changes")
 export class PriceChangesController {
   constructor(private readonly priceChangesService: PriceChangesService) {}
+
+  // Rol ORIGEN, solo lectura: identidad del nodo actual, para que el frontend excluya el
+  // propio nodo de la lista de destinos seleccionables. Declarado antes de ":batchId" para
+  // que "context" no sea interpretado como un batchId.
+  @Get("context")
+  async context() {
+    return this.priceChangesService.getCurrentNodeInfo();
+  }
 
   @Post("preview")
   async preview(@Body() previewPriceChangeBatchDto: PreviewPriceChangeBatchDto) {

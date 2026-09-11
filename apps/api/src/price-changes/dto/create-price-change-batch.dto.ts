@@ -18,9 +18,9 @@ export class CreatePriceChangeBatchDto {
   @IsIn(PRICE_CHANGE_MODES)
   declare mode: PriceChangeMode;
 
-  // Tiendas destino (SYNC_NODES.NodeId). Nunca puede incluir Bodega Central/Bodega 002
-  // (Decision 2) ni el propio nodo origen; validado en el servicio, donde se dispone del
-  // contexto del nodo actual y de la consulta a SYNC_NODES.
+  // Tiendas o bodegas destino (SYNC_NODES.NodeId, Tipo='TIENDA' o 'BODEGA'). Nunca puede
+  // incluir el propio nodo origen; validado en el servicio, donde se dispone del contexto
+  // del nodo actual y de la consulta a SYNC_NODES.
   @IsArray()
   @ArrayNotEmpty()
   @IsString({ each: true })

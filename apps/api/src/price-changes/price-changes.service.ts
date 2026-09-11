@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
 import { UserView } from "../users/user-view.util";
+import { normalizeLegacyGroupCode } from "../users/user-groups.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
 import { syncHealthRegistry } from "../shared/sync-health.registry";
@@ -26,6 +27,11 @@ import {
 const PRICE_CHANGE_SYNC_REQUEST_TIMEOUT_MS = 20000;
 
 const PRICE_CHANGE_ORIGIN_NODE_IDS = new Set(["ORIGEN", "BODEGA001", "BODEGA002"]);
+// Subconjunto de lo anterior que identifica Bodega Central bajo cualquiera de sus dos
+// alias. Bodega 002 quedo fuera de este subconjunto a proposito: ahora puede ser destino
+// de un batch (creado por Bodega Central u otra bodega) y necesita correr el ciclo LOCAL
+// SERVICE para aplicarlo, cosa que Bodega Central nunca hace consigo misma.
+const PRICE_CHANGE_CENTRAL_NODE_IDS = new Set(["ORIGEN", "BODEGA001"]);
 const DEFAULT_WAREHOUSE_NODE_ID = "ORIGEN";
 
 const PRICE_CHANGE_BATCH_STATUS_DRAFT = "DRAFT";
@@ -384,16 +390,19 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // La aplicacion de costos en INVENTARIO solo corre en instancias de tienda destino
-  // FISICAS (Decision 2). El ORIGEN (ORIGEN/BODEGA001/BODEGA002) nunca aplica localmente,
-  // y el representante VPS/REMOTO de una tienda (isVpsRemote=true, DB "_vps") tampoco --
-  // ese rol solo recibe/expone/reporta, nunca escribe Inventario (Decision 1).
+  // La aplicacion de costos en INVENTARIO corre en instancias de tienda O bodega destino
+  // FISICAS. Bodega Central (ORIGEN/BODEGA001) nunca aplica localmente porque es la fuente
+  // de verdad de precios, pero Bodega 002 (u otra bodega que reciba un batch) si debe
+  // aplicarlo -- por eso solo se excluye PRICE_CHANGE_CENTRAL_NODE_IDS, no el set completo
+  // de origenes permitidos. El representante VPS/REMOTO de un nodo (isVpsRemote=true, DB
+  // "_vps") tampoco aplica -- ese rol solo recibe/expone/reporta, nunca escribe Inventario
+  // (Decision 1).
   private isPriceChangeLocalServiceInstance() {
     const current = this.getCurrentSourceContext();
     return (
-      current.tipo === "TIENDA" &&
+      (current.tipo === "TIENDA" || current.tipo === "BODEGA") &&
       !current.isVpsRemote &&
-      !PRICE_CHANGE_ORIGIN_NODE_IDS.has(current.nodeId)
+      !PRICE_CHANGE_CENTRAL_NODE_IDS.has(current.nodeId)
     );
   }
 
@@ -568,7 +577,7 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
       return this.buildPriceChangeBatchSendResult(batch, allStores, {
         sentCount: 0,
         failedCount: 0,
-        message: "No hay tiendas en PENDING_SEND o FAILED_NETWORK para enviar.",
+        message: "No hay destinos en PENDING_SEND o FAILED_NETWORK para enviar.",
       });
     }
 
@@ -602,7 +611,7 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
       });
       if (invalid.length > 0) {
         throw new ConflictException(
-          `Solo se pueden reintentar tiendas en estado FAILED_NETWORK. No aplica para: ${invalid.join(", ")}.`,
+          `Solo se pueden reintentar destinos en estado FAILED_NETWORK. No aplica para: ${invalid.join(", ")}.`,
         );
       }
       eligible = allStores.filter((store) => requestedIds.includes(store.DestinationNodeId.toUpperCase()));
@@ -614,7 +623,7 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
       return this.buildPriceChangeBatchSendResult(batch, allStores, {
         sentCount: 0,
         failedCount: 0,
-        message: "No hay tiendas en FAILED_NETWORK para reintentar.",
+        message: "No hay destinos en FAILED_NETWORK para reintentar.",
       });
     }
 
@@ -1397,10 +1406,21 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
   }
 
   private assertSystemUser(user: UserView) {
-    const isSystem = user.grupos.some((group) => String(group.codigo || "").trim().toUpperCase() === "SISTEMA");
-    if (!isSystem) {
-      throw new ConflictException("Solo el usuario sistema puede ejecutar el proceso de Cambio de Precio.");
+    const isAllowed = user.grupos.some((group) =>
+      ["SISTEMA", "ADMI"].includes(normalizeLegacyGroupCode(String(group.codigo || ""))),
+    );
+    if (!isAllowed) {
+      throw new ConflictException("Solo un usuario sistema o administrador puede ejecutar el proceso de Cambio de Precio.");
     }
+  }
+
+  // Expone la identidad del nodo actual para que el frontend pueda excluirse a si mismo
+  // de la lista de destinos posibles (no tiene sentido que un nodo se envie un lote a si
+  // mismo; el backend ya lo rechaza en resolvePriceChangeDestinations, esto es solo para
+  // no ofrecerlo de entrada en el selector).
+  getCurrentNodeInfo(): { nodeId: string; tipo: string } {
+    const current = this.getCurrentSourceContext();
+    return { nodeId: current.nodeId, tipo: current.tipo };
   }
 
   // Rol ORIGEN. Deriva la identidad del nodo actual a partir del nombre de la base en
@@ -1620,20 +1640,14 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // Destinos deben ser solo tiendas operativas (Tipo='TIENDA' en SYNC_NODES); Bodega
-  // Central/Bodega 002 quedan explicitamente rechazadas como destino (Decision 2), igual
-  // que el propio nodo origen.
+  // Destinos permitidos: tiendas (Tipo='TIENDA') y bodegas (Tipo='BODEGA') en SYNC_NODES.
+  // La antigua Decision 2 rechazaba TODA bodega como destino; ahora solo se rechaza el
+  // propio nodo origen (no puede enviarse un batch a si mismo), permitiendo que, por
+  // ejemplo, Bodega Central envie a Bodega 002 o viceversa.
   private async resolvePriceChangeDestinations(destinationNodeIds: string[], current: PriceChangeNodeContext) {
     const requestedIds = Array.from(new Set(destinationNodeIds));
     if (requestedIds.length === 0) {
-      throw new BadRequestException("Debes seleccionar al menos una tienda destino.");
-    }
-
-    const rejectedAsOrigin = requestedIds.filter((nodeId) => PRICE_CHANGE_ORIGIN_NODE_IDS.has(nodeId));
-    if (rejectedAsOrigin.length > 0) {
-      throw new ConflictException(
-        `Bodega Central y Bodega 002 solo pueden ser origen de Cambio de Precio, nunca destino: ${rejectedAsOrigin.join(", ")}.`,
-      );
+      throw new BadRequestException("Debes seleccionar al menos un destino (tienda o bodega).");
     }
 
     if (requestedIds.includes(current.nodeId)) {
@@ -1650,9 +1664,10 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
       if (!node) {
         throw new NotFoundException(`No existe el nodo destino ${nodeId} registrado en SYNC_NODES.`);
       }
-      if ((node.Tipo || "").toUpperCase() !== "TIENDA") {
+      const tipo = (node.Tipo || "").toUpperCase();
+      if (tipo !== "TIENDA" && tipo !== "BODEGA") {
         throw new ConflictException(
-          `El destino ${nodeId} no es una tienda operativa (Tipo=${node.Tipo ?? "desconocido"}).`,
+          `El destino ${nodeId} no es una tienda ni una bodega operativa (Tipo=${node.Tipo ?? "desconocido"}).`,
         );
       }
       if (!node.ApiUrl) {

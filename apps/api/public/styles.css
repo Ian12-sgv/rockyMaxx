@@ -5509,7 +5509,9 @@ button {
 .compras-lines-panel,
 .compras-history-panel,
 .impresoras-panel,
-.impresoras-history-panel {
+.impresoras-history-panel,
+.price-change-panel,
+.price-change-lines-panel {
   border: 1px solid rgba(38, 73, 111, 0.14);
   border-radius: 12px;
   background: linear-gradient(180deg, #ffffff 0%, #f4f8fd 100%);
@@ -5622,7 +5624,8 @@ button {
 .cash-register-history-head h2,
 .compras-lines-head h2,
 .compras-history-head h2,
-.impresoras-history-head h2 {
+.impresoras-history-head h2,
+.price-change-lines-head h2 {
   margin: 0;
   color: #1f3245;
   font-family: var(--font-display);
@@ -5632,7 +5635,8 @@ button {
 .cash-register-history-head p,
 .compras-lines-head p,
 .compras-history-head p,
-.impresoras-history-head p {
+.impresoras-history-head p,
+.price-change-lines-head p {
   margin: 4px 0 0;
   color: #617486;
   font-size: 0.88rem;
@@ -5747,7 +5751,9 @@ button {
 
 .compras-panel,
 .compras-lines-panel,
-.compras-history-panel {
+.compras-history-panel,
+.price-change-panel,
+.price-change-lines-panel {
   display: grid;
   gap: 14px;
   padding: 16px;
@@ -5814,7 +5820,8 @@ button {
 
 .compras-lines-head,
 .compras-history-head,
-.impresoras-history-head {
+.impresoras-history-head,
+.price-change-lines-head {
   display: flex;
   align-items: end;
   justify-content: space-between;
@@ -7183,9 +7190,11 @@ button {
 }
 
 /* Cambio de Precio (Procesos) -- reutiliza .adjustment-window/.adjustment-titlebar (mismo
-   patron compacto que Facturacion/Apertura de caja), .transfer-register-form,
-   .inventory-bulk-destination*, .adjustment-grid*, .button*, .modern-chip* y .empty-state;
-   solo se agrega lo que no tiene equivalente ya en el sistema. */
+   patron compacto que Facturacion/Compras/Apertura de caja), .transfer-register-form,
+   .compras-panel/.compras-lines-panel (mismo panel con borde+degradado que agrupa campos y
+   lista de articulos en Compras), .inventory-bulk-destination*, .data-table/.table-wrap,
+   .button*, .modern-chip* y .empty-state; solo se agrega lo que no tiene equivalente ya en
+   el sistema. */
 .price-change-shell {
   display: flex;
   flex-direction: column;
@@ -7234,6 +7243,17 @@ button {
   margin-bottom: 6px;
 }
 
+.price-change-destination-filter-field {
+  gap: 14px;
+  margin: 0 0 8px;
+}
+
+.price-change-destination-filter-field label {
+  font-size: 0.86rem;
+  font-weight: 400;
+  color: #445468;
+}
+
 .price-change-destinations {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
@@ -7247,22 +7267,12 @@ button {
   gap: 7px;
 }
 
-.price-change-full-inventory-notice {
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #d8e2ec;
-  border-radius: 12px;
-  background: #f9fbfd;
-  color: #445468;
+.price-change-items-table-wrap {
+  max-height: min(40vh, 360px);
 }
 
-.price-change-items-block {
-  margin-bottom: 0;
-}
-
-.price-change-items-grid-wrap {
-  min-height: 0;
-  max-height: 170px;
+.price-change-items-table-wrap .data-table {
+  min-width: 640px;
 }
 
 .price-change-store-grid-wrap {
@@ -7273,9 +7283,31 @@ button {
 .price-change-barcode-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-width: 360px;
-  margin-bottom: 8px;
+  gap: 8px;
+  max-width: 420px;
+  margin-bottom: 12px;
+}
+
+.price-change-barcode-field span {
+  color: #263847;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.price-change-barcode-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(35, 48, 58, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+
+.price-change-barcode-field input::placeholder {
+  color: #8a97a6;
+  font-size: 0.84rem;
 }
 
 .price-change-actions {

@@ -214,11 +214,20 @@ const state = {
     pullingStatus: false,
     downloadingPdf: false,
     nodes: [],
+    currentNodeId: "",
     mode: "SELECTED_ITEMS",
+    destinationTypeFilter: "ALL",
     selectedNodeIds: [],
     selectedItems: [],
     preview: null,
     batch: null,
+    lineLookup: {
+      open: false,
+      loading: false,
+      search: "",
+      items: [],
+      activeIndex: -1,
+    },
   },
   devReturnLookup: {
     open: false,
@@ -1285,6 +1294,7 @@ function renderShellView() {
       ${renderArticleLookupModal()}
       ${renderAdjustmentLookupModal()}
       ${renderAdjustmentLineLookupModal()}
+      ${renderPriceChangeLineLookupModal()}
       ${renderTransferLookupModal()}
       ${renderTransferLineLookupModal()}
       ${renderInventoryBulkTransferModal()}
@@ -1682,7 +1692,7 @@ function renderDesktopProcesosMenu() {
         ${renderDesktopMenuLink("registrar-tasa-cambio", "Registrar tasa cambio")}
         ${renderDesktopMenuLink("borrador-devoluciones", "Borrador devoluciones")}
         ${renderDesktopMenuLink("ajuste-inventario", "Ajuste de inventario")}
-        ${userIsSystemOperator() ? renderDesktopMenuLink("cambio-precio", "Cambio de precio") : ""}
+        ${userCanManageAllModules() ? renderDesktopMenuLink("cambio-precio", "Cambio de precio") : ""}
         ${renderDesktopMenuLink("cajas", "Apertura de caja")}
         ${renderDesktopMenuLink("cierre-caja", "Cierre de caja")}
         <button
@@ -15392,7 +15402,7 @@ function renderPriceChangeWorkspace() {
       <section class="transfer-register-shell adjustment-window price-change-shell">
         <div class="adjustment-titlebar">Cambio de precio</div>
         <div class="price-change-scroll">
-          ${pc.loadingMetadata ? renderLoadingState("Cargando tiendas disponibles...") : renderPriceChangeForm(pc, mode, isBusy)}
+          ${pc.loadingMetadata ? renderLoadingState("Cargando tiendas y bodegas disponibles...") : renderPriceChangeForm(pc, mode, isBusy)}
           ${pc.preview ? renderPriceChangePreviewSummary(pc.preview) : ""}
           ${pc.batch ? renderPriceChangeBatchSummary(pc) : ""}
         </div>
@@ -15401,8 +15411,19 @@ function renderPriceChangeWorkspace() {
   `;
 }
 
+function getPriceChangeVisibleDestinations() {
+  const allDestinations = Array.isArray(state.priceChange.nodes) ? state.priceChange.nodes : [];
+  const typeFilter = state.priceChange.destinationTypeFilter || "ALL";
+  if (typeFilter === "ALL") {
+    return allDestinations;
+  }
+  return allDestinations.filter((node) => String(node.tipo || "").trim().toUpperCase() === typeFilter);
+}
+
 function renderPriceChangeForm(pc, mode, isBusy) {
-  const destinations = Array.isArray(pc.nodes) ? pc.nodes : [];
+  const allDestinations = Array.isArray(pc.nodes) ? pc.nodes : [];
+  const typeFilter = pc.destinationTypeFilter || "ALL";
+  const destinations = getPriceChangeVisibleDestinations();
   const selected = new Set(Array.isArray(pc.selectedNodeIds) ? pc.selectedNodeIds : []);
   const hasDestinations = pc.selectedNodeIds.length > 0;
   const hasItems = mode === "FULL_INVENTORY" || pc.selectedItems.length > 0;
@@ -15418,57 +15439,73 @@ function renderPriceChangeForm(pc, mode, isBusy) {
         </button>
       </div>
 
-      <fieldset class="price-change-mode-field">
-        <legend>Modo</legend>
-        <label>
-          <input type="radio" name="priceChangeMode" value="SELECTED_ITEMS" ${mode === "SELECTED_ITEMS" ? "checked" : ""} ${isBusy ? "disabled" : ""} />
-          Articulos seleccionados
-        </label>
-        <label>
-          <input type="radio" name="priceChangeMode" value="FULL_INVENTORY" ${mode === "FULL_INVENTORY" ? "checked" : ""} ${isBusy ? "disabled" : ""} />
-          Todo el inventario
-        </label>
-      </fieldset>
+      <div class="price-change-panel compras-panel">
+        <fieldset class="price-change-mode-field">
+          <legend>Modo</legend>
+          <label>
+            <input type="radio" name="priceChangeMode" value="SELECTED_ITEMS" ${mode === "SELECTED_ITEMS" ? "checked" : ""} ${isBusy ? "disabled" : ""} />
+            Articulos seleccionados
+          </label>
+          <label>
+            <input type="radio" name="priceChangeMode" value="FULL_INVENTORY" ${mode === "FULL_INVENTORY" ? "checked" : ""} ${isBusy ? "disabled" : ""} />
+            Todo el inventario
+          </label>
+        </fieldset>
 
-      <div class="price-change-destinations-block">
-        <div class="inventory-bulk-toolbar">
-          <strong>Tiendas destino</strong>
-          <button class="button button-ghost" type="button" data-price-change-select-all-destinations ${destinations.length && !isBusy ? "" : "disabled"}>
-            Seleccionar todas
-          </button>
-        </div>
-        <div class="inventory-bulk-destinations price-change-destinations">
-          ${
-            destinations.length
-              ? destinations
-                  .map(
-                    (node) => `
-                      <label class="inventory-bulk-destination">
-                        <input
-                          type="checkbox"
-                          name="priceChangeDestinationNodeIds"
-                          value="${escapeHtml(node.nodeId || "")}"
-                          ${selected.has(node.nodeId) ? "checked" : ""}
-                          ${isBusy ? "disabled" : ""}
-                        />
-                        <span>
-                          <strong>${escapeHtml(node.nombre || node.sucursalCodigo || node.nodeId)}</strong>
-                          <small>${escapeHtml(node.sucursalCodigo || "-")}</small>
-                        </span>
-                      </label>
-                    `,
-                  )
-                  .join("")
-              : `<div class="empty-state price-change-empty"><h3>Sin tiendas configuradas</h3><p>Las tiendas deben existir registradas como nodo de sincronizacion.</p></div>`
-          }
+        <div class="price-change-destinations-block">
+          <div class="inventory-bulk-toolbar">
+            <strong>Tiendas y bodegas destino</strong>
+            <button class="button button-ghost" type="button" data-price-change-select-all-destinations ${destinations.length && !isBusy ? "" : "disabled"}>
+              Seleccionar todas
+            </button>
+          </div>
+
+          <fieldset class="price-change-mode-field price-change-destination-filter-field">
+            <label>
+              <input type="radio" name="priceChangeDestinationTypeFilter" value="ALL" ${typeFilter === "ALL" ? "checked" : ""} ${isBusy ? "disabled" : ""} />
+              Todas
+            </label>
+            <label>
+              <input type="radio" name="priceChangeDestinationTypeFilter" value="TIENDA" ${typeFilter === "TIENDA" ? "checked" : ""} ${isBusy ? "disabled" : ""} />
+              Solo tiendas
+            </label>
+            <label>
+              <input type="radio" name="priceChangeDestinationTypeFilter" value="BODEGA" ${typeFilter === "BODEGA" ? "checked" : ""} ${isBusy ? "disabled" : ""} />
+              Solo bodegas
+            </label>
+          </fieldset>
+
+          <div class="inventory-bulk-destinations price-change-destinations">
+            ${
+              destinations.length
+                ? destinations
+                    .map(
+                      (node) => `
+                        <label class="inventory-bulk-destination">
+                          <input
+                            type="checkbox"
+                            name="priceChangeDestinationNodeIds"
+                            value="${escapeHtml(node.nodeId || "")}"
+                            ${selected.has(node.nodeId) ? "checked" : ""}
+                            ${isBusy ? "disabled" : ""}
+                          />
+                          <span>
+                            <strong>${escapeHtml(node.nombre || node.sucursalCodigo || node.nodeId)}</strong>
+                            <small>${escapeHtml(node.sucursalCodigo || "-")}</small>
+                          </span>
+                        </label>
+                      `,
+                    )
+                    .join("")
+                : allDestinations.length
+                  ? `<div class="empty-state price-change-empty"><h3>Sin resultados</h3><p>No hay ${typeFilter === "TIENDA" ? "tiendas" : "bodegas"} configuradas con ese filtro.</p></div>`
+                  : `<div class="empty-state price-change-empty"><h3>Sin tiendas ni bodegas configuradas</h3><p>Deben existir registradas como nodo de sincronizacion.</p></div>`
+            }
+          </div>
         </div>
       </div>
 
-      ${
-        mode === "SELECTED_ITEMS"
-          ? renderPriceChangeItemsBlock(pc, isBusy)
-          : `<p class="price-change-full-inventory-notice">Se enviara todo el inventario valido de esta instancia origen. Puede ser un volumen grande de articulos.</p>`
-      }
+      ${renderPriceChangeItemsPanel(pc, mode, isBusy)}
 
       <div class="price-change-actions">
         <button class="button button-ghost" type="button" data-price-change-preview ${canPreview ? "" : "disabled"}>
@@ -15482,49 +15519,157 @@ function renderPriceChangeForm(pc, mode, isBusy) {
   `;
 }
 
+function renderPriceChangeItemsPanel(pc, mode, isBusy) {
+  const items = Array.isArray(pc.selectedItems) ? pc.selectedItems : [];
+
+  return `
+    <div class="price-change-lines-panel compras-lines-panel">
+      <div class="compras-lines-head price-change-lines-head">
+        <div>
+          <h2>Articulos incluidos</h2>
+          <p>
+            ${
+              mode === "SELECTED_ITEMS"
+                ? `${escapeHtml(String(items.length))} articulo(s) seleccionados.`
+                : "Se enviara todo el inventario valido de esta instancia origen. Puede ser un volumen grande de articulos."
+            }
+          </p>
+        </div>
+      </div>
+      ${mode === "SELECTED_ITEMS" ? renderPriceChangeItemsBlock(pc, isBusy) : ""}
+    </div>
+  `;
+}
+
 function renderPriceChangeItemsBlock(pc, isBusy) {
   const items = Array.isArray(pc.selectedItems) ? pc.selectedItems : [];
 
   return `
-    <div class="price-change-items-block">
-      <label class="price-change-barcode-field">
-        <span>Codigo de barra</span>
-        <input type="text" id="price-change-barcode-input" maxlength="30" placeholder="Escanea o escribe el codigo y presiona Enter" ${isBusy ? "disabled" : ""} />
-      </label>
+    <label class="price-change-barcode-field">
+      <span>Codigo de barra o Referencia</span>
+      <input type="text" id="price-change-barcode-input" maxlength="30" placeholder="Escanea o escribe y presiona Enter" ${isBusy ? "disabled" : ""} />
+    </label>
 
-      <div class="adjustment-grid-wrap price-change-items-grid-wrap">
-        <table class="adjustment-grid price-change-items-grid">
-          <thead>
-            <tr>
-              <th>Codigo Barra</th>
-              <th>Nombre</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-              items.length
-                ? items
-                    .map(
-                      (item) => `
-                        <tr>
-                          <td>${escapeHtml(item.codigoBarra)}</td>
-                          <td>${escapeHtml(item.nombre || "-")}</td>
-                          <td>
-                            <button class="button button-ghost" type="button" data-price-change-remove-item="${escapeHtml(item.codigoBarra)}" ${isBusy ? "disabled" : ""}>
-                              Quitar
-                            </button>
-                          </td>
-                        </tr>
-                      `,
-                    )
-                    .join("")
-                : `<tr><td colspan="3">Sin articulos seleccionados.</td></tr>`
-            }
-          </tbody>
-        </table>
-      </div>
+    ${
+      items.length
+        ? `
+          <div class="table-wrap price-change-items-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Codigo Barra</th>
+                  <th>Nombre</th>
+                  <th>Accion</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items
+                  .map(
+                    (item, index) => `
+                      <tr>
+                        <td>${escapeHtml(String(index + 1))}</td>
+                        <td><strong>${escapeHtml(item.codigoBarra)}</strong></td>
+                        <td>${escapeHtml(item.nombre || "-")}</td>
+                        <td>
+                          <button class="button button-ghost" type="button" data-price-change-remove-item="${escapeHtml(item.codigoBarra)}" ${isBusy ? "disabled" : ""}>
+                            Quitar
+                          </button>
+                        </td>
+                      </tr>
+                    `,
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </div>
+        `
+        : `
+          <div class="empty-state">
+            <h3>Sin articulos</h3>
+            <p>Escanea o escribe un codigo de barra/referencia arriba para agregarlo al lote.</p>
+          </div>
+        `
+    }
+  `;
+}
+
+function renderPriceChangeLineLookupModal() {
+  const lookup = state.priceChange.lineLookup;
+  if (!lookup?.open) {
+    return "";
+  }
+
+  const items = Array.isArray(lookup.items) ? lookup.items : [];
+  const activeIndex = Number.isInteger(lookup.activeIndex) ? lookup.activeIndex : -1;
+  const totalLabel = `Coincidencias (${escapeHtml(String(items.length))} Registros)`;
+
+  return `
+    <div class="article-lookup-overlay price-change-line-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-price-change-line-lookup-close aria-label="Cerrar buscador"></button>
+      <section class="article-lookup-dialog price-change-line-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="price-change-line-lookup-title" tabindex="-1" data-price-change-line-lookup-dialog>
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Articulos</p>
+            <h3 id="price-change-line-lookup-title">${totalLabel}</h3>
+            <p>Selecciona el articulo correcto para agregarlo al lote.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">${escapeHtml(String(items.length))} registros</span>
+            <button class="article-command-button" type="button" data-price-change-line-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          items.length === 0
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Sin coincidencias</h3>
+                <p>No se encontraron articulos para la busqueda actual.</p>
+              </div>
+            `
+            : `
+              <div class="table-wrap article-lookup-table-wrap price-change-line-lookup-table-wrap">
+                <table class="data-table article-lookup-table price-change-line-lookup-table">
+                  <thead>
+                    <tr>
+                      <th>Codigo Barra</th>
+                      <th>Referencia</th>
+                      <th>Marca</th>
+                      <th>Nombre</th>
+                      <th>Precio Detal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${items.map((item, index) => renderPriceChangeLineLookupRow(item, index, index === activeIndex)).join("")}
+                  </tbody>
+                </table>
+              </div>
+            `
+        }
+      </section>
     </div>
+  `;
+}
+
+function renderPriceChangeLineLookupRow(item, index, isActive) {
+  const precioDetal = item.precios?.detal ?? item.precioDetal ?? "";
+
+  return `
+    <tr
+      class="article-lookup-row ${isActive ? "article-lookup-row-active" : ""}"
+      data-price-change-line-lookup-select="${escapeHtml(String(index))}"
+      tabindex="0"
+      aria-selected="${isActive ? "true" : "false"}"
+    >
+      <td><strong>${escapeHtml(item.codigoBarra || "-")}</strong></td>
+      <td>${escapeHtml(item.referencia || "-")}</td>
+      <td>${escapeHtml(item.general?.marca?.nombre || item.general?.marca?.codigo || "-")}</td>
+      <td>${escapeHtml(item.general?.nombre || item.nombre || "-")}</td>
+      <td>${escapeHtml(toInputValue(precioDetal))}</td>
+    </tr>
   `;
 }
 
@@ -15601,7 +15746,7 @@ function renderPriceChangeBatchSummary(pc) {
         ${renderDevReturnSyncStatusChip(getPriceChangeBatchStatusLabel(batch.status), getPriceChangeStatusTone(batch.status))}
         <span>Modo: ${escapeHtml(getPriceChangeModeLabel(batch.mode))}</span>
         <span>Articulos: ${escapeHtml(String(batch.totalItems ?? "-"))}</span>
-        <span>Tiendas: ${escapeHtml(String(batch.totalStores ?? stores.length))}</span>
+        <span>Destinos: ${escapeHtml(String(batch.totalStores ?? stores.length))}</span>
       </p>
 
       <div class="price-change-actions price-change-batch-actions">
@@ -15629,7 +15774,7 @@ function renderPriceChangeBatchSummary(pc) {
         <table class="adjustment-grid price-change-store-grid">
           <thead>
             <tr>
-              <th>Tienda</th>
+              <th>Destino</th>
               <th>Estado</th>
               <th>Aplicados</th>
               <th>No encontrados</th>
@@ -15659,7 +15804,7 @@ function renderPriceChangeBatchSummary(pc) {
                       `,
                     )
                     .join("")
-                : `<tr><td colspan="5">Sin tiendas destino.</td></tr>`
+                : `<tr><td colspan="5">Sin destinos.</td></tr>`
             }
           </tbody>
         </table>
@@ -15676,14 +15821,24 @@ async function loadPriceChangeMetadata(options = {}) {
   }
 
   try {
-    const response = await apiFetch("/transfers/sync/nodes");
-    const nodes = Array.isArray(response.nodes) ? response.nodes : [];
-    // El backend sigue siendo la autoridad (rechaza Bodega Central/Bodega 002 como
-    // destino); este filtro es solo para no ofrecerlas de entrada en el selector.
-    state.priceChange.nodes = nodes.filter((node) => String(node.tipo || "").trim().toUpperCase() === "TIENDA");
+    const [nodesResponse, context] = await Promise.all([
+      apiFetch("/transfers/sync/nodes"),
+      apiFetch("/price-changes/context"),
+    ]);
+    const nodes = Array.isArray(nodesResponse.nodes) ? nodesResponse.nodes : [];
+    const currentNodeId = String(context?.nodeId || "").trim().toUpperCase();
+    state.priceChange.currentNodeId = currentNodeId;
+    // El backend sigue siendo la autoridad (rechaza el propio nodo origen como destino);
+    // estos filtros solo evitan ofrecer, de entrada, nodos que no son tienda ni bodega, o
+    // el propio nodo origen (no tiene sentido enviarse un lote a si mismo).
+    state.priceChange.nodes = nodes.filter((node) => {
+      const tipo = String(node.tipo || "").trim().toUpperCase();
+      const nodeId = String(node.nodeId || "").trim().toUpperCase();
+      return (tipo === "TIENDA" || tipo === "BODEGA") && nodeId !== currentNodeId;
+    });
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar la lista de tiendas: ${extractErrorMessage(error)}`, "error");
+    setFlash(`No se pudo cargar la lista de tiendas y bodegas: ${extractErrorMessage(error)}`, "error");
   } finally {
     state.priceChange.loadingMetadata = false;
     if (renderAfter) {
@@ -15698,10 +15853,14 @@ function resetPriceChangeWorkspace() {
   state.priceChange.selectedItems = [];
   state.priceChange.preview = null;
   state.priceChange.batch = null;
+  closePriceChangeLineLookupModal();
 }
 
-async function addPriceChangeBarcode(rawCodigoBarra) {
-  const codigoBarra = String(rawCodigoBarra || "").trim().toUpperCase();
+// Agrega un articulo YA resuelto (viene del modal de busqueda o de un match exacto/unico
+// de resolvePriceChangeLineFromField) a la lista de items del lote. No hace llamada
+// adicional al backend: el articulo completo ya vino de /inventory?buscar=.
+function addPriceChangeArticle(article) {
+  const codigoBarra = String(article?.codigoBarra || "").trim().toUpperCase();
   if (!codigoBarra) {
     return;
   }
@@ -15709,24 +15868,102 @@ async function addPriceChangeBarcode(rawCodigoBarra) {
   const items = Array.isArray(state.priceChange.selectedItems) ? state.priceChange.selectedItems : [];
   if (items.some((item) => item.codigoBarra === codigoBarra)) {
     setFlash(`El codigo ${codigoBarra} ya esta en la lista.`, "warning");
-    render();
     return;
   }
 
-  let nombre = "";
-  try {
-    const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
-    const article = response.mercancia || response;
-    nombre = article?.general?.nombre || article?.nombre || "";
-  } catch (error) {
-    console.error(error);
-    // No bloquea el agregado: Previsualizar/Crear lote son quienes deciden, contra
-    // Inventario real, si el codigo existe o no (el backend nunca confia en el frontend).
-  }
-
+  const nombre = article.general?.nombre || article.nombre || "";
   state.priceChange.selectedItems = [...items, { codigoBarra, nombre }];
   state.priceChange.preview = null;
+}
+
+function openPriceChangeLineLookupModal(searchValue, items) {
+  state.priceChange.lineLookup = {
+    open: true,
+    loading: false,
+    search: searchValue,
+    items: Array.isArray(items) ? items : [],
+    activeIndex: Array.isArray(items) && items.length ? 0 : -1,
+  };
+}
+
+function closePriceChangeLineLookupModal() {
+  state.priceChange.lineLookup = {
+    open: false,
+    loading: false,
+    search: "",
+    items: [],
+    activeIndex: -1,
+  };
+}
+
+function focusPriceChangeBarcodeInput() {
+  const target = document.getElementById("price-change-barcode-input");
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  target.focus();
+  target.select?.();
+}
+
+function advancePriceChangeLineFocus() {
   render();
+  queueMicrotask(() => {
+    focusPriceChangeBarcodeInput();
+  });
+}
+
+// Igual patron que resolveAdjustmentLineFromField: busca por codigo de barra O referencia
+// (/inventory?buscar=), autocompleta directo si hay un unico match (exacto o no) y abre
+// el modal de seleccion con navegacion por teclado si hay varias coincidencias.
+async function resolvePriceChangeLineFromField(rawSearchValue) {
+  const searchValue = String(rawSearchValue || "").trim();
+  if (!searchValue) {
+    return;
+  }
+
+  try {
+    const params = new URLSearchParams();
+    params.set("buscar", searchValue);
+    params.set("limit", "25");
+
+    const response = await apiFetch(`/inventory?${params.toString()}`);
+    const itemsFound = Array.isArray(response.data) ? response.data : [];
+    const normalizedSearch = searchValue.toUpperCase();
+    const exactMatch = itemsFound.find((item) => {
+      const codigoBarra = String(item.codigoBarra || "").trim().toUpperCase();
+      const referencia = String(item.referencia || "").trim().toUpperCase();
+      return codigoBarra === normalizedSearch || referencia === normalizedSearch;
+    });
+
+    if (!itemsFound.length) {
+      throw new Error("ARTICULO_NOT_FOUND");
+    }
+
+    if (exactMatch) {
+      addPriceChangeArticle(exactMatch);
+      closePriceChangeLineLookupModal();
+      clearFlash();
+      advancePriceChangeLineFocus();
+      return;
+    }
+
+    if (itemsFound.length === 1) {
+      addPriceChangeArticle(itemsFound[0]);
+      closePriceChangeLineLookupModal();
+      clearFlash();
+      advancePriceChangeLineFocus();
+      return;
+    }
+
+    openPriceChangeLineLookupModal(searchValue, itemsFound);
+    clearFlash();
+    render();
+  } catch (error) {
+    console.error(error);
+    closePriceChangeLineLookupModal();
+    setFlash(`No se encontro un articulo para ${searchValue}.`, "error");
+    render();
+  }
 }
 
 function removePriceChangeItem(codigoBarra) {
@@ -15949,8 +16186,20 @@ function bindPriceChangeEvents() {
     });
   });
 
+  document.querySelectorAll('input[name="priceChangeDestinationTypeFilter"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!input.checked) {
+        return;
+      }
+      state.priceChange.destinationTypeFilter = input.value;
+      render();
+    });
+  });
+
   document.querySelector("[data-price-change-select-all-destinations]")?.addEventListener("click", () => {
-    state.priceChange.selectedNodeIds = (state.priceChange.nodes || []).map((node) => node.nodeId);
+    // Selecciona solo los destinos actualmente visibles (respeta el filtro de
+    // tipo tienda/bodega), no todos los nodos sin filtrar.
+    state.priceChange.selectedNodeIds = getPriceChangeVisibleDestinations().map((node) => node.nodeId);
     render();
   });
 
@@ -15975,7 +16224,7 @@ function bindPriceChangeEvents() {
     event.preventDefault();
     const value = barcodeInput.value;
     barcodeInput.value = "";
-    await addPriceChangeBarcode(value);
+    await resolvePriceChangeLineFromField(value);
   });
 
   document.querySelectorAll("[data-price-change-remove-item]").forEach((button) => {
@@ -15983,6 +16232,98 @@ function bindPriceChangeEvents() {
       removePriceChangeItem(button.getAttribute("data-price-change-remove-item") || "");
     });
   });
+
+  document.querySelectorAll("[data-price-change-line-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closePriceChangeLineLookupModal();
+      render();
+      queueMicrotask(() => {
+        focusPriceChangeBarcodeInput();
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-price-change-line-lookup-select]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const selectedIndex = Number.parseInt(row.getAttribute("data-price-change-line-lookup-select") || "", 10);
+      if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+        return;
+      }
+
+      const lookup = state.priceChange.lineLookup;
+      const selected = (lookup.items || [])[selectedIndex];
+      if (!selected) {
+        return;
+      }
+
+      addPriceChangeArticle(selected);
+      closePriceChangeLineLookupModal();
+      clearFlash();
+      advancePriceChangeLineFocus();
+    });
+  });
+
+  const priceChangeLineLookupDialog = document.querySelector("[data-price-change-line-lookup-dialog]");
+  if (priceChangeLineLookupDialog instanceof HTMLElement) {
+    queueMicrotask(() => {
+      priceChangeLineLookupDialog.focus();
+    });
+
+    priceChangeLineLookupDialog.addEventListener("keydown", (event) => {
+      const lookup = state.priceChange.lineLookup;
+      const items = Array.isArray(lookup?.items) ? lookup.items : [];
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closePriceChangeLineLookupModal();
+        render();
+        queueMicrotask(() => {
+          focusPriceChangeBarcodeInput();
+        });
+        return;
+      }
+
+      if (!lookup?.open || !items.length) {
+        return;
+      }
+
+      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0 ? lookup.activeIndex : 0;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.priceChange.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex + 1) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.priceChange.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex - 1 + items.length) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const selected = items[currentIndex];
+        if (!selected) {
+          return;
+        }
+
+        addPriceChangeArticle(selected);
+        closePriceChangeLineLookupModal();
+        clearFlash();
+        advancePriceChangeLineFocus();
+        return;
+      }
+    });
+  }
 
   document.querySelector("[data-price-change-preview]")?.addEventListener("click", async () => {
     await previewCurrentPriceChangeBatch();
