@@ -469,11 +469,21 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
   // Variante para bases gemelas del VPS -- mismo motivo que
   // buildVentasBatchPorRecepcion: INVENTARIO."UltimaActualizacion" tambien
   // sale del reloj de la caja de la tienda. El cursor usa en cambio
-  // COALESCE(MIRROR_SYNC_INBOX."ReceivedAt", "UltimaActualizacion"), y
-  // reproduce exactamente las mismas 3 ramas de la version original (con
-  // cursor y fecha real, con cursor pero todavia en el grupo sin fecha, y
-  // sin cursor) para no cambiar el comportamiento para articulos que nunca
-  // tuvieron "UltimaActualizacion".
+  // MIRROR_SYNC_INBOX."ReceivedAt".
+  //
+  // IMPORTANTE: el join es INNER, no LEFT. La primera version de este
+  // arreglo usaba LEFT JOIN + COALESCE(r."ReceivedAt", inv."UltimaActualizacion")
+  // como respaldo por si algun articulo no tenia fila de inbox todavia --
+  // pero eso "envenena" el cursor para siempre: si ese respaldo se usa una
+  // sola vez para la ULTIMA fila de una tanda (ej. por una carrera con
+  // mirror-sync, que no habia terminado de escribir esa fila de inbox
+  // todavia), el cursor queda guardado con el reloj roto de la tienda --
+  // confirmado en produccion el 11/9: tiendas 004 y 006 quedaron con el
+  // cursor de VENTAS en una hora del futuro y dejaron de sincronizar nada
+  // mas, sin ningun error visible. Con INNER JOIN, un articulo sin fila de
+  // inbox todavia simplemente se salta ESTE ciclo (no entra al batch) y se
+  // toma en el siguiente, una vez que mirror-sync ya lo escribio -- nunca
+  // se usa un timestamp que no sea confiable para avanzar el cursor.
   private async buildInventarioBatchesPorRecepcion(): Promise<{
     batches: TablaBatch[];
     onSuccess: () => Promise<void>;
@@ -492,32 +502,34 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
       )
     `;
     const baseSelect = Prisma.sql`
-      SELECT inv.*, COALESCE(r."ReceivedAt", inv."UltimaActualizacion") AS "__cursorTs"
+      SELECT inv.*, r."ReceivedAt" AS "__cursorTs"
       FROM dbo."INVENTARIO" inv
-      LEFT JOIN ultimo_recibo r ON r."EntityKey" = inv."CodigoBarra"
+      INNER JOIN ultimo_recibo r ON r."EntityKey" = inv."CodigoBarra"
     `;
 
     let whereClause = Prisma.empty;
     if (cursor && cursor.fecha !== null) {
       const cursorTs = new Date(cursor.fecha);
       whereClause = Prisma.sql`
-        WHERE COALESCE(r."ReceivedAt", inv."UltimaActualizacion") > ${cursorTs}
-           OR (COALESCE(r."ReceivedAt", inv."UltimaActualizacion") = ${cursorTs} AND inv."CodigoBarra" > ${cursor.pk})
-           OR COALESCE(r."ReceivedAt", inv."UltimaActualizacion") IS NULL
+        WHERE r."ReceivedAt" > ${cursorTs}
+           OR (r."ReceivedAt" = ${cursorTs} AND inv."CodigoBarra" > ${cursor.pk})
       `;
     } else if (cursor && cursor.fecha === null) {
-      whereClause = Prisma.sql`
-        WHERE COALESCE(r."ReceivedAt", inv."UltimaActualizacion") IS NULL AND inv."CodigoBarra" > ${cursor.pk}
-      `;
+      // Compatibilidad con un cursor viejo guardado antes de este arreglo
+      // (formato {fecha:null, pk}) -- con INNER JOIN "__cursorTs" nunca es
+      // null, asi que esta rama en la practica no encuentra nada y en el
+      // siguiente ciclo isFirstRun ya no aplica; no rompe nada, solo no hace
+      // avanzar el cursor hasta que alguien lo resetee.
+      whereClause = Prisma.sql`WHERE inv."CodigoBarra" > ${cursor.pk} AND false`;
     }
 
     const rows = await this.prisma.$queryRaw<
-      Array<{ CodigoBarra: string; __cursorTs: Date | null; [key: string]: unknown }>
+      Array<{ CodigoBarra: string; __cursorTs: Date; [key: string]: unknown }>
     >(Prisma.sql`
       ${ultimoReciboCte}
       ${baseSelect}
       ${whereClause}
-      ORDER BY "__cursorTs" ASC NULLS LAST, inv."CodigoBarra" ASC
+      ORDER BY "__cursorTs" ASC, inv."CodigoBarra" ASC
       LIMIT ${BATCH_LIMIT}
     `);
 
@@ -710,10 +722,21 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
   // Variante para bases gemelas del VPS: mismo cursor compuesto (timestamp,
   // NumeroFactura, Serie), pero el timestamp es MIRROR_SYNC_INBOX."ReceivedAt"
   // (cuando el VPS recibio la venta) en vez de VENTAS."Fecha" (el reloj de la
-  // caja). "__cursorTs" cae de vuelta a "Fecha" solo si por algun motivo no
-  // hay fila de inbox para esa venta (no deberia pasar en la practica, ya que
-  // toda fila de VENTAS en una base "_vps" llego justamente via un inbox
-  // aplicado), para no dejar nunca una fila sin timestamp valido.
+  // caja).
+  //
+  // IMPORTANTE: el join es INNER, no LEFT -- ver el comentario largo en
+  // buildInventarioBatchesPorRecepcion. La primera version usaba LEFT JOIN +
+  // COALESCE(r."ReceivedAt", v."Fecha") "por si una venta no tenia fila de
+  // inbox todavia", pero eso deja que una sola carrera con mirror-sync (la
+  // fila de inbox de la ULTIMA venta de una tanda todavia no se habia
+  // escrito cuando corrio este query) envenene el cursor para siempre con el
+  // reloj roto de la tienda. Confirmado en produccion el 11/9: tiendas 004 y
+  // 006 quedaron con el cursor de VENTAS en una hora del futuro y dejaron de
+  // sincronizar nada mas, sin ningun error visible -- exactamente el mismo
+  // sintoma que este arreglo estaba tratando de evitar. Con INNER JOIN, una
+  // venta sin fila de inbox todavia simplemente se salta ESTE ciclo (no
+  // entra al batch) y se toma en el siguiente, una vez que mirror-sync ya la
+  // escribio -- nunca se usa un timestamp que no sea confiable.
   private async buildVentasBatchPorRecepcion(
     windowDays: number,
   ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
@@ -738,12 +761,12 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
         WHERE "EntityType" = 'VENTAS'
         GROUP BY "EntityKey"
       )
-      SELECT v.*, COALESCE(r."ReceivedAt", v."Fecha") AS "__cursorTs"
+      SELECT v.*, r."ReceivedAt" AS "__cursorTs"
       FROM dbo."VENTAS" v
-      LEFT JOIN ultimo_recibo r ON r."EntityKey" = v."Serie" || ':' || v."NumeroFactura"::text
-      WHERE COALESCE(r."ReceivedAt", v."Fecha") > ${cursorTs}
-         OR (COALESCE(r."ReceivedAt", v."Fecha") = ${cursorTs} AND v."NumeroFactura" > ${numeroFacturaCursor})
-         OR (COALESCE(r."ReceivedAt", v."Fecha") = ${cursorTs} AND v."NumeroFactura" = ${numeroFacturaCursor} AND v."Serie" > ${serieCursor})
+      INNER JOIN ultimo_recibo r ON r."EntityKey" = v."Serie" || ':' || v."NumeroFactura"::text
+      WHERE r."ReceivedAt" > ${cursorTs}
+         OR (r."ReceivedAt" = ${cursorTs} AND v."NumeroFactura" > ${numeroFacturaCursor})
+         OR (r."ReceivedAt" = ${cursorTs} AND v."NumeroFactura" = ${numeroFacturaCursor} AND v."Serie" > ${serieCursor})
       ORDER BY "__cursorTs" ASC, v."NumeroFactura" ASC, v."Serie" ASC
       LIMIT ${BATCH_LIMIT}
     `);
@@ -836,9 +859,12 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
 
   // Variante para bases gemelas del VPS -- mismo motivo que
   // buildVentasBatchPorRecepcion: MOVVENTAS."Hora" tambien sale del reloj de
-  // la caja. La fila de MIRROR_SYNC_INBOX es por venta (VENTAS + su
-  // EntityKey Serie:NumeroFactura), no por linea, asi que el join es contra
-  // el mismo EntityKey de la cabecera de la factura, ignorando Item.
+  // la caja, y el join es INNER por la misma razon (ver comentario largo en
+  // buildVentasBatchPorRecepcion sobre por que LEFT JOIN + COALESCE
+  // envenena el cursor con el reloj roto de la tienda). La fila de
+  // MIRROR_SYNC_INBOX es por venta (VENTAS + su EntityKey
+  // Serie:NumeroFactura), no por linea, asi que el join es contra el mismo
+  // EntityKey de la cabecera de la factura, ignorando Item.
   private async buildVentasDetalleBatchPorRecepcion(
     windowDays: number,
   ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
@@ -865,13 +891,13 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
         WHERE "EntityType" = 'VENTAS'
         GROUP BY "EntityKey"
       )
-      SELECT m.*, COALESCE(r."ReceivedAt", m."Hora") AS "__cursorTs"
+      SELECT m.*, r."ReceivedAt" AS "__cursorTs"
       FROM dbo."MOVVENTAS" m
-      LEFT JOIN ultimo_recibo r ON r."EntityKey" = m."Serie" || ':' || m."NumeroFactura"::text
-      WHERE COALESCE(r."ReceivedAt", m."Hora") > ${cursorTs}
-         OR (COALESCE(r."ReceivedAt", m."Hora") = ${cursorTs} AND m."NumeroFactura" > ${numeroFacturaCursor})
-         OR (COALESCE(r."ReceivedAt", m."Hora") = ${cursorTs} AND m."NumeroFactura" = ${numeroFacturaCursor} AND m."Serie" > ${serieCursor})
-         OR (COALESCE(r."ReceivedAt", m."Hora") = ${cursorTs} AND m."NumeroFactura" = ${numeroFacturaCursor} AND m."Serie" = ${serieCursor} AND m."Item" > ${itemCursor})
+      INNER JOIN ultimo_recibo r ON r."EntityKey" = m."Serie" || ':' || m."NumeroFactura"::text
+      WHERE r."ReceivedAt" > ${cursorTs}
+         OR (r."ReceivedAt" = ${cursorTs} AND m."NumeroFactura" > ${numeroFacturaCursor})
+         OR (r."ReceivedAt" = ${cursorTs} AND m."NumeroFactura" = ${numeroFacturaCursor} AND m."Serie" > ${serieCursor})
+         OR (r."ReceivedAt" = ${cursorTs} AND m."NumeroFactura" = ${numeroFacturaCursor} AND m."Serie" = ${serieCursor} AND m."Item" > ${itemCursor})
       ORDER BY "__cursorTs" ASC, m."NumeroFactura" ASC, m."Serie" ASC, m."Item" ASC
       LIMIT ${BATCH_LIMIT}
     `);
