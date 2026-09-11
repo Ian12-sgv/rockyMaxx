@@ -108,10 +108,14 @@ for t in "${TIENDAS[@]}"; do
   vps="${APLICADAS[$t]:-0}"
   bodega="${EN_BODEGA[$codigo]:-0}"
   dif=$((vps - bodega))
-  dif_abs=${dif#-}
   estado="OK"
-  if [ "$dif_abs" -gt "$TOLERANCIA" ]; then
-    estado="REVISAR (hueco de ${dif_abs})"
+  # Solo alarma si a bodega_datos le FALTAN ventas que si llegaron al VPS
+  # (dif positivo y mayor a la tolerancia). Que bodega_datos tenga de MAS
+  # (dif negativo) no es un problema -- pasa si se corrio este chequeo justo
+  # entre que se leyeron los dos lados, o durante una recuperacion de
+  # backlog, y no indica perdida de datos.
+  if [ "$dif" -gt "$TOLERANCIA" ]; then
+    estado="REVISAR (faltan ${dif} en bodega_datos)"
     hubo_problemas=1
   fi
   if [ "${ERRORES_MS[$t]:-0}" -gt 0 ]; then
