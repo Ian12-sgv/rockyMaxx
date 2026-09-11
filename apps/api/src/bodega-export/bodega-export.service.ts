@@ -52,6 +52,12 @@ function resolveCodigoTiendaDesdeDatabaseUrl(databaseUrl: string): string | null
   return match[1].padStart(3, "0");
 }
 
+// true cuando esta instancia corre contra una base gemela de MirrorSync en
+// el VPS (rocky_tienda_00N_vps), no contra la base real de la tienda.
+function isVpsMirrorDatabaseUrl(databaseUrl: string): boolean {
+  return /_vps\b/i.test(String(databaseUrl || ""));
+}
+
 type Operacion = "SNAPSHOT" | "INSERT" | "UPDATE" | "DELETE";
 
 type RegistroPayload = {
@@ -154,6 +160,22 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
   private resolveCodigoTienda(): string | null {
     const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "");
     return resolveCodigoTiendaDesdeDatabaseUrl(databaseUrl);
+  }
+
+  // Las bases gemelas del VPS (rocky_tienda_00N_vps) reciben VENTAS/MOVVENTAS
+  // via MirrorSync, cuyo UPSERT pisa "Fecha"/"Hora" con el reloj de la caja
+  // de la tienda -- reloj que en algunas tiendas salta hacia atras durante el
+  // dia (confirmado: mas del 90% de las ventas de un dia real quedan "fuera
+  // de orden" en tienda 002/003/006). Un cursor que avanza por Fecha/Hora
+  // pierde para siempre cualquier fila cuyo reloj haya saltado detras de la
+  // ultima posicion ya vista. En estas bases gemelas (y SOLO en ellas) el
+  // cursor usa en cambio MIRROR_SYNC_INBOX."ReceivedAt": el momento real en
+  // que el VPS recibio esa venta, que nunca depende del reloj de la caja y
+  // siempre avanza hacia adelante. Las tiendas reales (sin "_vps") no se
+  // tocan, siguen exactamente igual que antes.
+  private isVpsMirrorInstance(): boolean {
+    const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "");
+    return isVpsMirrorDatabaseUrl(databaseUrl);
   }
 
   // BODEGA_INGEST_URL explicito siempre manda (compatibilidad con tienda001,
@@ -545,6 +567,10 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
   private async buildVentasBatch(
     windowDays: number,
   ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
+    if (this.isVpsMirrorInstance()) {
+      return this.buildVentasBatchPorRecepcion(windowDays);
+    }
+
     const cursorKey = "VENTAS";
     const cursorRaw = await this.getCursor(cursorKey);
     const cursor = cursorRaw ? this.parseTupleCursor(cursorRaw, ["-1", ""]) : null;
@@ -589,9 +615,80 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  // Variante para bases gemelas del VPS: mismo cursor compuesto (timestamp,
+  // NumeroFactura, Serie), pero el timestamp es MIRROR_SYNC_INBOX."ReceivedAt"
+  // (cuando el VPS recibio la venta) en vez de VENTAS."Fecha" (el reloj de la
+  // caja). "__cursorTs" cae de vuelta a "Fecha" solo si por algun motivo no
+  // hay fila de inbox para esa venta (no deberia pasar en la practica, ya que
+  // toda fila de VENTAS en una base "_vps" llego justamente via un inbox
+  // aplicado), para no dejar nunca una fila sin timestamp valido.
+  private async buildVentasBatchPorRecepcion(
+    windowDays: number,
+  ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
+    const cursorKey = "VENTAS";
+    const cursorRaw = await this.getCursor(cursorKey);
+    const cursor = cursorRaw ? this.parseTupleCursor(cursorRaw, ["-1", ""]) : null;
+    const cursorTs = cursor ? new Date(cursor.fecha) : this.computeWindowStart(windowDays);
+    const numeroFacturaCursor = cursor ? BigInt(cursor.tie[0]) : BigInt(-1);
+    const serieCursor = cursor ? cursor.tie[1] : "";
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        NumeroFactura: bigint;
+        Serie: string;
+        __cursorTs: Date;
+        [key: string]: unknown;
+      }>
+    >(Prisma.sql`
+      WITH ultimo_recibo AS (
+        SELECT "EntityKey", MAX("ReceivedAt") AS "ReceivedAt"
+        FROM dbo."MIRROR_SYNC_INBOX"
+        WHERE "EntityType" = 'VENTAS'
+        GROUP BY "EntityKey"
+      )
+      SELECT v.*, COALESCE(r."ReceivedAt", v."Fecha") AS "__cursorTs"
+      FROM dbo."VENTAS" v
+      LEFT JOIN ultimo_recibo r ON r."EntityKey" = v."Serie" || ':' || v."NumeroFactura"::text
+      WHERE COALESCE(r."ReceivedAt", v."Fecha") > ${cursorTs}
+         OR (COALESCE(r."ReceivedAt", v."Fecha") = ${cursorTs} AND v."NumeroFactura" > ${numeroFacturaCursor})
+         OR (COALESCE(r."ReceivedAt", v."Fecha") = ${cursorTs} AND v."NumeroFactura" = ${numeroFacturaCursor} AND v."Serie" > ${serieCursor})
+      ORDER BY "__cursorTs" ASC, v."NumeroFactura" ASC, v."Serie" ASC
+      LIMIT ${BATCH_LIMIT}
+    `);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const now = new Date();
+    const registros = rows.map((row) => ({
+      pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie]),
+      operacion: "SNAPSHOT" as const,
+      payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie", "__cursorTs"]),
+      fechaExtraida: now.toISOString(),
+    }));
+
+    const lastRow = rows[rows.length - 1];
+    const nextCursor = {
+      fecha: lastRow.__cursorTs.toISOString(),
+      tie: [lastRow.NumeroFactura.toString(), lastRow.Serie],
+    };
+
+    return {
+      batch: { entidadDestino: "HECH_VENTAS_HIST", tablaOrigen: "VENTAS", registros },
+      onSuccess: async () => {
+        await this.setCursor(cursorKey, JSON.stringify(nextCursor));
+      },
+    };
+  }
+
   private async buildVentasDetalleBatch(
     windowDays: number,
   ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
+    if (this.isVpsMirrorInstance()) {
+      return this.buildVentasDetalleBatchPorRecepcion(windowDays);
+    }
+
     const cursorKey = "MOVVENTAS";
     const cursorRaw = await this.getCursor(cursorKey);
     const cursor = cursorRaw ? this.parseTupleCursor(cursorRaw, ["-1", "", "-1"]) : null;
@@ -634,6 +731,74 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     const lastRow = rows[rows.length - 1];
     const nextCursor = {
       fecha: lastRow.Hora.toISOString(),
+      tie: [lastRow.NumeroFactura.toString(), lastRow.Serie, String(lastRow.Item)],
+    };
+
+    return {
+      batch: { entidadDestino: "HECH_VENTAS_DETALLE_HIST", tablaOrigen: "MOVVENTAS", registros },
+      onSuccess: async () => {
+        await this.setCursor(cursorKey, JSON.stringify(nextCursor));
+      },
+    };
+  }
+
+  // Variante para bases gemelas del VPS -- mismo motivo que
+  // buildVentasBatchPorRecepcion: MOVVENTAS."Hora" tambien sale del reloj de
+  // la caja. La fila de MIRROR_SYNC_INBOX es por venta (VENTAS + su
+  // EntityKey Serie:NumeroFactura), no por linea, asi que el join es contra
+  // el mismo EntityKey de la cabecera de la factura, ignorando Item.
+  private async buildVentasDetalleBatchPorRecepcion(
+    windowDays: number,
+  ): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
+    const cursorKey = "MOVVENTAS";
+    const cursorRaw = await this.getCursor(cursorKey);
+    const cursor = cursorRaw ? this.parseTupleCursor(cursorRaw, ["-1", "", "-1"]) : null;
+    const cursorTs = cursor ? new Date(cursor.fecha) : this.computeWindowStart(windowDays);
+    const numeroFacturaCursor = cursor ? BigInt(cursor.tie[0]) : BigInt(-1);
+    const serieCursor = cursor ? cursor.tie[1] : "";
+    const itemCursor = cursor ? Number(cursor.tie[2]) : -1;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        NumeroFactura: bigint;
+        Serie: string;
+        Item: number;
+        __cursorTs: Date;
+        [key: string]: unknown;
+      }>
+    >(Prisma.sql`
+      WITH ultimo_recibo AS (
+        SELECT "EntityKey", MAX("ReceivedAt") AS "ReceivedAt"
+        FROM dbo."MIRROR_SYNC_INBOX"
+        WHERE "EntityType" = 'VENTAS'
+        GROUP BY "EntityKey"
+      )
+      SELECT m.*, COALESCE(r."ReceivedAt", m."Hora") AS "__cursorTs"
+      FROM dbo."MOVVENTAS" m
+      LEFT JOIN ultimo_recibo r ON r."EntityKey" = m."Serie" || ':' || m."NumeroFactura"::text
+      WHERE COALESCE(r."ReceivedAt", m."Hora") > ${cursorTs}
+         OR (COALESCE(r."ReceivedAt", m."Hora") = ${cursorTs} AND m."NumeroFactura" > ${numeroFacturaCursor})
+         OR (COALESCE(r."ReceivedAt", m."Hora") = ${cursorTs} AND m."NumeroFactura" = ${numeroFacturaCursor} AND m."Serie" > ${serieCursor})
+         OR (COALESCE(r."ReceivedAt", m."Hora") = ${cursorTs} AND m."NumeroFactura" = ${numeroFacturaCursor} AND m."Serie" = ${serieCursor} AND m."Item" > ${itemCursor})
+      ORDER BY "__cursorTs" ASC, m."NumeroFactura" ASC, m."Serie" ASC, m."Item" ASC
+      LIMIT ${BATCH_LIMIT}
+    `);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const now = new Date();
+    const registros = rows.map((row) => ({
+      pkOrigen: serializePkOrigen([row.NumeroFactura, row.Serie, row.Item]),
+      operacion: "SNAPSHOT" as const,
+      payload: buildPayload(row as unknown as Record<string, unknown>, ["NumeroFactura", "Serie", "Item", "__cursorTs"]),
+      fechaExtraida: now.toISOString(),
+    }));
+
+    const lastRow = rows[rows.length - 1];
+    const nextCursor = {
+      fecha: lastRow.__cursorTs.toISOString(),
       tie: [lastRow.NumeroFactura.toString(), lastRow.Serie, String(lastRow.Item)],
     };
 
