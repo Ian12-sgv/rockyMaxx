@@ -91,15 +91,17 @@ while IFS='|' read -r codigo cantidad; do
   [ -z "$codigo" ] && continue
   EN_BODEGA[$codigo]="$cantidad"
 done < <(psql_de "$BODEGA_ENV" "
-  -- payload_json->>'Fecha' se guarda SIN zona horaria, pero el valor ya esta
-  -- en UTC (4 horas adelante de Venezuela) -- forzamos 'Z' antes de comparar
-  -- para que el dia calendario coincida con el dia real de la tienda; sin
-  -- esto, ventas de anoche despues de las 8pm caen mal en 'hoy'.
+  -- payload_json->>'Fecha' viene en dos formatos segun cuando se cargo (con
+  -- o sin sufijo 'Z' ya puesto), pero el valor SIEMPRE esta en UTC (4 horas
+  -- adelante de Venezuela). Se saca cualquier 'Z' que ya tenga y se pone
+  -- exactamente una, para que el dia calendario coincida con el dia real de
+  -- la tienda -- sin esto, ventas de anoche despues de las 8pm caen mal en
+  -- 'hoy'.
   select codigo_tienda_legacy, count(distinct pk_origen)
   from public.\"HECH_VENTAS_HIST\"
   where tabla_origen='VENTAS' and es_actual = true
-    and ((payload_json->>'Fecha') || 'Z')::timestamptz >= '${HOY_INICIO}'
-    and ((payload_json->>'Fecha') || 'Z')::timestamptz < '${HOY_FIN}'
+    and (regexp_replace(payload_json->>'Fecha', 'Z\$', '') || 'Z')::timestamptz >= '${HOY_INICIO}'
+    and (regexp_replace(payload_json->>'Fecha', 'Z\$', '') || 'Z')::timestamptz < '${HOY_FIN}'
   group by codigo_tienda_legacy;
 ")
 
