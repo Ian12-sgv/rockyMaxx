@@ -632,6 +632,7 @@ async function loadDesktopPrinters(options = {}) {
 async function hydrateAuthenticatedState() {
   const session = await apiFetch("/auth/me");
   state.user = session.usuario;
+  state.edicion = session.edicion || "completa";
   persistUser();
   await preloadAuthenticatedDesktopData();
   void loadBodegaPanelResumen();
@@ -744,6 +745,7 @@ async function hydrateAuthenticatedState() {
     open: false,
     loading: false,
     items: [],
+    confirmDeleteNumero: null,
   };
   state.transferLookup = {
     open: false,
@@ -1210,15 +1212,19 @@ function renderShellView() {
               </div>
 
             <nav class="modern-nav">
-              ${renderDesktopMenu(
-                "sistema",
-                "Sistema",
-                `
+              ${
+                esEdicionBasica()
+                  ? ""
+                  : renderDesktopMenu(
+                      "sistema",
+                      "Sistema",
+                      `
                 ${renderDesktopMenuLink("desktop", "Panel principal")}
                 ${userCanViewBodegaPanel() ? renderDesktopMenuLink("todas-tiendas", "Todas las tiendas") : ""}
                 <button class="modern-dropdown-link" type="button" data-menu-action="logout">Cerrar sesion</button>
               `,
-              )}
+                    )
+              }
               ${isCashier ? "" : renderDesktopMenu("archivos", "Archivos", renderDesktopArchivoMenuV2())}
               ${renderDesktopMenu("procesos", "Procesos", renderDesktopProcesosMenu())}
                 ${
@@ -1233,7 +1239,7 @@ function renderShellView() {
                     : ""
                 }
                 ${
-                  canManageAllModules
+                  canManageAllModules && !esEdicionBasica()
                     ? renderDesktopMenu(
                         "utilidades",
                         "Utilidades",
@@ -1244,13 +1250,17 @@ function renderShellView() {
                       )
                     : ""
                 }
-                ${renderDesktopMenu(
-                  "ayuda",
-                  "Ayuda",
-                  `
+                ${
+                  esEdicionBasica()
+                    ? ""
+                    : renderDesktopMenu(
+                        "ayuda",
+                        "Ayuda",
+                        `
                   ${renderDesktopMenuLink("ayuda", "Acerca de Rocky Maxx")}
                 `,
-                )}
+                      )
+                }
               </nav>
           </div>
 
@@ -1274,6 +1284,7 @@ function renderShellView() {
       </section>
       ${renderArticleLookupModal()}
       ${renderAdjustmentLookupModal()}
+      ${renderAdjustmentLineLookupModal()}
       ${renderTransferLookupModal()}
       ${renderTransferLineLookupModal()}
       ${renderInventoryBulkTransferModal()}
@@ -1635,6 +1646,22 @@ function renderDesktopProcesosMenu() {
         <div class="modern-mega-column modern-mega-column-root">
           ${renderDesktopMenuLink("facturacion", "Facturacion")}
           ${renderDesktopMenuLink("devolucion-factura", "Devolucion de factura")}
+          ${renderDesktopMenuLink("cajas", "Apertura de caja")}
+          ${renderDesktopMenuLink("cierre-caja", "Cierre de caja")}
+        </div>
+      </div>
+    `;
+  }
+
+  if (esEdicionBasica()) {
+    return `
+      <div class="modern-mega-menu">
+        <div class="modern-mega-column modern-mega-column-root">
+          ${renderDesktopMenuLink("facturacion", "Facturacion")}
+          ${renderDesktopMenuLink("devolucion-factura", "Devolucion de factura")}
+          ${renderDesktopMenuLink("compras", "Compras")}
+          ${renderDesktopMenuLink("impresoras", "Impresoras")}
+          ${renderDesktopMenuLink("registrar-tasa-cambio", "Registrar tasa cambio")}
           ${renderDesktopMenuLink("cajas", "Apertura de caja")}
           ${renderDesktopMenuLink("cierre-caja", "Cierre de caja")}
         </div>
@@ -3715,7 +3742,13 @@ function renderAdjustmentLinesEditor(draft, { isApproved = false } = {}) {
                   />
                 </td>
                 <td>
-                  <input name="referencia" value="${escapeHtml(toInputValue(line.referencia))}" readonly />
+                  <input
+                    name="referencia"
+                    data-adjustment-referencia-input="${index}"
+                    value="${escapeHtml(toInputValue(line.referencia))}"
+                    maxlength="30"
+                    ${isApproved ? "disabled" : ""}
+                  />
                 </td>
                 <td>
                   <input name="nombre" value="${escapeHtml(toInputValue(line.nombre))}" readonly />
@@ -3737,6 +3770,83 @@ function renderAdjustmentLinesEditor(draft, { isApproved = false } = {}) {
         </tbody>
       </table>
     </div>
+  `;
+}
+
+function renderAdjustmentLineLookupModal() {
+  const lookup = state.adjustments.lineLookup;
+  if (!lookup?.open) {
+    return "";
+  }
+
+  const items = Array.isArray(lookup.items) ? lookup.items : [];
+  const activeIndex = Number.isInteger(lookup.activeIndex) ? lookup.activeIndex : -1;
+  const totalLabel = `Coincidencias (${escapeHtml(String(items.length))} Registros)`;
+
+  return `
+    <div class="article-lookup-overlay adjustment-line-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-adjustment-line-lookup-close aria-label="Cerrar buscador"></button>
+      <section class="article-lookup-dialog adjustment-line-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="adjustment-line-lookup-title" tabindex="-1" data-adjustment-line-lookup-dialog>
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Articulos</p>
+            <h3 id="adjustment-line-lookup-title">${totalLabel}</h3>
+            <p>Selecciona el articulo correcto para esta linea del ajuste.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">${escapeHtml(String(items.length))} registros</span>
+            <button class="article-command-button" type="button" data-adjustment-line-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          items.length === 0
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Sin coincidencias</h3>
+                <p>No se encontraron articulos para la busqueda actual.</p>
+              </div>
+            `
+            : `
+              <div class="table-wrap article-lookup-table-wrap adjustment-line-lookup-table-wrap">
+                <table class="data-table article-lookup-table adjustment-line-lookup-table">
+                  <thead>
+                    <tr>
+                      <th>Codigo Barra</th>
+                      <th>Referencia</th>
+                      <th>Marca</th>
+                      <th>Nombre</th>
+                      <th>Existencia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${items.map((item, index) => renderAdjustmentLineLookupRow(item, index, index === activeIndex)).join("")}
+                  </tbody>
+                </table>
+              </div>
+            `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderAdjustmentLineLookupRow(item, index, isActive) {
+  return `
+    <tr
+      class="article-lookup-row ${isActive ? "article-lookup-row-active" : ""}"
+      data-adjustment-line-lookup-select="${escapeHtml(String(index))}"
+      tabindex="0"
+      aria-selected="${isActive ? "true" : "false"}"
+    >
+      <td><strong>${escapeHtml(item.codigoBarra || "-")}</strong></td>
+      <td>${escapeHtml(item.referencia || "-")}</td>
+      <td>${escapeHtml(item.general?.marca?.nombre || item.general?.marca?.codigo || "-")}</td>
+      <td>${escapeHtml(item.general?.nombre || item.nombre || "-")}</td>
+      <td>${escapeHtml(toInputValue(item.inventario?.existenciaActual ?? ""))}</td>
+    </tr>
   `;
 }
 
@@ -10026,6 +10136,21 @@ function bodegaPanelGetStoreOptions(panel) {
   return Array.from(codes).sort((a, b) => a.localeCompare(b, "es"));
 }
 
+// Nombre real de la tienda para mostrar en pantalla (dropdown, etc.) -- el
+// codigo (001, 002...) sigue siendo el value real usado para filtrar/pedir
+// datos al backend, esto es solo la etiqueta visible. Busca en cualquiera de
+// las listas que ya trae bodega-api con "nombre" (ventas o inventario); si
+// no lo encuentra (dato viejo en cache, tienda sin nombre cargado en
+// DIM_TIENDAS), cae de vuelta al codigo.
+function bodegaPanelGetNombreTienda(panel, codigo) {
+  if (!codigo) {
+    return codigo;
+  }
+  const filas = [...(panel.ventas || []), ...(panel.inventario || [])];
+  const fila = filas.find((row) => row.codigo_legacy === codigo && row.nombre);
+  return fila?.nombre || codigo;
+}
+
 function bodegaPanelGetTasaValor(panel) {
   return toFiniteNumber(panel.tasaCambio?.tasa);
 }
@@ -10325,7 +10450,7 @@ function bodegaPanelRenderControlsBar(panel) {
           ${storeOptions
             .map(
               (codigo) => `
-                <option value="${escapeHtml(codigo)}" ${panel.tiendaFiltro === codigo ? "selected" : ""}>${escapeHtml(codigo)}</option>
+                <option value="${escapeHtml(codigo)}" ${panel.tiendaFiltro === codigo ? "selected" : ""}>${escapeHtml(bodegaPanelGetNombreTienda(panel, codigo))}</option>
               `,
             )
             .join("")}
@@ -10503,7 +10628,7 @@ function bodegaPanelRenderDesempenoRow(panel, row, isTotal) {
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.codigo_legacy || "-")}</td>
+      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
       <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_pago))}</td>
       <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_costo_bs))}</td>
@@ -10533,7 +10658,6 @@ function bodegaPanelRenderInventarioSection(panel) {
             <tr>
               <th>Tienda</th>
               <th>Articulos</th>
-              <th>Unidades</th>
               <th>Valor a costo / Participacion</th>
             </tr>
           </thead>
@@ -10541,7 +10665,7 @@ function bodegaPanelRenderInventarioSection(panel) {
             ${
               filtradas.length
                 ? filtradas.map((row) => bodegaPanelRenderInventarioRow(panel, row, totalValor, false)).join("")
-                : `<tr><td colspan="4"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                : `<tr><td colspan="3"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
             }
             ${total && !panel.tiendaFiltro ? bodegaPanelRenderInventarioRow(panel, total, totalValor, true) : ""}
           </tbody>
@@ -10557,9 +10681,8 @@ function bodegaPanelRenderInventarioRow(panel, row, totalValor, isTotal) {
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.codigo_legacy || "-")}</td>
+      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.articulos ?? "0"))}</td>
-      <td>${escapeHtml(formatTransferAmount(row.unidades))}</td>
       <td>
         <div class="bodega-participacion-cell">
           <span>${escapeHtml(bodegaPanelFormatMonedaDesdeUsd(panel, valorUsd))}</span>
@@ -11806,6 +11929,7 @@ function renderAdjustmentLookupModal() {
                         <th>Tipo</th>
                         <th>Observacion</th>
                         <th>Status</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -11822,14 +11946,54 @@ function renderAdjustmentLookupModal() {
 
 function renderAdjustmentLookupRow(item) {
   const isApproved = Number(item.status || 0) === 1;
+  const numero = String(item.numero || "");
+  const isConfirmingDelete =
+    !isApproved &&
+    String(state.adjustmentLookup.confirmDeleteNumero || "") === numero;
 
   return `
-    <tr class="adjustment-lookup-row ${isApproved ? "adjustment-lookup-row-approved" : "adjustment-lookup-row-pending"}" data-adjustment-lookup-select="${escapeHtml(String(item.numero || ""))}">
-      <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+    <tr class="adjustment-lookup-row ${isApproved ? "adjustment-lookup-row-approved" : "adjustment-lookup-row-pending"}" data-adjustment-lookup-select="${escapeHtml(numero)}">
+      <td><strong>${escapeHtml(numero || "-")}</strong></td>
       <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
       <td>${escapeHtml(item.tipo === "negativo" ? "NEGATIVO - RESTA" : "POSITIVO - SUMA")}</td>
       <td>${escapeHtml(item.observacion || "-")}</td>
       <td>${renderAdjustmentLookupStatusBadge(item.status)}</td>
+      <td>
+        ${
+          isApproved
+            ? ""
+            : isConfirmingDelete
+              ? `
+                <span class="adjustment-lookup-confirm-delete">
+                  <span>Eliminar?</span>
+                  <button
+                    class="button button-danger"
+                    type="button"
+                    data-adjustment-lookup-confirm-delete="${escapeHtml(numero)}"
+                  >
+                    Si
+                  </button>
+                  <button
+                    class="button"
+                    type="button"
+                    data-adjustment-lookup-cancel-delete="${escapeHtml(numero)}"
+                  >
+                    No
+                  </button>
+                </span>
+              `
+              : `
+                <button
+                  class="button button-danger adjustment-lookup-delete-button"
+                  type="button"
+                  data-adjustment-lookup-delete="${escapeHtml(numero)}"
+                  title="Eliminar ajuste ${escapeHtml(numero)}"
+                >
+                  Eliminar
+                </button>
+              `
+        }
+      </td>
     </tr>
   `;
 }
@@ -15052,6 +15216,51 @@ function bindArticleEvents() {
     });
 
   document
+    .querySelectorAll("[data-adjustment-lookup-delete]")
+    .forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const numero = Number.parseInt(
+          button.getAttribute("data-adjustment-lookup-delete") || "",
+          10,
+        );
+        if (!numero) {
+          return;
+        }
+
+        state.adjustmentLookup.confirmDeleteNumero = String(numero);
+        render();
+      });
+    });
+
+  document
+    .querySelectorAll("[data-adjustment-lookup-cancel-delete]")
+    .forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        state.adjustmentLookup.confirmDeleteNumero = null;
+        render();
+      });
+    });
+
+  document
+    .querySelectorAll("[data-adjustment-lookup-confirm-delete]")
+    .forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const numero = Number.parseInt(
+          button.getAttribute("data-adjustment-lookup-confirm-delete") || "",
+          10,
+        );
+        if (!numero) {
+          return;
+        }
+
+        await deleteAdjustment(numero);
+      });
+    });
+
+  document
     .querySelectorAll("[data-dev-return-lookup-close]")
     .forEach((button) => {
       button.addEventListener("click", () => {
@@ -16426,25 +16635,124 @@ function bindAdjustmentEvents() {
           input.getAttribute("data-adjustment-barcode-input") || "-1",
           10,
         );
-        const codigoBarra = String(input.value || "").trim();
-        if (index >= 0 && codigoBarra) {
-          await fillAdjustmentLineFromInventory(index, codigoBarra);
+        if (index < 0) {
+          return;
         }
-      });
 
-      input.addEventListener("blur", async () => {
-        const index = Number.parseInt(
-          input.getAttribute("data-adjustment-barcode-input") || "-1",
-          10,
-        );
-        const codigoBarra = String(input.value || "").trim();
-        const row = input.closest("[data-adjustment-line-row]");
-        const currentName = row?.querySelector('[name="nombre"]')?.value || "";
-        if (index >= 0 && codigoBarra && !currentName) {
-          await fillAdjustmentLineFromInventory(index, codigoBarra);
-        }
+        await resolveAdjustmentLineFromField(index, input.value);
       });
     });
+
+  document
+    .querySelectorAll("[data-adjustment-referencia-input]")
+    .forEach((input) => {
+      input.addEventListener("keydown", async (event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
+
+        event.preventDefault();
+        const index = Number.parseInt(
+          input.getAttribute("data-adjustment-referencia-input") || "-1",
+          10,
+        );
+        if (index < 0) {
+          return;
+        }
+
+        await resolveAdjustmentLineFromField(index, input.value);
+      });
+    });
+
+  document
+    .querySelectorAll("[data-adjustment-line-lookup-close]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        closeAdjustmentLineLookupModal();
+        render();
+      });
+    });
+
+  document
+    .querySelectorAll("[data-adjustment-line-lookup-select]")
+    .forEach((row) => {
+      row.addEventListener("click", () => {
+        const selectedIndex = Number.parseInt(
+          row.getAttribute("data-adjustment-line-lookup-select") || "",
+          10,
+        );
+        if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+          return;
+        }
+
+        const lookup = state.adjustments.lineLookup;
+        const selected = (lookup.items || [])[selectedIndex];
+        if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+          return;
+        }
+
+        applyArticleToAdjustmentLine(lookup.lineIndex, selected);
+        closeAdjustmentLineLookupModal();
+        clearFlash();
+        advanceAdjustmentLineFocus(lookup.lineIndex);
+      });
+    });
+
+  const adjustmentLineLookupDialog = document.querySelector(
+    "[data-adjustment-line-lookup-dialog]",
+  );
+  if (adjustmentLineLookupDialog instanceof HTMLElement) {
+    queueMicrotask(() => {
+      adjustmentLineLookupDialog.focus();
+    });
+
+    adjustmentLineLookupDialog.addEventListener("keydown", (event) => {
+      const lookup = state.adjustments.lineLookup;
+      const items = Array.isArray(lookup?.items) ? lookup.items : [];
+      if (!lookup?.open || !items.length) {
+        return;
+      }
+
+      const currentIndex =
+        Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0
+          ? lookup.activeIndex
+          : 0;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.adjustments.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex + 1) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.adjustments.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex - 1 + items.length) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const selected = items[currentIndex];
+        if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+          return;
+        }
+
+        applyArticleToAdjustmentLine(lookup.lineIndex, selected);
+        closeAdjustmentLineLookupModal();
+        clearFlash();
+        advanceAdjustmentLineFocus(lookup.lineIndex);
+        return;
+      }
+    });
+  }
 }
 
 function bindSucursalEvents() {
@@ -20071,6 +20379,7 @@ async function openAdjustmentLookupModal() {
   state.adjustmentLookup.open = true;
   state.adjustmentLookup.loading = true;
   state.adjustmentLookup.items = [];
+  state.adjustmentLookup.confirmDeleteNumero = null;
   render();
 
   try {
@@ -20093,6 +20402,339 @@ async function openAdjustmentLookupModal() {
 function closeAdjustmentLookupModal() {
   state.adjustmentLookup.open = false;
   state.adjustmentLookup.loading = false;
+}
+
+async function deleteAdjustment(numero) {
+  state.adjustmentLookup.confirmDeleteNumero = null;
+  state.adjustmentLookup.loading = true;
+  clearFlash();
+  render();
+
+  try {
+    await apiFetch(`/adjustments/${encodeURIComponent(numero)}`, {
+      method: "DELETE",
+    });
+
+    if (Number(state.adjustments.draft?.numero) === Number(numero)) {
+      resetAdjustmentDraft();
+    }
+
+    state.adjustmentLookup.items = (state.adjustmentLookup.items || []).filter(
+      (item) => Number(item.numero) !== Number(numero),
+    );
+    setFlash(`Ajuste ${numero} eliminado correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.adjustmentLookup.loading = false;
+    render();
+  }
+}
+
+async function loadAdjustmentsMetadata(options = {}) {
+  const { renderAfter = true } = options;
+  state.adjustments.loadingMetadata = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    state.adjustments.metadata = await apiFetch("/adjustments/metadata");
+    if (!state.adjustments.draft?.numero) {
+      state.adjustments.draft = createEmptyAdjustmentDraft(state.adjustments.metadata);
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la configuracion de ajustes: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.adjustments.loadingMetadata = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+function computeAdjustmentDraftQuantity(draft) {
+  return (draft?.items || []).reduce((total, item) => {
+    const quantity = Number(item?.cantidad || 0);
+    return total + (Number.isFinite(quantity) ? quantity : 0);
+  }, 0);
+}
+
+function captureAdjustmentDraft() {
+  const form = document.getElementById("adjustment-form");
+  if (!form) {
+    return;
+  }
+
+  state.adjustments.draft = readAdjustmentDraft(form);
+}
+
+function readAdjustmentDraft(form) {
+  const currentDraft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
+  const rows = Array.from(form.querySelectorAll("[data-adjustment-line-row]"));
+  const items = rows
+    .map((row) => ({
+      codigoBarra: readRowFieldValue(row, "codigoBarra", ""),
+      referencia: readRowFieldValue(row, "referencia", ""),
+      nombre: readRowFieldValue(row, "nombre", ""),
+      cantidad: readRowFieldValue(row, "cantidad", ""),
+      costo: readRowFieldValue(row, "costo", ""),
+    }))
+    .filter((item) => item.codigoBarra || item.referencia || item.nombre || item.cantidad);
+
+  return {
+    numero: currentDraft.numero,
+    fecha: readFormFieldValue(form, "fecha", currentDraft.fecha),
+    tipo: readFormFieldValue(form, "tipo", currentDraft.tipo),
+    tipoAjuste: currentDraft.tipoAjuste,
+    idLote: readFormFieldValue(form, "idLote", currentDraft.idLote),
+    observacion: readFormFieldValue(form, "observacion", currentDraft.observacion),
+    status: currentDraft.status,
+    items: items.length ? items : [createEmptyAdjustmentLineDraft()],
+  };
+}
+
+function validateAdjustmentDraft(draft) {
+  const validLines = (draft.items || []).filter((item) => String(item.codigoBarra || "").trim());
+  if (!validLines.length) {
+    return "El ajuste debe tener al menos un renglon.";
+  }
+
+  for (const item of validLines) {
+    const cantidad = Number(item.cantidad || 0);
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      return `La cantidad del articulo ${item.codigoBarra || ""} debe ser mayor a cero.`;
+    }
+  }
+
+  return "";
+}
+
+function buildAdjustmentPayload(draft) {
+  const tipo = String(draft.tipo || "positivo");
+  const tipoAjuste = Number.parseInt(String(draft.tipoAjuste || ""), 10) || (tipo === "negativo" ? 2 : 1);
+
+  return {
+    tipo,
+    tipoAjuste,
+    fecha: toApiDateTime(draft.fecha),
+    observacion: String(draft.observacion || "").trim() || undefined,
+    idLote: Number.parseInt(String(draft.idLote || ""), 10) || undefined,
+    items: (draft.items || [])
+      .filter((item) => String(item.codigoBarra || "").trim())
+      .map((item) => ({
+        codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
+        cantidad: String(item.cantidad || "").trim(),
+        costo: String(item.costo || "").trim() || undefined,
+      })),
+  };
+}
+
+function adjustmentToDraft(ajuste, metadata = state.adjustments?.metadata) {
+  return {
+    numero: ajuste?.numero ?? null,
+    fecha: toDateInputValue(ajuste?.fecha || new Date()),
+    tipo: ajuste?.tipo || metadata?.defaults?.tipo || "positivo",
+    tipoAjuste: String(ajuste?.tipoAjuste ?? metadata?.defaults?.tipoAjuste ?? "1"),
+    idLote: String(ajuste?.idLote ?? metadata?.defaults?.idLote ?? ""),
+    observacion: ajuste?.observacion || "",
+    status: Number(ajuste?.status ?? 0),
+    items: Array.isArray(ajuste?.items) && ajuste.items.length > 0
+      ? ajuste.items.map((item) => ({
+          codigoBarra: item.codigoBarra || "",
+          referencia: item.referencia || "",
+          nombre: item.nombre || "",
+          cantidad: toInputValue(item.cantidad),
+          costo: toInputValue(item.costo),
+          existenciaActual: item.existenciaActual || "",
+        }))
+      : [createEmptyAdjustmentLineDraft()],
+  };
+}
+
+function openAdjustmentLineLookupModal(lineIndex, searchValue, items) {
+  state.adjustments.lineLookup = {
+    open: true,
+    loading: false,
+    lineIndex,
+    search: searchValue,
+    items: Array.isArray(items) ? items : [],
+    activeIndex: Array.isArray(items) && items.length ? 0 : -1,
+  };
+}
+
+function closeAdjustmentLineLookupModal() {
+  state.adjustments.lineLookup = {
+    open: false,
+    loading: false,
+    lineIndex: -1,
+    search: "",
+    items: [],
+    activeIndex: -1,
+  };
+}
+
+function focusAdjustmentLineInput(index) {
+  if (!Number.isInteger(index) || index < 0) {
+    return;
+  }
+
+  const target = document.querySelector(`[data-adjustment-barcode-input="${index}"]`);
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+
+  target.focus();
+  target.select?.();
+}
+
+function advanceAdjustmentLineFocus(index) {
+  render();
+  queueMicrotask(() => {
+    focusAdjustmentLineInput(index + 1);
+  });
+}
+
+function applyArticleToAdjustmentLine(index, article) {
+  const draft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
+  const items = Array.isArray(draft.items) && draft.items.length
+    ? [...draft.items]
+    : [createEmptyAdjustmentLineDraft()];
+  const currentLine = items[index] || createEmptyAdjustmentLineDraft();
+  const ultimoCosto = article.inventario?.costos?.ultimo ?? currentLine.costo ?? "";
+  const existencia = article.inventario?.existenciaActual ?? currentLine.existenciaActual ?? "";
+
+  items[index] = {
+    ...currentLine,
+    codigoBarra: article.codigoBarra || currentLine.codigoBarra || "",
+    referencia: article.referencia || currentLine.referencia || "",
+    nombre: article.general?.nombre || article.nombre || currentLine.nombre || "",
+    costo: toInputValue(ultimoCosto),
+    cantidad: currentLine.cantidad || "1",
+    existenciaActual: toInputValue(existencia),
+  };
+
+  state.adjustments.draft = {
+    ...draft,
+    items,
+  };
+}
+
+async function resolveAdjustmentLineFromField(index, rawSearchValue) {
+  const searchValue = String(rawSearchValue || "").trim();
+  if (!searchValue) {
+    return;
+  }
+
+  captureAdjustmentDraft();
+
+  try {
+    const params = new URLSearchParams();
+    params.set("buscar", searchValue);
+    params.set("limit", "25");
+
+    const response = await apiFetch(`/inventory?${params.toString()}`);
+    const itemsFound = Array.isArray(response.data) ? response.data : [];
+    const normalizedSearch = searchValue.toUpperCase();
+    const exactMatch = itemsFound.find((item) => {
+      const codigoBarra = String(item.codigoBarra || "").trim().toUpperCase();
+      const referencia = String(item.referencia || "").trim().toUpperCase();
+      return codigoBarra === normalizedSearch || referencia === normalizedSearch;
+    });
+
+    if (!itemsFound.length) {
+      throw new Error("ARTICULO_NOT_FOUND");
+    }
+
+    if (exactMatch) {
+      applyArticleToAdjustmentLine(index, exactMatch);
+      closeAdjustmentLineLookupModal();
+      clearFlash();
+      advanceAdjustmentLineFocus(index);
+      return;
+    }
+
+    if (itemsFound.length === 1) {
+      applyArticleToAdjustmentLine(index, itemsFound[0]);
+      closeAdjustmentLineLookupModal();
+      clearFlash();
+      advanceAdjustmentLineFocus(index);
+      return;
+    }
+
+    openAdjustmentLineLookupModal(index, searchValue, itemsFound);
+    clearFlash();
+    render();
+  } catch (error) {
+    console.error(error);
+    closeAdjustmentLineLookupModal();
+    setFlash(`No se encontro un articulo para ${searchValue}.`, "error");
+    render();
+  }
+}
+
+async function saveAdjustment() {
+  const draft = state.adjustments.draft || createEmptyAdjustmentDraft(state.adjustments.metadata);
+  const validationMessage = validateAdjustmentDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.adjustments.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildAdjustmentPayload(draft);
+    const response = draft.numero
+      ? await apiFetch(`/adjustments/${encodeURIComponent(draft.numero)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/adjustments", {
+          method: "POST",
+          body: payload,
+        });
+
+    state.adjustments.draft = adjustmentToDraft(response.ajuste, state.adjustments.metadata);
+    setFlash(
+      draft.numero
+        ? `Ajuste ${response.ajuste?.numero || draft.numero} actualizado correctamente.`
+        : `Ajuste ${response.ajuste?.numero || ""} guardado correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.adjustments.saving = false;
+    render();
+  }
+}
+
+async function approveAdjustment(numero) {
+  state.adjustments.approving = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/adjustments/${encodeURIComponent(numero)}/approve`, {
+      method: "POST",
+    });
+
+    state.adjustments.draft = adjustmentToDraft(response.ajuste, state.adjustments.metadata);
+    setFlash(`Ajuste ${numero} aprobado correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.adjustments.approving = false;
+    render();
+  }
 }
 
 async function loadTransfersModule(options = {}) {
@@ -26991,10 +27633,32 @@ function userCanViewBodegaPanel() {
   return userIsSystemOperator() || getCurrentUserGroupCodes().includes("JEFE");
 }
 
+function esEdicionBasica() {
+  return state.edicion === "basica";
+}
+
+const BASICA_RESTRICTED_VIEWS = [
+  "usuarios",
+  "roles",
+  "todas-tiendas",
+  "ayuda",
+  "borrador-devoluciones",
+  "ajuste-inventario",
+  "cambio-precio",
+  "registro-transferencia",
+  "registro-devoluciones",
+  "cargar-transferencia",
+  "cargar-devoluciones",
+];
+
 function userCanAccessView(view) {
   const normalizedView = String(view || "desktop")
     .trim()
     .toLowerCase();
+
+  if (esEdicionBasica() && BASICA_RESTRICTED_VIEWS.includes(normalizedView)) {
+    return false;
+  }
 
   if (normalizedView === "usuarios") {
     return userIsSystemOperator();
@@ -27372,6 +28036,7 @@ function clearSession() {
     open: false,
     loading: false,
     items: [],
+    confirmDeleteNumero: null,
   };
   state.transferLookup = {
     open: false,

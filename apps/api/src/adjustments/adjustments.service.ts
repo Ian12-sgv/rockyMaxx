@@ -262,6 +262,29 @@ export class AdjustmentsService {
     };
   }
 
+  async deleteAdjustment(numero: bigint) {
+    await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.ajustes.findUnique({
+        where: { Numero: numero },
+      });
+
+      if (!existing) {
+        throw new NotFoundException("El ajuste no existe.");
+      }
+
+      if (existing.Status === 1) {
+        throw new ConflictException("El ajuste ya fue aprobado y no puede eliminarse.");
+      }
+
+      await this.deleteMovementRows(tx, numero);
+      await tx.ajustes.delete({
+        where: { Numero: numero },
+      });
+    });
+
+    return { numero: numero.toString() };
+  }
+
   private async findAdjustmentOrThrow(numero: bigint) {
     const adjustment = await this.prisma.ajustes.findUnique({
       where: { Numero: numero },

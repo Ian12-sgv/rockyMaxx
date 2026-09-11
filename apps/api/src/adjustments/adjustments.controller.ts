@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { RequireGroups } from "../auth/decorators/require-groups.decorator";
@@ -47,5 +47,10 @@ export class AdjustmentsController {
   @Post(":numero/approve")
   async approve(@Param("numero") numero: string) {
     return this.adjustmentsService.approveAdjustment(BigInt(numero));
+  }
+
+  @Delete(":numero")
+  async remove(@Param("numero") numero: string) {
+    return this.adjustmentsService.deleteAdjustment(BigInt(numero));
   }
 }

@@ -3759,6 +3759,24 @@ button {
   white-space: normal;
 }
 
+.adjustment-lookup-delete-button {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.adjustment-lookup-confirm-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.adjustment-lookup-confirm-delete button {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
 .modern-search-wrap {
   margin-bottom: 18px;
   padding: 16px;
