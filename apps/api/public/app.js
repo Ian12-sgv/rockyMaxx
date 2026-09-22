@@ -1299,6 +1299,7 @@ function renderShellView() {
       ${renderTransferLineLookupModal()}
       ${renderInventoryBulkTransferModal()}
       ${renderDevReturnLookupModal()}
+      ${renderDevReturnLineLookupModal()}
       ${renderImpuestosLookupModal()}
       ${renderFacturacionLookupModal()}
       ${renderFacturacionClientEditorModal()}
@@ -2916,7 +2917,13 @@ function renderDevReturnLinesEditor(draft, { isLocked = false } = {}) {
                   />
                 </td>
                 <td>
-                  <input name="referencia" value="${escapeHtml(toInputValue(line.referencia))}" readonly />
+                  <input
+                    name="referencia"
+                    data-dev-return-referencia-input="${index}"
+                    value="${escapeHtml(toInputValue(line.referencia))}"
+                    maxlength="30"
+                    ${isLocked ? "disabled" : ""}
+                  />
                 </td>
                 <td>
                   <input name="nombre" value="${escapeHtml(toInputValue(line.nombre))}" readonly />
@@ -3848,6 +3855,83 @@ function renderAdjustmentLineLookupRow(item, index, isActive) {
     <tr
       class="article-lookup-row ${isActive ? "article-lookup-row-active" : ""}"
       data-adjustment-line-lookup-select="${escapeHtml(String(index))}"
+      tabindex="0"
+      aria-selected="${isActive ? "true" : "false"}"
+    >
+      <td><strong>${escapeHtml(item.codigoBarra || "-")}</strong></td>
+      <td>${escapeHtml(item.referencia || "-")}</td>
+      <td>${escapeHtml(item.general?.marca?.nombre || item.general?.marca?.codigo || "-")}</td>
+      <td>${escapeHtml(item.general?.nombre || item.nombre || "-")}</td>
+      <td>${escapeHtml(toInputValue(item.inventario?.existenciaActual ?? ""))}</td>
+    </tr>
+  `;
+}
+
+function renderDevReturnLineLookupModal() {
+  const lookup = state.devReturns.lineLookup;
+  if (!lookup?.open) {
+    return "";
+  }
+
+  const items = Array.isArray(lookup.items) ? lookup.items : [];
+  const activeIndex = Number.isInteger(lookup.activeIndex) ? lookup.activeIndex : -1;
+  const totalLabel = `Coincidencias (${escapeHtml(String(items.length))} Registros)`;
+
+  return `
+    <div class="article-lookup-overlay dev-return-line-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-dev-return-line-lookup-close aria-label="Cerrar buscador"></button>
+      <section class="article-lookup-dialog dev-return-line-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="dev-return-line-lookup-title" tabindex="-1" data-dev-return-line-lookup-dialog>
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Articulos</p>
+            <h3 id="dev-return-line-lookup-title">${totalLabel}</h3>
+            <p>Selecciona el articulo correcto para esta linea del borrador.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <span class="article-lookup-count">${escapeHtml(String(items.length))} registros</span>
+            <button class="article-command-button" type="button" data-dev-return-line-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        ${
+          items.length === 0
+            ? `
+              <div class="empty-state article-lookup-empty">
+                <h3>Sin coincidencias</h3>
+                <p>No se encontraron articulos para la busqueda actual.</p>
+              </div>
+            `
+            : `
+              <div class="table-wrap article-lookup-table-wrap dev-return-line-lookup-table-wrap">
+                <table class="data-table article-lookup-table dev-return-line-lookup-table">
+                  <thead>
+                    <tr>
+                      <th>Codigo Barra</th>
+                      <th>Referencia</th>
+                      <th>Marca</th>
+                      <th>Nombre</th>
+                      <th>Existencia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${items.map((item, index) => renderDevReturnLineLookupRow(item, index, index === activeIndex)).join("")}
+                  </tbody>
+                </table>
+              </div>
+            `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function renderDevReturnLineLookupRow(item, index, isActive) {
+  return `
+    <tr
+      class="article-lookup-row ${isActive ? "article-lookup-row-active" : ""}"
+      data-dev-return-line-lookup-select="${escapeHtml(String(index))}"
       tabindex="0"
       aria-selected="${isActive ? "true" : "false"}"
     >
@@ -16725,21 +16809,106 @@ function bindDevReturnEvents() {
 
         event.preventDefault();
         const index = Number.parseInt(input.getAttribute("data-dev-return-barcode-input") || "-1", 10);
-        const codigoBarra = String(input.value || "").trim();
-        if (index >= 0 && codigoBarra) {
-          await fillDevReturnLineFromInventory(index, codigoBarra);
+        if (index < 0) {
+          return;
         }
-      });
 
-      input.addEventListener("blur", async () => {
-        const index = Number.parseInt(input.getAttribute("data-dev-return-barcode-input") || "-1", 10);
-        const codigoBarra = String(input.value || "").trim();
-        const row = input.closest("[data-dev-return-line-row]");
-        const currentName = row?.querySelector('[name="nombre"]')?.value || "";
-        if (index >= 0 && codigoBarra && !currentName) {
-          await fillDevReturnLineFromInventory(index, codigoBarra);
-        }
+        await resolveDevReturnLineFromField(index, input.value);
       });
+    });
+
+    document.querySelectorAll("[data-dev-return-referencia-input]").forEach((input) => {
+      input.addEventListener("keydown", async (event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
+
+        event.preventDefault();
+        const index = Number.parseInt(input.getAttribute("data-dev-return-referencia-input") || "-1", 10);
+        if (index < 0) {
+          return;
+        }
+
+        await resolveDevReturnLineFromField(index, input.value);
+      });
+    });
+  }
+
+  document.querySelectorAll("[data-dev-return-line-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeDevReturnLineLookupModal();
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-dev-return-line-lookup-select]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const selectedIndex = Number.parseInt(row.getAttribute("data-dev-return-line-lookup-select") || "", 10);
+      if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+        return;
+      }
+
+      const lookup = state.devReturns.lineLookup;
+      const selected = (lookup.items || [])[selectedIndex];
+      if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+        return;
+      }
+
+      applyArticleToDevReturnLine(lookup.lineIndex, selected);
+      closeDevReturnLineLookupModal();
+      clearFlash();
+      advanceDevReturnLineFocus(lookup.lineIndex);
+    });
+  });
+
+  const devReturnLineLookupDialog = document.querySelector("[data-dev-return-line-lookup-dialog]");
+  if (devReturnLineLookupDialog instanceof HTMLElement) {
+    queueMicrotask(() => {
+      devReturnLineLookupDialog.focus();
+    });
+
+    devReturnLineLookupDialog.addEventListener("keydown", (event) => {
+      const lookup = state.devReturns.lineLookup;
+      const items = Array.isArray(lookup?.items) ? lookup.items : [];
+      if (!lookup?.open || !items.length) {
+        return;
+      }
+
+      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0 ? lookup.activeIndex : 0;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.devReturns.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex + 1) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.devReturns.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex - 1 + items.length) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const selected = items[currentIndex];
+        if (!selected || typeof lookup.lineIndex !== "number" || lookup.lineIndex < 0) {
+          return;
+        }
+
+        applyArticleToDevReturnLine(lookup.lineIndex, selected);
+        closeDevReturnLineLookupModal();
+        clearFlash();
+        advanceDevReturnLineFocus(lookup.lineIndex);
+        return;
+      }
     });
   }
 
@@ -21865,40 +22034,122 @@ async function approveInboundDevReturn(numero, codigoEnvia) {
   }
 }
 
-async function fillDevReturnLineFromInventory(index, codigoBarra) {
+function openDevReturnLineLookupModal(lineIndex, searchValue, items) {
+  state.devReturns.lineLookup = {
+    open: true,
+    loading: false,
+    lineIndex,
+    search: searchValue,
+    items: Array.isArray(items) ? items : [],
+    activeIndex: Array.isArray(items) && items.length ? 0 : -1,
+  };
+}
+
+function closeDevReturnLineLookupModal() {
+  state.devReturns.lineLookup = {
+    open: false,
+    loading: false,
+    lineIndex: -1,
+    search: "",
+    items: [],
+    activeIndex: -1,
+  };
+}
+
+function focusDevReturnLineInput(index) {
+  if (!Number.isInteger(index) || index < 0) {
+    return;
+  }
+
+  const target = document.querySelector(`[data-dev-return-barcode-input="${index}"]`);
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+
+  target.focus();
+  target.select?.();
+}
+
+function advanceDevReturnLineFocus(index) {
+  render();
+  queueMicrotask(() => {
+    focusDevReturnLineInput(index + 1);
+  });
+}
+
+function applyArticleToDevReturnLine(index, article) {
+  const draft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
+  const items = Array.isArray(draft.items) && draft.items.length
+    ? [...draft.items]
+    : [createEmptyDevReturnLineDraft()];
+  const currentLine = items[index] || createEmptyDevReturnLineDraft();
+  const ultimoCosto = article.inventario?.costos?.ultimo ?? article.costos?.ultimo ?? currentLine.costo ?? "";
+
+  items[index] = {
+    ...currentLine,
+    codigoBarra: article.codigoBarra || currentLine.codigoBarra || "",
+    referencia: article.referencia || currentLine.referencia || "",
+    nombre: article.general?.nombre || article.nombre || currentLine.nombre || "",
+    costo: toInputValue(ultimoCosto),
+    cantidad: currentLine.cantidad || "1",
+    numeroCaja: currentLine.numeroCaja || "0",
+  };
+
+  state.devReturns.draft = {
+    ...draft,
+    items,
+  };
+}
+
+async function resolveDevReturnLineFromField(index, rawSearchValue) {
+  const searchValue = String(rawSearchValue || "").trim();
+  if (!searchValue) {
+    return;
+  }
+
   captureDevReturnDraft();
-  const initialDraft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
 
   try {
-    const response = await apiFetch(`/inventory/${encodeURIComponent(codigoBarra)}`);
-    const article = response.mercancia || response;
-    captureDevReturnDraft();
-    const latestDraft = state.devReturns.draft || initialDraft;
-    const items = Array.isArray(latestDraft.items) && latestDraft.items.length
-      ? [...latestDraft.items]
-      : [createEmptyDevReturnLineDraft()];
-    const currentLine = items[index] || createEmptyDevReturnLineDraft();
-    const ultimoCosto = article.inventario?.costos?.ultimo ?? article.costos?.ultimo ?? currentLine.costo ?? "";
+    const params = new URLSearchParams();
+    params.set("buscar", searchValue);
+    params.set("limit", "25");
 
-    items[index] = {
-      ...currentLine,
-      codigoBarra: article.codigoBarra || codigoBarra,
-      referencia: article.referencia || currentLine.referencia || "",
-      nombre: article.general?.nombre || article.nombre || currentLine.nombre || "",
-      costo: toInputValue(ultimoCosto),
-      cantidad: currentLine.cantidad || "1",
-      numeroCaja: currentLine.numeroCaja || "0",
-    };
+    const response = await apiFetch(`/inventory?${params.toString()}`);
+    const itemsFound = Array.isArray(response.data) ? response.data : [];
+    const normalizedSearch = searchValue.toUpperCase();
+    const exactMatch = itemsFound.find((item) => {
+      const codigoBarra = String(item.codigoBarra || "").trim().toUpperCase();
+      const referencia = String(item.referencia || "").trim().toUpperCase();
+      return codigoBarra === normalizedSearch || referencia === normalizedSearch;
+    });
 
-    state.devReturns.draft = {
-      ...latestDraft,
-      items,
-    };
+    if (!itemsFound.length) {
+      throw new Error("ARTICULO_NOT_FOUND");
+    }
+
+    if (exactMatch) {
+      applyArticleToDevReturnLine(index, exactMatch);
+      closeDevReturnLineLookupModal();
+      clearFlash();
+      advanceDevReturnLineFocus(index);
+      return;
+    }
+
+    if (itemsFound.length === 1) {
+      applyArticleToDevReturnLine(index, itemsFound[0]);
+      closeDevReturnLineLookupModal();
+      clearFlash();
+      advanceDevReturnLineFocus(index);
+      return;
+    }
+
+    openDevReturnLineLookupModal(index, searchValue, itemsFound);
     clearFlash();
+    render();
   } catch (error) {
     console.error(error);
-    setFlash(`No se pudo cargar el articulo ${codigoBarra}: ${extractErrorMessage(error)}`, "error");
-  } finally {
+    closeDevReturnLineLookupModal();
+    setFlash(`No se encontro un articulo para ${searchValue}.`, "error");
     render();
   }
 }
