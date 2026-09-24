@@ -819,6 +819,19 @@ model DiarioCaja {
   @@map("DIARIOCAJA")
 }
 
+// Tabla nueva (no forma parte del espejo legacy de SQL Server): fila unica que registra
+// hasta que fecha se aplico el ultimo Cierre General exitoso en esta sucursal. La usa
+// CajasService para bloquear el cierre general si hay cajas abiertas y para forzar
+// automaticamente al dia siguiente cualquier caja que se abra con fecha <= UltimoCierre.
+model CierreGeneralEstado {
+  ID            Int       @id @default(1)
+  UltimoCierre  DateTime?
+  GeneradoEn    DateTime?
+  Usuario       String?
+
+  @@map("CIERRE_GENERAL_ESTADO")
+}
+
 model SalidasCaja {
   Numero          BigInt
   Serie           String

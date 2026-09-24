@@ -76,6 +76,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     `);
 
     await this.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS dbo."CIERRE_GENERAL_ESTADO" (
+        "ID" INTEGER PRIMARY KEY,
+        "UltimoCierre" TIMESTAMP(3) NULL,
+        "GeneradoEn" TIMESTAMP(3) NULL,
+        "Usuario" VARCHAR(50) NULL,
+        CONSTRAINT "CIERRE_GENERAL_ESTADO_singleton" CHECK ("ID" = 1)
+      )
+    `);
+
+    await this.$executeRawUnsafe(`
       ALTER TABLE IF EXISTS dbo."DEVBORRADOR"
       ADD COLUMN IF NOT EXISTS "CodigoOrigen" VARCHAR(15)
     `);

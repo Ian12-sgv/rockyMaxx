@@ -92,6 +92,7 @@ export class CajasService {
 
     const created = await this.prisma.$transaction(
       async (tx) => {
+        await this.applyCierreGeneralRollover(tx, normalized);
         await this.ensureCajaConfig(tx, normalized);
 
         const existing = await tx.diarioCaja.findUnique({
@@ -209,6 +210,22 @@ export class CajasService {
 
     return toCajaView(updated);
   }
+
+  // Si ya se aplico un Cierre General para `normalized.fecha` (o una fecha posterior),
+  // fuerza la apertura al dia siguiente al ultimo cierre en vez de dejarla caer en un dia
+  // que la sucursal ya dio por cerrado. Silencioso a proposito: el operador no tiene que
+  // saber ni elegir el dia correcto, el sistema lo corrige solo.
+  private async applyCierreGeneralRollover(tx: CajaTransactionClient, normalized: NormalizedCajaInput) {
+    const estado = await tx.cierreGeneralEstado.findUnique({ where: { ID: 1 } });
+    if (!estado?.UltimoCierre || normalized.fecha > estado.UltimoCierre) {
+      return;
+    }
+
+    const siguienteDia = new Date(estado.UltimoCierre.getTime());
+    siguienteDia.setDate(siguienteDia.getDate() + 1);
+    normalized.fecha = siguienteDia;
+  }
+
   async close(serie: string, fecha: string, closeCajaDto: CloseCajaDto) {
     const normalizedSerie = this.normalizeSerie(serie);
     const normalizedFecha = this.parseDateKey(fecha);
@@ -308,6 +325,19 @@ export class CajasService {
   async buildGeneralCloseReport(fecha: string) {
     const normalizedFecha = this.parseDateKey(fecha);
     const { start, end } = this.getDayRange(normalizedFecha);
+
+    const openSessions = await this.prisma.diarioCaja.findMany({
+      where: { Status: { in: [0, 1] } },
+      select: { Serie: true },
+      orderBy: { Serie: "asc" },
+    });
+
+    if (openSessions.length) {
+      const series = [...new Set(openSessions.map((item) => item.Serie))].join(", ");
+      throw new ConflictException(
+        `No se puede generar el cierre general: hay cajas abiertas (${series}). Cierralas antes de continuar.`,
+      );
+    }
 
     const items = await this.prisma.diarioCaja.findMany({
       where: {
@@ -448,12 +478,32 @@ export class CajasService {
     };
 
     const pdf = buildCashRegisterGeneralCloseReportPdf(summary);
+    await this.registerCierreGeneralAplicado(normalizedFecha);
+
     return {
       fileName: `cierre-general-${this.slugifyForFileName(summary.sucursalNombre)}-${this.formatFileDate(normalizedFecha)}.pdf`,
       generatedAt: summary.generatedAt,
       summary,
       pdfBase64: pdf.toString("base64"),
     };
+  }
+
+  // Deja constancia de que ya se aplico un Cierre General para `fecha`. Cualquier caja que
+  // se abra despues con una fecha <= a esta se corrige automaticamente al dia siguiente
+  // (ver `create`). Nunca retrocede el marcador: si alguien reimprime el cierre de un dia
+  // anterior, el dia operativo ya avanzado se mantiene.
+  private async registerCierreGeneralAplicado(fecha: Date) {
+    const estadoActual = await this.prisma.cierreGeneralEstado.findUnique({ where: { ID: 1 } });
+    const nuevoUltimoCierre =
+      estadoActual?.UltimoCierre && estadoActual.UltimoCierre > fecha
+        ? estadoActual.UltimoCierre
+        : fecha;
+
+    await this.prisma.cierreGeneralEstado.upsert({
+      where: { ID: 1 },
+      create: { ID: 1, UltimoCierre: nuevoUltimoCierre, GeneradoEn: new Date() },
+      update: { UltimoCierre: nuevoUltimoCierre, GeneradoEn: new Date() },
+    });
   }
 
   private async buildCloseReportPayload(item: CajaSessionRecord) {

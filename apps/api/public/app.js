@@ -16803,16 +16803,33 @@ function bindDevReturnEvents() {
 
     document.querySelectorAll("[data-dev-return-barcode-input]").forEach((input) => {
       input.addEventListener("keydown", async (event) => {
-        if (event.key !== "Enter") {
-          return;
-        }
-
-        event.preventDefault();
         const index = Number.parseInt(input.getAttribute("data-dev-return-barcode-input") || "-1", 10);
         if (index < 0) {
           return;
         }
 
+        // Igual que en Facturacion: parado en el campo de codigo, con el campo ya
+        // vacio, Backspace borra la linea completa en vez de no hacer nada (Backspace
+        // normal de edicion de texto se deja intacto mientras el campo tenga contenido).
+        if (event.key === "Backspace" && !input.value) {
+          event.preventDefault();
+          captureDevReturnDraft();
+          if (!removeDevReturnLine(index)) {
+            return;
+          }
+          clearFlash();
+          render();
+          queueMicrotask(() => {
+            focusDevReturnLineInput(index);
+          });
+          return;
+        }
+
+        if (event.key !== "Enter") {
+          return;
+        }
+
+        event.preventDefault();
         await resolveDevReturnLineFromField(index, input.value);
       });
     });
@@ -22099,6 +22116,42 @@ function applyArticleToDevReturnLine(index, article) {
     ...draft,
     items,
   };
+}
+
+function devReturnLineHasContent(line) {
+  return Boolean(
+    String(line?.codigoBarra || "").trim() ||
+      String(line?.referencia || "").trim() ||
+      String(line?.nombre || "").trim() ||
+      String(line?.costo || "").trim() ||
+      Number(line?.cantidad || 0) > 0,
+  );
+}
+
+// Igual patron que removeFacturacionLine: borra la linea SOLO si tiene contenido
+// (una fila vacia no tiene nada que borrar) y compacta las restantes -- las lineas
+// de abajo suben, no queda un hueco en medio de la grilla.
+function removeDevReturnLine(index) {
+  const draft = state.devReturns.draft || createEmptyDevReturnDraft(state.devReturns.metadata);
+  const items = Array.isArray(draft.items) ? draft.items : [];
+  if (!Number.isInteger(index) || index < 0 || index >= items.length) {
+    return false;
+  }
+
+  if (!devReturnLineHasContent(items[index])) {
+    return false;
+  }
+
+  const compactedItems = items
+    .filter((_, currentIndex) => currentIndex !== index)
+    .filter((item) => devReturnLineHasContent(item));
+
+  state.devReturns.draft = {
+    ...draft,
+    items: compactedItems,
+  };
+
+  return true;
 }
 
 async function resolveDevReturnLineFromField(index, rawSearchValue) {
