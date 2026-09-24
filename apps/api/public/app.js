@@ -20097,12 +20097,15 @@ async function loadBodegaPanelResumen(options = {}) {
     return;
   }
 
-  const { renderAfter = true } = options;
+  const { renderAfter = true, silent = false } = options;
   if (!state.bodegaPanel.rango) {
     state.bodegaPanel.rango = { desde: bodegaPanelTodayIso(), hasta: bodegaPanelTodayIso() };
   }
   state.bodegaPanel.loading = true;
-  if (renderAfter) {
+  // silent: se usa desde la auto-actualizacion de fondo -- no repinta la pantalla
+  // antes de tener la respuesta (evitaria un titileo si el usuario esta mirando
+  // esta seccion), pero igual repinta al final para mostrar los datos frescos.
+  if (renderAfter && !silent) {
     render();
   }
 
@@ -20145,6 +20148,25 @@ async function loadBodegaPanelResumen(options = {}) {
     }
   }
 }
+
+// Auto-actualizacion del panel "Todas las tiendas" cada 10 segundos. A diferencia
+// del panel web standalone de bodega-api, este vive embebido dentro del cliente de
+// escritorio completo (facturacion, inventario, etc.), asi que SOLO corre mientras
+// el usuario esta parado en esa seccion (state.currentView === "todas-tiendas"):
+// si esta facturando o en cualquier otra pantalla, no se le fuerza un repintado de
+// fondo. Tambien se salta si hay un formulario de ingreso/egreso abierto o el
+// selector de rango de fechas abierto, para no pisarle lo que esta escribiendo.
+setInterval(() => {
+  if (
+    state.currentView !== "todas-tiendas" ||
+    state.bodegaPanel.loading ||
+    state.bodegaPanel.balanceFormAbierto ||
+    state.bodegaPanel.rangoPickerOpen
+  ) {
+    return;
+  }
+  void loadBodegaPanelResumen({ silent: true });
+}, 10000);
 
 async function bodegaPanelSubmitMovimientoForm(form) {
   const tipo = form.getAttribute("data-bodega-balance-form");

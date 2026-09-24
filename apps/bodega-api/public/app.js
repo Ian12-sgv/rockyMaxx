@@ -1212,7 +1212,9 @@ function renderMovimientoForm(tipo) {
 
 // ---- Carga de datos y eventos ------------------------------------------------
 
-async function loadPanel() {
+async function loadPanel(options) {
+  const silent = Boolean(options?.silent);
+
   const token = getToken();
   if (!token) {
     state.view = "login";
@@ -1221,8 +1223,10 @@ async function loadPanel() {
   }
 
   state.loading = true;
-  setFlash(state.view === "panel" ? "Actualizando..." : "Conectando...", "info");
-  render();
+  if (!silent) {
+    setFlash(state.view === "panel" ? "Actualizando..." : "Conectando...", "info");
+    render();
+  }
 
   if (!state.rango) {
     state.rango = { desde: todayIso(), hasta: todayIso() };
@@ -1608,3 +1612,16 @@ function seleccionarDiaCalendario(iso) {
 }
 
 void loadPanel();
+
+// Auto-actualizacion cada 10 segundos, silenciosa (sin el flash "Actualizando...")
+// para no titilar la pantalla en cada vuelta. Se salta el ciclo si:
+// - no estamos viendo el panel todavia (login, o el fetch inicial no termino),
+// - hay un formulario de ingreso/egreso abierto (no pisar lo que el usuario esta
+//   escribiendo a mitad de carga),
+// - el selector de rango de fechas esta abierto (no interrumpir esa interaccion).
+setInterval(() => {
+  if (state.view !== "panel" || state.loading || state.balanceFormAbierto || state.rangoPickerOpen) {
+    return;
+  }
+  void loadPanel({ silent: true });
+}, 10000);
