@@ -227,28 +227,67 @@ export class ValidacionesService {
   // caja una vez (al crearse, abierta), asi que HoraCierre nunca llega a
   // bodega_datos (ninguna caja con cierre desde 30/08/2026), y HoraApertura
   // puede ser de la noche anterior cuando la caja se crea sola tras el Cierre
-  // General. Las ventas si llegan completas.
+  // General.
   //
-  // Mismo criterio de dia que ventasResumenPorRango ((Fecha)::date), para
-  // que las horas correspondan a las mismas facturas de la tabla. Si el
-  // rango abarca varios dias, se devuelve el dia MAS RECIENTE con ventas de
-  // cada tienda (con su fecha, para que el frontend la muestre). Fecha viene
-  // en UTC con sufijo Z (confirmado: 100% de las filas); la conversion a
-  // hora de Venezuela la hace el frontend.
+  // OJO con VENTAS.Fecha: facturacion.service.ts#buildSaleDateTime la arma
+  // con la FECHA DE LA CAJA ABIERTA + la hora del reloj. Si una tienda sigue
+  // vendiendo despues del Cierre General, esas facturas caen en la caja del
+  // dia siguiente (abierta sola) y quedan con fecha de MANANA a la hora de
+  // hoy (ej. vendida el 26 a las 6:04 pm -> Fecha 27 6:04 pm). Pasa casi a
+  // diario en 002/003/005/006. Para la contabilidad es intencional (cuentan
+  // para el dia siguiente), pero para "a que hora cerro" daba horas del
+  // futuro. Se detecta porque la factura dice ser POSTERIOR a su primera
+  // llegada a bodega_datos: si Fecha > primera recepcion + 1 h (margen para
+  // relojes algo adelantados), se le restan los dias completos de mas
+  // (CEIL, para cubrir tambien el caso en que la tienda envio recien a la
+  // manana siguiente). Luego se agrupa por el dia REAL en hora de Venezuela.
+  //
+  // Por eso el dia de esta columna puede no coincidir 1:1 con el de las
+  // facturas de la tabla (que siguen el criterio contable (Fecha)::date).
+  // Si el rango abarca varios dias, se devuelve el dia MAS RECIENTE con
+  // ventas de cada tienda (con su fecha, para que el frontend la muestre).
+  // Fecha viene en UTC con sufijo Z (100% de las filas); el frontend la
+  // muestra en hora de Venezuela.
   private async horariosPorTienda(desde: string, hasta: string) {
     return this.prisma.$queryRaw<
       Array<{ codigo_legacy: string; fecha: string; primera_venta: Date; ultima_venta: Date }>
     >(Prisma.sql`
-      WITH por_dia AS (
+      -- Sin filtro por fecha a proposito: castear payload_json->>'Fecha' en
+      -- todo el historial es mas lento (0.5-2 s medido) que agrupar todo
+      -- (~0.1-0.3 s para 1 a 30 dias, medido el 27/09/2026).
+      WITH primera_recepcion AS (
+        SELECT h."dim_tienda_id", h."pk_origen", MIN(h."valido_desde") AS recibida
+        FROM "HECH_VENTAS_HIST" h
+        GROUP BY 1, 2
+      ),
+      ventas AS (
         SELECT
           t."codigo_legacy" AS codigo_legacy,
-          (v."payload_json" ->> 'Fecha')::date AS fecha,
-          MIN((v."payload_json" ->> 'Fecha')::timestamptz) AS primera_venta,
-          MAX((v."payload_json" ->> 'Fecha')::timestamptz) AS ultima_venta
+          (v."payload_json" ->> 'Fecha')::timestamptz AS fecha_factura,
+          r.recibida
         FROM "VW_HECH_VENTAS_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
-        WHERE (v."payload_json" ->> 'Fecha')::date BETWEEN ${desde}::date AND ${hasta}::date
+        JOIN primera_recepcion r ON r."dim_tienda_id" = v."dim_tienda_id" AND r."pk_origen" = v."pk_origen"
+        WHERE (v."payload_json" ->> 'Fecha')::date BETWEEN ${desde}::date - 1 AND ${hasta}::date + 2
           AND ${FILTRO_TIENDAS_PANEL}
+      ),
+      reales AS (
+        SELECT
+          codigo_legacy,
+          CASE
+            WHEN fecha_factura > recibida + INTERVAL '1 hour'
+              THEN fecha_factura - CEIL(EXTRACT(EPOCH FROM (fecha_factura - recibida)) / 86400) * INTERVAL '1 day'
+            ELSE fecha_factura
+          END AS momento
+        FROM ventas
+      ),
+      por_dia AS (
+        SELECT
+          codigo_legacy,
+          (momento AT TIME ZONE 'America/Caracas')::date AS fecha,
+          MIN(momento) AS primera_venta,
+          MAX(momento) AS ultima_venta
+        FROM reales
         GROUP BY 1, 2
       )
       SELECT DISTINCT ON (codigo_legacy)
@@ -257,6 +296,7 @@ export class ValidacionesService {
         primera_venta,
         ultima_venta
       FROM por_dia
+      WHERE fecha BETWEEN ${desde}::date AND ${hasta}::date
       ORDER BY codigo_legacy, fecha DESC
     `);
   }
