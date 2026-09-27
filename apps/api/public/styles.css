@@ -2348,6 +2348,28 @@ button {
   background: rgba(34, 197, 94, 0.08);
 }
 
+.modern-stat-card-red::after {
+  background: rgba(171, 63, 47, 0.08);
+}
+
+/* Fila de 5 tarjetas del panel "Todas las tiendas" (con "Gastos generales")
+   en pantallas anchas; por debajo de 1200px aplican las reglas responsivas
+   de .modern-summary-grid. */
+@media (min-width: 1201px) {
+  .modern-summary-grid-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.bodega-gastos-cell {
+  color: #ab3f2f;
+  white-space: nowrap;
+}
+
+.bodega-gastos-cell.is-cero {
+  color: #94a3b8;
+}
+
 .modern-stat-copy {
   position: relative;
   z-index: 1;

@@ -867,6 +867,7 @@ function renderSummaryCards() {
 
   const toneColors = { blue: "#2b6dc9", sky: "#0ea5e9", green: "#22c55e", danger: "#ab3f2f", gold: "#ba8b34" };
   const gananciaTone = ganancia >= 0 ? "green" : "danger";
+  const gastosGenerales = getGastosGenerales();
 
   const items = [
     {
@@ -901,10 +902,18 @@ function renderSummaryCards() {
       delta: null,
       puntos: [],
     },
+    {
+      label: "Gastos generales",
+      value: formatMontoSinConvertir(gastosGenerales.total),
+      meta: `${gastosGenerales.cantidad} egreso(s) compartidos entre tiendas`,
+      tone: "red",
+      delta: null,
+      puntos: [],
+    },
   ];
 
   return `
-    <div class="modern-summary-grid">
+    <div class="modern-summary-grid modern-summary-grid-5">
       ${items
         .map(
           (item) => `
@@ -976,6 +985,7 @@ function renderDesempenoTable() {
               <th>Costo</th>
               <th>Ganancia</th>
               <th>Margen</th>
+              <th title="Egresos de Balance asignados solo a esta tienda">Gastos</th>
             </tr>
           </thead>
           <tbody>
@@ -984,7 +994,7 @@ function renderDesempenoTable() {
                 ? ordenadas
                     .map((row) => renderDesempenoRow(row, false))
                     .join("")
-                : `<tr><td colspan="6"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                : `<tr><td colspan="7"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
             }
             ${total && !state.tiendaFiltro ? renderDesempenoRow(total, true) : ""}
           </tbody>
@@ -999,6 +1009,7 @@ function renderDesempenoRow(row, isTotal) {
   const margenTone = Math.abs(margenPct) < 0.005 ? "neutral" : margenPct >= 0 ? "positivo" : "negativo";
   const ganancia = toFiniteNumber(row.ganancia);
   const gananciaTone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
+  const gastos = isTotal ? getGastosTiendasVisibles() : getGastosTienda(row.codigo_legacy);
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
@@ -1008,6 +1019,7 @@ function renderDesempenoRow(row, isTotal) {
       <td>${escapeHtml(formatMoneda(row.total_costo_bs))}</td>
       <td class="bodega-ganancia-cell bodega-ganancia-${gananciaTone}">${escapeHtml(formatMoneda(row.ganancia))}</td>
       <td><span class="bodega-margen-badge bodega-margen-${margenTone}">${escapeHtml(formatPercent(margenPct))}%</span></td>
+      <td class="bodega-gastos-cell ${gastos > 0 ? "" : "is-cero"}">${escapeHtml(formatMontoSinConvertir(gastos))}</td>
     </tr>
   `;
 }
@@ -1107,6 +1119,60 @@ function sumarMontos(movimientos, soloOperativos) {
   return movimientos
     .filter((mov) => !soloOperativos || mov.es_operativo)
     .reduce((acc, mov) => acc + toFiniteNumber(mov.monto), 0);
+}
+
+// ---- Gastos (egresos de Balance) en el dashboard ------------------------------
+// Un egreso asignado a UNA sola tienda es gasto de esa tienda (columna
+// "Gastos" de Desempeno por tienda); uno asignado a 2 o mas tiendas es gasto
+// general (tarjeta "Gastos generales"). Asi cada egreso se cuenta una sola
+// vez. A diferencia de la vista Balance (donde el toggle Bs/US$ FILTRA), aqui
+// se convierte con la tasa como el resto del dashboard (pedido del usuario).
+// No depende del filtro Operativo de Balance: el dashboard cuenta todos.
+function montoEnMonedaActual(mov) {
+  const monto = toFiniteNumber(mov?.monto);
+  const origen = mov?.moneda || "BS";
+  if (origen === state.moneda) {
+    return monto;
+  }
+  const tasa = getTasaValor();
+  if (tasa <= 0) {
+    return 0;
+  }
+  return origen === "BS" ? monto / tasa : monto * tasa;
+}
+
+function getEgresos() {
+  return (Array.isArray(state.balanceMovimientos) ? state.balanceMovimientos : []).filter((mov) => mov.tipo === "egreso");
+}
+
+function esGastoDeUnaTienda(mov) {
+  return Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.length === 1;
+}
+
+function getGastosTienda(codigo) {
+  return getEgresos()
+    .filter((mov) => esGastoDeUnaTienda(mov) && mov.codigos_tienda[0] === codigo)
+    .reduce((acc, mov) => acc + montoEnMonedaActual(mov), 0);
+}
+
+// Suma de los gastos propios de las tiendas visibles (fila TOTAL de la tabla).
+function getGastosTiendasVisibles() {
+  return getEgresos()
+    .filter((mov) => esGastoDeUnaTienda(mov) && tiendaVisible(mov.codigos_tienda[0]))
+    .reduce((acc, mov) => acc + montoEnMonedaActual(mov), 0);
+}
+
+// Con filtro de tienda/grupo, entra el gasto general que incluya alguna
+// tienda visible (mismo criterio que filtrarMovimientos en Balance).
+function getGastosGenerales() {
+  const lista = getEgresos()
+    .filter((mov) => !esGastoDeUnaTienda(mov))
+    .filter(
+      (mov) =>
+        (!state.tiendaFiltro && !state.grupoFiltro) ||
+        (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.some((codigo) => tiendaVisible(codigo))),
+    );
+  return { total: lista.reduce((acc, mov) => acc + montoEnMonedaActual(mov), 0), cantidad: lista.length };
 }
 
 function formatMontoSinConvertir(valor) {

@@ -10642,6 +10642,7 @@ function bodegaPanelRenderSummaryCards(panel) {
 
   const toneColors = { blue: "#2b6dc9", sky: "#0ea5e9", green: "#22c55e", danger: "#ab3f2f", gold: "#ba8b34" };
   const gananciaTone = ganancia >= 0 ? "green" : "danger";
+  const gastosGenerales = bodegaPanelGetGastosGenerales(panel);
 
   const items = [
     {
@@ -10676,10 +10677,18 @@ function bodegaPanelRenderSummaryCards(panel) {
       delta: null,
       puntos: [],
     },
+    {
+      label: "Gastos generales",
+      value: bodegaPanelFormatMontoSinConvertir(panel, gastosGenerales.total),
+      meta: `${gastosGenerales.cantidad} egreso(s) compartidos entre tiendas`,
+      tone: "red",
+      delta: null,
+      puntos: [],
+    },
   ];
 
   return `
-    <div class="modern-summary-grid">
+    <div class="modern-summary-grid modern-summary-grid-5">
       ${items
         .map(
           (item) => `
@@ -10750,13 +10759,14 @@ function bodegaPanelRenderDesempenoTable(panel) {
               <th>Costo</th>
               <th>Ganancia</th>
               <th>Margen</th>
+              <th title="Egresos de Balance asignados solo a esta tienda">Gastos</th>
             </tr>
           </thead>
           <tbody>
             ${
               ordenadas.length
                 ? ordenadas.map((row) => bodegaPanelRenderDesempenoRow(panel, row, false)).join("")
-                : `<tr><td colspan="6"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                : `<tr><td colspan="7"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
             }
             ${total && !panel.tiendaFiltro ? bodegaPanelRenderDesempenoRow(panel, total, true) : ""}
           </tbody>
@@ -10771,6 +10781,7 @@ function bodegaPanelRenderDesempenoRow(panel, row, isTotal) {
   const margenTone = Math.abs(margenPct) < 0.005 ? "neutral" : margenPct >= 0 ? "positivo" : "negativo";
   const ganancia = toFiniteNumber(row.ganancia);
   const gananciaTone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
+  const gastos = isTotal ? bodegaPanelGetGastosTiendasVisibles(panel) : bodegaPanelGetGastosTienda(panel, row.codigo_legacy);
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
@@ -10780,6 +10791,7 @@ function bodegaPanelRenderDesempenoRow(panel, row, isTotal) {
       <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_costo_bs))}</td>
       <td class="bodega-ganancia-cell bodega-ganancia-${gananciaTone}">${escapeHtml(bodegaPanelFormatMoneda(panel, row.ganancia))}</td>
       <td><span class="bodega-margen-badge bodega-margen-${margenTone}">${escapeHtml(bodegaPanelFormatPercent(margenPct))}%</span></td>
+      <td class="bodega-gastos-cell ${gastos > 0 ? "" : "is-cero"}">${escapeHtml(bodegaPanelFormatMontoSinConvertir(panel, gastos))}</td>
     </tr>
   `;
 }
@@ -10907,6 +10919,54 @@ function bodegaPanelSumarMontos(movimientos, soloOperativos) {
   return movimientos
     .filter((mov) => !soloOperativos || mov.es_operativo)
     .reduce((acc, mov) => acc + toFiniteNumber(mov.monto), 0);
+}
+
+// ---- Gastos (egresos de Balance) en el dashboard ------------------------------
+// Mismo criterio que apps/bodega-api/public/app.js: egreso de UNA tienda ->
+// columna "Gastos" de esa tienda; egreso de 2 o mas tiendas -> tarjeta
+// "Gastos generales". Aqui se convierte con la tasa (en Balance se filtra).
+function bodegaPanelMontoEnMonedaActual(panel, mov) {
+  const monto = toFiniteNumber(mov?.monto);
+  const origen = mov?.moneda || "BS";
+  if (origen === panel.moneda) {
+    return monto;
+  }
+  const tasa = bodegaPanelGetTasaValor(panel);
+  if (tasa <= 0) {
+    return 0;
+  }
+  return origen === "BS" ? monto / tasa : monto * tasa;
+}
+
+function bodegaPanelGetEgresos(panel) {
+  return (Array.isArray(panel.balanceMovimientos) ? panel.balanceMovimientos : []).filter((mov) => mov.tipo === "egreso");
+}
+
+function bodegaPanelEsGastoDeUnaTienda(mov) {
+  return Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.length === 1;
+}
+
+function bodegaPanelGetGastosTienda(panel, codigo) {
+  return bodegaPanelGetEgresos(panel)
+    .filter((mov) => bodegaPanelEsGastoDeUnaTienda(mov) && mov.codigos_tienda[0] === codigo)
+    .reduce((acc, mov) => acc + bodegaPanelMontoEnMonedaActual(panel, mov), 0);
+}
+
+function bodegaPanelGetGastosTiendasVisibles(panel) {
+  return bodegaPanelGetEgresos(panel)
+    .filter((mov) => bodegaPanelEsGastoDeUnaTienda(mov) && bodegaPanelTiendaVisible(panel, mov.codigos_tienda[0]))
+    .reduce((acc, mov) => acc + bodegaPanelMontoEnMonedaActual(panel, mov), 0);
+}
+
+function bodegaPanelGetGastosGenerales(panel) {
+  const lista = bodegaPanelGetEgresos(panel)
+    .filter((mov) => !bodegaPanelEsGastoDeUnaTienda(mov))
+    .filter(
+      (mov) =>
+        (!panel.tiendaFiltro && !panel.grupoFiltro) ||
+        (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.some((codigo) => bodegaPanelTiendaVisible(panel, codigo))),
+    );
+  return { total: lista.reduce((acc, mov) => acc + bodegaPanelMontoEnMonedaActual(panel, mov), 0), cantidad: lista.length };
 }
 
 function bodegaPanelFormatMontoSinConvertir(panel, valor) {
