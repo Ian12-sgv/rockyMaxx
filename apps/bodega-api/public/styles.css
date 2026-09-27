@@ -2369,6 +2369,103 @@ button {
   color: #94a3b8;
 }
 
+/* ---- Inventario: desplegable "Ver articulos" por tienda ---- */
+.bodega-inv-tienda-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bodega-inv-detalle-toggle {
+  border: 1px solid #d9e1ec;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #2b6dc9;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bodega-inv-detalle-toggle:hover,
+.bodega-inv-detalle-toggle.is-open {
+  background: #eef4fc;
+  border-color: #2b6dc9;
+}
+
+.bodega-inv-row-abierta > td {
+  background: #f7f9fc;
+}
+
+.bodega-inv-detalle-row > td {
+  background: #f7f9fc;
+  padding: 0 12px 14px;
+}
+
+.bodega-inv-detalle {
+  display: grid;
+  gap: 10px;
+}
+
+.bodega-inv-detalle-buscar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bodega-inv-detalle-buscar input {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid #d9e1ec;
+  border-radius: 10px;
+  font: inherit;
+  background: #ffffff;
+}
+
+.bodega-inv-detalle-hint,
+.bodega-inv-detalle-pagina {
+  color: #62748a;
+  font-size: 0.85rem;
+}
+
+.bodega-inv-detalle-tabla {
+  max-height: 460px;
+  overflow: auto;
+  border: 1px solid #e3e9f1;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.bodega-inv-detalle-tabla thead th {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+}
+
+.bodega-inv-detalle-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: #62748a;
+  font-size: 0.85rem;
+}
+
+.bodega-inv-detalle-footer .bodega-controls-group {
+  align-items: center;
+}
+
+.bodega-inv-detalle-footer button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .modern-stat-copy {
   position: relative;
   z-index: 1;

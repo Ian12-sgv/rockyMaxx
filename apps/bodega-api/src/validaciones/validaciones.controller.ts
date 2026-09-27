@@ -95,6 +95,23 @@ export class ValidacionesController {
     return this.validacionesService.stockPorArticulo(requireCodigoTienda(codigoTienda), codigoBarra?.trim());
   }
 
+  @Get("inventario-detalle")
+  async inventarioDetalle(
+    @Query("codigoTienda") codigoTienda: string,
+    @Query("busqueda") busqueda?: string,
+    @Query("pagina") pagina?: string,
+    @Query("limite") limite?: string,
+  ) {
+    const paginaNum = Math.max(1, Math.floor(Number(pagina) || 1));
+    const limiteNum = Math.min(200, Math.max(1, Math.floor(Number(limite) || 50)));
+    return this.validacionesService.inventarioDetalle(
+      requireCodigoTienda(codigoTienda),
+      String(busqueda || "").slice(0, 100),
+      paginaNum,
+      limiteNum,
+    );
+  }
+
   @Get("panel-resumen")
   async panelResumen(@Query("desde") desde?: string, @Query("hasta") hasta?: string) {
     const rango = resolveRango(desde, hasta);

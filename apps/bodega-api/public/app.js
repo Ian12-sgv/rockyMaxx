@@ -26,6 +26,9 @@ const state = {
   moneda: "BS",
   tiendaFiltro: "",
   grupoFiltro: "", // "" | "A" | "B" -- ver getGrupoTienda()
+  // Desplegable "Ver articulos" de la seccion Inventario: una tienda abierta a
+  // la vez. { codigo, busqueda, pagina, loading, error, data } o null.
+  inventarioDetalle: null,
   sortDir: "desc",
   balanceVisible: false,
   balanceMovimientos: [],
@@ -297,9 +300,30 @@ function setFlash(message, type = "info") {
   state.flash = message ? { message, type } : null;
 }
 
+// El auto-refresh (cada 10 s) y cada carga vuelven a pintar todo con
+// innerHTML: sin esto, el buscador de "Ver articulos" perderia el foco en
+// medio de la escritura.
 function render() {
+  const activo = document.activeElement;
+  const enBuscador = Boolean(activo && activo.matches && activo.matches("[data-inv-detalle-input]"));
+  const valor = enBuscador ? activo.value : null;
+  const cursor = enBuscador ? activo.selectionStart : null;
+
   app.innerHTML = state.view === "panel" ? renderPanelShell() : renderLoginView();
   bindEvents();
+
+  if (enBuscador) {
+    const input = document.querySelector("[data-inv-detalle-input]");
+    if (input) {
+      input.value = valor;
+      input.focus();
+      try {
+        input.setSelectionRange(cursor, cursor);
+      } catch (error) {
+        // type="search" en algunos motores no soporta setSelectionRange.
+      }
+    }
+  }
 }
 
 function renderLoginView() {
@@ -1057,7 +1081,13 @@ function renderInventarioSection() {
           <tbody>
             ${
               filtradas.length
-                ? filtradas.map((row) => renderInventarioRow(row, totalValor, false)).join("")
+                ? filtradas
+                    .map(
+                      (row) =>
+                        renderInventarioRow(row, totalValor, false) +
+                        (state.inventarioDetalle?.codigo === row.codigo_legacy ? renderInventarioDetalle() : ""),
+                    )
+                    .join("")
                 : `<tr><td colspan="3"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
             }
             ${total && !state.tiendaFiltro ? renderInventarioRow(total, totalValor, true) : ""}
@@ -1071,10 +1101,22 @@ function renderInventarioSection() {
 function renderInventarioRow(row, totalValor, isTotal) {
   const valorUsd = toFiniteNumber(row.valor_costo_usd);
   const participacion = isTotal ? 100 : Math.min(100, (valorUsd / totalValor) * 100);
+  const abierto = !isTotal && state.inventarioDetalle?.codigo === row.codigo_legacy;
 
   return `
-    <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? `<strong>${state.grupoFiltro ? `TOTAL GRUPO ${state.grupoFiltro}` : "TOTAL"}</strong>` : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
+    <tr class="${isTotal ? "is-selected-row" : ""} ${abierto ? "bodega-inv-row-abierta" : ""}">
+      <td>
+        ${
+          isTotal
+            ? `<strong>${state.grupoFiltro ? `TOTAL GRUPO ${state.grupoFiltro}` : "TOTAL"}</strong>`
+            : `<div class="bodega-inv-tienda-cell">
+                <span>${escapeHtml(row.nombre || row.codigo_legacy || "-")}</span>
+                <button type="button" class="bodega-inv-detalle-toggle ${abierto ? "is-open" : ""}" data-inv-detalle-toggle="${escapeHtml(row.codigo_legacy)}">
+                  ${abierto ? "Ocultar articulos &#9652;" : "Ver articulos &#9662;"}
+                </button>
+              </div>`
+        }
+      </td>
       <td>${escapeHtml(String(row.articulos ?? "0"))}</td>
       <td>
         <div class="bodega-participacion-cell">
@@ -1086,6 +1128,132 @@ function renderInventarioRow(row, totalValor, isTotal) {
       </td>
     </tr>
   `;
+}
+
+const DETALLE_LIMITE = 50;
+
+function formatCantidad(valor) {
+  return new Intl.NumberFormat("es-VE", { maximumFractionDigits: 2 }).format(toFiniteNumber(valor));
+}
+
+// Fila desplegada debajo de la tienda con sus articulos (paginados en el
+// servidor, ordenados por valor a costo de mayor a menor).
+function renderInventarioDetalle() {
+  const det = state.inventarioDetalle;
+  const data = det.data;
+  const totalArticulos = data ? toFiniteNumber(data.articulos) : 0;
+  const totalPaginas = Math.max(1, Math.ceil(totalArticulos / DETALLE_LIMITE));
+  const desde = totalArticulos ? (det.pagina - 1) * DETALLE_LIMITE + 1 : 0;
+  const hasta = Math.min(det.pagina * DETALLE_LIMITE, totalArticulos);
+  const filas = Array.isArray(data?.filas) ? data.filas : [];
+
+  return `
+    <tr class="bodega-inv-detalle-row">
+      <td colspan="3">
+        <div class="bodega-inv-detalle">
+          <form class="bodega-inv-detalle-buscar" data-inv-detalle-buscar>
+            <input type="search" name="busqueda" maxlength="100" placeholder="Buscar por codigo, referencia o nombre" value="${escapeHtml(det.busqueda)}" data-inv-detalle-input>
+            <button type="submit" class="button button-ghost">Buscar</button>
+            ${det.loading ? `<span class="bodega-inv-detalle-hint">Cargando...</span>` : ""}
+          </form>
+          ${det.error ? `<p class="bodega-movimiento-form-error">${escapeHtml(det.error)}</p>` : ""}
+          ${
+            data
+              ? `
+                <div class="bodega-inv-detalle-tabla">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Codigo</th>
+                        <th>Referencia</th>
+                        <th>Nombre</th>
+                        <th>Talla</th>
+                        <th>Existencia</th>
+                        <th>Costo prom.</th>
+                        <th>Valor a costo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${
+                        filas.length
+                          ? filas
+                              .map(
+                                (fila) => `
+                                  <tr>
+                                    <td>${escapeHtml(fila.codigo_barra || "-")}</td>
+                                    <td>${escapeHtml(fila.referencia || "-")}</td>
+                                    <td>${escapeHtml(fila.nombre || "-")}</td>
+                                    <td>${escapeHtml(fila.talla || "-")}</td>
+                                    <td>${escapeHtml(formatCantidad(fila.existencia))}</td>
+                                    <td>${escapeHtml(formatMonedaDesdeUsd(fila.costo_promedio_usd))}</td>
+                                    <td>${escapeHtml(formatMonedaDesdeUsd(fila.valor_costo_usd))}</td>
+                                  </tr>
+                                `,
+                              )
+                              .join("")
+                          : `<tr><td colspan="7"><div class="empty-state"><p>${det.busqueda ? "Ningun articulo coincide con la busqueda." : "Sin articulos."}</p></div></td></tr>`
+                      }
+                    </tbody>
+                  </table>
+                </div>
+                <div class="bodega-inv-detalle-footer">
+                  <span>
+                    ${totalArticulos ? `Mostrando ${desde}-${hasta} de ${escapeHtml(formatCantidad(totalArticulos))} articulos` : "0 articulos"}
+                    &middot; Valor ${escapeHtml(formatMonedaDesdeUsd(data.valor_costo_usd))}
+                  </span>
+                  <div class="bodega-controls-group" role="group" aria-label="Paginas">
+                    <button type="button" class="bodega-toggle-button" data-inv-detalle-pagina="${det.pagina - 1}" ${det.pagina <= 1 || det.loading ? "disabled" : ""}>&laquo; Anterior</button>
+                    <span class="bodega-inv-detalle-pagina">Pagina ${det.pagina} de ${totalPaginas}</span>
+                    <button type="button" class="bodega-toggle-button" data-inv-detalle-pagina="${det.pagina + 1}" ${det.pagina >= totalPaginas || det.loading ? "disabled" : ""}>Siguiente &raquo;</button>
+                  </div>
+                </div>
+              `
+              : ""
+          }
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+async function cargarInventarioDetalle(codigo, busqueda, pagina) {
+  const previo = state.inventarioDetalle;
+  state.inventarioDetalle = {
+    codigo,
+    busqueda,
+    pagina,
+    loading: true,
+    error: null,
+    // Mientras carga la pagina/busqueda nueva se deja ver la anterior de la
+    // MISMA tienda, para que la tabla no "salte" a vacio.
+    data: previo && previo.codigo === codigo ? previo.data : null,
+  };
+  render();
+
+  let data = null;
+  let error = null;
+  try {
+    const params = new URLSearchParams({ codigoTienda: codigo, busqueda, pagina: String(pagina), limite: String(DETALLE_LIMITE) });
+    const response = await window.fetch(apiUrl(`bodega/validaciones/inventario-detalle?${params.toString()}`), {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`El servidor respondio ${response.status}${text ? `: ${text}` : ""}`);
+    }
+    data = await response.json();
+  } catch (err) {
+    error = `No se pudieron cargar los articulos. ${err?.message || err}`;
+  }
+
+  // Si mientras esperaba el usuario cerro el desplegable, cambio de tienda,
+  // de busqueda o de pagina, esta respuesta ya no aplica.
+  const actual = state.inventarioDetalle;
+  if (!actual || actual.codigo !== codigo || actual.busqueda !== busqueda || actual.pagina !== pagina) {
+    return;
+  }
+  state.inventarioDetalle = { ...actual, loading: false, error, data: data || actual.data };
+  render();
 }
 
 // Balance con lo que se puede calcular con certeza a partir de bodega_datos:
@@ -1508,6 +1676,35 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.balanceOperativoFiltro = button.getAttribute("data-balance-operativo-filtro");
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-inv-detalle-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const codigo = button.getAttribute("data-inv-detalle-toggle");
+      if (state.inventarioDetalle?.codigo === codigo) {
+        state.inventarioDetalle = null;
+        render();
+        return;
+      }
+      void cargarInventarioDetalle(codigo, "", 1);
+    });
+  });
+
+  document.querySelector("[data-inv-detalle-buscar]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const det = state.inventarioDetalle;
+    if (!det) return;
+    const busqueda = String(event.target.querySelector("[data-inv-detalle-input]")?.value || "").trim();
+    void cargarInventarioDetalle(det.codigo, busqueda, 1);
+  });
+
+  document.querySelectorAll("[data-inv-detalle-pagina]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const det = state.inventarioDetalle;
+      const pagina = Number(button.getAttribute("data-inv-detalle-pagina"));
+      if (!det || !Number.isFinite(pagina) || pagina < 1) return;
+      void cargarInventarioDetalle(det.codigo, det.busqueda, pagina);
     });
   });
 

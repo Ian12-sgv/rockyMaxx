@@ -125,6 +125,81 @@ export class ValidacionesService {
     `);
   }
 
+  // Detalle de articulos del inventario actual de UNA tienda (el "Ver
+  // articulos" de la seccion Inventario del panel). Paginado en el servidor
+  // porque cada tienda tiene ~7000 articulos. valor_costo_usd usa la MISMA
+  // formula que inventarioResumen() (Existencia * CostoPromedio), asi que la
+  // suma de todas las paginas cuadra con el total de la tienda en el panel.
+  // Busqueda opcional por codigo de barra, referencia o nombre.
+  async inventarioDetalle(codigoTienda: string, busqueda: string, pagina: number, limite: number) {
+    const texto = busqueda.trim();
+    const filtroBusqueda = texto
+      ? Prisma.sql`AND (
+          v."pk_origen" ILIKE ${`%${texto}%`}
+          OR (v."payload_json" ->> 'Referencia') ILIKE ${`%${texto}%`}
+          OR (v."payload_json" ->> 'Nombre') ILIKE ${`%${texto}%`}
+        )`
+      : Prisma.empty;
+    const offset = (pagina - 1) * limite;
+
+    const [filas, totales] = await Promise.all([
+      this.prisma.$queryRaw<
+        Array<{
+          codigo_barra: string;
+          referencia: string | null;
+          nombre: string | null;
+          talla: string | null;
+          existencia: string;
+          costo_promedio_usd: string;
+          valor_costo_usd: string;
+        }>
+      >(Prisma.sql`
+        SELECT
+          TRIM(v."pk_origen") AS codigo_barra,
+          (v."payload_json" ->> 'Referencia') AS referencia,
+          (v."payload_json" ->> 'Nombre') AS nombre,
+          (v."payload_json" ->> 'Talla') AS talla,
+          COALESCE((v."payload_json" ->> 'Existencia')::numeric, 0)::text AS existencia,
+          COALESCE((v."payload_json" ->> 'CostoPromedio')::numeric, 0)::text AS costo_promedio_usd,
+          COALESCE(
+            (v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric,
+            0
+          )::text AS valor_costo_usd
+        FROM "VW_HECH_INVENTARIO_ACTUAL" v
+        JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
+        WHERE t."codigo_legacy" = ${codigoTienda} ${filtroBusqueda}
+        ORDER BY
+          COALESCE(
+            (v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric,
+            0
+          ) DESC,
+          v."pk_origen" ASC
+        LIMIT ${limite} OFFSET ${offset}
+      `),
+      this.prisma.$queryRaw<Array<{ articulos: string; valor_costo_usd: string }>>(Prisma.sql`
+        SELECT
+          COUNT(*)::text AS articulos,
+          COALESCE(
+            SUM((v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric),
+            0
+          )::text AS valor_costo_usd
+        FROM "VW_HECH_INVENTARIO_ACTUAL" v
+        JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
+        WHERE t."codigo_legacy" = ${codigoTienda} ${filtroBusqueda}
+      `),
+    ]);
+
+    return {
+      codigoTienda,
+      busqueda: texto,
+      pagina,
+      limite,
+      articulos: Number(totales[0]?.articulos ?? 0),
+      valor_costo_usd: totales[0]?.valor_costo_usd ?? "0",
+      filas,
+    };
+  }
+
   // Resumen para el panel principal (todas las tiendas juntas): ventas del
   // rango de fechas pedido, el mismo rango pero inmediatamente anterior (para
   // el "vs periodo anterior" del frontend) e inventario actual valorizado a
