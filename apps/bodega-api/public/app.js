@@ -303,14 +303,56 @@ function setFlash(message, type = "info") {
 // El auto-refresh (cada 10 s) y cada carga vuelven a pintar todo con
 // innerHTML: sin esto, el buscador de "Ver articulos" perderia el foco en
 // medio de la escritura.
+// Clave estable de un elemento con scroll entre un render y el siguiente:
+// tag + clases + cuantas veces aparecio antes esa misma combinacion. No usa
+// la posicion en el arbol porque el flash o el desplegable de articulos
+// pueden aparecer/desaparecer y correr los indices.
+function capturarScrolls() {
+  const vistos = new Map();
+  const posiciones = [];
+  app.querySelectorAll("*").forEach((el) => {
+    const base = `${el.tagName}.${el.className}`;
+    const indice = vistos.get(base) || 0;
+    vistos.set(base, indice + 1);
+    if (el.scrollTop || el.scrollLeft) {
+      posiciones.push({ clave: `${base}#${indice}`, top: el.scrollTop, left: el.scrollLeft });
+    }
+  });
+  return { ventanaX: window.scrollX, ventanaY: window.scrollY, posiciones };
+}
+
+function restaurarScrolls(capturado) {
+  const pendientes = new Map(capturado.posiciones.map((pos) => [pos.clave, pos]));
+  if (pendientes.size) {
+    const vistos = new Map();
+    app.querySelectorAll("*").forEach((el) => {
+      const base = `${el.tagName}.${el.className}`;
+      const indice = vistos.get(base) || 0;
+      vistos.set(base, indice + 1);
+      const pos = pendientes.get(`${base}#${indice}`);
+      if (pos) {
+        el.scrollTop = pos.top;
+        el.scrollLeft = pos.left;
+      }
+    });
+  }
+  window.scrollTo(capturado.ventanaX, capturado.ventanaY);
+}
+
+// Todo el panel se vuelve a pintar con innerHTML (auto-refresh cada 10 s,
+// abrir/paginar/buscar en "Ver articulos", toggles...). Eso reinicia el
+// scroll de la pagina y de las tablas, y le quita el foco al buscador; por
+// eso se guardan antes y se restauran despues.
 function render() {
   const activo = document.activeElement;
   const enBuscador = Boolean(activo && activo.matches && activo.matches("[data-inv-detalle-input]"));
   const valor = enBuscador ? activo.value : null;
   const cursor = enBuscador ? activo.selectionStart : null;
+  const scrolls = capturarScrolls();
 
   app.innerHTML = state.view === "panel" ? renderPanelShell() : renderLoginView();
   bindEvents();
+  restaurarScrolls(scrolls);
 
   if (enBuscador) {
     const input = document.querySelector("[data-inv-detalle-input]");
@@ -1254,6 +1296,15 @@ async function cargarInventarioDetalle(codigo, busqueda, pagina) {
   }
   state.inventarioDetalle = { ...actual, loading: false, error, data: data || actual.data };
   render();
+
+  // Pagina o busqueda nueva: la lista interna arranca desde su primer
+  // articulo (la pagina general se queda donde estaba, ver render()).
+  if (data) {
+    const tabla = document.querySelector(".bodega-inv-detalle-tabla");
+    if (tabla) {
+      tabla.scrollTop = 0;
+    }
+  }
 }
 
 // Balance con lo que se puede calcular con certeza a partir de bodega_datos:
@@ -1516,7 +1567,12 @@ async function loadPanel(options) {
 
   state.loading = true;
   if (!silent) {
-    setFlash(state.view === "panel" ? "Actualizando..." : "Conectando...", "info");
+    // Dentro del panel no se muestra el flash "Actualizando...": el boton ya
+    // lo dice, y el aviso aparecia/desaparecia arriba empujando todo el
+    // contenido (la vista "saltaba").
+    if (state.view !== "panel") {
+      setFlash("Conectando...", "info");
+    }
     render();
   }
 
