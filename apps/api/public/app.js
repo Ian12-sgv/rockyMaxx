@@ -10729,7 +10729,6 @@ function bodegaPanelRenderAlertBanner(panel) {
 function bodegaPanelRenderDesempenoTable(panel) {
   const ventas = panel.ventas;
   const filas = (Array.isArray(ventas) ? ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
-  const total = bodegaPanelGetEffectiveTotalRow(panel, ventas);
   const filtradas = filas.filter((row) => bodegaPanelTiendaVisible(panel, row.codigo_legacy));
 
   const ordenadas = [...filtradas].sort((a, b) => {
@@ -10760,15 +10759,15 @@ function bodegaPanelRenderDesempenoTable(panel) {
               <th>Ganancia</th>
               <th>Margen</th>
               <th title="Egresos de Balance asignados solo a esta tienda">Gastos</th>
+              <th title="Ganancia menos los gastos de la tienda">Total</th>
             </tr>
           </thead>
           <tbody>
             ${
               ordenadas.length
-                ? ordenadas.map((row) => bodegaPanelRenderDesempenoRow(panel, row, false)).join("")
-                : `<tr><td colspan="7"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                ? ordenadas.map((row) => bodegaPanelRenderDesempenoRow(panel, row)).join("")
+                : `<tr><td colspan="8"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
             }
-            ${total && !panel.tiendaFiltro ? bodegaPanelRenderDesempenoRow(panel, total, true) : ""}
           </tbody>
         </table>
       </div>
@@ -10776,22 +10775,28 @@ function bodegaPanelRenderDesempenoTable(panel) {
   `;
 }
 
-function bodegaPanelRenderDesempenoRow(panel, row, isTotal) {
+// "Total" = ganancia de la tienda menos sus gastos propios (los generales
+// van aparte en la tarjeta "Gastos generales"). La ganancia nace en Bs y los
+// gastos ya vienen en la moneda mostrada, asi que se convierte antes de restar.
+function bodegaPanelRenderDesempenoRow(panel, row) {
   const margenPct = bodegaPanelCalcularMargenPct(row);
   const margenTone = Math.abs(margenPct) < 0.005 ? "neutral" : margenPct >= 0 ? "positivo" : "negativo";
   const ganancia = toFiniteNumber(row.ganancia);
   const gananciaTone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
-  const gastos = isTotal ? bodegaPanelGetGastosTiendasVisibles(panel) : bodegaPanelGetGastosTienda(panel, row.codigo_legacy);
+  const gastos = bodegaPanelGetGastosTienda(panel, row.codigo_legacy);
+  const neto = bodegaPanelConvertirDesdeBs(panel, row.ganancia) - gastos;
+  const netoTone = Math.abs(neto) < 0.005 ? "neutral" : neto >= 0 ? "positivo" : "negativo";
 
   return `
-    <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? `<strong>${panel.grupoFiltro ? `TOTAL GRUPO ${panel.grupoFiltro}` : "TOTAL"}</strong>` : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
+    <tr>
+      <td>${escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
       <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_pago))}</td>
       <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_costo_bs))}</td>
       <td class="bodega-ganancia-cell bodega-ganancia-${gananciaTone}">${escapeHtml(bodegaPanelFormatMoneda(panel, row.ganancia))}</td>
       <td><span class="bodega-margen-badge bodega-margen-${margenTone}">${escapeHtml(bodegaPanelFormatPercent(margenPct))}%</span></td>
       <td class="bodega-gastos-cell ${gastos > 0 ? "" : "is-cero"}">${escapeHtml(bodegaPanelFormatMontoSinConvertir(panel, gastos))}</td>
+      <td class="bodega-ganancia-cell bodega-ganancia-${netoTone}">${escapeHtml(bodegaPanelFormatMontoSinConvertir(panel, neto))}</td>
     </tr>
   `;
 }
@@ -10949,12 +10954,6 @@ function bodegaPanelEsGastoDeUnaTienda(mov) {
 function bodegaPanelGetGastosTienda(panel, codigo) {
   return bodegaPanelGetEgresos(panel)
     .filter((mov) => bodegaPanelEsGastoDeUnaTienda(mov) && mov.codigos_tienda[0] === codigo)
-    .reduce((acc, mov) => acc + bodegaPanelMontoEnMonedaActual(panel, mov), 0);
-}
-
-function bodegaPanelGetGastosTiendasVisibles(panel) {
-  return bodegaPanelGetEgresos(panel)
-    .filter((mov) => bodegaPanelEsGastoDeUnaTienda(mov) && bodegaPanelTiendaVisible(panel, mov.codigos_tienda[0]))
     .reduce((acc, mov) => acc + bodegaPanelMontoEnMonedaActual(panel, mov), 0);
 }
 

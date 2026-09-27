@@ -954,8 +954,6 @@ function renderAlertBanner() {
 function renderDesempenoTable() {
   const ventas = state.ventas;
   const filas = (Array.isArray(ventas) ? ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
-  const total = getEffectiveTotalRow(ventas);
-
   const filtradas = filas.filter((row) => tiendaVisible(row.codigo_legacy));
 
   const ordenadas = [...filtradas].sort((a, b) => {
@@ -986,17 +984,17 @@ function renderDesempenoTable() {
               <th>Ganancia</th>
               <th>Margen</th>
               <th title="Egresos de Balance asignados solo a esta tienda">Gastos</th>
+              <th title="Ganancia menos los gastos de la tienda">Total</th>
             </tr>
           </thead>
           <tbody>
             ${
               ordenadas.length
                 ? ordenadas
-                    .map((row) => renderDesempenoRow(row, false))
+                    .map((row) => renderDesempenoRow(row))
                     .join("")
-                : `<tr><td colspan="7"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                : `<tr><td colspan="8"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
             }
-            ${total && !state.tiendaFiltro ? renderDesempenoRow(total, true) : ""}
           </tbody>
         </table>
       </div>
@@ -1004,22 +1002,29 @@ function renderDesempenoTable() {
   `;
 }
 
-function renderDesempenoRow(row, isTotal) {
+// "Total" = ganancia de la tienda menos sus gastos propios (los generales,
+// compartidos entre tiendas, van aparte en la tarjeta "Gastos generales").
+// La ganancia nace en Bs y los gastos ya vienen en la moneda mostrada, asi
+// que se convierte la ganancia antes de restar.
+function renderDesempenoRow(row) {
   const margenPct = calcularMargenPct(row);
   const margenTone = Math.abs(margenPct) < 0.005 ? "neutral" : margenPct >= 0 ? "positivo" : "negativo";
   const ganancia = toFiniteNumber(row.ganancia);
   const gananciaTone = Math.abs(ganancia) < 0.005 ? "neutral" : ganancia >= 0 ? "positivo" : "negativo";
-  const gastos = isTotal ? getGastosTiendasVisibles() : getGastosTienda(row.codigo_legacy);
+  const gastos = getGastosTienda(row.codigo_legacy);
+  const neto = convertirDesdeBs(row.ganancia) - gastos;
+  const netoTone = Math.abs(neto) < 0.005 ? "neutral" : neto >= 0 ? "positivo" : "negativo";
 
   return `
-    <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? `<strong>${state.grupoFiltro ? `TOTAL GRUPO ${state.grupoFiltro}` : "TOTAL"}</strong>` : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
+    <tr>
+      <td>${escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
       <td>${escapeHtml(formatMoneda(row.total_pago))}</td>
       <td>${escapeHtml(formatMoneda(row.total_costo_bs))}</td>
       <td class="bodega-ganancia-cell bodega-ganancia-${gananciaTone}">${escapeHtml(formatMoneda(row.ganancia))}</td>
       <td><span class="bodega-margen-badge bodega-margen-${margenTone}">${escapeHtml(formatPercent(margenPct))}%</span></td>
       <td class="bodega-gastos-cell ${gastos > 0 ? "" : "is-cero"}">${escapeHtml(formatMontoSinConvertir(gastos))}</td>
+      <td class="bodega-ganancia-cell bodega-ganancia-${netoTone}">${escapeHtml(formatMontoSinConvertir(neto))}</td>
     </tr>
   `;
 }
@@ -1152,13 +1157,6 @@ function esGastoDeUnaTienda(mov) {
 function getGastosTienda(codigo) {
   return getEgresos()
     .filter((mov) => esGastoDeUnaTienda(mov) && mov.codigos_tienda[0] === codigo)
-    .reduce((acc, mov) => acc + montoEnMonedaActual(mov), 0);
-}
-
-// Suma de los gastos propios de las tiendas visibles (fila TOTAL de la tabla).
-function getGastosTiendasVisibles() {
-  return getEgresos()
-    .filter((mov) => esGastoDeUnaTienda(mov) && tiendaVisible(mov.codigos_tienda[0]))
     .reduce((acc, mov) => acc + montoEnMonedaActual(mov), 0);
 }
 
