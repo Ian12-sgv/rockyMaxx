@@ -211,14 +211,54 @@ export class ValidacionesService {
     const { desde: desdeAnterior, hasta: hastaAnterior } = this.calcularRangoAnterior(desde, hasta);
     const diasSerie = Math.min(this.contarDias(desde, hasta), 60);
 
-    const [ventas, ventasAnterior, inventario, serieDiaria] = await Promise.all([
+    const [ventas, ventasAnterior, inventario, serieDiaria, horarios] = await Promise.all([
       this.ventasResumenPorRango(desde, hasta, tasaValor),
       this.ventasResumenPorRango(desdeAnterior, hastaAnterior, tasaValor),
       this.inventarioResumen(),
       this.ventasSerieDiaria(hasta, diasSerie, tasaValor),
+      this.horariosPorTienda(desde, hasta),
     ]);
 
-    return { ventas, ventasAnterior, inventario, serieDiaria, tasaCambio, rango: { desde, hasta } };
+    return { ventas, ventasAnterior, inventario, serieDiaria, horarios, tasaCambio, rango: { desde, hasta } };
+  }
+
+  // Hora de "apertura" y "cierre" de cada tienda = primera y ultima factura
+  // del dia. No se usa DIARIOCAJA a proposito: bodega-export solo manda cada
+  // caja una vez (al crearse, abierta), asi que HoraCierre nunca llega a
+  // bodega_datos (ninguna caja con cierre desde 30/08/2026), y HoraApertura
+  // puede ser de la noche anterior cuando la caja se crea sola tras el Cierre
+  // General. Las ventas si llegan completas.
+  //
+  // Mismo criterio de dia que ventasResumenPorRango ((Fecha)::date), para
+  // que las horas correspondan a las mismas facturas de la tabla. Si el
+  // rango abarca varios dias, se devuelve el dia MAS RECIENTE con ventas de
+  // cada tienda (con su fecha, para que el frontend la muestre). Fecha viene
+  // en UTC con sufijo Z (confirmado: 100% de las filas); la conversion a
+  // hora de Venezuela la hace el frontend.
+  private async horariosPorTienda(desde: string, hasta: string) {
+    return this.prisma.$queryRaw<
+      Array<{ codigo_legacy: string; fecha: string; primera_venta: Date; ultima_venta: Date }>
+    >(Prisma.sql`
+      WITH por_dia AS (
+        SELECT
+          t."codigo_legacy" AS codigo_legacy,
+          (v."payload_json" ->> 'Fecha')::date AS fecha,
+          MIN((v."payload_json" ->> 'Fecha')::timestamptz) AS primera_venta,
+          MAX((v."payload_json" ->> 'Fecha')::timestamptz) AS ultima_venta
+        FROM "VW_HECH_VENTAS_ACTUAL" v
+        JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
+        WHERE (v."payload_json" ->> 'Fecha')::date BETWEEN ${desde}::date AND ${hasta}::date
+          AND ${FILTRO_TIENDAS_PANEL}
+        GROUP BY 1, 2
+      )
+      SELECT DISTINCT ON (codigo_legacy)
+        codigo_legacy,
+        fecha::text AS fecha,
+        primera_venta,
+        ultima_venta
+      FROM por_dia
+      ORDER BY codigo_legacy, fecha DESC
+    `);
   }
 
   // Rango inmediatamente anterior, de la misma duracion (en dias) que

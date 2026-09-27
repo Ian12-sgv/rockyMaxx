@@ -280,6 +280,7 @@ const state = {
     ventasAnterior: [],
     inventario: [],
     serieDiaria: [],
+    horarios: [], // primera/ultima factura por tienda (ver horariosPorTienda en bodega-api)
     tasaCambio: null,
     lastUpdated: null,
   },
@@ -10751,6 +10752,7 @@ function bodegaPanelRenderDesempenoTable(panel) {
           <thead>
             <tr>
               <th>Tienda</th>
+              <th title="Abrio = primera factura del dia; Cerro = ultima factura (si es hoy, la ultima hasta ahora). Hora de Venezuela.">Horario</th>
               <th>Facturas</th>
               <th class="bodega-sortable-th" data-bodega-sort-vendido>
                 Vendido ${panel.sortDir === "asc" ? "&#8593;" : "&#8595;"}
@@ -10766,12 +10768,38 @@ function bodegaPanelRenderDesempenoTable(panel) {
             ${
               ordenadas.length
                 ? ordenadas.map((row) => bodegaPanelRenderDesempenoRow(panel, row)).join("")
-                : `<tr><td colspan="8"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                : `<tr><td colspan="9"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
             }
           </tbody>
         </table>
       </div>
     </section>
+  `;
+}
+
+// Hora en Venezuela sin importar la zona horaria de la PC.
+function bodegaPanelFormatHoraVzla(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  return date.toLocaleTimeString("es-VE", { timeZone: "America/Caracas", hour: "numeric", minute: "2-digit" });
+}
+
+// Abrio/Cerro = primera/ultima factura del dia (mismo criterio que
+// apps/bodega-api/public/app.js#renderHorarioCell).
+function bodegaPanelRenderHorarioCell(panel, codigo) {
+  const horario = (Array.isArray(panel.horarios) ? panel.horarios : []).find((item) => item.codigo_legacy === codigo);
+  if (!horario || !horario.primera_venta) {
+    return `<td class="bodega-horario-cell is-vacio">-</td>`;
+  }
+  const variosDias = Boolean(panel.rango && panel.rango.desde !== panel.rango.hasta);
+  return `
+    <td class="bodega-horario-cell">
+      <span><em>Abrio</em> ${escapeHtml(bodegaPanelFormatHoraVzla(horario.primera_venta))}</span>
+      <span><em>Cerro</em> ${escapeHtml(bodegaPanelFormatHoraVzla(horario.ultima_venta))}</span>
+      ${variosDias && horario.fecha ? `<small>${escapeHtml(bodegaPanelFormatDiaCorto(horario.fecha))}</small>` : ""}
+    </td>
   `;
 }
 
@@ -10790,6 +10818,7 @@ function bodegaPanelRenderDesempenoRow(panel, row) {
   return `
     <tr>
       <td>${escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
+      ${bodegaPanelRenderHorarioCell(panel, row.codigo_legacy)}
       <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
       <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_pago))}</td>
       <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_costo_bs))}</td>
@@ -20248,6 +20277,7 @@ async function loadBodegaPanelResumen(options = {}) {
     state.bodegaPanel.ventasAnterior = Array.isArray(response.ventasAnterior) ? response.ventasAnterior : [];
     state.bodegaPanel.inventario = Array.isArray(response.inventario) ? response.inventario : [];
     state.bodegaPanel.serieDiaria = Array.isArray(response.serieDiaria) ? response.serieDiaria : [];
+    state.bodegaPanel.horarios = Array.isArray(response.horarios) ? response.horarios : [];
     state.bodegaPanel.tasaCambio = response.tasaCambio || null;
     state.bodegaPanel.lastUpdated = new Date();
   } catch (error) {

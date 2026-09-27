@@ -2369,6 +2369,34 @@ button {
   color: #94a3b8;
 }
 
+/* Abrio / Cerro (primera y ultima factura del dia) en Desempeno por tienda */
+.bodega-horario-cell {
+  white-space: nowrap;
+  color: #334155;
+  font-size: 0.88rem;
+}
+
+.bodega-horario-cell span {
+  display: block;
+}
+
+.bodega-horario-cell em {
+  font-style: normal;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  margin-right: 4px;
+}
+
+.bodega-horario-cell small {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+.bodega-horario-cell.is-vacio {
+  color: #94a3b8;
+}
+
 /* ---- Inventario: desplegable "Ver articulos" por tienda ---- */
 .bodega-inv-tienda-cell {
   display: flex;

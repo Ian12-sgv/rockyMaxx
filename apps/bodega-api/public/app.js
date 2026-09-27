@@ -41,6 +41,7 @@ const state = {
   ventasAnterior: [],
   inventario: [],
   serieDiaria: [],
+  horarios: [], // primera/ultima factura por tienda (ver horariosPorTienda en bodega-api)
   tasaCambio: null,
   lastUpdated: null,
 };
@@ -1042,6 +1043,7 @@ function renderDesempenoTable() {
           <thead>
             <tr>
               <th>Tienda</th>
+              <th title="Abrio = primera factura del dia; Cerro = ultima factura (si es hoy, la ultima hasta ahora). Hora de Venezuela.">Horario</th>
               <th>Facturas</th>
               <th class="bodega-sortable-th" data-sort-vendido>
                 Vendido ${state.sortDir === "asc" ? "&#8593;" : "&#8595;"}
@@ -1059,12 +1061,40 @@ function renderDesempenoTable() {
                 ? ordenadas
                     .map((row) => renderDesempenoRow(row))
                     .join("")
-                : `<tr><td colspan="8"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
+                : `<tr><td colspan="9"><div class="empty-state"><p>Sin datos todavia.</p></div></td></tr>`
             }
           </tbody>
         </table>
       </div>
     </section>
+  `;
+}
+
+// Hora en Venezuela sin importar la zona horaria de la PC que abre el panel.
+function formatHoraVzla(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  return date.toLocaleTimeString("es-VE", { timeZone: "America/Caracas", hour: "numeric", minute: "2-digit" });
+}
+
+// Abrio/Cerro = primera/ultima factura del dia, en UNA columna de dos
+// lineas (dos columnas separadas desbordaban la tabla en pantallas de
+// ~1280px). Con un rango de varios dias, el backend manda el dia mas
+// reciente con ventas; se muestra su fecha abajo.
+function renderHorarioCell(codigo) {
+  const horario = (Array.isArray(state.horarios) ? state.horarios : []).find((item) => item.codigo_legacy === codigo);
+  if (!horario || !horario.primera_venta) {
+    return `<td class="bodega-horario-cell is-vacio">-</td>`;
+  }
+  const variosDias = Boolean(state.rango && state.rango.desde !== state.rango.hasta);
+  return `
+    <td class="bodega-horario-cell">
+      <span><em>Abrio</em> ${escapeHtml(formatHoraVzla(horario.primera_venta))}</span>
+      <span><em>Cerro</em> ${escapeHtml(formatHoraVzla(horario.ultima_venta))}</span>
+      ${variosDias && horario.fecha ? `<small>${escapeHtml(formatDiaCorto(horario.fecha))}</small>` : ""}
+    </td>
   `;
 }
 
@@ -1084,6 +1114,7 @@ function renderDesempenoRow(row) {
   return `
     <tr>
       <td>${escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
+      ${renderHorarioCell(row.codigo_legacy)}
       <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
       <td>${escapeHtml(formatMoneda(row.total_pago))}</td>
       <td>${escapeHtml(formatMoneda(row.total_costo_bs))}</td>
@@ -1631,6 +1662,7 @@ async function loadPanel(options) {
   state.ventasAnterior = Array.isArray(data.ventasAnterior) ? data.ventasAnterior : [];
   state.inventario = Array.isArray(data.inventario) ? data.inventario : [];
   state.serieDiaria = Array.isArray(data.serieDiaria) ? data.serieDiaria : [];
+  state.horarios = Array.isArray(data.horarios) ? data.horarios : [];
   state.tasaCambio = data.tasaCambio || null;
   state.lastUpdated = new Date();
   try {
