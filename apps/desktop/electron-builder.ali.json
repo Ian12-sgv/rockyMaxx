@@ -6,7 +6,8 @@
   "asar": true,
   "extraMetadata": {
     "name": "cliente-ali",
-    "productName": "ClienteALI"
+    "productName": "ClienteALI",
+    "version": "4.0.0"
   },
   "directories": {
     "output": "../../dist/desktop-client-ali"
