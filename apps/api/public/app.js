@@ -267,6 +267,7 @@ const state = {
     rangoPickerInicio: null, // primer dia clicado en modo "rango", antes del segundo click
     moneda: "BS",
     tiendaFiltro: "",
+    grupoFiltro: "", // "" | "A" | "B" -- ver bodegaPanelGetGrupoTienda()
     sortDir: "desc",
     balanceVisible: false,
     balanceMovimientos: [],
@@ -10212,13 +10213,57 @@ function findBodegaRow(rows, codigo) {
   return (Array.isArray(rows) ? rows : []).find((row) => row.codigo_legacy === codigo) || null;
 }
 
+// Con filtro de grupo, "el total" es la suma de las tiendas de ese grupo
+// (bodega-api solo trae el TOTAL de todas).
 function bodegaPanelGetEffectiveTotalRow(panel, rows) {
   if (panel.tiendaFiltro) {
     return findBodegaRow(rows, panel.tiendaFiltro);
   }
+  if (panel.grupoFiltro) {
+    return bodegaPanelSumarFilasVisibles(panel, rows);
+  }
   return findBodegaTotalRow(rows);
 }
 
+// Grupos para los botones "Grupo A"/"Grupo B": las tiendas cuyo nombre
+// contiene "rocky" (RockyMaxxCentro, RockyMaxxMcbo, Bodega Rockymaxx) son
+// el grupo B; todas las demas, el grupo A. Mismo criterio que
+// apps/bodega-api/public/app.js.
+function bodegaPanelGetGrupoTienda(panel, codigo) {
+  return /rocky/i.test(String(bodegaPanelGetNombreTienda(panel, codigo) || "")) ? "B" : "A";
+}
+
+function bodegaPanelTiendaVisible(panel, codigo) {
+  if (panel.tiendaFiltro) {
+    return codigo === panel.tiendaFiltro;
+  }
+  if (panel.grupoFiltro) {
+    return bodegaPanelGetGrupoTienda(panel, codigo) === panel.grupoFiltro;
+  }
+  return true;
+}
+
+// Todas las columnas numericas del panel-resumen son sumables.
+function bodegaPanelSumarFilasVisibles(panel, rows) {
+  const filas = (Array.isArray(rows) ? rows : []).filter(
+    (row) => row.codigo_legacy !== "TOTAL" && bodegaPanelTiendaVisible(panel, row.codigo_legacy),
+  );
+  if (!filas.length) {
+    return null;
+  }
+  const total = { codigo_legacy: "TOTAL", nombre: null };
+  filas.forEach((row) => {
+    Object.entries(row).forEach(([key, value]) => {
+      if (key === "codigo_legacy" || key === "nombre" || value === null || value === "") {
+        return;
+      }
+      if (Number.isFinite(Number(value))) {
+        total[key] = toFiniteNumber(total[key]) + Number(value);
+      }
+    });
+  });
+  return total;
+}
 
 function bodegaPanelGetStoreOptions(panel) {
   const codes = new Set();
@@ -10227,7 +10272,9 @@ function bodegaPanelGetStoreOptions(panel) {
       codes.add(row.codigo_legacy);
     }
   });
-  return Array.from(codes).sort((a, b) => a.localeCompare(b, "es"));
+  return Array.from(codes)
+    .filter((codigo) => !panel.grupoFiltro || bodegaPanelGetGrupoTienda(panel, codigo) === panel.grupoFiltro)
+    .sort((a, b) => a.localeCompare(b, "es"));
 }
 
 // Nombre real de la tienda para mostrar en pantalla (dropdown, etc.) -- el
@@ -10540,7 +10587,7 @@ function bodegaPanelRenderControlsBar(panel) {
       <label class="bodega-select-wrap">
         <span class="sr-only">Tienda</span>
         <select data-bodega-tienda-filtro>
-          <option value="">Todas las tiendas</option>
+          <option value="">${panel.grupoFiltro ? `Todas del grupo ${panel.grupoFiltro}` : "Todas las tiendas"}</option>
           ${storeOptions
             .map(
               (codigo) => `
@@ -10559,6 +10606,11 @@ function bodegaPanelRenderControlsBar(panel) {
       <button type="button" class="button button-ghost bodega-balance-toggle ${panel.balanceVisible ? "is-active" : ""}" data-bodega-balance-toggle>
         Balance
       </button>
+
+      <div class="bodega-controls-group" role="group" aria-label="Grupo de tiendas">
+        <button type="button" class="bodega-toggle-button ${panel.grupoFiltro === "A" ? "is-active" : ""}" data-bodega-grupo-filtro="A">Grupo A</button>
+        <button type="button" class="bodega-toggle-button ${panel.grupoFiltro === "B" ? "is-active" : ""}" data-bodega-grupo-filtro="B">Grupo B</button>
+      </div>
 
       ${
         panel.balanceVisible
@@ -10595,7 +10647,7 @@ function bodegaPanelRenderSummaryCards(panel) {
     {
       label: "Vendido",
       value: bodegaPanelFormatMoneda(panel, totalVentas?.total_pago),
-      meta: `${escapeHtml(String(totalVentas?.facturas ?? "0"))} facturas${panel.tiendaFiltro ? "" : " en todas las tiendas"}`,
+      meta: `${escapeHtml(String(totalVentas?.facturas ?? "0"))} facturas${panel.tiendaFiltro ? "" : panel.grupoFiltro ? ` en el grupo ${panel.grupoFiltro}` : " en todas las tiendas"}`,
       tone: "blue",
       delta: bodegaPanelGetDelta(panel, "total_pago"),
       puntos: bodegaPanelGetSparklinePuntos(panel, "total_pago"),
@@ -10634,7 +10686,7 @@ function bodegaPanelRenderSummaryCards(panel) {
             <article class="modern-stat-card modern-stat-card-${item.tone === "danger" ? "gold" : item.tone}">
               <div class="modern-stat-copy">
                 <span class="modern-stat-eyebrow">${escapeHtml(item.label)}</span>
-                <strong class="modern-stat-value">${escapeHtml(item.value)}</strong>
+                <strong class="modern-stat-value ${String(item.value).length > 15 ? "modern-stat-value-long" : ""}">${escapeHtml(item.value)}</strong>
                 ${bodegaPanelRenderDelta(item.delta)}
                 <span class="modern-stat-meta">${item.meta}</span>
               </div>
@@ -10668,8 +10720,8 @@ function bodegaPanelRenderAlertBanner(panel) {
 function bodegaPanelRenderDesempenoTable(panel) {
   const ventas = panel.ventas;
   const filas = (Array.isArray(ventas) ? ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
-  const total = findBodegaTotalRow(ventas);
-  const filtradas = panel.tiendaFiltro ? filas.filter((row) => row.codigo_legacy === panel.tiendaFiltro) : filas;
+  const total = bodegaPanelGetEffectiveTotalRow(panel, ventas);
+  const filtradas = filas.filter((row) => bodegaPanelTiendaVisible(panel, row.codigo_legacy));
 
   const ordenadas = [...filtradas].sort((a, b) => {
     const diff = toFiniteNumber(a.total_pago) - toFiniteNumber(b.total_pago);
@@ -10722,7 +10774,7 @@ function bodegaPanelRenderDesempenoRow(panel, row, isTotal) {
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
+      <td>${isTotal ? `<strong>${panel.grupoFiltro ? `TOTAL GRUPO ${panel.grupoFiltro}` : "TOTAL"}</strong>` : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
       <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_pago))}</td>
       <td>${escapeHtml(bodegaPanelFormatMoneda(panel, row.total_costo_bs))}</td>
@@ -10734,9 +10786,10 @@ function bodegaPanelRenderDesempenoRow(panel, row, isTotal) {
 
 function bodegaPanelRenderInventarioSection(panel) {
   const filas = (Array.isArray(panel.inventario) ? panel.inventario : []).filter((row) => row.codigo_legacy !== "TOTAL");
-  const total = findBodegaTotalRow(panel.inventario);
+  // Con grupo activo, la participacion se mide contra el total del grupo.
+  const total = bodegaPanelGetEffectiveTotalRow(panel, panel.inventario);
   const totalValor = toFiniteNumber(total?.valor_costo_usd) || 1;
-  const filtradas = panel.tiendaFiltro ? filas.filter((row) => row.codigo_legacy === panel.tiendaFiltro) : filas;
+  const filtradas = filas.filter((row) => bodegaPanelTiendaVisible(panel, row.codigo_legacy));
 
   return `
     <section class="modern-card">
@@ -10775,7 +10828,7 @@ function bodegaPanelRenderInventarioRow(panel, row, totalValor, isTotal) {
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
+      <td>${isTotal ? `<strong>${panel.grupoFiltro ? `TOTAL GRUPO ${panel.grupoFiltro}` : "TOTAL"}</strong>` : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.articulos ?? "0"))}</td>
       <td>
         <div class="bodega-participacion-cell">
@@ -10839,7 +10892,9 @@ function bodegaPanelFiltrarMovimientos(panel, tipo) {
     .filter((mov) => mov.tipo === tipo)
     .filter((mov) => (mov.moneda || "BS") === panel.moneda)
     .filter(
-      (mov) => !panel.tiendaFiltro || (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.includes(panel.tiendaFiltro)),
+      (mov) =>
+        (!panel.tiendaFiltro && !panel.grupoFiltro) ||
+        (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.some((codigo) => bodegaPanelTiendaVisible(panel, codigo))),
     )
     .filter((mov) => {
       if (panel.balanceOperativoFiltro === "operativo") return mov.es_operativo;
@@ -12979,6 +13034,16 @@ function bindShellEvents() {
   document.querySelectorAll("[data-bodega-balance-operativo-filtro]").forEach((button) => {
     button.addEventListener("click", () => {
       state.bodegaPanel.balanceOperativoFiltro = button.getAttribute("data-bodega-balance-operativo-filtro");
+      render();
+    });
+  });
+
+  // Click en el grupo activo lo apaga; cambiar de grupo limpia la tienda puntual.
+  document.querySelectorAll("[data-bodega-grupo-filtro]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const grupo = button.getAttribute("data-bodega-grupo-filtro");
+      state.bodegaPanel.grupoFiltro = state.bodegaPanel.grupoFiltro === grupo ? "" : grupo;
+      state.bodegaPanel.tiendaFiltro = "";
       render();
     });
   });

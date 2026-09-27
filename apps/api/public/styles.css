@@ -2373,6 +2373,12 @@ button {
   overflow-wrap: break-word;
 }
 
+/* Montos completos largos (ej. "US$ 189,994,932.53"): letra mas chica para
+   que la cifra quepa en una linea en vez de partirse a mitad del numero. */
+.modern-stat-value-long {
+  font-size: 1.35rem;
+}
+
 .modern-stat-meta {
   color: #64748b;
   font-size: 0.92rem;

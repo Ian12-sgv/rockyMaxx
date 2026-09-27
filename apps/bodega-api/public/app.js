@@ -25,6 +25,7 @@ const state = {
   rangoPickerInicio: null, // primer dia clicado en modo "rango", antes del segundo click
   moneda: "BS",
   tiendaFiltro: "",
+  grupoFiltro: "", // "" | "A" | "B" -- ver getGrupoTienda()
   sortDir: "desc",
   balanceVisible: false,
   balanceMovimientos: [],
@@ -361,12 +362,59 @@ function findTotalRow(rows) {
 
 // Con filtro de tienda activo, "el total" pasa a ser la fila de esa tienda
 // (asi las tarjetas KPI y el banner de alerta reflejan la tienda elegida en
-// vez del agregado de todas).
+// vez del agregado de todas). Con filtro de grupo, es la suma de las tiendas
+// de ese grupo (el backend solo trae el TOTAL de todas).
 function getEffectiveTotalRow(rows) {
   if (state.tiendaFiltro) {
     return findRow(rows, state.tiendaFiltro);
   }
+  if (state.grupoFiltro) {
+    return sumarFilasVisibles(rows);
+  }
   return findTotalRow(rows);
+}
+
+// Grupos para los botones "Grupo A"/"Grupo B": las tiendas cuyo nombre
+// contiene "rocky" (RockyMaxxCentro, RockyMaxxMcbo, Bodega Rockymaxx) son
+// el grupo B; todas las demas, el grupo A. Se decide por el nombre real de
+// DIM_TIENDAS, asi una tienda nueva cae sola en su grupo sin tocar codigo.
+function getGrupoTienda(codigo) {
+  return /rocky/i.test(String(getNombreTienda(codigo) || "")) ? "B" : "A";
+}
+
+// true si la tienda entra en los filtros activos (tienda puntual o grupo).
+function tiendaVisible(codigo) {
+  if (state.tiendaFiltro) {
+    return codigo === state.tiendaFiltro;
+  }
+  if (state.grupoFiltro) {
+    return getGrupoTienda(codigo) === state.grupoFiltro;
+  }
+  return true;
+}
+
+// Suma las filas por tienda visibles. Todas las columnas numericas del
+// panel-resumen (facturas, total_pago, total_costo_bs, ganancia, articulos,
+// unidades, valor_costo_usd) son sumables.
+function sumarFilasVisibles(rows) {
+  const filas = (Array.isArray(rows) ? rows : []).filter(
+    (row) => row.codigo_legacy !== "TOTAL" && tiendaVisible(row.codigo_legacy),
+  );
+  if (!filas.length) {
+    return null;
+  }
+  const total = { codigo_legacy: "TOTAL", nombre: null };
+  filas.forEach((row) => {
+    Object.entries(row).forEach(([key, value]) => {
+      if (key === "codigo_legacy" || key === "nombre" || value === null || value === "") {
+        return;
+      }
+      if (Number.isFinite(Number(value))) {
+        total[key] = toFiniteNumber(total[key]) + Number(value);
+      }
+    });
+  });
+  return total;
 }
 
 function getStoreOptions() {
@@ -376,7 +424,9 @@ function getStoreOptions() {
       codes.add(row.codigo_legacy);
     }
   });
-  return Array.from(codes).sort((a, b) => a.localeCompare(b, "es"));
+  return Array.from(codes)
+    .filter((codigo) => !state.grupoFiltro || getGrupoTienda(codigo) === state.grupoFiltro)
+    .sort((a, b) => a.localeCompare(b, "es"));
 }
 
 // Nombre real de la tienda para mostrar en pantalla (dropdown, etc.) -- el
@@ -748,7 +798,7 @@ function renderControlsBar() {
       <label class="bodega-select-wrap">
         <span class="sr-only">Tienda</span>
         <select data-tienda-filtro>
-          <option value="">Todas las tiendas</option>
+          <option value="">${state.grupoFiltro ? `Todas del grupo ${state.grupoFiltro}` : "Todas las tiendas"}</option>
           ${storeOptions
             .map(
               (codigo) => `
@@ -767,6 +817,11 @@ function renderControlsBar() {
       <button type="button" class="button button-ghost bodega-balance-toggle ${state.balanceVisible ? "is-active" : ""}" data-balance-toggle>
         Balance
       </button>
+
+      <div class="bodega-controls-group" role="group" aria-label="Grupo de tiendas">
+        <button type="button" class="bodega-toggle-button ${state.grupoFiltro === "A" ? "is-active" : ""}" data-grupo-filtro="A">Grupo A</button>
+        <button type="button" class="bodega-toggle-button ${state.grupoFiltro === "B" ? "is-active" : ""}" data-grupo-filtro="B">Grupo B</button>
+      </div>
 
       ${
         state.balanceVisible
@@ -817,7 +872,7 @@ function renderSummaryCards() {
     {
       label: "Vendido",
       value: formatMoneda(totalVentas?.total_pago),
-      meta: `${escapeHtml(String(totalVentas?.facturas ?? "0"))} facturas${state.tiendaFiltro ? "" : " en todas las tiendas"}`,
+      meta: `${escapeHtml(String(totalVentas?.facturas ?? "0"))} facturas${state.tiendaFiltro ? "" : state.grupoFiltro ? ` en el grupo ${state.grupoFiltro}` : " en todas las tiendas"}`,
       tone: "blue",
       delta: getDeltaPeriodo("total_pago"),
       puntos: getSparklinePuntos("total_pago"),
@@ -856,7 +911,7 @@ function renderSummaryCards() {
             <article class="modern-stat-card modern-stat-card-${item.tone === "danger" ? "gold" : item.tone}">
               <div class="modern-stat-copy">
                 <span class="modern-stat-eyebrow">${escapeHtml(item.label)}</span>
-                <strong class="modern-stat-value">${escapeHtml(item.value)}</strong>
+                <strong class="modern-stat-value ${String(item.value).length > 15 ? "modern-stat-value-long" : ""}">${escapeHtml(item.value)}</strong>
                 ${renderDelta(item.delta)}
                 <span class="modern-stat-meta">${item.meta}</span>
               </div>
@@ -890,9 +945,9 @@ function renderAlertBanner() {
 function renderDesempenoTable() {
   const ventas = state.ventas;
   const filas = (Array.isArray(ventas) ? ventas : []).filter((row) => row.codigo_legacy !== "TOTAL");
-  const total = findTotalRow(ventas);
+  const total = getEffectiveTotalRow(ventas);
 
-  const filtradas = state.tiendaFiltro ? filas.filter((row) => row.codigo_legacy === state.tiendaFiltro) : filas;
+  const filtradas = filas.filter((row) => tiendaVisible(row.codigo_legacy));
 
   const ordenadas = [...filtradas].sort((a, b) => {
     const diff = toFiniteNumber(a.total_pago) - toFiniteNumber(b.total_pago);
@@ -947,7 +1002,7 @@ function renderDesempenoRow(row, isTotal) {
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
+      <td>${isTotal ? `<strong>${state.grupoFiltro ? `TOTAL GRUPO ${state.grupoFiltro}` : "TOTAL"}</strong>` : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.facturas ?? "0"))}</td>
       <td>${escapeHtml(formatMoneda(row.total_pago))}</td>
       <td>${escapeHtml(formatMoneda(row.total_costo_bs))}</td>
@@ -959,10 +1014,11 @@ function renderDesempenoRow(row, isTotal) {
 
 function renderInventarioSection() {
   const filas = (Array.isArray(state.inventario) ? state.inventario : []).filter((row) => row.codigo_legacy !== "TOTAL");
-  const total = findTotalRow(state.inventario);
+  // Con grupo activo, la participacion se mide contra el total del grupo.
+  const total = getEffectiveTotalRow(state.inventario);
   const totalValor = toFiniteNumber(total?.valor_costo_usd) || 1;
 
-  const filtradas = state.tiendaFiltro ? filas.filter((row) => row.codigo_legacy === state.tiendaFiltro) : filas;
+  const filtradas = filas.filter((row) => tiendaVisible(row.codigo_legacy));
 
   return `
     <section class="modern-card">
@@ -1001,7 +1057,7 @@ function renderInventarioRow(row, totalValor, isTotal) {
 
   return `
     <tr class="${isTotal ? "is-selected-row" : ""}">
-      <td>${isTotal ? "<strong>TOTAL</strong>" : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
+      <td>${isTotal ? `<strong>${state.grupoFiltro ? `TOTAL GRUPO ${state.grupoFiltro}` : "TOTAL"}</strong>` : escapeHtml(row.nombre || row.codigo_legacy || "-")}</td>
       <td>${escapeHtml(String(row.articulos ?? "0"))}</td>
       <td>
         <div class="bodega-participacion-cell">
@@ -1037,7 +1093,8 @@ function filtrarMovimientos(tipo) {
     .filter((mov) => (mov.moneda || "BS") === state.moneda)
     .filter(
       (mov) =>
-        !state.tiendaFiltro || (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.includes(state.tiendaFiltro)),
+        (!state.tiendaFiltro && !state.grupoFiltro) ||
+        (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.some((codigo) => tiendaVisible(codigo))),
     )
     .filter((mov) => {
       if (state.balanceOperativoFiltro === "operativo") return mov.es_operativo;
@@ -1383,6 +1440,17 @@ function bindEvents() {
   document.querySelectorAll("[data-balance-operativo-filtro]").forEach((button) => {
     button.addEventListener("click", () => {
       state.balanceOperativoFiltro = button.getAttribute("data-balance-operativo-filtro");
+      render();
+    });
+  });
+
+  // Click en el grupo activo lo apaga (vuelve a todas las tiendas). Cambiar
+  // de grupo limpia la tienda puntual, que podria no pertenecer al nuevo.
+  document.querySelectorAll("[data-grupo-filtro]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const grupo = button.getAttribute("data-grupo-filtro");
+      state.grupoFiltro = state.grupoFiltro === grupo ? "" : grupo;
+      state.tiendaFiltro = "";
       render();
     });
   });
