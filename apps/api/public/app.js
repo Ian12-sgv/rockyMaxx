@@ -10618,7 +10618,7 @@ function bodegaPanelRenderSummaryCards(panel) {
     },
     {
       label: "Inventario a costo",
-      value: bodegaPanelFormatMonedaDesdeUsd(panel, totalInventario?.valor_costo_usd, { compact: true }),
+      value: bodegaPanelFormatMonedaDesdeUsd(panel, totalInventario?.valor_costo_usd),
       meta: `${escapeHtml(String(totalInventario?.articulos ?? "0"))} articulos`,
       tone: "gold",
       delta: null,
