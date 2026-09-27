@@ -905,7 +905,7 @@ function renderSummaryCards() {
     {
       label: "Gastos generales",
       value: formatMontoSinConvertir(gastosGenerales.total),
-      meta: `${gastosGenerales.cantidad} egreso(s) compartidos entre tiendas`,
+      meta: `${gastosGenerales.cantidad} egreso(s) operativos compartidos entre tiendas`,
       tone: "red",
       delta: null,
       puntos: [],
@@ -983,7 +983,7 @@ function renderDesempenoTable() {
               <th>Costo</th>
               <th>Ganancia</th>
               <th>Margen</th>
-              <th title="Egresos de Balance asignados solo a esta tienda">Gastos</th>
+              <th title="Egresos operativos de Balance asignados solo a esta tienda">Gastos</th>
               <th title="Ganancia menos los gastos de la tienda">Total</th>
             </tr>
           </thead>
@@ -1132,7 +1132,8 @@ function sumarMontos(movimientos, soloOperativos) {
 // general (tarjeta "Gastos generales"). Asi cada egreso se cuenta una sola
 // vez. A diferencia de la vista Balance (donde el toggle Bs/US$ FILTRA), aqui
 // se convierte con la tasa como el resto del dashboard (pedido del usuario).
-// No depende del filtro Operativo de Balance: el dashboard cuenta todos.
+// Solo cuentan los egresos marcados "Es operativo" (pedido del usuario), sin
+// importar el filtro Todos/Operativo/No operativo de la vista Balance.
 function montoEnMonedaActual(mov) {
   const monto = toFiniteNumber(mov?.monto);
   const origen = mov?.moneda || "BS";
@@ -1147,7 +1148,9 @@ function montoEnMonedaActual(mov) {
 }
 
 function getEgresos() {
-  return (Array.isArray(state.balanceMovimientos) ? state.balanceMovimientos : []).filter((mov) => mov.tipo === "egreso");
+  return (Array.isArray(state.balanceMovimientos) ? state.balanceMovimientos : []).filter(
+    (mov) => mov.tipo === "egreso" && mov.es_operativo,
+  );
 }
 
 function esGastoDeUnaTienda(mov) {

@@ -10680,7 +10680,7 @@ function bodegaPanelRenderSummaryCards(panel) {
     {
       label: "Gastos generales",
       value: bodegaPanelFormatMontoSinConvertir(panel, gastosGenerales.total),
-      meta: `${gastosGenerales.cantidad} egreso(s) compartidos entre tiendas`,
+      meta: `${gastosGenerales.cantidad} egreso(s) operativos compartidos entre tiendas`,
       tone: "red",
       delta: null,
       puntos: [],
@@ -10758,7 +10758,7 @@ function bodegaPanelRenderDesempenoTable(panel) {
               <th>Costo</th>
               <th>Ganancia</th>
               <th>Margen</th>
-              <th title="Egresos de Balance asignados solo a esta tienda">Gastos</th>
+              <th title="Egresos operativos de Balance asignados solo a esta tienda">Gastos</th>
               <th title="Ganancia menos los gastos de la tienda">Total</th>
             </tr>
           </thead>
@@ -10943,8 +10943,11 @@ function bodegaPanelMontoEnMonedaActual(panel, mov) {
   return origen === "BS" ? monto / tasa : monto * tasa;
 }
 
+// Solo cuentan los egresos marcados "Es operativo" (pedido del usuario).
 function bodegaPanelGetEgresos(panel) {
-  return (Array.isArray(panel.balanceMovimientos) ? panel.balanceMovimientos : []).filter((mov) => mov.tipo === "egreso");
+  return (Array.isArray(panel.balanceMovimientos) ? panel.balanceMovimientos : []).filter(
+    (mov) => mov.tipo === "egreso" && mov.es_operativo,
+  );
 }
 
 function bodegaPanelEsGastoDeUnaTienda(mov) {
