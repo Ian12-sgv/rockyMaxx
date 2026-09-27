@@ -15,7 +15,8 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:diff": "prisma migrate diff --from-migrations ./prisma/migrations --to-schema-datamodel ./prisma/schema.prisma --shadow-database-url \"$DATABASE_URL\"",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "hash-password": "node scripts/hash-panel-password.cjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.11",

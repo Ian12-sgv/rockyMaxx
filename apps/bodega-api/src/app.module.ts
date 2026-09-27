@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
 import { AppController } from "./app.controller";
+import { PanelAuthModule } from "./auth/panel-auth.module";
 import { BalanceModule } from "./balance/balance.module";
 import { DiagnosticoModule } from "./diagnostico/diagnostico.module";
 import { DimTiendasModule } from "./dim-tiendas/dim-tiendas.module";
@@ -17,6 +18,7 @@ import { ValidacionesModule } from "./validaciones/validaciones.module";
       envFilePath: [".env"],
     }),
     PrismaModule,
+    PanelAuthModule,
     DimTiendasModule,
     EtlModule,
     IngestModule,

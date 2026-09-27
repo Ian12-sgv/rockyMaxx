@@ -1,6 +1,8 @@
 import { BadRequestException, Controller, Get, Query, UseGuards } from "@nestjs/common";
 
 import { IngestAuthGuard } from "../auth/ingest-auth.guard";
+import { Alcance, PanelAuthGuard } from "../auth/panel-auth.guard";
+import { AlcancePanel } from "../auth/panel-auth.service";
 import { ValidacionesService } from "./validaciones.service";
 
 const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -61,27 +63,33 @@ function resolveRango(desde?: string, hasta?: string) {
   return { desde, hasta };
 }
 
+// Guards por ruta (no a nivel de clase): panel-resumen e inventario-detalle
+// son del panel web y aceptan sesion de usuario (PanelAuthGuard, filtrado por
+// grupo); el resto son endpoints tecnicos solo con INGEST_AUTH_TOKEN.
 @Controller("bodega/validaciones")
-@UseGuards(IngestAuthGuard)
 export class ValidacionesController {
   constructor(private readonly validacionesService: ValidacionesService) {}
 
   @Get("conteos")
+  @UseGuards(IngestAuthGuard)
   async conteos(@Query("codigoTienda") codigoTienda?: string) {
     return this.validacionesService.conteosPorTienda(codigoTienda?.trim().toUpperCase());
   }
 
   @Get("ventas-totales")
+  @UseGuards(IngestAuthGuard)
   async ventasTotales(@Query("codigoTienda") codigoTienda: string, @Query("fecha") fecha: string) {
     return this.validacionesService.ventasTotalesPorDia(requireCodigoTienda(codigoTienda), requireFecha(fecha));
   }
 
   @Get("pagos-totales")
+  @UseGuards(IngestAuthGuard)
   async pagosTotales(@Query("codigoTienda") codigoTienda: string, @Query("fecha") fecha: string) {
     return this.validacionesService.pagosTotalesPorDia(requireCodigoTienda(codigoTienda), requireFecha(fecha));
   }
 
   @Get("facturas-conteo")
+  @UseGuards(IngestAuthGuard)
   async facturasConteo(@Query("codigoTienda") codigoTienda: string, @Query("fecha") fecha: string) {
     const rows = await this.validacionesService.ventasTotalesPorDia(
       requireCodigoTienda(codigoTienda),
@@ -91,12 +99,15 @@ export class ValidacionesController {
   }
 
   @Get("stock")
+  @UseGuards(IngestAuthGuard)
   async stock(@Query("codigoTienda") codigoTienda: string, @Query("codigoBarra") codigoBarra?: string) {
     return this.validacionesService.stockPorArticulo(requireCodigoTienda(codigoTienda), codigoBarra?.trim());
   }
 
   @Get("inventario-detalle")
+  @UseGuards(PanelAuthGuard)
   async inventarioDetalle(
+    @Alcance() alcance: AlcancePanel,
     @Query("codigoTienda") codigoTienda: string,
     @Query("busqueda") busqueda?: string,
     @Query("pagina") pagina?: string,
@@ -109,16 +120,23 @@ export class ValidacionesController {
       String(busqueda || "").slice(0, 100),
       paginaNum,
       limiteNum,
+      alcance,
     );
   }
 
   @Get("panel-resumen")
-  async panelResumen(@Query("desde") desde?: string, @Query("hasta") hasta?: string) {
+  @UseGuards(PanelAuthGuard)
+  async panelResumen(
+    @Alcance() alcance: AlcancePanel,
+    @Query("desde") desde?: string,
+    @Query("hasta") hasta?: string,
+  ) {
     const rango = resolveRango(desde, hasta);
-    return this.validacionesService.panelResumen(rango.desde, rango.hasta);
+    return this.validacionesService.panelResumen(rango.desde, rango.hasta, alcance);
   }
 
   @Get("errores-pendientes")
+  @UseGuards(IngestAuthGuard)
   async erroresPendientes(@Query("codigoTienda") codigoTienda?: string, @Query("limit") limit?: string) {
     const parsedLimit = Math.min(Math.max(parseInt(limit || "100", 10) || 100, 1), 500);
     return this.validacionesService.erroresPendientes(codigoTienda?.trim().toUpperCase(), parsedLimit);

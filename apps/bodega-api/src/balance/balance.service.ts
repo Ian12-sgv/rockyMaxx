@@ -28,13 +28,19 @@ export type ActualizarMovimientoInput = {
 export class BalanceService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listarMovimientos(desde: string, hasta: string, codigoTienda?: string) {
+  // soloGrupoB: usuario del grupo B (tiendas con "rocky" en el nombre, mismo
+  // criterio que ValidacionesService). Solo recibe movimientos que incluyan
+  // alguna tienda suya, y de cada uno solo ve los codigos de SUS tiendas (no
+  // se le revela a que tiendas del grupo A tambien se asigno).
+  async listarMovimientos(desde: string, hasta: string, codigoTienda?: string, soloGrupoB = false) {
+    const esGrupoB = (nombre: string | null | undefined) => /rocky/i.test(String(nombre || ""));
     const rows = await this.prisma.balanceMovimiento.findMany({
       where: {
         fecha: { gte: new Date(`${desde}T00:00:00Z`), lte: new Date(`${hasta}T00:00:00Z`) },
-        ...(codigoTienda
-          ? { tiendas: { some: { dimTienda: { codigoLegacy: codigoTienda } } } }
-          : {}),
+        AND: [
+          codigoTienda ? { tiendas: { some: { dimTienda: { codigoLegacy: codigoTienda } } } } : {},
+          soloGrupoB ? { tiendas: { some: { dimTienda: { nombre: { contains: "rocky", mode: "insensitive" } } } } } : {},
+        ],
       },
       include: { tiendas: { include: { dimTienda: true } } },
       orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
@@ -49,7 +55,9 @@ export class BalanceService {
       descripcion: row.descripcion,
       fecha: row.fecha.toISOString().slice(0, 10),
       registrado_por: row.registradoPor,
-      codigos_tienda: row.tiendas.map((t) => t.dimTienda.codigoLegacy),
+      codigos_tienda: row.tiendas
+        .filter((t) => !soloGrupoB || esGrupoB(t.dimTienda.nombre))
+        .map((t) => t.dimTienda.codigoLegacy),
     }));
   }
 

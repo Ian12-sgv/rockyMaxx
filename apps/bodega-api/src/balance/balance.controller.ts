@@ -1,7 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { BadRequestException } from "@nestjs/common";
 
-import { IngestAuthGuard } from "../auth/ingest-auth.guard";
+import { Alcance, exigirAdmin, PanelAuthGuard } from "../auth/panel-auth.guard";
+import { AlcancePanel } from "../auth/panel-auth.service";
 import { BalanceService } from "./balance.service";
 
 const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -35,23 +36,33 @@ function resolveRango(desde?: string, hasta?: string) {
   return { desde, hasta };
 }
 
+// Lectura: cualquier usuario del panel (el grupo B solo ve movimientos de sus
+// tiendas). Crear/editar/borrar: solo alcance "TODOS" (admin o el token de
+// apps/api).
 @Controller("bodega/balance-movimientos")
-@UseGuards(IngestAuthGuard)
+@UseGuards(PanelAuthGuard)
 export class BalanceController {
   constructor(private readonly balanceService: BalanceService) {}
 
   @Get()
   async listar(
+    @Alcance() alcance: AlcancePanel,
     @Query("desde") desde?: string,
     @Query("hasta") hasta?: string,
     @Query("codigoTienda") codigoTienda?: string,
   ) {
     const rango = resolveRango(desde, hasta);
-    return this.balanceService.listarMovimientos(rango.desde, rango.hasta, codigoTienda?.trim().toUpperCase());
+    return this.balanceService.listarMovimientos(
+      rango.desde,
+      rango.hasta,
+      codigoTienda?.trim().toUpperCase(),
+      alcance.grupo === "B",
+    );
   }
 
   @Post()
   async crear(
+    @Alcance() alcance: AlcancePanel,
     @Body()
     body: {
       tipo: "ingreso" | "egreso";
@@ -64,6 +75,7 @@ export class BalanceController {
       registradoPor?: string;
     },
   ) {
+    exigirAdmin(alcance);
     if (!body?.fecha || !FECHA_REGEX.test(body.fecha)) {
       throw new BadRequestException('"fecha" invalida, formato esperado yyyy-MM-dd.');
     }
@@ -81,6 +93,7 @@ export class BalanceController {
 
   @Patch(":id")
   async actualizar(
+    @Alcance() alcance: AlcancePanel,
     @Param("id") id: string,
     @Body()
     body: {
@@ -93,6 +106,7 @@ export class BalanceController {
       registradoPor?: string;
     },
   ) {
+    exigirAdmin(alcance);
     if (!body?.fecha || !FECHA_REGEX.test(body.fecha)) {
       throw new BadRequestException('"fecha" invalida, formato esperado yyyy-MM-dd.');
     }
@@ -108,7 +122,8 @@ export class BalanceController {
   }
 
   @Delete(":id")
-  async eliminar(@Param("id") id: string) {
+  async eliminar(@Alcance() alcance: AlcancePanel, @Param("id") id: string) {
+    exigirAdmin(alcance);
     return this.balanceService.eliminarMovimiento(id);
   }
 }

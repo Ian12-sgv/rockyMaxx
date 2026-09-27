@@ -2397,6 +2397,27 @@ button {
   color: #94a3b8;
 }
 
+/* Usuario de la sesion en la barra superior */
+.modern-session-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bodega-sesion-usuario {
+  display: grid;
+  text-align: right;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.2;
+}
+
+.bodega-sesion-usuario small {
+  font-weight: 400;
+  color: #62748a;
+  font-size: 0.75rem;
+}
+
 /* ---- Inventario: desplegable "Ver articulos" por tienda ---- */
 .bodega-inv-tienda-cell {
   display: flex;

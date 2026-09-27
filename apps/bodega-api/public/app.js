@@ -208,6 +208,57 @@ function formatPercent(value) {
   }).format(toFiniteNumber(value));
 }
 
+// La sesion es un token firmado por bodega-api (POST bodega/auth/login):
+// "<payload base64url>.<firma>". El payload trae usuario/grupo/expiracion y
+// se lee aqui SOLO para mostrar el nombre y ocultar botones; quien decide que
+// datos se entregan es el servidor (valida la firma en cada peticion).
+// Un token sin "." es el INGEST_AUTH_TOKEN viejo del login anterior: se
+// descarta para obligar a entrar con usuario y contrasena.
+function leerSesion(token) {
+  const [payload, firma] = String(token || "").split(".");
+  if (!payload || !firma) {
+    return null;
+  }
+  try {
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const datos = JSON.parse(atob(base64 + "===".slice((base64.length + 3) % 4)));
+    if (!datos?.u || !datos?.exp || Date.now() > datos.exp) {
+      return null;
+    }
+    return { usuario: String(datos.u), grupo: datos.g === "B" ? "B" : "TODOS" };
+  } catch (error) {
+    return null;
+  }
+}
+
+function sesionActual() {
+  return leerSesion(getToken());
+}
+
+// Usuario del grupo B: solo lectura en Balance y sin botones de grupo (el
+// servidor ya le manda solo sus tiendas).
+function esSoloGrupoB() {
+  return sesionActual()?.grupo === "B";
+}
+
+// Al cerrar sesion (o si expira) no deben quedar en memoria datos del usuario
+// anterior: el siguiente podria ser del grupo B.
+function limpiarDatosSesion() {
+  state.ventas = [];
+  state.ventasAnterior = [];
+  state.inventario = [];
+  state.serieDiaria = [];
+  state.horarios = [];
+  state.balanceMovimientos = [];
+  state.inventarioDetalle = null;
+  state.tiendaFiltro = "";
+  state.grupoFiltro = "";
+  state.balanceVisible = false;
+  state.balanceFormAbierto = null;
+  state.balanceEditando = null;
+  state.lastUpdated = null;
+}
+
 function getToken() {
   try {
     return window.localStorage.getItem(TOKEN_STORAGE_KEY) || "";
@@ -382,14 +433,30 @@ function renderLoginView() {
           ${renderFlash()}
           <form id="login-form" class="form-stack login-form">
             <label class="field login-field">
-              <span>Token</span>
+              <span>Usuario</span>
+              <span class="login-input-wrap">
+                <span class="login-input-icon">${renderIcon("shield")}</span>
+                <input
+                  id="usuario-input"
+                  type="text"
+                  name="usuario"
+                  placeholder="Tu usuario"
+                  autocomplete="username"
+                  maxlength="40"
+                  required
+                />
+              </span>
+            </label>
+
+            <label class="field login-field">
+              <span>Contrasena</span>
               <span class="login-input-wrap">
                 <span class="login-input-icon">${renderIcon("lock")}</span>
                 <input
-                  id="token-input"
+                  id="password-input"
                   type="password"
-                  name="token"
-                  placeholder="Token compartido de INGEST_AUTH_TOKEN"
+                  name="password"
+                  placeholder="Tu contrasena"
                   autocomplete="current-password"
                   required
                 />
@@ -408,7 +475,7 @@ function renderLoginView() {
             <span class="login-security-badge">${renderIcon("shield")}</span>
             <div class="login-security-copy">
               <strong>Solo lectura</strong>
-              <span>Muestra el resumen de todas las tiendas en bodega_datos. No modifica ni exporta nada.</span>
+              <span>Muestra el resumen de las tiendas que tu usuario tiene permitido ver. No modifica ni exporta nada de las tiendas.</span>
             </div>
           </div>
         </section>
@@ -666,6 +733,11 @@ function renderPanelShell() {
             </div>
           </div>
           <div class="modern-session-area">
+            ${
+              sesionActual()
+                ? `<span class="bodega-sesion-usuario">${escapeHtml(sesionActual().usuario)}<small>${esSoloGrupoB() ? "Grupo B &middot; solo lectura" : "Todas las tiendas"}</small></span>`
+                : ""
+            }
             <button class="button button-ghost" type="button" data-action="logout">Cerrar sesion</button>
           </div>
         </header>
@@ -681,7 +753,9 @@ function renderPanelShell() {
                   <p>${
                     state.balanceVisible
                       ? "Ingresos y egresos registrados a mano, por tienda o varias a la vez."
-                      : "Ventas, costo, margen e inventario de todas las tiendas."
+                      : esSoloGrupoB()
+                        ? "Ventas, costo, margen e inventario de las tiendas del grupo B."
+                        : "Ventas, costo, margen e inventario de todas las tiendas."
                   }</p>
                 </div>
                 <div class="modern-page-actions">
@@ -885,10 +959,14 @@ function renderControlsBar() {
         Balance
       </button>
 
-      <div class="bodega-controls-group" role="group" aria-label="Grupo de tiendas">
-        <button type="button" class="bodega-toggle-button ${state.grupoFiltro === "A" ? "is-active" : ""}" data-grupo-filtro="A">Grupo A</button>
-        <button type="button" class="bodega-toggle-button ${state.grupoFiltro === "B" ? "is-active" : ""}" data-grupo-filtro="B">Grupo B</button>
-      </div>
+      ${
+        esSoloGrupoB()
+          ? ""
+          : `<div class="bodega-controls-group" role="group" aria-label="Grupo de tiendas">
+              <button type="button" class="bodega-toggle-button ${state.grupoFiltro === "A" ? "is-active" : ""}" data-grupo-filtro="A">Grupo A</button>
+              <button type="button" class="bodega-toggle-button ${state.grupoFiltro === "B" ? "is-active" : ""}" data-grupo-filtro="B">Grupo B</button>
+            </div>`
+      }
 
       ${
         state.balanceVisible
@@ -940,7 +1018,13 @@ function renderSummaryCards() {
     {
       label: "Vendido",
       value: formatMoneda(totalVentas?.total_pago),
-      meta: `${escapeHtml(String(totalVentas?.facturas ?? "0"))} facturas${state.tiendaFiltro ? "" : state.grupoFiltro ? ` en el grupo ${state.grupoFiltro}` : " en todas las tiendas"}`,
+      meta: `${escapeHtml(String(totalVentas?.facturas ?? "0"))} facturas${
+        state.tiendaFiltro
+          ? ""
+          : state.grupoFiltro || esSoloGrupoB()
+            ? ` en el grupo ${state.grupoFiltro || "B"}`
+            : " en todas las tiendas"
+      }`,
       tone: "blue",
       delta: getDeltaPeriodo("total_pago"),
       puntos: getSparklinePuntos("total_pago"),
@@ -1485,11 +1569,15 @@ function renderMovimientosBlock(tipo, movimientos, total) {
           <h3>${titulo}</h3>
           <span class="bodega-movimientos-count">${movimientos.length}</span>
         </div>
-        <button type="button" class="bodega-movimientos-toggle-btn ${formAbierto ? "is-open" : ""}" data-balance-form-toggle="${tipo}">
-          ${formAbierto ? "&times; Cancelar" : "+ Agregar"}
-        </button>
+        ${
+          esSoloGrupoB()
+            ? ""
+            : `<button type="button" class="bodega-movimientos-toggle-btn ${formAbierto ? "is-open" : ""}" data-balance-form-toggle="${tipo}">
+                ${formAbierto ? "&times; Cancelar" : "+ Agregar"}
+              </button>`
+        }
       </div>
-      ${formAbierto ? renderMovimientoForm(tipo) : ""}
+      ${formAbierto && !esSoloGrupoB() ? renderMovimientoForm(tipo) : ""}
       ${
         movimientos.length
           ? `<div class="bodega-movimientos-list">
@@ -1505,8 +1593,12 @@ function renderMovimientosBlock(tipo, movimientos, total) {
                       </div>
                       <div class="bodega-movimiento-row-amount">
                         <strong>${escapeHtml(formatMontoSinConvertir(mov.monto))}</strong>
-                        <button type="button" class="bodega-movimiento-edit" data-balance-editar="${escapeHtml(mov.id)}" title="Editar">&#9998;</button>
-                        <button type="button" class="bodega-movimiento-delete" data-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">&times;</button>
+                        ${
+                          esSoloGrupoB()
+                            ? ""
+                            : `<button type="button" class="bodega-movimiento-edit" data-balance-editar="${escapeHtml(mov.id)}" title="Editar">&#9998;</button>
+                               <button type="button" class="bodega-movimiento-delete" data-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">&times;</button>`
+                        }
                       </div>
                     </div>
                   `,
@@ -1634,7 +1726,8 @@ async function loadPanel(options) {
     setToken("");
     state.view = "login";
     state.loading = false;
-    setFlash("Token invalido o expirado. Ingresalo de nuevo.", "error");
+    limpiarDatosSesion();
+    setFlash("Tu sesion expiro o no es valida. Inicia sesion de nuevo.", "error");
     render();
     return;
   }
@@ -1677,19 +1770,19 @@ async function loadPanel(options) {
 function bindEvents() {
   document.getElementById("login-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const token = String(document.getElementById("token-input")?.value || "").trim();
-    if (!token) {
-      setFlash("Ingresa el token para conectar.", "error");
+    const usuario = String(document.getElementById("usuario-input")?.value || "").trim();
+    const password = String(document.getElementById("password-input")?.value || "");
+    if (!usuario || !password) {
+      setFlash("Ingresa tu usuario y contrasena.", "error");
       render();
       return;
     }
-
-    setToken(token);
-    void loadPanel();
+    void iniciarSesion(usuario, password);
   });
 
   document.querySelector('[data-action="logout"]')?.addEventListener("click", () => {
     setToken("");
+    limpiarDatosSesion();
     state.view = "login";
     state.flash = null;
     render();
@@ -2031,6 +2124,42 @@ function seleccionarDiaCalendario(iso) {
   seleccionarRango({ desde, hasta });
 }
 
+async function iniciarSesion(usuario, password) {
+  state.loading = true;
+  state.flash = null;
+  render();
+
+  let response;
+  try {
+    response = await window.fetch(apiUrl("bodega/auth/login"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario, password }),
+    });
+  } catch (error) {
+    state.loading = false;
+    setFlash(`No se pudo contactar el servidor: ${error?.message || error}`, "error");
+    render();
+    return;
+  }
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.token) {
+    state.loading = false;
+    setFlash(data?.message || `El servidor respondio ${response.status}.`, "error");
+    render();
+    return;
+  }
+
+  limpiarDatosSesion();
+  setToken(data.token);
+  state.loading = false;
+  void loadPanel();
+}
+
+if (!sesionActual()) {
+  setToken("");
+}
 void loadPanel();
 
 // Auto-actualizacion cada 10 segundos, silenciosa (sin el flash "Actualizando...")

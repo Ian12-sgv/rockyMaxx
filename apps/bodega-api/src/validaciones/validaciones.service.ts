@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "../../generated/prisma-client";
 
+import { AlcancePanel } from "../auth/panel-auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 // Todas las agregaciones monetarias se hacen en SQL sobre columnas numeric
@@ -30,6 +31,15 @@ import { PrismaService } from "../prisma/prisma.service";
 // insertando algo reciente, no solo que el registro exista).
 const CODIGOS_TIENDA_ACTIVOS_PANEL = ["001", "002", "003", "004", "005", "006"];
 const FILTRO_TIENDAS_PANEL = Prisma.sql`t."codigo_legacy" IN (${Prisma.join(CODIGOS_TIENDA_ACTIVOS_PANEL)})`;
+
+// Grupo B = tiendas cuyo nombre contiene "rocky" (mismo criterio que
+// getGrupoTienda() en public/app.js). Un usuario del grupo B solo recibe
+// esas tiendas: el filtro va en el SQL, no en el frontend.
+const FILTRO_GRUPO_B = Prisma.sql`t."nombre" ILIKE '%rocky%'`;
+
+function filtroTiendasAlcance(alcance: AlcancePanel) {
+  return alcance.grupo === "B" ? Prisma.sql`${FILTRO_TIENDAS_PANEL} AND ${FILTRO_GRUPO_B}` : FILTRO_TIENDAS_PANEL;
+}
 
 @Injectable()
 export class ValidacionesService {
@@ -131,8 +141,10 @@ export class ValidacionesService {
   // formula que inventarioResumen() (Existencia * CostoPromedio), asi que la
   // suma de todas las paginas cuadra con el total de la tienda en el panel.
   // Busqueda opcional por codigo de barra, referencia o nombre.
-  async inventarioDetalle(codigoTienda: string, busqueda: string, pagina: number, limite: number) {
+  async inventarioDetalle(codigoTienda: string, busqueda: string, pagina: number, limite: number, alcance: AlcancePanel) {
     const texto = busqueda.trim();
+    // Un usuario del grupo B que pida una tienda de otro grupo recibe 0 filas.
+    const filtroAlcance = alcance.grupo === "B" ? Prisma.sql`AND ${FILTRO_GRUPO_B}` : Prisma.empty;
     const filtroBusqueda = texto
       ? Prisma.sql`AND (
           v."pk_origen" ILIKE ${`%${texto}%`}
@@ -167,7 +179,7 @@ export class ValidacionesService {
           )::text AS valor_costo_usd
         FROM "VW_HECH_INVENTARIO_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
-        WHERE t."codigo_legacy" = ${codigoTienda} ${filtroBusqueda}
+        WHERE t."codigo_legacy" = ${codigoTienda} ${filtroAlcance} ${filtroBusqueda}
         ORDER BY
           COALESCE(
             (v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric,
@@ -185,7 +197,7 @@ export class ValidacionesService {
           )::text AS valor_costo_usd
         FROM "VW_HECH_INVENTARIO_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
-        WHERE t."codigo_legacy" = ${codigoTienda} ${filtroBusqueda}
+        WHERE t."codigo_legacy" = ${codigoTienda} ${filtroAlcance} ${filtroBusqueda}
       `),
     ]);
 
@@ -205,18 +217,19 @@ export class ValidacionesService {
   // el "vs periodo anterior" del frontend) e inventario actual valorizado a
   // costo. Cada consulta de ventas trae una fila por tienda MAS una fila
   // "TOTAL".
-  async panelResumen(desde: string, hasta: string) {
+  async panelResumen(desde: string, hasta: string, alcance: AlcancePanel) {
+    const filtro = filtroTiendasAlcance(alcance);
     const tasaCambio = await this.tasaCambioActual(hasta);
     const tasaValor = tasaCambio?.tasa ? Number(tasaCambio.tasa) : 1;
     const { desde: desdeAnterior, hasta: hastaAnterior } = this.calcularRangoAnterior(desde, hasta);
     const diasSerie = Math.min(this.contarDias(desde, hasta), 60);
 
     const [ventas, ventasAnterior, inventario, serieDiaria, horarios] = await Promise.all([
-      this.ventasResumenPorRango(desde, hasta, tasaValor),
-      this.ventasResumenPorRango(desdeAnterior, hastaAnterior, tasaValor),
-      this.inventarioResumen(),
-      this.ventasSerieDiaria(hasta, diasSerie, tasaValor),
-      this.horariosPorTienda(desde, hasta),
+      this.ventasResumenPorRango(desde, hasta, tasaValor, filtro),
+      this.ventasResumenPorRango(desdeAnterior, hastaAnterior, tasaValor, filtro),
+      this.inventarioResumen(filtro),
+      this.ventasSerieDiaria(hasta, diasSerie, tasaValor, filtro),
+      this.horariosPorTienda(desde, hasta, filtro),
     ]);
 
     return { ventas, ventasAnterior, inventario, serieDiaria, horarios, tasaCambio, rango: { desde, hasta } };
@@ -248,7 +261,7 @@ export class ValidacionesService {
   // ventas de cada tienda (con su fecha, para que el frontend la muestre).
   // Fecha viene en UTC con sufijo Z (100% de las filas); el frontend la
   // muestra en hora de Venezuela.
-  private async horariosPorTienda(desde: string, hasta: string) {
+  private async horariosPorTienda(desde: string, hasta: string, filtro: Prisma.Sql) {
     return this.prisma.$queryRaw<
       Array<{ codigo_legacy: string; fecha: string; primera_venta: Date; ultima_venta: Date }>
     >(Prisma.sql`
@@ -269,7 +282,7 @@ export class ValidacionesService {
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
         JOIN primera_recepcion r ON r."dim_tienda_id" = v."dim_tienda_id" AND r."pk_origen" = v."pk_origen"
         WHERE (v."payload_json" ->> 'Fecha')::date BETWEEN ${desde}::date - 1 AND ${hasta}::date + 2
-          AND ${FILTRO_TIENDAS_PANEL}
+          AND ${filtro}
       ),
       reales AS (
         SELECT
@@ -387,7 +400,7 @@ export class ValidacionesService {
   // mini-graficas de tendencia. "hasta" es el fin del rango que el usuario
   // eligio (no necesariamente hoy), asi que el sparkline siempre termina en
   // el mismo punto que el rango seleccionado.
-  private async ventasSerieDiaria(hasta: string, dias: number, tasaValor: number) {
+  private async ventasSerieDiaria(hasta: string, dias: number, tasaValor: number, filtro: Prisma.Sql) {
     return this.prisma.$queryRaw<
       Array<{ fecha: string; facturas: string; total_pago: string; total_costo_bs: string; ganancia: string }>
     >(Prisma.sql`
@@ -400,7 +413,7 @@ export class ValidacionesService {
         FROM "VW_HECH_VENTAS_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
         WHERE (v."payload_json" ->> 'Fecha')::date BETWEEN ${hasta}::date - (${dias - 1} * INTERVAL '1 day') AND ${hasta}::date
-          AND ${FILTRO_TIENDAS_PANEL}
+          AND ${filtro}
         GROUP BY 1
       ),
       costo AS (
@@ -411,7 +424,7 @@ export class ValidacionesService {
         JOIN "DIM_TIENDAS" t ON t."id" = d."dim_tienda_id"
         ${ValidacionesService.COSTO_ACTUAL_JOIN}
         WHERE (d."payload_json" ->> 'Hora')::date BETWEEN ${hasta}::date - (${dias - 1} * INTERVAL '1 day') AND ${hasta}::date
-          AND ${FILTRO_TIENDAS_PANEL}
+          AND ${filtro}
         GROUP BY 1
       )
       SELECT
@@ -462,7 +475,7 @@ export class ValidacionesService {
   // usuario, para que ambos reportes cuadren. Esto significa que "Costo" aqui
   // puede moverse retroactivamente si el costo de un articulo cambia despues
   // de la venta -- es intencional, no un bug.
-  private async ventasResumenPorRango(desde: string, hasta: string, tasaValor: number) {
+  private async ventasResumenPorRango(desde: string, hasta: string, tasaValor: number, filtro: Prisma.Sql) {
     return this.prisma.$queryRaw<
       Array<{
         codigo_legacy: string;
@@ -483,7 +496,7 @@ export class ValidacionesService {
         FROM "VW_HECH_VENTAS_ACTUAL" v
         JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
         WHERE (v."payload_json" ->> 'Fecha')::date BETWEEN ${desde}::date AND ${hasta}::date
-          AND ${FILTRO_TIENDAS_PANEL}
+          AND ${filtro}
         GROUP BY 1, 2
       ),
       costo AS (
@@ -495,7 +508,7 @@ export class ValidacionesService {
         JOIN "DIM_TIENDAS" t ON t."id" = d."dim_tienda_id"
         ${ValidacionesService.COSTO_ACTUAL_JOIN}
         WHERE (d."payload_json" ->> 'Hora')::date BETWEEN ${desde}::date AND ${hasta}::date
-          AND ${FILTRO_TIENDAS_PANEL}
+          AND ${filtro}
         GROUP BY 1, 2
       ),
       combinado AS (
@@ -525,7 +538,7 @@ export class ValidacionesService {
   // requeriria traer la tabla TASA_CAMBIO a bodega_datos (no se sincroniza
   // hoy), asi que el valor se reporta en dolares, explicito en el nombre del
   // campo.
-  private async inventarioResumen() {
+  private async inventarioResumen(filtro: Prisma.Sql) {
     return this.prisma.$queryRaw<
       Array<{ codigo_legacy: string; nombre: string | null; articulos: string; unidades: string; valor_costo_usd: string }>
     >(Prisma.sql`
@@ -540,7 +553,7 @@ export class ValidacionesService {
         )::text AS valor_costo_usd
       FROM "VW_HECH_INVENTARIO_ACTUAL" v
       JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
-      WHERE ${FILTRO_TIENDAS_PANEL}
+      WHERE ${filtro}
       GROUP BY GROUPING SETS ((t."codigo_legacy"), ())
       ORDER BY 1
     `);
