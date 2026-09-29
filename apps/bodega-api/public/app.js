@@ -30,13 +30,7 @@ const state = {
   // la vez. { codigo, busqueda, pagina, loading, error, data } o null.
   inventarioDetalle: null,
   sortDir: "desc",
-  balanceVisible: false,
   balanceMovimientos: [],
-  balanceFormAbierto: null, // "ingreso" | "egreso" | null
-  balanceFormSaving: false,
-  balanceFormError: null,
-  balanceEditando: null, // movimiento completo (de balanceMovimientos) mientras se edita, o null
-  balanceOperativoFiltro: "todos", // "todos" | "operativo" | "no-operativo"
   ventas: [],
   ventasAnterior: [],
   inventario: [],
@@ -253,9 +247,6 @@ function limpiarDatosSesion() {
   state.inventarioDetalle = null;
   state.tiendaFiltro = "";
   state.grupoFiltro = "";
-  state.balanceVisible = false;
-  state.balanceFormAbierto = null;
-  state.balanceEditando = null;
   state.lastUpdated = null;
 }
 
@@ -749,13 +740,11 @@ function renderPanelShell() {
             <div class="modern-page">
               <div class="modern-page-header">
                 <div>
-                  <h1>${state.balanceVisible ? "Balance" : "Todas las tiendas"}</h1>
+                  <h1>Todas las tiendas</h1>
                   <p>${
-                    state.balanceVisible
-                      ? "Ingresos y egresos registrados a mano, por tienda o varias a la vez."
-                      : esSoloGrupoB()
-                        ? "Ventas, costo, margen e inventario de las tiendas del grupo B."
-                        : "Ventas, costo, margen e inventario de todas las tiendas."
+                    esSoloGrupoB()
+                      ? "Ventas, costo, margen e inventario de las tiendas del grupo B."
+                      : "Ventas, costo, margen e inventario de todas las tiendas."
                   }</p>
                 </div>
                 <div class="modern-page-actions">
@@ -767,16 +756,10 @@ function renderPanelShell() {
               </div>
 
               ${renderControlsBar()}
-              ${
-                state.balanceVisible
-                  ? renderBalanceSection()
-                  : `
-                    ${renderSummaryCards()}
-                    ${renderAlertBanner()}
-                    ${renderDesempenoTable()}
-                    ${renderInventarioSection()}
-                  `
-              }
+              ${renderSummaryCards()}
+              ${renderAlertBanner()}
+              ${renderDesempenoTable()}
+              ${renderInventarioSection()}
             </div>
           </div>
         </section>
@@ -955,10 +938,6 @@ function renderControlsBar() {
         <button type="button" class="bodega-toggle-button ${state.moneda === "USD" ? "is-active" : ""}" data-moneda="USD">US$</button>
       </div>
 
-      <button type="button" class="button button-ghost bodega-balance-toggle ${state.balanceVisible ? "is-active" : ""}" data-balance-toggle>
-        Balance
-      </button>
-
       ${
         esSoloGrupoB()
           ? ""
@@ -966,18 +945,6 @@ function renderControlsBar() {
               <button type="button" class="bodega-toggle-button ${state.grupoFiltro === "A" ? "is-active" : ""}" data-grupo-filtro="A">Grupo A</button>
               <button type="button" class="bodega-toggle-button ${state.grupoFiltro === "B" ? "is-active" : ""}" data-grupo-filtro="B">Grupo B</button>
             </div>`
-      }
-
-      ${
-        state.balanceVisible
-          ? `
-            <div class="bodega-controls-group" role="group" aria-label="Operativo">
-              <button type="button" class="bodega-toggle-button ${state.balanceOperativoFiltro === "todos" ? "is-active" : ""}" data-balance-operativo-filtro="todos">Todos</button>
-              <button type="button" class="bodega-toggle-button ${state.balanceOperativoFiltro === "operativo" ? "is-active" : ""}" data-balance-operativo-filtro="operativo">Operativo</button>
-              <button type="button" class="bodega-toggle-button ${state.balanceOperativoFiltro === "no-operativo" ? "is-active" : ""}" data-balance-operativo-filtro="no-operativo">No operativo</button>
-            </div>
-          `
-          : ""
       }
 
       ${
@@ -1422,52 +1389,15 @@ async function cargarInventarioDetalle(codigo, busqueda, pagina) {
   }
 }
 
-// Balance con lo que se puede calcular con certeza a partir de bodega_datos:
-// el inventario a costo (activo real) y la ganancia acumulada del periodo
-// elegido (resultado, no un "activo" contable formal). NO incluye cuentas
-// por cobrar/pagar, deudas ni el efectivo real de caja/banco -- esos datos
-// no se sincronizan hoy a bodega_datos, y mostrar un cero ahi seria peor que
-// no mostrar la fila: daria la impresion de que la tienda no tiene deudas ni
-// efectivo, cuando en realidad simplemente no lo estamos midiendo. Reusa
-// state.inventario/state.ventas ya cargados -- no dispara ninguna consulta
-// nueva al servidor.
-// Los montos de Balance NO se convierten con la tasa -- cada movimiento
-// se guarda en la moneda con la que se tipeo (state.moneda al momento de
-// guardar) y se muestra tal cual. El toggle Bs/US$ actua como FILTRO aqui
-// (a pedido del usuario, para no mezclar montos en bolivares con montos en
-// dolares en el mismo total), a diferencia del resto del panel (ventas,
-// inventario) donde el mismo toggle SI convierte con la tasa.
-function filtrarMovimientos(tipo) {
-  const lista = Array.isArray(state.balanceMovimientos) ? state.balanceMovimientos : [];
-  return lista
-    .filter((mov) => mov.tipo === tipo)
-    .filter((mov) => (mov.moneda || "BS") === state.moneda)
-    .filter(
-      (mov) =>
-        (!state.tiendaFiltro && !state.grupoFiltro) ||
-        (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.some((codigo) => tiendaVisible(codigo))),
-    )
-    .filter((mov) => {
-      if (state.balanceOperativoFiltro === "operativo") return mov.es_operativo;
-      if (state.balanceOperativoFiltro === "no-operativo") return !mov.es_operativo;
-      return true;
-    });
-}
-
-function sumarMontos(movimientos, soloOperativos) {
-  return movimientos
-    .filter((mov) => !soloOperativos || mov.es_operativo)
-    .reduce((acc, mov) => acc + toFiniteNumber(mov.monto), 0);
-}
-
 // ---- Gastos (egresos de Balance) en el dashboard ------------------------------
+// ClienteALI ya no tiene la vista Balance (se quito a pedido del usuario): los
+// ingresos/egresos se registran desde la vista "Todas las tiendas" de apps/api,
+// y aqui solo se leen (bodega/balance-movimientos) para los gastos.
 // Un egreso asignado a UNA sola tienda es gasto de esa tienda (columna
 // "Gastos" de Desempeno por tienda); uno asignado a 2 o mas tiendas es gasto
 // general (tarjeta "Gastos generales"). Asi cada egreso se cuenta una sola
-// vez. A diferencia de la vista Balance (donde el toggle Bs/US$ FILTRA), aqui
-// se convierte con la tasa como el resto del dashboard (pedido del usuario).
-// Solo cuentan los egresos marcados "Es operativo" (pedido del usuario), sin
-// importar el filtro Todos/Operativo/No operativo de la vista Balance.
+// vez. Se convierte con la tasa como el resto del dashboard, y solo cuentan
+// los egresos marcados "Es operativo" (pedidos del usuario).
 function montoEnMonedaActual(mov) {
   const monto = toFiniteNumber(mov?.monto);
   const origen = mov?.moneda || "BS";
@@ -1498,7 +1428,7 @@ function getGastosTienda(codigo) {
 }
 
 // Con filtro de tienda/grupo, entra el gasto general que incluya alguna
-// tienda visible (mismo criterio que filtrarMovimientos en Balance).
+// tienda visible.
 function getGastosGenerales() {
   const lista = getEgresos()
     .filter((mov) => !esGastoDeUnaTienda(mov))
@@ -1512,168 +1442,6 @@ function getGastosGenerales() {
 
 function formatMontoSinConvertir(valor) {
   return state.moneda === "USD" ? `US$ ${formatUsd(toFiniteNumber(valor))}` : `Bs ${formatBs(toFiniteNumber(valor))}`;
-}
-
-function renderBalanceSection() {
-  const ingresos = filtrarMovimientos("ingreso");
-  const egresos = filtrarMovimientos("egreso");
-  const totalIngresos = sumarMontos(ingresos, false);
-  const totalEgresos = sumarMontos(egresos, false);
-  const neto = totalIngresos - totalEgresos;
-  const netoTone = neto >= 0 ? "positivo" : "negativo";
-
-  return `
-    <div class="bodega-balance-kpi-grid">
-      <article class="bodega-balance-kpi-card bodega-balance-kpi-ingreso">
-        <div class="bodega-balance-kpi-head">
-          <span class="bodega-balance-kpi-label">INGRESOS</span>
-          <span class="bodega-balance-kpi-icon">${renderIcon("trending-up")}</span>
-        </div>
-        <strong class="bodega-balance-kpi-value">${escapeHtml(formatMontoSinConvertir(totalIngresos))}</strong>
-        <span class="bodega-balance-kpi-meta">${ingresos.length} registro(s)</span>
-      </article>
-      <article class="bodega-balance-kpi-card bodega-balance-kpi-egreso">
-        <div class="bodega-balance-kpi-head">
-          <span class="bodega-balance-kpi-label">EGRESOS</span>
-          <span class="bodega-balance-kpi-icon">${renderIcon("trending-down")}</span>
-        </div>
-        <strong class="bodega-balance-kpi-value">${escapeHtml(formatMontoSinConvertir(totalEgresos))}</strong>
-        <span class="bodega-balance-kpi-meta">${egresos.length} registro(s)</span>
-      </article>
-      <article class="bodega-balance-kpi-card bodega-balance-kpi-neto">
-        <div class="bodega-balance-kpi-head">
-          <span class="bodega-balance-kpi-label">BALANCE NETO</span>
-          <span class="bodega-balance-kpi-icon">${renderIcon("scale")}</span>
-        </div>
-        <strong class="bodega-balance-kpi-value bodega-balance-kpi-value-${netoTone}">${escapeHtml(formatMontoSinConvertir(neto))}</strong>
-        <span class="bodega-balance-kpi-meta">${neto >= 0 ? "A favor" : "En contra"} en el periodo</span>
-      </article>
-    </div>
-
-    <div class="bodega-movimientos-grid">
-      ${renderMovimientosBlock("ingreso", ingresos, totalIngresos)}
-      ${renderMovimientosBlock("egreso", egresos, totalEgresos)}
-    </div>
-  `;
-}
-
-function renderMovimientosBlock(tipo, movimientos, total) {
-  const titulo = tipo === "ingreso" ? "Ingresos" : "Egresos";
-  const formAbierto = state.balanceFormAbierto === tipo;
-
-  return `
-    <div class="bodega-movimientos-card bodega-movimientos-card-${tipo}">
-      <div class="bodega-movimientos-card-head">
-        <div class="bodega-movimientos-card-title">
-          <span class="bodega-movimientos-dot"></span>
-          <h3>${titulo}</h3>
-          <span class="bodega-movimientos-count">${movimientos.length}</span>
-        </div>
-        ${
-          esSoloGrupoB()
-            ? ""
-            : `<button type="button" class="bodega-movimientos-toggle-btn ${formAbierto ? "is-open" : ""}" data-balance-form-toggle="${tipo}">
-                ${formAbierto ? "&times; Cancelar" : "+ Agregar"}
-              </button>`
-        }
-      </div>
-      ${formAbierto && !esSoloGrupoB() ? renderMovimientoForm(tipo) : ""}
-      ${
-        movimientos.length
-          ? `<div class="bodega-movimientos-list">
-              ${movimientos
-                .map(
-                  (mov) => `
-                    <div class="bodega-movimiento-row">
-                      <div class="bodega-movimiento-row-main">
-                        <span class="bodega-movimiento-desc">${escapeHtml(mov.descripcion || "-")}</span>
-                        <span class="bodega-movimiento-meta">
-                          ${escapeHtml(formatDiaCorto(mov.fecha))} &middot; ${escapeHtml((mov.codigos_tienda || []).join(", "))}${mov.es_operativo ? " &middot; Operativo" : ""}
-                        </span>
-                      </div>
-                      <div class="bodega-movimiento-row-amount">
-                        <strong>${escapeHtml(formatMontoSinConvertir(mov.monto))}</strong>
-                        ${
-                          esSoloGrupoB()
-                            ? ""
-                            : `<button type="button" class="bodega-movimiento-edit" data-balance-editar="${escapeHtml(mov.id)}" title="Editar">&#9998;</button>
-                               <button type="button" class="bodega-movimiento-delete" data-balance-eliminar="${escapeHtml(mov.id)}" title="Eliminar">&times;</button>`
-                        }
-                      </div>
-                    </div>
-                  `,
-                )
-                .join("")}
-            </div>`
-          : `<div class="bodega-movimientos-empty">Sin ${titulo.toLowerCase()} registrados en este periodo.</div>`
-      }
-      <div class="bodega-movimientos-total">
-        <span>TOTAL</span>
-        <strong>${escapeHtml(formatMontoSinConvertir(total))}</strong>
-      </div>
-    </div>
-  `;
-}
-
-function renderMovimientoForm(tipo) {
-  const storeOptions = getStoreOptions();
-  const editando = state.balanceEditando && state.balanceEditando.tipo === tipo ? state.balanceEditando : null;
-  const tiendasSeleccionadas = editando ? editando.codigos_tienda || [] : storeOptions;
-  const todasSeleccionadas = storeOptions.every((codigo) => tiendasSeleccionadas.includes(codigo));
-  const montoPrefill = editando ? toFiniteNumber(editando.monto) : null;
-
-  return `
-    <form class="bodega-movimiento-form" data-balance-form="${tipo}" data-balance-edit-id="${editando ? escapeHtml(editando.id) : ""}">
-      ${editando ? `<p class="bodega-movimiento-form-editing">Editando movimiento &mdash; <button type="button" class="bodega-movimiento-cancel-edit" data-balance-cancelar-edicion>cancelar edicion</button></p>` : ""}
-      <div class="bodega-movimiento-form-row">
-        <label>
-          <span>Monto (${state.moneda === "USD" ? "US$" : "Bs"})</span>
-          <input type="number" step="0.01" min="0.01" name="monto" placeholder="0.00" value="${montoPrefill !== null ? escapeHtml(String(montoPrefill)) : ""}" required>
-        </label>
-        <label>
-          <span>Fecha</span>
-          <input type="date" name="fecha" value="${escapeHtml(editando ? editando.fecha : todayIso())}" required>
-        </label>
-      </div>
-      <p class="bodega-movimiento-form-hint">Sin puntos de miles: escribe 1000 (no 1.000). Usa punto solo para decimales, ej. 1000.50.</p>
-      <label class="bodega-movimiento-form-full">
-        <span>Descripcion</span>
-        <input type="text" name="descripcion" maxlength="300" placeholder="Ej. pago de flete" value="${escapeHtml(editando ? editando.descripcion || "" : "")}" required>
-      </label>
-      <div class="bodega-movimiento-tiendas">
-        <span>Tienda(s)</span>
-        <div class="bodega-movimiento-tiendas-list">
-          <label class="bodega-tienda-pill">
-            <input type="checkbox" data-balance-todas-tiendas ${todasSeleccionadas ? "checked" : ""}>
-            <span class="bodega-tienda-pill-check">&check;</span>
-            Todas
-          </label>
-          ${storeOptions
-            .map(
-              (codigo) => `
-                <label class="bodega-tienda-pill">
-                  <input type="checkbox" name="codigosTienda" value="${escapeHtml(codigo)}" data-balance-tienda-pill ${tiendasSeleccionadas.includes(codigo) ? "checked" : ""}>
-                  <span class="bodega-tienda-pill-check">&check;</span>
-                  ${escapeHtml(codigo)}
-                </label>
-              `,
-            )
-            .join("")}
-        </div>
-      </div>
-      <div class="bodega-movimiento-form-row bodega-movimiento-form-footer">
-        <label class="bodega-checkbox-inline bodega-movimiento-operativo">
-          <input type="checkbox" name="esOperativo" ${editando && editando.es_operativo ? "checked" : ""}>
-          <span class="bodega-operativo-dot"></span>
-          Es operativo
-        </label>
-        <button type="submit" class="button button-primary" ${state.balanceFormSaving ? "disabled" : ""}>
-          ${state.balanceFormSaving ? "Guardando..." : editando ? "Guardar cambios" : "Guardar"}
-        </button>
-      </div>
-      ${state.balanceFormError ? `<p class="bodega-movimiento-form-error">${escapeHtml(state.balanceFormError)}</p>` : ""}
-    </form>
-  `;
 }
 
 // ---- Carga de datos y eventos ------------------------------------------------
@@ -1853,13 +1621,6 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-balance-operativo-filtro]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.balanceOperativoFiltro = button.getAttribute("data-balance-operativo-filtro");
-      render();
-    });
-  });
-
   document.querySelectorAll("[data-inv-detalle-toggle]").forEach((button) => {
     button.addEventListener("click", () => {
       const codigo = button.getAttribute("data-inv-detalle-toggle");
@@ -1909,175 +1670,6 @@ function bindEvents() {
     state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
     render();
   });
-
-  document.querySelector("[data-balance-toggle]")?.addEventListener("click", () => {
-    state.balanceVisible = !state.balanceVisible;
-    state.balanceFormAbierto = null;
-    state.balanceFormError = null;
-    render();
-  });
-
-  document.querySelectorAll("[data-balance-form-toggle]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const tipo = button.getAttribute("data-balance-form-toggle");
-      state.balanceFormAbierto = state.balanceFormAbierto === tipo ? null : tipo;
-      state.balanceFormError = null;
-      state.balanceEditando = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-balance-editar]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const id = button.getAttribute("data-balance-editar");
-      const mov = (state.balanceMovimientos || []).find((item) => item.id === id);
-      if (!mov) return;
-      state.balanceFormAbierto = mov.tipo;
-      state.balanceEditando = mov;
-      state.balanceFormError = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-balance-cancelar-edicion]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.balanceEditando = null;
-      state.balanceFormError = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-balance-todas-tiendas]").forEach((checkbox) => {
-    checkbox.addEventListener("change", (event) => {
-      const form = event.target.closest("form");
-      const marcado = event.target.checked;
-      form?.querySelectorAll('input[name="codigosTienda"]').forEach((input) => {
-        input.checked = marcado;
-      });
-    });
-  });
-
-  document.querySelectorAll("[data-balance-tienda-pill]").forEach((checkbox) => {
-    checkbox.addEventListener("change", (event) => {
-      const form = event.target.closest("form");
-      if (!form) return;
-      const pills = form.querySelectorAll('input[name="codigosTienda"]');
-      const todas = form.querySelector("[data-balance-todas-tiendas]");
-      if (todas) {
-        todas.checked = Array.from(pills).every((input) => input.checked);
-      }
-    });
-  });
-
-  document.querySelectorAll("[data-balance-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void submitMovimientoForm(form);
-    });
-  });
-
-  document.querySelectorAll("[data-balance-eliminar]").forEach((button) => {
-    button.addEventListener("click", () => {
-      void eliminarMovimiento(button.getAttribute("data-balance-eliminar"));
-    });
-  });
-}
-
-async function submitMovimientoForm(form) {
-  const tipo = form.getAttribute("data-balance-form");
-  const editId = form.getAttribute("data-balance-edit-id") || "";
-  const formData = new FormData(form);
-  const montoIngresado = Number(formData.get("monto"));
-  const descripcion = String(formData.get("descripcion") || "").trim();
-  const fecha = String(formData.get("fecha") || "");
-  const esOperativo = formData.get("esOperativo") === "on";
-  const codigosTienda = formData.getAll("codigosTienda").map((value) => String(value));
-
-  if (!montoIngresado || montoIngresado <= 0) {
-    state.balanceFormError = "El monto debe ser mayor a 0.";
-    render();
-    return;
-  }
-  if (!descripcion) {
-    state.balanceFormError = "La descripcion es requerida.";
-    render();
-    return;
-  }
-  if (!codigosTienda.length) {
-    state.balanceFormError = "Selecciona al menos una tienda.";
-    render();
-    return;
-  }
-
-  // El monto se guarda tal cual se tipeo, en la moneda que este activa en
-  // el toggle Bs/US$ -- sin convertir. A proposito: el usuario no quiere
-  // que un monto cargado en bolivares aparezca convertido al ver en
-  // dolares (ni viceversa); el toggle filtra por moneda en vez de
-  // convertir, a diferencia del resto del panel.
-  const monto = montoIngresado;
-  const moneda = state.moneda;
-
-  state.balanceFormSaving = true;
-  state.balanceFormError = null;
-  render();
-
-  const token = getToken();
-  const editando = Boolean(editId);
-  try {
-    const response = await window.fetch(
-      apiUrl(editando ? `bodega/balance-movimientos/${encodeURIComponent(editId)}` : "bodega/balance-movimientos"),
-      {
-        method: editando ? "PATCH" : "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(
-          editando
-            ? { moneda, esOperativo, monto, descripcion, fecha, codigosTienda }
-            : { tipo, moneda, esOperativo, monto, descripcion, fecha, codigosTienda },
-        ),
-      },
-    );
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      state.balanceFormError = `No se pudo guardar: ${text || response.status}`;
-      state.balanceFormSaving = false;
-      render();
-      return;
-    }
-  } catch (error) {
-    state.balanceFormError = `No se pudo contactar el servidor: ${error?.message || error}`;
-    state.balanceFormSaving = false;
-    render();
-    return;
-  }
-
-  state.balanceFormSaving = false;
-  state.balanceFormAbierto = null;
-  state.balanceEditando = null;
-  await loadPanel();
-}
-
-async function eliminarMovimiento(id) {
-  if (!id || !window.confirm("Eliminar este movimiento?")) {
-    return;
-  }
-  const token = getToken();
-  try {
-    const response = await window.fetch(apiUrl(`bodega/balance-movimientos/${encodeURIComponent(id)}`), {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      setFlash(`No se pudo eliminar: ${text || response.status}`, "error");
-      render();
-      return;
-    }
-  } catch (error) {
-    setFlash(`No se pudo contactar el servidor: ${error?.message || error}`, "error");
-    render();
-    return;
-  }
-  await loadPanel();
 }
 
 // Cierra el desplegable si el clic fue fuera de el. Registrado UNA sola vez
@@ -2165,11 +1757,9 @@ void loadPanel();
 // Auto-actualizacion cada 10 segundos, silenciosa (sin el flash "Actualizando...")
 // para no titilar la pantalla en cada vuelta. Se salta el ciclo si:
 // - no estamos viendo el panel todavia (login, o el fetch inicial no termino),
-// - hay un formulario de ingreso/egreso abierto (no pisar lo que el usuario esta
-//   escribiendo a mitad de carga),
 // - el selector de rango de fechas esta abierto (no interrumpir esa interaccion).
 setInterval(() => {
-  if (state.view !== "panel" || state.loading || state.balanceFormAbierto || state.rangoPickerOpen) {
+  if (state.view !== "panel" || state.loading || state.rangoPickerOpen) {
     return;
   }
   void loadPanel({ silent: true });
