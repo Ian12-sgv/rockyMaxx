@@ -1,4 +1,8 @@
 const TOKEN_STORAGE_KEY = "rocky.bodega.token";
+const USUARIO_RECORDADO_STORAGE_KEY = "rocky.bodega.usuarioRecordado";
+// Clave de una version anterior (nunca publicada) que guardaba usuario Y
+// contrasena en texto plano. Se borra al cargar, por si quedo en algun equipo.
+const CREDENCIALES_VIEJAS_STORAGE_KEY = "rocky.bodega.credenciales";
 
 // Esta pagina puede servirse detras de un prefijo de proxy (ej.
 // "/bodega-api/") que varia segun el nginx del VPS -- un fetch a una ruta
@@ -18,6 +22,7 @@ const state = {
   view: "login",
   loading: false,
   flash: null,
+  loginIntento: null, // usuario del ultimo intento fallido, para no borrarlo del formulario
   rango: null, // { desde, hasta } en yyyy-MM-dd -- se inicializa a "hoy" en loadPanel()
   rangoPickerOpen: false,
   rangoPickerModo: "dia", // "dia" | "rango"
@@ -271,6 +276,38 @@ function setToken(token) {
   }
 }
 
+// Casilla "Recordarme": guarda SOLO el nombre de usuario en este equipo
+// (para rellenar el formulario) y pide al servidor una sesion de 30 dias en
+// vez de 12 h (ver PanelAuthService). La contrasena nunca se guarda: mientras
+// la sesion siga valida se entra directo, y al vencer solo hay que escribirla.
+function getUsuarioRecordado() {
+  try {
+    return window.localStorage.getItem(USUARIO_RECORDADO_STORAGE_KEY) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function setUsuarioRecordado(usuario) {
+  try {
+    if (usuario) {
+      window.localStorage.setItem(USUARIO_RECORDADO_STORAGE_KEY, usuario);
+    } else {
+      window.localStorage.removeItem(USUARIO_RECORDADO_STORAGE_KEY);
+    }
+  } catch (error) {
+    // Igual que setToken: no persistir no es fatal.
+  }
+}
+
+function borrarCredencialesViejas() {
+  try {
+    window.localStorage.removeItem(CREDENCIALES_VIEJAS_STORAGE_KEY);
+  } catch (error) {
+    // Sin localStorage no hay nada que borrar.
+  }
+}
+
 function renderIcon(icon) {
   switch (icon) {
     case "lock":
@@ -412,6 +449,10 @@ function render() {
 }
 
 function renderLoginView() {
+  // Tras un intento fallido se re-renderiza: conservar el usuario que se
+  // acaba de escribir (la contrasena se vuelve a escribir).
+  const usuarioRecordado = getUsuarioRecordado();
+  const usuarioInicial = state.loginIntento || usuarioRecordado;
   return `
     <main class="login-shell">
       <section class="login-stage login-stage-compact">
@@ -434,6 +475,7 @@ function renderLoginView() {
                   placeholder="Tu usuario"
                   autocomplete="username"
                   maxlength="40"
+                  value="${escapeHtml(usuarioInicial || "")}"
                   required
                 />
               </span>
@@ -453,6 +495,13 @@ function renderLoginView() {
                 />
               </span>
             </label>
+
+            <div class="login-meta-row">
+              <label class="login-remember">
+                <input id="recordar-input" type="checkbox" ${usuarioRecordado ? "checked" : ""} />
+                <span>Recordarme en este equipo (30 dias)</span>
+              </label>
+            </div>
 
             <div class="button-row login-button-row">
               <button class="button button-primary login-submit" type="submit" ${state.loading ? "disabled" : ""}>
@@ -1540,12 +1589,13 @@ function bindEvents() {
     event.preventDefault();
     const usuario = String(document.getElementById("usuario-input")?.value || "").trim();
     const password = String(document.getElementById("password-input")?.value || "");
+    const recordar = Boolean(document.getElementById("recordar-input")?.checked);
     if (!usuario || !password) {
       setFlash("Ingresa tu usuario y contrasena.", "error");
       render();
       return;
     }
-    void iniciarSesion(usuario, password);
+    void iniciarSesion(usuario, password, recordar);
   });
 
   document.querySelector('[data-action="logout"]')?.addEventListener("click", () => {
@@ -1716,7 +1766,8 @@ function seleccionarDiaCalendario(iso) {
   seleccionarRango({ desde, hasta });
 }
 
-async function iniciarSesion(usuario, password) {
+async function iniciarSesion(usuario, password, recordar) {
+  state.loginIntento = usuario;
   state.loading = true;
   state.flash = null;
   render();
@@ -1726,7 +1777,7 @@ async function iniciarSesion(usuario, password) {
     response = await window.fetch(apiUrl("bodega/auth/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ usuario, password }),
+      body: JSON.stringify({ usuario, password, recordar }),
     });
   } catch (error) {
     state.loading = false;
@@ -1743,12 +1794,15 @@ async function iniciarSesion(usuario, password) {
     return;
   }
 
+  state.loginIntento = null;
+  setUsuarioRecordado(recordar ? usuario : "");
   limpiarDatosSesion();
   setToken(data.token);
   state.loading = false;
   void loadPanel();
 }
 
+borrarCredencialesViejas();
 if (!sesionActual()) {
   setToken("");
 }

@@ -25,6 +25,9 @@ interface UsuarioPanel {
 }
 
 const SESION_HORAS = 12;
+// Casilla "Recordarme" del login: sesion larga para no pedir la contrasena
+// cada dia. La contrasena NUNCA se guarda en el equipo; solo el token firmado.
+const SESION_RECORDADA_DIAS = 30;
 const SCRYPT_KEYLEN = 64;
 const MAX_INTENTOS_FALLIDOS = 5;
 const VENTANA_BLOQUEO_MS = 10 * 60 * 1000;
@@ -100,7 +103,7 @@ export class PanelAuthService {
     return createHmac("sha256", this.secretoSesion()).update(payload).digest("base64url");
   }
 
-  login(usuario: string, password: string, origen: string) {
+  login(usuario: string, password: string, origen: string, recordar = false) {
     const usuarioNormalizado = String(usuario || "").trim();
     const clave = `${origen}|${usuarioNormalizado.toLowerCase()}`;
     const ahora = Date.now();
@@ -131,7 +134,7 @@ export class PanelAuthService {
     }
 
     this.intentosFallidos.delete(clave);
-    const expira = ahora + SESION_HORAS * 60 * 60 * 1000;
+    const expira = ahora + (recordar ? SESION_RECORDADA_DIAS * 24 : SESION_HORAS) * 60 * 60 * 1000;
     const payload = base64url(JSON.stringify({ u: encontrado.usuario, g: encontrado.grupo, exp: expira }));
     return {
       token: `${payload}.${this.firmar(payload)}`,
