@@ -121,6 +121,7 @@ const state = {
     saving: false,
     approving: false,
     deleting: false,
+    printing: false,
     items: [],
     metadata: null,
     search: {
@@ -696,6 +697,7 @@ async function hydrateAuthenticatedState() {
     saving: false,
     approving: false,
     deleting: false,
+    printing: false,
     items: [],
     metadata: null,
     search: {
@@ -2256,9 +2258,9 @@ function renderTransfersWorkspace() {
                 `
                 : ""
             }
-            <button class="transfer-command-button" type="button" data-print-transfer>
+            <button class="transfer-command-button" type="button" data-print-transfer ${draft.numero && !isBusy && !state.transfers.printing ? "" : "disabled"}>
               <span class="transfer-command-icon">P</span>
-              Imprimir
+              ${state.transfers.printing ? "Preparando" : "Imprimir"}
             </button>
             <button class="transfer-command-button transfer-command-primary" type="submit" ${isLocked || isBusy ? "disabled" : ""}>
               <span class="transfer-command-icon">G</span>
@@ -16637,8 +16639,8 @@ function bindTransferEvents() {
     await submitInventoryBulkTransfer();
   });
 
-  document.querySelector("[data-print-transfer]")?.addEventListener("click", () => {
-    window.print();
+  document.querySelector("[data-print-transfer]")?.addEventListener("click", async () => {
+    await printTransferReport(state.transfers.draft?.numero);
   });
 
   document.querySelector("[data-transfer-exit]")?.addEventListener("click", () => {
@@ -22480,6 +22482,218 @@ async function openTransferLookupModal() {
 function closeTransferLookupModal() {
   state.transferLookup.open = false;
   state.transferLookup.loading = false;
+}
+
+async function printTransferReport(numero) {
+  const normalizedNumero = Number.parseInt(String(numero || ""), 10);
+  if (!normalizedNumero) {
+    setFlash("Guarda la transferencia antes de imprimir el reporte.", "error");
+    render();
+    return;
+  }
+
+  state.transfers.printing = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/transfers/${encodeURIComponent(String(normalizedNumero))}`);
+    const html = buildTransferReportHtml(response.transferencia);
+    await printHtmlInHiddenFrame(html);
+  } catch (error) {
+    console.error(error);
+    setFlash(
+      `No se pudo generar el reporte de la transferencia ${normalizedNumero}: ${extractErrorMessage(error)}`,
+      "error",
+    );
+  } finally {
+    state.transfers.printing = false;
+    render();
+  }
+}
+
+function printHtmlInHiddenFrame(html) {
+  return new Promise((resolve, reject) => {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+    document.body.appendChild(frame);
+
+    const frameWindow = frame.contentWindow;
+    if (!frameWindow) {
+      frame.remove();
+      reject(new Error("No se pudo preparar el documento de impresion."));
+      return;
+    }
+
+    frameWindow.document.open();
+    frameWindow.document.write(html);
+    frameWindow.document.close();
+
+    window.setTimeout(() => {
+      try {
+        frameWindow.focus();
+        frameWindow.print();
+        resolve();
+      } catch (error) {
+        reject(error);
+      } finally {
+        window.setTimeout(() => frame.remove(), 1000);
+      }
+    }, 200);
+  });
+}
+
+function formatTransferReportLocation(info, fallbackCode) {
+  const codigo = String(info?.codigo || fallbackCode || "").trim();
+  const nombre = String(info?.nombre || "").trim();
+  if (codigo && nombre && nombre !== codigo) {
+    return `${codigo} - ${nombre}`;
+  }
+  return codigo || nombre || "-";
+}
+
+function buildTransferReportHtml(transfer) {
+  const numero = String(transfer?.numero ?? "");
+  const isApproved = Number(transfer?.status) === 1;
+  const items = Array.isArray(transfer?.items) ? transfer.items : [];
+  const despacho = transfer?.tipoDespacho
+    ? `${String(transfer.tipoDespacho.id ?? "")} - ${String(transfer.tipoDespacho.descripcion || "").trim()}`
+    : "-";
+  const printedBy = String(state.user?.nombreUsuario || state.user?.codUsuario || "").trim() || "-";
+
+  let totalCantidad = 0;
+  let totalValor = 0;
+  const rowsHtml = items
+    .map((line, index) => {
+      const cantidad = toFiniteNumber(line.cantidad);
+      const valor = toFiniteNumber(line.valor);
+      const subtotal = cantidad * valor;
+      totalCantidad += cantidad;
+      totalValor += subtotal;
+      return `
+        <tr>
+          <td class="num">${index + 1}</td>
+          <td class="mono">${escapeHtml(line.codigoBarra || "-")}</td>
+          <td>${escapeHtml(line.articulo?.referencia || "-")}</td>
+          <td>${escapeHtml(line.articulo?.nombre || "-")}</td>
+          <td class="num">${escapeHtml(String(line.numeroCaja ?? 0))}</td>
+          <td class="num">${escapeHtml(formatTransferQuantity(cantidad))}</td>
+          <td class="num">${escapeHtml(formatTransferAmount(valor))}</td>
+          <td class="num">${escapeHtml(formatTransferAmount(subtotal))}</td>
+        </tr>`;
+    })
+    .join("");
+
+  const field = (label, value) => `
+    <div class="field"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "-")}</strong></div>`;
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Transferencia ${escapeHtml(numero)}</title>
+<style>
+  @page { size: letter; margin: 14mm 12mm 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 10.5px; color: #111; }
+  header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 10px; }
+  .brand { font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+  .doc-title { font-size: 13px; font-weight: 700; margin-top: 2px; text-transform: uppercase; }
+  .doc-number { text-align: right; }
+  .doc-number strong { display: block; font-size: 20px; }
+  .status { display: inline-block; margin-top: 4px; padding: 2px 8px; border: 1.5px solid #111; font-weight: 700; font-size: 10px; text-transform: uppercase; }
+  .status.pending { border-style: dashed; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 16px; margin-bottom: 8px; }
+  .field span { display: block; font-size: 9px; color: #555; text-transform: uppercase; }
+  .field strong { font-weight: 600; }
+  .field.wide { grid-column: span 3; }
+  .route { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; border: 1px solid #bbb; padding: 8px 10px; margin-bottom: 10px; }
+  .route .arrow { font-size: 16px; font-weight: 700; }
+  .route strong { font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { display: table-header-group; }
+  th { background: #eee; font-size: 9px; text-transform: uppercase; text-align: left; padding: 5px 4px; border-bottom: 1.5px solid #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  td { padding: 4px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  .num { text-align: right; white-space: nowrap; }
+  .mono { font-family: Consolas, "Courier New", monospace; }
+  tfoot td { border-top: 1.5px solid #111; border-bottom: 0; font-weight: 700; padding-top: 6px; }
+  .empty { text-align: center; color: #666; padding: 14px; }
+  .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 46px; page-break-inside: avoid; }
+  .signatures div { border-top: 1px solid #111; padding-top: 4px; text-align: center; font-size: 9.5px; }
+  footer { margin-top: 18px; font-size: 9px; color: #555; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="brand">ROCKY MAXX</div>
+      <div class="doc-title">Transferencia de mercancia</div>
+    </div>
+    <div class="doc-number">
+      <span>N&deg;</span>
+      <strong>${escapeHtml(numero)}</strong>
+      <span class="status ${isApproved ? "" : "pending"}">${isApproved ? "Aprobada" : "Pendiente de aprobacion"}</span>
+    </div>
+  </header>
+
+  <section class="route">
+    <div>${field("Envia", formatTransferReportLocation(transfer?.codigoEnviaInfo, transfer?.codigoEnvia))}</div>
+    <div class="arrow">&rarr;</div>
+    <div>${field("Recibe", formatTransferReportLocation(transfer?.codigoRecibeInfo, transfer?.codigoRecibe))}</div>
+  </section>
+
+  <section class="grid">
+    ${field("Fecha registro", formatDateDisplay(transfer?.fechaRegistro || transfer?.fecha))}
+    ${field("Fecha aprobacion", isApproved ? formatDateDisplay(transfer?.fechaAprobacion) : "Pendiente")}
+    ${field("Usuario", transfer?.usuario)}
+    ${field("Documento origen", transfer?.documentoOrigen)}
+    ${field("Despacho", despacho)}
+    ${field("Lote", transfer?.zona)}
+    ${transfer?.correccion ? field("Tipo", "Transferencia de correccion") : ""}
+    ${String(transfer?.observacion || "").trim() ? `<div class="field wide"><span>Observacion</span><strong>${escapeHtml(transfer.observacion)}</strong></div>` : ""}
+  </section>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="num">#</th>
+        <th>Codigo barra</th>
+        <th>Referencia</th>
+        <th>Descripcion</th>
+        <th class="num">Caja</th>
+        <th class="num">Cantidad</th>
+        <th class="num">Valor unit.</th>
+        <th class="num">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml || `<tr><td class="empty" colspan="8">Sin renglones para esta transferencia.</td></tr>`}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4">Total renglones: ${items.length}</td>
+        <td></td>
+        <td class="num">${escapeHtml(formatTransferQuantity(totalCantidad))}</td>
+        <td></td>
+        <td class="num">Bs ${escapeHtml(formatTransferAmount(totalValor))}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <section class="signatures">
+    <div>Despachado por</div>
+    <div>Transportado por</div>
+    <div>Recibido por</div>
+  </section>
+
+  <footer>
+    <span>Impreso por ${escapeHtml(printedBy)}</span>
+    <span>${escapeHtml(formatDateDisplay(new Date()))}</span>
+  </footer>
+</body>
+</html>`;
 }
 
 async function downloadTransferLookupPdf(numero, inbound = false) {
@@ -28808,6 +29022,7 @@ function clearSession() {
     saving: false,
     approving: false,
     deleting: false,
+    printing: false,
     items: [],
     metadata: null,
     search: {
