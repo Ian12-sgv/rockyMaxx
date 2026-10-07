@@ -832,6 +832,27 @@ model CierreGeneralEstado {
   @@map("CIERRE_GENERAL_ESTADO")
 }
 
+// Tabla nueva (no forma parte del espejo legacy de SQL Server): gastos operativos
+// que registra el administrador de la tienda desde Reportes > Reporte gastos.
+// La crea PrismaService al arrancar y viaja al VPS por MirrorSync (GASTO_UPSERT).
+// No se borra fisicamente: anular deja Status = 0 para que el espejo solo haga upsert.
+model Gastos {
+  ID            BigInt   @id @default(autoincrement())
+  Fecha         DateTime @db.Date
+  Categoria     String   @db.VarChar(40)
+  Descripcion   String   @db.VarChar(300)
+  Moneda        String   @default("BS") @db.VarChar(3)
+  Monto         Decimal  @db.Decimal(18, 2)
+  Referencia    String?  @db.VarChar(50)
+  Usuario       String   @db.VarChar(15)
+  Status        Int      @default(1)
+  CreadoEn      DateTime @default(now()) @db.Timestamptz(3)
+  ActualizadoEn DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([Fecha], map: "IX_GASTOS_Fecha")
+  @@map("GASTOS")
+}
+
 model SalidasCaja {
   Numero          BigInt
   Serie           String

@@ -27,6 +27,7 @@ const MIRROR_SYNC_EVENT_WORKER_UPSERT = "WORKER_UPSERT";
 const MIRROR_SYNC_EVENT_RATE_UPSERT = "RATE_UPSERT";
 const MIRROR_SYNC_EVENT_SALE_UPSERT = "SALE_UPSERT";
 const MIRROR_SYNC_EVENT_CAJA_UPSERT = "CAJA_UPSERT";
+const MIRROR_SYNC_EVENT_GASTO_UPSERT = "GASTO_UPSERT";
 const DEFAULT_MIRROR_SYNC_RETRY_INTERVAL_MS = 30_000;
 const DEFAULT_MIRROR_SYNC_RETRY_STARTUP_DELAY_MS = 5_000;
 const DEFAULT_MIRROR_SYNC_RETRY_LIMIT = 200;
@@ -261,6 +262,20 @@ type MirrorSyncCajaPayload = {
   incluirIGTF: boolean | null;
 };
 
+type MirrorSyncGastoPayload = {
+  id: string;
+  fecha: string;
+  categoria: string;
+  descripcion: string;
+  moneda: string;
+  monto: string;
+  referencia: string | null;
+  usuario: string;
+  status: number;
+  creadoEn: string;
+  actualizadoEn: string;
+};
+
 type MirrorEnvelopeBase = {
   schemaVersion: number;
   globalId: string;
@@ -353,6 +368,11 @@ type CajaUpsertEnvelope = MirrorEnvelopeBase & {
   impresoraFiscal: MirrorSyncImpresoraFiscalPayload;
 };
 
+type GastoUpsertEnvelope = MirrorEnvelopeBase & {
+  eventType: typeof MIRROR_SYNC_EVENT_GASTO_UPSERT;
+  gasto: MirrorSyncGastoPayload;
+};
+
 type MirrorSyncEnvelope =
   | InventoryUpsertEnvelope
   | InventoryDeleteEnvelope
@@ -362,7 +382,8 @@ type MirrorSyncEnvelope =
   | WorkerUpsertEnvelope
   | RateUpsertEnvelope
   | SaleUpsertEnvelope
-  | CajaUpsertEnvelope;
+  | CajaUpsertEnvelope
+  | GastoUpsertEnvelope;
 
 type CatalogSnapshotRow = {
   Codigo: string | number;
@@ -744,6 +765,25 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async enqueueGastoUpsertTx(
+    tx: MirrorSyncTransactionClient,
+    id: bigint | number | string,
+  ) {
+    if (!this.isMirrorSyncEnabled()) {
+      return;
+    }
+
+    const gasto = await tx.gastos.findUnique({
+      where: { ID: BigInt(this.normalizeBigIntString(id, "ID de gasto espejo invalido.")) },
+    });
+
+    if (!gasto) {
+      return;
+    }
+
+    await this.recordPendingEnvelope(tx, this.buildGastoUpsertEnvelope(gasto));
+  }
+
   async backfillCajaUpserts() {
     await this.ensureMirrorSyncSchema();
 
@@ -874,6 +914,8 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
             await this.applyCajaUpsertEnvelope(tx, payload);
           } else if (payload.eventType === MIRROR_SYNC_EVENT_SALE_UPSERT) {
             await this.applySaleUpsertEnvelope(tx, payload);
+          } else if (payload.eventType === MIRROR_SYNC_EVENT_GASTO_UPSERT) {
+            await this.applyGastoUpsertEnvelope(tx, payload);
           } else {
             throw new BadRequestException("Tipo de evento espejo no soportado.");
           }
@@ -1250,6 +1292,31 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
         id: entityKey,
         fecha: this.toIsoString(row.Fecha),
         valor: this.toDecimalString(row.Valor),
+      },
+    };
+  }
+
+  private buildGastoUpsertEnvelope(gasto: Prisma.GastosGetPayload<object>): GastoUpsertEnvelope {
+    const entityKey = gasto.ID.toString();
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.buildGlobalId("GASTO", entityKey),
+      sourceDatabase: this.getCurrentDatabaseName(),
+      entityType: "GASTO",
+      entityKey,
+      eventType: MIRROR_SYNC_EVENT_GASTO_UPSERT,
+      gasto: {
+        id: entityKey,
+        fecha: this.toIsoString(gasto.Fecha),
+        categoria: gasto.Categoria,
+        descripcion: gasto.Descripcion,
+        moneda: gasto.Moneda,
+        monto: this.toDecimalString(gasto.Monto),
+        referencia: gasto.Referencia ?? null,
+        usuario: gasto.Usuario,
+        status: gasto.Status,
+        creadoEn: this.toIsoString(gasto.CreadoEn),
+        actualizadoEn: this.toIsoString(gasto.ActualizadoEn),
       },
     };
   }
@@ -1906,6 +1973,31 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
     await this.recalculateInventoryPricesFromRatesTx(tx);
   }
 
+  private async applyGastoUpsertEnvelope(
+    tx: MirrorSyncTransactionClient,
+    payload: GastoUpsertEnvelope,
+  ) {
+    const id = BigInt(payload.gasto.id);
+    const data = {
+      Fecha: new Date(payload.gasto.fecha),
+      Categoria: payload.gasto.categoria,
+      Descripcion: payload.gasto.descripcion,
+      Moneda: payload.gasto.moneda,
+      Monto: payload.gasto.monto,
+      Referencia: payload.gasto.referencia,
+      Usuario: payload.gasto.usuario,
+      Status: payload.gasto.status,
+      CreadoEn: new Date(payload.gasto.creadoEn),
+      ActualizadoEn: new Date(payload.gasto.actualizadoEn),
+    };
+
+    await tx.gastos.upsert({
+      where: { ID: id },
+      create: { ID: id, ...data },
+      update: data,
+    });
+  }
+
   private async applyImpresoraFiscalUpsert(
     tx: MirrorSyncTransactionClient,
     impresora: MirrorSyncImpresoraFiscalPayload,
@@ -2508,6 +2600,10 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       return this.normalizeCajaUpsertEnvelope(raw);
     }
 
+    if (eventType === MIRROR_SYNC_EVENT_GASTO_UPSERT) {
+      return this.normalizeGastoUpsertEnvelope(raw);
+    }
+
     throw new BadRequestException("Tipo de evento espejo no soportado.");
   }
 
@@ -2655,6 +2751,32 @@ export class MirrorSyncService implements OnModuleInit, OnModuleDestroy {
       eventType: MIRROR_SYNC_EVENT_RATE_UPSERT,
       rateTable: this.normalizeRateTable(raw.rateTable),
       rate: this.normalizeRatePayload(raw.rate),
+    };
+  }
+
+  private normalizeGastoUpsertEnvelope(raw: Record<string, unknown>): GastoUpsertEnvelope {
+    const value = this.asRecord(raw.gasto);
+    const referencia = this.normalizeOptionalString(value.referencia);
+    return {
+      schemaVersion: MIRROR_SYNC_SCHEMA_VERSION,
+      globalId: this.normalizeRequiredCode(raw.globalId, "GlobalId espejo invalido."),
+      sourceDatabase: String(raw.sourceDatabase || "").trim(),
+      entityType: this.normalizeRequiredCode(raw.entityType, "EntityType espejo invalido."),
+      entityKey: this.normalizeRequiredCode(raw.entityKey, "EntityKey espejo invalido."),
+      eventType: MIRROR_SYNC_EVENT_GASTO_UPSERT,
+      gasto: {
+        id: this.normalizeBigIntString(value.id, "ID de gasto invalido."),
+        fecha: this.normalizeIsoDateString(value.fecha, "Fecha de gasto invalida."),
+        categoria: this.normalizeRequiredString(value.categoria, "Categoria de gasto invalida.").slice(0, 40),
+        descripcion: this.normalizeRequiredString(value.descripcion, "Descripcion de gasto invalida.").slice(0, 300),
+        moneda: this.normalizeRequiredCode(value.moneda, "Moneda de gasto invalida.").slice(0, 3),
+        monto: this.normalizeDecimalString(value.monto, "Monto de gasto invalido."),
+        referencia: referencia ? referencia.slice(0, 50) : null,
+        usuario: this.normalizeRequiredString(value.usuario, "Usuario de gasto invalido.").slice(0, 15),
+        status: this.normalizeSignedInteger(value.status, "Status de gasto invalido."),
+        creadoEn: this.normalizeIsoDateString(value.creadoEn, "Fecha de creacion de gasto invalida."),
+        actualizadoEn: this.normalizeIsoDateString(value.actualizadoEn, "Fecha de actualizacion de gasto invalida."),
+      },
     };
   }
 

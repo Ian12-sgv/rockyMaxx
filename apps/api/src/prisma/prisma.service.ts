@@ -86,6 +86,26 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     `);
 
     await this.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS dbo."GASTOS" (
+        "ID" BIGSERIAL PRIMARY KEY,
+        "Fecha" DATE NOT NULL,
+        "Categoria" VARCHAR(40) NOT NULL,
+        "Descripcion" VARCHAR(300) NOT NULL,
+        "Moneda" VARCHAR(3) NOT NULL DEFAULT 'BS',
+        "Monto" DECIMAL(18, 2) NOT NULL,
+        "Referencia" VARCHAR(50) NULL,
+        "Usuario" VARCHAR(15) NOT NULL,
+        "Status" INTEGER NOT NULL DEFAULT 1,
+        "CreadoEn" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "ActualizadoEn" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await this.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS "IX_GASTOS_Fecha" ON dbo."GASTOS" ("Fecha")
+    `);
+
+    await this.$executeRawUnsafe(`
       ALTER TABLE IF EXISTS dbo."DEVBORRADOR"
       ADD COLUMN IF NOT EXISTS "CodigoOrigen" VARCHAR(15)
     `);
@@ -132,6 +152,20 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         SELECT MAX("ID") INTO max_id FROM dbo."TASA_CAMBIO_M";
         IF max_id IS NOT NULL THEN
           PERFORM setval(pg_get_serial_sequence('dbo."TASA_CAMBIO_M"', 'ID'), max_id, true);
+        END IF;
+      END $$
+    `);
+
+    // GASTOS llega con "ID" explicito desde el espejo; si una tienda se restaura
+    // desde el dump del VPS, la secuencia queda atras y el siguiente gasto choca.
+    await this.$executeRawUnsafe(`
+      DO $$
+      DECLARE
+        max_id bigint;
+      BEGIN
+        SELECT MAX("ID") INTO max_id FROM dbo."GASTOS";
+        IF max_id IS NOT NULL THEN
+          PERFORM setval(pg_get_serial_sequence('dbo."GASTOS"', 'ID'), max_id, true);
         END IF;
       END $$
     `);

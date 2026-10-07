@@ -371,6 +371,7 @@ const state = {
     updatedAt: "",
   },
   reportes: createEmptyReportesState(),
+  gastos: createEmptyGastosState(),
   articlePricingRates: createEmptyArticlePricingRateState(),
   desktopPrinting: createEmptyDesktopPrintingState(),
   cashRegisters: {
@@ -875,6 +876,7 @@ async function hydrateAuthenticatedState() {
     updatedAt: "",
   };
   state.reportes = createEmptyReportesState();
+  state.gastos = createEmptyGastosState();
   state.cashRegisters = {
     loading: false,
     loadingMetadata: false,
@@ -1247,6 +1249,7 @@ function renderShellView() {
                         "Reportes",
                         `
                   ${renderDesktopMenuLink("reportes", "Cierre general")}
+                  ${renderDesktopMenuLink("reporte-gastos", "Reporte gastos")}
                 `,
                       )
                     : ""
@@ -1431,6 +1434,10 @@ function renderDesktopWorkspace() {
     return renderGeneralCloseReportsWorkspace();
   }
 
+  if (state.currentView === "reporte-gastos") {
+    return renderGastosWorkspace();
+  }
+
   if (state.currentView === "cargar-devoluciones") {
     return renderLoadDevReturnsWorkspace();
   }
@@ -1600,6 +1607,7 @@ function getDesktopViewLabel(view) {
     compras: "Compras",
     "registrar-tasa-cambio": "Registrar tasa cambio",
     reportes: "Reportes",
+    "reporte-gastos": "Reporte gastos",
     usuarios: "Usuarios",
     roles: "Roles",
     ayuda: "Ayuda",
@@ -9659,6 +9667,248 @@ function renderGeneralCloseReportsWorkspace() {
   `;
 }
 
+function renderGastosWorkspace() {
+  const gastosState = state.gastos || createEmptyGastosState();
+  const draft = gastosState.draft || createEmptyGastoDraft(gastosState.metadata);
+  const isSaving = gastosState.saving;
+  const isVoiding = gastosState.voiding;
+  const isBusy = isSaving || isVoiding;
+  const categorias = Array.isArray(gastosState.metadata?.categorias)
+    ? gastosState.metadata.categorias
+    : [];
+  const monedas = Array.isArray(gastosState.metadata?.monedas)
+    ? gastosState.metadata.monedas
+    : ["BS", "USD"];
+
+  return `
+    <div class="modern-page clients-page">
+      ${renderDesktopBreadcrumb(["Reportes", "Reporte gastos"])}
+
+      <section class="transfer-register-shell adjustment-window clients-window">
+        <div class="adjustment-titlebar">Reporte gastos</div>
+        <form id="gasto-form" class="adjustment-form clients-form">
+          <div class="transfer-command-bar adjustment-command-bar clients-command-bar" role="toolbar" aria-label="Acciones de gastos">
+            <button class="transfer-command-button" type="button" data-new-gasto ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Nuevo
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" form="gasto-form" ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${isSaving ? "Guardando" : draft.id ? "Guardar cambios" : "Guardar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-void-current-gasto ${!draft.id || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">X</span>
+              ${isVoiding ? "Anulando" : "Anular"}
+            </button>
+            <button class="transfer-command-button" type="button" data-gastos-exit ${isBusy ? "disabled" : ""}>
+              Salir
+            </button>
+          </div>
+
+          <div class="clients-panel">
+            <div class="clients-grid">
+              <label class="clients-field clients-field-date">
+                <span>Fecha</span>
+                <input
+                  type="date"
+                  name="fecha"
+                  value="${escapeHtml(toInputValue(draft.fecha))}"
+                  required
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>Categoria</span>
+                <select name="categoria">
+                  ${categorias
+                    .map(
+                      (categoria) => `
+                    <option value="${escapeHtml(categoria)}" ${draft.categoria === categoria ? "selected" : ""}>
+                      ${escapeHtml(formatGastoCategoriaLabel(categoria))}
+                    </option>
+                  `,
+                    )
+                    .join("")}
+                </select>
+              </label>
+
+              <label class="clients-field">
+                <span>Moneda</span>
+                <select name="moneda">
+                  ${monedas
+                    .map(
+                      (moneda) => `
+                    <option value="${escapeHtml(moneda)}" ${draft.moneda === moneda ? "selected" : ""}>
+                      ${moneda === "USD" ? "Dolares (USD)" : "Bolivares (Bs)"}
+                    </option>
+                  `,
+                    )
+                    .join("")}
+                </select>
+              </label>
+
+              <label class="clients-field">
+                <span>Monto</span>
+                <input
+                  type="text"
+                  name="monto"
+                  value="${escapeHtml(toInputValue(draft.monto))}"
+                  inputmode="decimal"
+                  maxlength="20"
+                  placeholder="0,00"
+                />
+              </label>
+
+              <label class="clients-field">
+                <span>Referencia</span>
+                <input
+                  type="text"
+                  name="referencia"
+                  value="${escapeHtml(toInputValue(draft.referencia))}"
+                  maxlength="50"
+                  placeholder="Factura o recibo (opcional)"
+                />
+              </label>
+
+              <label class="clients-field clients-field-wide">
+                <span>Descripcion</span>
+                <input
+                  type="text"
+                  name="descripcion"
+                  value="${escapeHtml(toInputValue(draft.descripcion))}"
+                  maxlength="300"
+                  placeholder="Ej: pago de luz del mes de septiembre"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div class="clients-history-panel">
+            <div class="clients-history-head">
+              <div>
+                <h2>Gastos registrados</h2>
+                <p>${escapeHtml(String((gastosState.items || []).length))} registro(s) en el rango.</p>
+              </div>
+              <div class="clients-history-actions gastos-filter-actions">
+                <label class="field gastos-filter-field">
+                  <span>Desde</span>
+                  <input type="date" data-gastos-desde value="${escapeHtml(toInputValue(gastosState.filters.desde))}" />
+                </label>
+                <label class="field gastos-filter-field">
+                  <span>Hasta</span>
+                  <input type="date" data-gastos-hasta value="${escapeHtml(toInputValue(gastosState.filters.hasta))}" />
+                </label>
+                <label class="gastos-filter-check">
+                  <input type="checkbox" data-gastos-incluir-anulados ${gastosState.filters.incluirAnulados ? "checked" : ""} />
+                  <span>Ver anulados</span>
+                </label>
+                <button class="button button-ghost" type="button" data-refresh-gastos ${gastosState.loading || isBusy ? "disabled" : ""}>
+                  ${gastosState.loading ? "Actualizando..." : "Consultar"}
+                </button>
+              </div>
+            </div>
+            ${renderGastosTotals()}
+            ${gastosState.loading ? renderLoadingState("Cargando gastos...") : renderGastosTable()}
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderGastosTotals() {
+  const totales = Array.isArray(state.gastos?.totales) ? state.gastos.totales : [];
+  if (!totales.length) {
+    return "";
+  }
+
+  return `
+    <div class="gastos-totals">
+      ${totales
+        .map(
+          (item) => `
+        <span class="modern-chip">
+          Total ${item.moneda === "USD" ? "USD" : "Bs"}: <strong>${escapeHtml(formatGastoAmount(item.monto, item.moneda))}</strong>
+          (${escapeHtml(String(item.cantidad || 0))})
+        </span>
+      `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderGastosTable() {
+  const items = Array.isArray(state.gastos?.items) ? state.gastos.items : [];
+
+  if (!items.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin gastos</h3>
+        <p>No hay gastos registrados en el rango de fechas seleccionado.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="table-shell clients-table-shell">
+      <table class="modern-table clients-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Categoria</th>
+            <th>Descripcion</th>
+            <th>Referencia</th>
+            <th>Monto</th>
+            <th>Usuario</th>
+            <th>Estado</th>
+            <th class="sucursal-row-actions">Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map((item) => {
+              const isSelected =
+                String(state.gastos.selectedId || "") === String(item.id || "");
+              const isActive = Number(item.status) === 1;
+              return `
+                <tr class="${isSelected ? "is-selected-row" : ""}">
+                  <td>${escapeHtml(formatDateOnlyDisplay(item.fecha))}</td>
+                  <td>${escapeHtml(formatGastoCategoriaLabel(item.categoria))}</td>
+                  <td>${escapeHtml(item.descripcion || "-")}</td>
+                  <td>${escapeHtml(item.referencia || "-")}</td>
+                  <td><strong>${escapeHtml(formatGastoAmount(item.monto, item.moneda))}</strong></td>
+                  <td>${escapeHtml(item.usuario || "-")}</td>
+                  <td><span class="modern-chip">${isActive ? "Registrado" : "Anulado"}</span></td>
+                  <td class="sucursal-row-actions">
+                    ${
+                      isActive
+                        ? `
+                    <button class="button button-ghost" type="button" data-gasto-select="${escapeHtml(String(item.id || ""))}">
+                      Abrir
+                    </button>
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-void-gasto="${escapeHtml(String(item.id || ""))}"
+                      ${state.gastos.voiding ? "disabled" : ""}
+                    >
+                      Anular
+                    </button>
+                  `
+                        : "-"
+                    }
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 function renderExchangeRateRegisterWorkspace() {
   const draft =
     state.exchangeRateRegister.draft || createEmptyExchangeRateRegisterDraft();
@@ -11217,6 +11467,10 @@ function getDesktopBreadcrumb(view) {
     return ["Reportes", "Cierre general"];
   }
 
+  if (view === "reporte-gastos") {
+    return ["Reportes", "Reporte gastos"];
+  }
+
   if (view === "transferencias" || view === "registro-transferencia") {
     return ["Procesos", "Transferencias", "Registro de transferencias"];
   }
@@ -11305,6 +11559,7 @@ function getDesktopViewLabelV2(view) {
     "registro-devoluciones": "Registro de devoluciones",
     "cargar-devoluciones": "Carga de devoluciones",
     reportes: "Reportes",
+    "reporte-gastos": "Reporte gastos",
     usuarios: "Usuarios",
     roles: "Roles",
     ayuda: "Ayuda",
@@ -12940,6 +13195,11 @@ function bindShellEvents() {
         return;
       }
 
+      if (nextView === "reporte-gastos") {
+        await loadGastos();
+        return;
+      }
+
       if (nextView === "sucursales") {
         await loadSucursales();
         return;
@@ -13240,6 +13500,7 @@ function bindShellEvents() {
   bindImpuestoEvents();
   bindExchangeRateRegisterEvents();
   bindReportesEvents();
+  bindGastosEvents();
   bindFacturacionEvents();
   bindCashRegisterEvents();
   bindCashRegisterCloseEvents();
@@ -14696,6 +14957,110 @@ function bindReportesEvents() {
   document
     .getElementById("reportes-general-form")
     ?.addEventListener("submit", submit);
+}
+
+function bindGastosEvents() {
+  const syncFilters = () => {
+    const desde = document.querySelector("[data-gastos-desde]");
+    const hasta = document.querySelector("[data-gastos-hasta]");
+    const incluirAnulados = document.querySelector(
+      "[data-gastos-incluir-anulados]",
+    );
+    state.gastos.filters = {
+      desde: desde?.value || state.gastos.filters.desde,
+      hasta: hasta?.value || state.gastos.filters.hasta,
+      incluirAnulados: Boolean(incluirAnulados?.checked),
+    };
+  };
+
+  document
+    .querySelector("[data-refresh-gastos]")
+    ?.addEventListener("click", async () => {
+      captureGastoDraft();
+      syncFilters();
+      await loadGastos();
+    });
+
+  document
+    .querySelector("[data-gastos-incluir-anulados]")
+    ?.addEventListener("change", async () => {
+      captureGastoDraft();
+      syncFilters();
+      await loadGastos();
+    });
+
+  ["[data-gastos-desde]", "[data-gastos-hasta]"].forEach((selector) => {
+    document.querySelector(selector)?.addEventListener("change", syncFilters);
+  });
+
+  document.querySelector("[data-new-gasto]")?.addEventListener("click", () => {
+    resetGastoDraft();
+    clearFlash();
+    render();
+  });
+
+  document
+    .querySelector("[data-void-current-gasto]")
+    ?.addEventListener("click", async () => {
+      const id = state.gastos.draft?.id || state.gastos.selectedId;
+      if (!id) {
+        return;
+      }
+
+      await voidGasto(id);
+    });
+
+  document
+    .querySelector("[data-gastos-exit]")
+    ?.addEventListener("click", () => {
+      state.currentView = "desktop";
+      state.navigation.openMenu = "";
+      state.navigation.openSubmenu = "";
+      state.navigation.menuPinned = false;
+      clearFlash();
+      render();
+    });
+
+  document.querySelectorAll("[data-gasto-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.getAttribute("data-gasto-select") || "";
+      const item = (state.gastos.items || []).find(
+        (gasto) => String(gasto.id) === id,
+      );
+      if (!item) {
+        return;
+      }
+
+      state.gastos.selectedId = id;
+      state.gastos.draft = gastoToDraft(item);
+      clearFlash();
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-void-gasto]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const id = button.getAttribute("data-void-gasto") || "";
+      if (!id) {
+        return;
+      }
+
+      await voidGasto(id);
+    });
+  });
+
+  const gastoForm = document.getElementById("gasto-form");
+  if (gastoForm instanceof HTMLFormElement) {
+    gastoForm.addEventListener("input", () => {
+      captureGastoDraft();
+    });
+
+    gastoForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureGastoDraft();
+      await saveGasto();
+    });
+  }
 }
 
 function bindCashRegisterCloseEvents() {
@@ -24792,6 +25157,271 @@ function createEmptyReportesState() {
     fechaCierreGeneral: toDateInputValue(new Date()),
     generatingGeneralClose: false,
   };
+}
+
+function createEmptyGastosState() {
+  const today = new Date();
+  return {
+    loading: false,
+    saving: false,
+    voiding: false,
+    metadata: null,
+    items: [],
+    totales: [],
+    selectedId: "",
+    filters: {
+      desde: toDateInputValue(
+        new Date(today.getFullYear(), today.getMonth(), 1),
+      ),
+      hasta: toDateInputValue(today),
+      incluirAnulados: false,
+    },
+    draft: createEmptyGastoDraft(),
+  };
+}
+
+function createEmptyGastoDraft(metadata) {
+  const defaults = metadata?.defaults || {};
+  return {
+    id: "",
+    fecha: toDateInputValue(new Date()),
+    categoria: defaults.categoria || "SERVICIOS",
+    moneda: defaults.moneda || "BS",
+    monto: "",
+    referencia: "",
+    descripcion: "",
+  };
+}
+
+function resetGastoDraft() {
+  state.gastos.selectedId = "";
+  state.gastos.draft = createEmptyGastoDraft(state.gastos.metadata);
+}
+
+function captureGastoDraft() {
+  const form = document.getElementById("gasto-form");
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  const currentDraft =
+    state.gastos.draft || createEmptyGastoDraft(state.gastos.metadata);
+  state.gastos.draft = {
+    id: currentDraft.id || "",
+    fecha: readFormFieldValue(form, "fecha", currentDraft.fecha || ""),
+    categoria: readFormFieldValue(form, "categoria", currentDraft.categoria),
+    moneda: readFormFieldValue(form, "moneda", currentDraft.moneda),
+    monto: readFormFieldValue(form, "monto", currentDraft.monto || ""),
+    referencia: readFormFieldValue(
+      form,
+      "referencia",
+      currentDraft.referencia || "",
+    ),
+    descripcion: readFormFieldValue(
+      form,
+      "descripcion",
+      currentDraft.descripcion || "",
+    ),
+  };
+}
+
+function validateGastoDraft(draft) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(draft.fecha || "").trim())) {
+    return "Debes indicar la fecha del gasto.";
+  }
+
+  if (!String(draft.categoria || "").trim()) {
+    return "Debes seleccionar la categoria del gasto.";
+  }
+
+  const monto = parseExchangeRateNumber(draft.monto);
+  if (monto === null || monto <= 0) {
+    return "Debes indicar un monto mayor que cero.";
+  }
+
+  // "1.234" se leeria como 1,234 y se redondearia a 1,23 sin avisar.
+  if (Math.abs(Math.round(monto * 100) - monto * 100) > 1e-6) {
+    return "Revisa el monto: usa coma para los decimales (ej: 1.234,50).";
+  }
+
+  if (!String(draft.descripcion || "").trim()) {
+    return "Debes indicar la descripcion del gasto.";
+  }
+
+  return "";
+}
+
+function buildGastoPayload(draft) {
+  const referencia = String(draft.referencia || "").trim();
+  return {
+    fecha: String(draft.fecha || "").trim(),
+    categoria: String(draft.categoria || "").trim().toUpperCase(),
+    moneda: String(draft.moneda || "BS").trim().toUpperCase(),
+    monto: normalizeExchangeRateInput(draft.monto),
+    descripcion: String(draft.descripcion || "").trim(),
+    ...(referencia ? { referencia } : {}),
+  };
+}
+
+function gastoToDraft(item) {
+  return {
+    id: String(item?.id || ""),
+    fecha: toDateInputValue(item?.fecha || new Date()),
+    categoria: item?.categoria || "SERVICIOS",
+    moneda: item?.moneda || "BS",
+    monto: formatExchangeRateDraftValue(item?.monto),
+    referencia: item?.referencia || "",
+    descripcion: item?.descripcion || "",
+  };
+}
+
+function formatGastoCategoriaLabel(categoria) {
+  const labels = {
+    ALQUILER: "Alquiler",
+    SERVICIOS: "Servicios (luz, agua, internet)",
+    NOMINA: "Nomina",
+    MANTENIMIENTO: "Mantenimiento",
+    LIMPIEZA: "Limpieza",
+    TRANSPORTE: "Transporte",
+    PAPELERIA: "Papeleria",
+    IMPUESTOS: "Impuestos",
+    OTROS: "Otros",
+  };
+
+  return labels[categoria] || String(categoria || "-");
+}
+
+function formatGastoAmount(value, moneda) {
+  return moneda === "USD"
+    ? `$ ${formatUsdReportAmount(value)}`
+    : `Bs ${formatTransferAmount(value)}`;
+}
+
+async function loadGastos(options = {}) {
+  const { renderAfter = true } = options;
+  state.gastos.loading = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const filters = state.gastos.filters || {};
+    const params = new URLSearchParams();
+    if (filters.desde) {
+      params.set("desde", filters.desde);
+    }
+    if (filters.hasta) {
+      params.set("hasta", filters.hasta);
+    }
+    if (filters.incluirAnulados) {
+      params.set("incluirAnulados", "true");
+    }
+
+    const [metadataResponse, listResponse] = await Promise.all([
+      state.gastos.metadata
+        ? Promise.resolve(state.gastos.metadata)
+        : apiFetch("/gastos/metadata"),
+      apiFetch(`/gastos?${params.toString()}`),
+    ]);
+
+    state.gastos.metadata = metadataResponse;
+    state.gastos.items = Array.isArray(listResponse?.gastos)
+      ? listResponse.gastos
+      : [];
+    state.gastos.totales = Array.isArray(listResponse?.totales)
+      ? listResponse.totales
+      : [];
+  } catch (error) {
+    console.error(error);
+    state.gastos.items = [];
+    state.gastos.totales = [];
+    setFlash(
+      `No se pudieron cargar los gastos: ${extractErrorMessage(error)}`,
+      "error",
+    );
+  } finally {
+    state.gastos.loading = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function saveGasto() {
+  const draft =
+    state.gastos.draft || createEmptyGastoDraft(state.gastos.metadata);
+  const validationMessage = validateGastoDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.gastos.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = buildGastoPayload(draft);
+    const response = draft.id
+      ? await apiFetch(`/gastos/${encodeURIComponent(draft.id)}`, {
+          method: "PATCH",
+          body: payload,
+        })
+      : await apiFetch("/gastos", {
+          method: "POST",
+          body: payload,
+        });
+
+    resetGastoDraft();
+    await loadGastos({ renderAfter: false });
+    setFlash(
+      draft.id
+        ? `Gasto ${response?.gasto?.id || draft.id} actualizado correctamente.`
+        : `Gasto ${response?.gasto?.id || ""} registrado correctamente.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.gastos.saving = false;
+    render();
+  }
+}
+
+async function voidGasto(id) {
+  const normalizedId = String(id || "").trim();
+  if (!normalizedId) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Se anulara el gasto ${normalizedId}. Ya no sumara en el reporte. Deseas continuar?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  state.gastos.voiding = true;
+  clearFlash();
+  render();
+
+  try {
+    await apiFetch(`/gastos/${encodeURIComponent(normalizedId)}/anular`, {
+      method: "POST",
+    });
+
+    resetGastoDraft();
+    await loadGastos({ renderAfter: false });
+    setFlash(`Gasto ${normalizedId} anulado correctamente.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.gastos.voiding = false;
+    render();
+  }
 }
 
 function createEmptyExchangeRateRegisterDraft() {

@@ -14,6 +14,7 @@ import { DevReturnsModule } from "./dev-returns/dev-returns.module";
 import { DiagnosticoPushModule } from "./diagnostico-push/diagnostico-push.module";
 import { ExchangeRatesModule } from "./exchange-rates/exchange-rates.module";
 import { FacturacionModule } from "./facturacion/facturacion.module";
+import { GastosModule } from "./gastos/gastos.module";
 import { HealthModule } from "./health/health.module";
 import { ImpresorasModule } from "./impresoras/impresoras.module";
 import { InventoryModule } from "./inventory/inventory.module";
@@ -52,6 +53,7 @@ import { UsersModule } from "./users/users.module";
     DiagnosticoPushModule,
     ExchangeRatesModule,
     FacturacionModule,
+    GastosModule,
     UsersModule,
     RolesModule,
     InventoryModule,
