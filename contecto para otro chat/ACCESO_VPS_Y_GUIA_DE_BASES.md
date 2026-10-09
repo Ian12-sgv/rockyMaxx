@@ -17,6 +17,19 @@ Advertencia:
 - este archivo no debe guardar credenciales vivas
 - si otro chat necesita acceso, debe pedir al operador la passphrase SSH, la clave de `sudo` y las claves de PostgreSQL
 
+## Nodos agregados despues (no estan en las listas de abajo)
+
+| Nodo | Sucursal | DB local / puerto | DB VPS / puerto interno | Servicio VPS | Ruta Nginx |
+|---|---|---|---|---|---|
+| Bodega Rockymaxx | `B003` | `rocky_bodega_003` / 3008 | `rocky_bodega_003_vps` / 3012 | `rocky-maxx-api-bodega003` | `/bodega003/` |
+| Tienda 007 - Rockymaxx CabomasCentro | `007` | `rocky_tienda_007` / 3009 | `rocky_tienda_007_vps` / 3013 | `rocky-maxx-api-tienda007` | `/tienda007/` |
+
+- Puertos internos del VPS ocupados (2026-10-08): 3000-3013 (3008-3011 son los nodos de prueba `prueba-*`) y 3100 (`bodega-api`).
+- La tienda 007 nacio con base vacia (esquema cargado como `rocky`), sucursal `007` creada por API, emparejada con Central (`rocky_maxx` y `rocky_sync_central`: sucursal + nodo `TIENDA007`) y con las 17 formas de pago copiadas de la 006.
+- La gemela VPS de una base vacia necesita `AUTH_BOOTSTRAP_ADMIN_ENABLED=true` (con la misma clave de admin que `.env.vps.bodega003`): los sync de transferencias, devoluciones y Cambio de Precio entran como `admin`.
+- `bodega-api` corre desde un checkout aparte: `/home/deploy/apps/rockyMaxxBodega` (no desde `rockyMaxx`).
+- Receta completa para agregar nodos: `skills/rocky-maxx-add-node/SKILL.md`.
+
 ## Estado actual validado
 
 Arquitectura activa:
