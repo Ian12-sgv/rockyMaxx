@@ -4381,7 +4381,14 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
+  // El valor de la transferencia es el "Costo" del articulo (CostoDolar), el mismo
+  // que usa el Cierre general. Los otros costos quedan solo como respaldo para
+  // articulos que todavia no tienen Costo cargado, para no valorar la linea en 0.
   private resolveLineValue(article: Inventario) {
+    if (article.CostoDolar && !article.CostoDolar.isZero()) {
+      return article.CostoDolar;
+    }
+
     if (article.UltimoCosto && !article.UltimoCosto.isZero()) {
       return article.UltimoCosto;
     }

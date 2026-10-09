@@ -21962,6 +21962,14 @@ function advanceTransferLineFocus(index) {
   });
 }
 
+// Mismo criterio que transfers.service.ts#resolveLineValue: el "Costo" del
+// articulo (CostoDolar) y, si no tiene, los demas costos como respaldo.
+function resolveTransferLineDefaultValue(article) {
+  const costos = article?.inventario?.costos || {};
+  const candidates = [costos.dolar, costos.ultimo, costos.promedio, costos.inicial];
+  return candidates.find((value) => toFiniteNumber(value) > 0) ?? candidates.find((value) => value != null);
+}
+
 function applyArticleToTransferLine(index, article) {
   const draft = state.transfers.draft || createEmptyTransferDraft(state.transfers.metadata);
   const items = Array.isArray(draft.items) && draft.items.length ? [...draft.items] : [createEmptyTransferLineDraft()];
@@ -21977,7 +21985,7 @@ function applyArticleToTransferLine(index, article) {
     articuloNombre: article.general?.nombre || article.nombre || currentLine.articuloNombre || "",
     existenciaActual: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaActual ?? ""),
     existenciaLote: toInputValue(article.inventario?.existenciaActual ?? currentLine.existenciaLote ?? ""),
-    valor: toInputValue(article.inventario?.costos?.ultimo ?? currentLine.valor ?? ""),
+    valor: toInputValue(resolveTransferLineDefaultValue(article) ?? currentLine.valor ?? ""),
   };
 
   state.transfers.draft = {
@@ -23029,8 +23037,8 @@ function buildTransferReportHtml(transfer) {
         <th>Descripcion</th>
         <th class="num">Caja</th>
         <th class="num">Cantidad</th>
-        <th class="num">Valor unit.</th>
-        <th class="num">Subtotal</th>
+        <th class="num">Costo unit. ($)</th>
+        <th class="num">Subtotal ($)</th>
       </tr>
     </thead>
     <tbody>
@@ -23042,7 +23050,7 @@ function buildTransferReportHtml(transfer) {
         <td></td>
         <td class="num">${escapeHtml(formatTransferQuantity(totalCantidad))}</td>
         <td></td>
-        <td class="num">Bs ${escapeHtml(formatTransferAmount(totalValor))}</td>
+        <td class="num">$ ${escapeHtml(formatTransferAmount(totalValor))}</td>
       </tr>
     </tfoot>
   </table>
