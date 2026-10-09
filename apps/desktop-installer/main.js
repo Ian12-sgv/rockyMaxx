@@ -97,6 +97,13 @@ const REMOTE_NODES = [
     localDatabaseName: "rocky_tienda_006",
   },
   {
+    id: "tienda007",
+    label: "Tienda 007 - Rockymaxx CabomasCentro",
+    baseUrl: "http://68.183.105.135/tienda007",
+    remoteDatabaseName: "rocky_tienda_007_vps",
+    localDatabaseName: "rocky_tienda_007",
+  },
+  {
     id: "bodega002",
     label: "Bodega 002 - galpon barquisimeto",
     baseUrl: "http://68.183.105.135/bodega002",

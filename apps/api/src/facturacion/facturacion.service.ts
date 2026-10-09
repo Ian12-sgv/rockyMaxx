@@ -37,6 +37,7 @@ const FACTURACION_STORE_TAX_ID_BY_CODE: Record<string, string> = {
   "004": "J508243501",
   "005": "J50759282-2",
   "006": "J506873850",
+  "007": "J508243501",
   ORIGEN: "",
   B002: "",
 };
@@ -47,6 +48,7 @@ const FACTURACION_STORE_ADDRESS_BY_CODE: Record<string, string> = {
   "004": "Calle 97 entre Avenidas 14A y 15, Prolongacion de la Av. 15 Las Delicias, C.C. Law Center PB Local 19, Maracaibo, Zulia Z.P. 4001",
   "005": "Av 20 entre calles 29 y 30 local nro S/N sector Centro Barquisimeto, Lara zona postal 3001",
   "006": "Av 26 entre calle 31 y 32, Edif. Anyul, piso planta baja, local N 6, Centro Barquisimeto, Lara zona postal 3001",
+  "007": "Calle La Rosa Vieja con interseccion Corredor Alonso, Casco Central, Cabimas, Zulia",
   ORIGEN: "",
   B002: "",
 };

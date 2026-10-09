@@ -17,6 +17,7 @@ const TIENDAS: SeedTienda[] = [
   { codigoLegacy: "004", tipo: "TIENDA", nombre: "Tienda 004", databaseName: "rocky_tienda_004", apiPath: "/tienda004" },
   { codigoLegacy: "005", tipo: "TIENDA", nombre: "Tienda 005", databaseName: "rocky_tienda_005", apiPath: "/tienda005" },
   { codigoLegacy: "006", tipo: "TIENDA", nombre: "Tienda 006", databaseName: "rocky_tienda_006", apiPath: "/tienda006" },
+  { codigoLegacy: "007", tipo: "TIENDA", nombre: "Rockymaxx CabomasCentro", databaseName: "rocky_tienda_007", apiPath: "/tienda007" },
   { codigoLegacy: "B002", tipo: "BODEGA", nombre: "Bodega 002", databaseName: "rocky_bodega_002", apiPath: "/bodega002" },
 ];
 
