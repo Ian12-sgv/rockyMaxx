@@ -53,6 +53,28 @@ const INVENTORY_BULK_BATCH_SIZE = 25;
 const INVENTORY_BULK_RETRY_INTERVAL_MS = 30_000;
 const ZERO = new Prisma.Decimal(0);
 
+// Topologia conocida de tiendas/bodegas (ver contecto para otro chat/ACCESO_VPS_Y_GUIA_DE_BASES.md).
+// Solo se usa para auto-sembrar SYNC_NODES en instancias Central/ORIGEN que arranquen con esta
+// tabla incompleta (ej. una PC de oficina restaurada/instalada antes de que existiera un nodo
+// nuevo, que nunca recibio el alta manual despues). Nunca sobrescribe un nodo ya registrado.
+const KNOWN_SYNC_NODES: ReadonlyArray<{
+  nodeId: string;
+  sucursalCodigo: string;
+  nombre: string;
+  tipo: string;
+  apiUrl: string;
+}> = [
+  { nodeId: "TIENDA001", sucursalCodigo: "001", nombre: "Tienda 001 - RockyMaxxCentro", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda001" },
+  { nodeId: "TIENDA002", sucursalCodigo: "002", nombre: "Tienda 002 - Moda shop", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda002" },
+  { nodeId: "TIENDA003", sucursalCodigo: "003", nombre: "Tienda 003 - Moda shop 2", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda003" },
+  { nodeId: "TIENDA004", sucursalCodigo: "004", nombre: "Tienda 004 - RockyMaxxMcbo", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda004" },
+  { nodeId: "TIENDA005", sucursalCodigo: "005", nombre: "Tienda 005 - Titan", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda005" },
+  { nodeId: "TIENDA006", sucursalCodigo: "006", nombre: "Tienda 006 - Top shop bqto", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda006" },
+  { nodeId: "TIENDA007", sucursalCodigo: "007", nombre: "Tienda 007 - Rockymaxx CabomasCentro", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda007" },
+  { nodeId: "BODEGA002", sucursalCodigo: "B002", nombre: "Bodega 002 - galpon barquisimeto", tipo: "BODEGA", apiUrl: "http://68.183.105.135/bodega002" },
+  { nodeId: "BODEGA003", sucursalCodigo: "B003", nombre: "Bodega Rockymaxx", tipo: "BODEGA", apiUrl: "http://68.183.105.135/bodega003" },
+];
+
 type TransferTransactionClient = Prisma.TransactionClient;
 type TransferDuplicateResolutionAction = "modify-existing" | "create-new";
 type TransferDuplicateResolution = {
@@ -316,6 +338,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     await this.ensureInventoryBulkSchema();
+    await this.ensureKnownSyncNodesSeed();
     this.startTransferSyncAutoRetry();
     this.startInventoryBulkRetry();
   }
@@ -565,6 +588,45 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     return {
       node: await this.getTransferSyncNodeById(nodeId),
     };
+  }
+
+  // Corre en cada arranque, solo en instancias Central/ORIGEN (rocky_maxx/rocky_sync_central).
+  // Rellena en SYNC_NODES cualquier tienda/bodega conocida que falte -- nunca toca ni
+  // sobrescribe un nodo que ya exista (on conflict do nothing), para no pisar un ApiUrl u
+  // otro dato que un admin haya cambiado a mano. Pensado para el caso real: una PC Central
+  // instalada/restaurada antes de que existiera un nodo nuevo, que nunca recibio el alta
+  // manual despues (ej. Bodega 003 faltando en la PC de oficina, 2026-10-06).
+  private async ensureKnownSyncNodesSeed() {
+    if (this.inferTransferSyncRemotePathFromDatabaseUrl() !== "") {
+      // No es Central/ORIGEN (es una tienda/bodega o una base no reconocida): esta instancia
+      // no necesita conocer el directorio completo de nodos.
+      return;
+    }
+
+    await this.ensureTransferSyncSchema();
+
+    let seeded = 0;
+    for (const node of KNOWN_SYNC_NODES) {
+      await this.ensureLocations(this.prisma, [node.sucursalCodigo]);
+      const result = await this.prisma.$executeRawUnsafe(
+        `
+          insert into dbo."SYNC_NODES"
+            ("NodeId", "SucursalCodigo", "Nombre", "Tipo", "ApiUrl", "CreatedAt", "UpdatedAt", "LastSeenAt")
+          values ($1, $2, $3, $4, $5, now(), now(), now())
+          on conflict do nothing
+        `,
+        node.nodeId,
+        node.sucursalCodigo,
+        node.nombre,
+        node.tipo,
+        node.apiUrl,
+      );
+      seeded += Number(result) > 0 ? 1 : 0;
+    }
+
+    if (seeded > 0) {
+      this.logger.log(`SYNC_NODES: se sembraron ${seeded} nodo(s) conocido(s) que faltaban al arrancar.`);
+    }
   }
 
   async listTransferSyncOutbox(findTransferSyncOutboxDto: FindTransferSyncOutboxDto) {
