@@ -14,6 +14,7 @@ import {
 } from "../cajas/caja-close-report.util";
 import { findContingenciaReportFormatById, getContingenciaReportFormats } from "../impresoras/contingencia-report-formats.util";
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
+import { NodeIdentityService } from "../node-identity/node-identity.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { applyInventoryExistenceDelta, sumQuantitiesByCode } from "../shared/inventory-existence.util";
 import { UserView } from "../users/user-view.util";
@@ -116,6 +117,7 @@ export class FacturacionService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly mirrorSyncService: MirrorSyncService,
+    private readonly nodeIdentity: NodeIdentityService,
   ) {}
 
   async createSale(payload: CreateFacturacionSaleDto, user: UserView) {
@@ -687,31 +689,23 @@ export class FacturacionService {
   }
 
   private getCurrentStoreContext() {
-    const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "");
-    const databaseNameMatch = databaseUrl.match(/\/([^/?]+)(\?|$)/);
-    const databaseName = String(databaseNameMatch?.[1] || "").trim();
-    const storeMatch = databaseName.match(/rocky_tienda_(\d+)/i);
-    const warehouseMatch = databaseName.match(/rocky_bodega_(\d+)/i);
-    const normalizedDatabaseName = databaseName.toLowerCase();
-    const isCentralDatabase = normalizedDatabaseName === "rocky_maxx"
-      || normalizedDatabaseName === "rocky_sync_central";
+    const databaseName = this.nodeIdentity.get().databaseName;
+    const self = this.nodeIdentity.describeSelfForLabels();
 
-    if (storeMatch) {
-      const code = storeMatch[1].padStart(3, "0");
+    if (self?.role === "tienda") {
       return {
         databaseName,
-        sucursalCodigo: code,
-        fallbackName: `Tienda ${code}`,
+        sucursalCodigo: self.sucursalCodigo,
+        fallbackName: `Tienda ${self.sucursalCodigo}`,
         isCentralDatabase: false,
       };
     }
 
-    if (warehouseMatch) {
-      const code = warehouseMatch[1].padStart(3, "0");
+    if (self?.role === "bodega") {
       return {
         databaseName,
-        sucursalCodigo: `B${code}`,
-        fallbackName: `Bodega ${code}`,
+        sucursalCodigo: self.sucursalCodigo,
+        fallbackName: `Bodega ${self.sucursalCodigo.replace(/^B/, "")}`,
         isCentralDatabase: false,
       };
     }
@@ -720,7 +714,7 @@ export class FacturacionService {
       databaseName,
       sucursalCodigo: DEFAULT_FACTURACION_STORE_CODE,
       fallbackName: DEFAULT_FACTURACION_COMPANY_NAME,
-      isCentralDatabase,
+      isCentralDatabase: self?.role === "central",
     };
   }
 

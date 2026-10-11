@@ -21,6 +21,7 @@ import { InventoryModule } from "./inventory/inventory.module";
 import { InvoiceReturnsModule } from "./invoice-returns/invoice-returns.module";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { MirrorSyncModule } from "./mirror-sync/mirror-sync.module";
+import { NodeIdentityModule } from "./node-identity/node-identity.module";
 import { PriceChangesModule } from "./price-changes/price-changes.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProveedoresModule } from "./proveedores/proveedores.module";
@@ -38,6 +39,7 @@ import { UsersModule } from "./users/users.module";
       envFilePath: ["../../.env", ".env"],
     }),
     PrismaModule,
+    NodeIdentityModule,
     MirrorSyncModule,
     AdjustmentsModule,
     BancosModule,

@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 
 import { UserView } from "../users/user-view.util";
 import { normalizeLegacyGroupCode } from "../users/user-groups.util";
+import { NodeIdentityService } from "../node-identity/node-identity.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
 import { syncHealthRegistry } from "../shared/sync-health.registry";
@@ -261,6 +262,7 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly nodeIdentity: NodeIdentityService,
   ) {}
 
   async onModuleInit() {
@@ -1423,68 +1425,39 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
     return { nodeId: current.nodeId, tipo: current.tipo };
   }
 
-  // Rol ORIGEN. Deriva la identidad del nodo actual a partir del nombre de la base en
-  // DATABASE_URL, igual que getCurrentInstanceContext() en dev-returns.service.ts:2207-2247
-  // (no hay un modulo compartido para esto en el repo, cada servicio lo re-implementa).
+  // Rol ORIGEN. La identidad sale de NodeIdentityService (NODE_ID/NODE_ROLE/NODE_INSTANCE
+  // del .env, o el nombre de la base como antes: rocky_tienda_NNN[_vps],
+  // rocky_bodega_NNN[_vps]). isVpsRemote es la unica senal del gating del timer LOCAL
+  // SERVICE (Decision 1): las gemelas *_vps nunca aplican Inventario.
   private getCurrentSourceContext(): PriceChangeNodeContext {
-    const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "");
-    const databaseName = databaseUrl.match(/\/([^/?]+)(\?|$)/)?.[1] ?? "";
+    const identity = this.nodeIdentity.get();
 
-    // Anclados al nombre COMPLETO de la base (^...$), no como substring: las bases del
-    // VPS usan sufijo "_vps" (ej. rocky_tienda_002_vps, ver ACCESO_VPS_Y_GUIA_DE_BASES.md)
-    // y un regex sin anclar clasificaria esa instancia igual que la tienda FISICA local
-    // (rocky_tienda_002), armando por error el timer LOCAL SERVICE del Paso 8.5 en el rol
-    // VPS/REMOTO -- exactamente lo que prohibe la Decision 1.
-    const storeVpsMatch = databaseName.match(/^rocky_tienda_(\d+)_vps$/i);
-    const storeLocalMatch = databaseName.match(/^rocky_tienda_(\d+)$/i);
-    const warehouseVpsMatch = databaseName.match(/^rocky_bodega_(\d+)_vps$/i);
-    const warehouseLocalMatch = databaseName.match(/^rocky_bodega_(\d+)$/i);
-
-    if (storeVpsMatch) {
-      const code = storeVpsMatch[1].padStart(3, "0");
+    if (identity.conflict) {
+      // Sin identidad confiable: tipo vacio deja apagado el ciclo LOCAL SERVICE y el
+      // NodeId no esta en PRICE_CHANGE_ORIGIN_NODE_IDS, asi que tampoco puede originar.
       return {
-        nodeId: `TIENDA${code}`,
-        sucursalCodigo: code,
-        nombre: `Tienda ${code} (VPS)`,
-        tipo: "TIENDA",
-        isVpsRemote: true,
-      };
-    }
-
-    if (storeLocalMatch) {
-      const code = storeLocalMatch[1].padStart(3, "0");
-      return {
-        nodeId: `TIENDA${code}`,
-        sucursalCodigo: code,
-        nombre: `Tienda ${code}`,
-        tipo: "TIENDA",
+        nodeId: "SIN_IDENTIDAD",
+        sucursalCodigo: "",
+        nombre: "Sin identidad",
+        tipo: "",
         isVpsRemote: false,
       };
     }
 
-    if (warehouseVpsMatch) {
-      const code = warehouseVpsMatch[1].padStart(3, "0");
+    if ((identity.role === "tienda" || identity.role === "bodega") && identity.nodeId && identity.sucursalCodigo) {
+      const code = identity.sucursalCodigo.replace(/^B/, "");
+      const label = identity.role === "tienda" ? `Tienda ${code}` : `Bodega ${code}`;
       return {
-        nodeId: `BODEGA${code}`,
-        sucursalCodigo: `B${code}`,
-        nombre: `Bodega ${code} (VPS)`,
-        tipo: "BODEGA",
-        isVpsRemote: true,
+        nodeId: identity.nodeId,
+        sucursalCodigo: identity.sucursalCodigo,
+        nombre: identity.isVpsInstance ? `${label} (VPS)` : label,
+        tipo: identity.role === "tienda" ? "TIENDA" : "BODEGA",
+        isVpsRemote: identity.isVpsInstance,
       };
     }
 
-    if (warehouseLocalMatch) {
-      const code = warehouseLocalMatch[1].padStart(3, "0");
-      return {
-        nodeId: `BODEGA${code}`,
-        sucursalCodigo: `B${code}`,
-        nombre: `Bodega ${code}`,
-        tipo: "BODEGA",
-        isVpsRemote: false,
-      };
-    }
-
-    // rocky_sync_central, rocky_maxx, o cualquier otro nombre no reconocido -> ORIGEN.
+    // Central (rocky_sync_central, rocky_maxx, NODE_ROLE=central) o base no reconocida sin
+    // NODE_ID -> ORIGEN, igual que antes (las bases de prueba dependen de esto).
     // isVpsRemote=false aqui es irrelevante para el gating (ORIGEN ya esta excluido via
     // PRICE_CHANGE_ORIGIN_NODE_IDS), pero se deja explicito por consistencia del tipo.
     return {
@@ -1499,6 +1472,7 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
   // Origen debe ser Bodega Central o Bodega 002 (Decision 2). El origen nunca viene del
   // cliente: siempre es "donde esta corriendo esta instancia", segun el plan aprobado.
   private assertOriginAllowed(): PriceChangeNodeContext {
+    this.nodeIdentity.assertSyncIdentity();
     const current = this.getCurrentSourceContext();
     if (!PRICE_CHANGE_ORIGIN_NODE_IDS.has(current.nodeId)) {
       throw new ConflictException(
@@ -1670,12 +1644,13 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
           `El destino ${nodeId} no es una tienda ni una bodega operativa (Tipo=${node.Tipo ?? "desconocido"}).`,
         );
       }
-      if (!node.ApiUrl) {
+      const apiUrl = this.resolvePeerApiUrl(node.NodeId, node.ApiUrl);
+      if (!apiUrl) {
         throw new ConflictException(
           `El nodo ${nodeId} no tiene una URL de sincronizacion configurada (SYNC_NODES.ApiUrl).`,
         );
       }
-      return node;
+      return { ...node, ApiUrl: apiUrl };
     });
   }
 
@@ -1817,8 +1792,13 @@ export class PriceChangesService implements OnModuleInit, OnModuleDestroy {
       `select "ApiUrl" from dbo."SYNC_NODES" where upper("NodeId") = upper($1) limit 1`,
       destinationNodeId,
     );
-    const apiUrl = rows[0]?.ApiUrl;
-    return apiUrl && apiUrl.trim() ? apiUrl.trim() : null;
+    return this.resolvePeerApiUrl(destinationNodeId, rows[0]?.ApiUrl);
+  }
+
+  // Misma regla que transferencias y devoluciones (node-identity.ts): raiz de este lado +
+  // ruta del nodo; la URL guardada solo para nodos no estandar o sin raiz configurada.
+  private resolvePeerApiUrl(nodeId: string, storedApiUrl: string | null | undefined) {
+    return this.nodeIdentity.resolvePeerApiUrl(nodeId, storedApiUrl, ["PRICE_CHANGE_REMOTE_API_URL"]);
   }
 
   // Rol LOCAL SERVICE: resuelve la URL del PROPIO gemelo VPS/REMOTO de esta tienda -- NO

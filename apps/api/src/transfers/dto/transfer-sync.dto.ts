@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { IsIn, IsInt, IsOptional, IsString, IsUrl, Max, MaxLength, Min } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUrl, Max, MaxLength, Min } from "class-validator";
 
 import { toOptionalInteger, toOptionalTrimmedString, toUpperTrimmedString } from "./transfer-dto.helpers";
 
@@ -53,6 +53,22 @@ export class RegisterTransferSyncNodeDto {
   @Type(() => String)
   @Transform(({ value }) => toOptionalTrimmedString(value))
   declare apiUrl?: string;
+
+  // Salta solo la verificacion de /api/health (nodo aun apagado); queda en el historial.
+  @IsOptional()
+  @IsBoolean()
+  declare forzar?: boolean;
+}
+
+export class RevertTransferSyncNodeDto {
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  declare historialId: number;
+
+  @IsOptional()
+  @IsBoolean()
+  declare forzar?: boolean;
 }
 
 export class PushTransferSyncDto {

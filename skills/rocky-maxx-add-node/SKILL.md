@@ -163,7 +163,10 @@ JWT/pepper y `BODEGA_INGEST_URL`, y además:
 - `BODEGA_SYNC_ENABLED=false` (bodega-export ya se desactiva solo en bases `*_vps`; así queda explícito).
 
 **Env local:** copiar `.env.tienda006` cambiando solo `DATABASE_URL`, `API_PORT`, `JWT_SECRET`,
-`AUTH_PASSWORD_PEPPER`, `MIRROR_SYNC_REMOTE_API_URL` y `BODEGA_INGEST_URL`.
+`AUTH_PASSWORD_PEPPER`, `MIRROR_SYNC_REMOTE_API_URL`, `BODEGA_INGEST_URL` y **`NODE_ID`/`NODE_ROLE`**
+(ej. `NODE_ID=TIENDA008`, `NODE_ROLE=tienda`). Si `NODE_ID` no coincide con la base (un `.env`
+copiado sin cambiar), el nodo arranca y vende pero la sincronizacion queda detenida y el log
+dice `Identidad del nodo en CONFLICTO`. Confirmar con `GET /api/health` -> campo `node`.
 
 **Gotcha de arranque desatendido:** los `herramientas/scripts/arrancar-api-*.ps1` usan
 `$ErrorActionPreference="Stop"`; si se redirige su salida (`*>`), PowerShell 5.1 corta node en la
@@ -219,6 +222,12 @@ read -r -s -p "Clave de sistema: " PASS; echo
 TOKEN=$(curl -s -X POST http://127.0.0.1:3000/api/auth/login -H "Content-Type: application/json" -d "{\"usuario\":\"sistema\",\"password\":\"$PASS\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['accessToken'])")
 curl -s -X POST http://127.0.0.1:3000/api/transfers/sync/nodes -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"nodeId":"<NODEID>","sucursalCodigo":"<CODIGO>","nombre":"<Nombre>","tipo":"<TIENDA|BODEGA>","apiUrl":"http://68.183.105.135/<nodo>"}'
 ```
+
+Desde 2026-10-10 este POST: exige grupo `sistema`, exige `apiUrl`, valida que NodeId/sucursal/tipo/ruta
+coincidan (`TIENDA008` -> `008` -> `/tienda008`) y que la URL responda en `/api/health` como ese
+nodo. Si el nodo aun no esta encendido, agregar `"forzar":true`. Cada cambio queda en
+`SYNC_NODES_HISTORIAL` (`GET /api/transfers/sync/nodes/<NODEID>/historial`) y se revierte con
+`POST /api/transfers/sync/nodes/<NODEID>/revertir` `{"historialId": N}`.
 
 **IMPORTANTE:** Claude no puede correr este login el mismo (bloqueado por
 "Credential Exploration"). Armar el comando exacto y pedirle al usuario que lo pegue en

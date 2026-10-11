@@ -10,6 +10,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import * as XLSX from "xlsx";
 
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
+import { NodeIdentityService } from "../node-identity/node-identity.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCatalogEntryDto } from "./dto/create-catalog-entry.dto";
 import { CreateMerchandiseDto } from "./dto/create-merchandise.dto";
@@ -219,6 +220,7 @@ export class InventoryService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly mirrorSyncService: MirrorSyncService,
+    private readonly nodeIdentity: NodeIdentityService,
   ) {}
 
   async getCreationMetadata() {
@@ -1112,8 +1114,8 @@ export class InventoryService {
       return ["1", "true", "yes", "si", "sí"].includes(override.toLowerCase());
     }
 
-    const databaseName = this.getCurrentDatabaseName();
-    return databaseName.toLowerCase() === "rocky_maxx";
+    // Central de oficina (rocky_maxx o NODE_ROLE=central local), no la del VPS.
+    return this.nodeIdentity.isCentralLocal();
   }
 
   private getCurrentDatabaseName() {

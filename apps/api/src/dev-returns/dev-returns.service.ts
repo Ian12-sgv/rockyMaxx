@@ -12,6 +12,8 @@ import { Prisma, type Inventario } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
+import { describeNode } from "../node-identity/node-identity";
+import { NodeIdentityService } from "../node-identity/node-identity.service";
 import { UserView } from "../users/user-view.util";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout.util";
 import { syncHealthRegistry } from "../shared/sync-health.registry";
@@ -323,6 +325,7 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly mirrorSyncService: MirrorSyncService,
+    private readonly nodeIdentity: NodeIdentityService,
   ) {}
 
   onModuleInit() {
@@ -2214,38 +2217,28 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  // Identidad desde NodeIdentityService. Con identidad en conflicto se corta aqui: este
+  // contexto se usa para autorregistrarse en SYNC_NODES y para armar los paquetes de sync,
+  // y adivinar seria peor que fallar con un mensaje claro.
   private getCurrentInstanceContext(): InstanceContext {
-    const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "");
+    this.nodeIdentity.assertSyncIdentity();
+    const identity = this.nodeIdentity.get();
     const apiPort = Number(this.configService.get<string>("API_PORT", "3000") || "3000") || 3000;
-    const databaseNameMatch = databaseUrl.match(/\/([^/?]+)(\?|$)/);
-    const databaseName = databaseNameMatch?.[1] ?? "";
-    const storeMatch = databaseName.match(/rocky_tienda_(\d+)/i);
-    const warehouseMatch = databaseName.match(/rocky_bodega_(\d+)/i);
+    const databaseName = identity.databaseName;
 
-    if (storeMatch) {
-      const code = storeMatch[1].padStart(3, "0");
+    if ((identity.role === "tienda" || identity.role === "bodega") && identity.nodeId && identity.sucursalCodigo) {
+      const code = identity.sucursalCodigo.replace(/^B/, "");
       return {
         databaseName,
-        sucursalCodigo: code,
-        nodeId: `TIENDA${code}`,
-        nombre: `Tienda ${code}`,
-        tipo: "TIENDA",
+        sucursalCodigo: identity.sucursalCodigo,
+        nodeId: identity.nodeId,
+        nombre: identity.role === "tienda" ? `Tienda ${code}` : `Bodega ${code}`,
+        tipo: identity.role === "tienda" ? "TIENDA" : "BODEGA",
         apiUrl: `http://localhost:${apiPort}`,
       };
     }
 
-    if (warehouseMatch) {
-      const code = warehouseMatch[1].padStart(3, "0");
-      return {
-        databaseName,
-        sucursalCodigo: `B${code}`,
-        nodeId: `BODEGA${code}`,
-        nombre: `Bodega ${code}`,
-        tipo: "BODEGA",
-        apiUrl: `http://localhost:${apiPort}`,
-      };
-    }
-
+    // Central o base no reconocida sin NODE_ID -> ORIGEN, igual que antes.
     return {
       databaseName,
       sucursalCodigo: DEFAULT_WAREHOUSE_CODE,
@@ -4298,46 +4291,15 @@ export class DevReturnsService implements OnModuleInit, OnModuleDestroy {
     return null;
   }
 
-  private resolveRemoteSyncApiRootUrl() {
-    const explicitUrl = this.configService.get<string>("DEV_RETURN_SYNC_REMOTE_API_URL");
-    const transferUrl = this.configService.get<string>("TRANSFER_SYNC_REMOTE_API_URL");
-    const mirrorUrl = this.configService.get<string>("MIRROR_SYNC_REMOTE_API_URL");
-    const configuredUrl = this.normalizeOptionalApiUrl(explicitUrl || transferUrl || mirrorUrl);
-    if (!configuredUrl) {
-      return null;
-    }
-
-    try {
-      const parsed = new URL(configuredUrl);
-      return `${parsed.protocol}//${parsed.host}`;
-    } catch {
-      return null;
-    }
-  }
-
+  // Misma regla de URLs que transferencias y cambio de precio (node-identity.ts).
   private buildRemoteNodeApiUrl(codeOrNodeId: string) {
-    const rootUrl = this.resolveRemoteSyncApiRootUrl();
+    const rootUrl = this.nodeIdentity.resolveSyncRootUrl(["DEV_RETURN_SYNC_REMOTE_API_URL"]);
     if (!rootUrl) {
       return null;
     }
 
-    const normalized = this.normalizeRequiredCode(codeOrNodeId, "Nodo invalido.");
-    if (normalized === DEFAULT_WAREHOUSE_CODE) {
-      return rootUrl;
-    }
-
-    const fromNodeId = normalized.match(/^TIENDA(\d{3})$/);
-    const numericCode = fromNodeId?.[1] ?? (/^\d+$/.test(normalized) ? normalized.padStart(3, "0") : null);
-    if (numericCode) {
-      return `${rootUrl}/tienda${numericCode}`;
-    }
-
-    const warehouseMatch = normalized.match(/^(?:BODEGA|B)(\d{3})$/);
-    if (warehouseMatch) {
-      return `${rootUrl}/bodega${warehouseMatch[1]}`;
-    }
-
-    return null;
+    const descriptor = describeNode(this.normalizeRequiredCode(codeOrNodeId, "Nodo invalido."));
+    return descriptor ? `${rootUrl}${descriptor.remotePath}` : null;
   }
 
   private shouldPreferRemoteSyncApiUrl(codeOrNodeId: string) {

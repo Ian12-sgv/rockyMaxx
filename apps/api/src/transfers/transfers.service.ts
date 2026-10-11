@@ -13,10 +13,17 @@ import { randomUUID } from "node:crypto";
 
 import { UserView } from "../users/user-view.util";
 import { MirrorSyncService } from "../mirror-sync/mirror-sync.service";
+import { describeNode, inferNodeFromDatabaseName } from "../node-identity/node-identity";
+import { NodeIdentityService } from "../node-identity/node-identity.service";
 import { ApproveTransferDto, TransferDuplicateResolutionDto } from "./dto/approve-transfer.dto";
 import { CreateTransferDto, CreateTransferLineDto } from "./dto/create-transfer.dto";
 import { FindTransfersDto } from "./dto/find-transfers.dto";
-import { FindTransferSyncOutboxDto, PushTransferSyncDto, RegisterTransferSyncNodeDto } from "./dto/transfer-sync.dto";
+import {
+  FindTransferSyncOutboxDto,
+  PushTransferSyncDto,
+  RegisterTransferSyncNodeDto,
+  RevertTransferSyncNodeDto,
+} from "./dto/transfer-sync.dto";
 import { UpdateTransferDto } from "./dto/update-transfer.dto";
 import { toTransferDetailView, toTransferListItemView, transferInclude } from "./transfer-view.util";
 import { PrismaService } from "../prisma/prisma.service";
@@ -76,6 +83,29 @@ const KNOWN_SYNC_NODES: ReadonlyArray<{
 ];
 
 type TransferTransactionClient = Prisma.TransactionClient;
+
+type SyncNodeSnapshot = {
+  nodeId: string;
+  sucursalCodigo: string;
+  nombre: string | null;
+  tipo: string | null;
+  apiUrl: string | null;
+};
+
+type SyncNodeHistoryRow = {
+  Id: bigint;
+  NodeId: string;
+  Accion: string;
+  Antes: SyncNodeSnapshot | null;
+  Despues: SyncNodeSnapshot | null;
+  Usuario: string | null;
+  Forzado: boolean;
+  CreatedAt: Date;
+};
+
+// Hosts aceptados en SYNC_NODES.ApiUrl si NODE_REGISTRY_ALLOWED_HOSTS no dice otra cosa.
+const DEFAULT_SYNC_NODE_ALLOWED_HOSTS = ["68.183.105.135", "localhost", "127.0.0.1"];
+const SYNC_NODE_HEALTH_TIMEOUT_MS = 8000;
 type TransferDuplicateResolutionAction = "modify-existing" | "create-new";
 type TransferDuplicateResolution = {
   action: TransferDuplicateResolutionAction;
@@ -334,6 +364,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly mirrorSyncService: MirrorSyncService,
+    private readonly nodeIdentity: NodeIdentityService,
   ) {}
 
   async onModuleInit() {
@@ -553,51 +584,365 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async registerTransferSyncNode(registerTransferSyncNodeDto: RegisterTransferSyncNodeDto) {
+  // Un error aqui en Central se reparte a todos los nodos, asi que antes de guardar se valida
+  // formato, coherencia NodeId/sucursal/tipo, host permitido, que la ruta corresponda al nodo
+  // y que la URL responda como ese nodo (/api/health). "forzar" solo salta el health check
+  // (nodo aun apagado) y queda anotado en el historial. Todo cambio queda en
+  // SYNC_NODES_HISTORIAL para poder revertirlo.
+  async registerTransferSyncNode(
+    registerTransferSyncNodeDto: RegisterTransferSyncNodeDto,
+    user: UserView | null = null,
+  ) {
     await this.ensureTransferSyncSchema();
     const nodeId = this.normalizeSyncNodeId(registerTransferSyncNodeDto.nodeId);
     const sucursalCodigo = this.normalizeRequiredCode(
       registerTransferSyncNodeDto.sucursalCodigo,
       "Debes indicar la sucursal del nodo.",
     );
+    const forzar = registerTransferSyncNodeDto.forzar === true;
+    const validated = await this.validateSyncNodeRegistration(
+      {
+        nodeId,
+        sucursalCodigo,
+        tipo: registerTransferSyncNodeDto.tipo,
+        apiUrl: registerTransferSyncNodeDto.apiUrl,
+      },
+      forzar,
+    );
     const nombre = String(registerTransferSyncNodeDto.nombre || sucursalCodigo).trim();
-    const tipo = String(registerTransferSyncNodeDto.tipo || "SUCURSAL").trim().toUpperCase();
-    const apiUrl = this.normalizeOptionalApiUrl(registerTransferSyncNodeDto.apiUrl);
 
-    await this.ensureLocations(this.prisma, [sucursalCodigo]);
-    await this.prisma.$executeRawUnsafe(
+    return this.writeSyncNode(
+      {
+        nodeId,
+        sucursalCodigo,
+        nombre,
+        tipo: validated.tipo,
+        apiUrl: validated.apiUrl,
+      },
+      { usuario: user?.codUsuario ?? null, forzado: forzar, accion: null },
+    );
+  }
+
+  async listSyncNodeHistory(nodeId: string) {
+    await this.ensureTransferSyncSchema();
+    const rows = await this.prisma.$queryRawUnsafe<SyncNodeHistoryRow[]>(
       `
-        insert into dbo."SYNC_NODES"
-          ("NodeId", "SucursalCodigo", "Nombre", "Tipo", "ApiUrl", "CreatedAt", "UpdatedAt", "LastSeenAt")
-        values ($1, $2, $3, $4, $5, now(), now(), now())
-        on conflict ("NodeId") do update set
-          "SucursalCodigo" = excluded."SucursalCodigo",
-          "Nombre" = excluded."Nombre",
-          "Tipo" = excluded."Tipo",
-          "ApiUrl" = excluded."ApiUrl",
-          "UpdatedAt" = now(),
-          "LastSeenAt" = now()
+        select "Id", "NodeId", "Accion", "Antes", "Despues", "Usuario", "Forzado", "CreatedAt"
+        from dbo."SYNC_NODES_HISTORIAL"
+        where upper("NodeId") = upper($1)
+        order by "CreatedAt" desc, "Id" desc
+        limit 100
       `,
-      nodeId,
-      sucursalCodigo,
-      nombre,
-      tipo,
-      apiUrl,
+      this.normalizeSyncNodeId(nodeId),
     );
 
     return {
-      node: await this.getTransferSyncNodeById(nodeId),
+      historial: rows.map((row) => ({
+        id: Number(row.Id),
+        nodeId: row.NodeId,
+        accion: row.Accion,
+        antes: row.Antes,
+        despues: row.Despues,
+        usuario: row.Usuario,
+        forzado: row.Forzado,
+        fecha: row.CreatedAt,
+      })),
     };
   }
 
-  // Corre en cada arranque, solo en instancias Central/ORIGEN (rocky_maxx/rocky_sync_central).
+  // Vuelve a dejar el nodo como estaba ANTES del cambio indicado, pasando por la misma
+  // validacion que un alta normal. Un alta (sin estado previo) no se revierte borrando: la
+  // baja de un nodo se decide a mano.
+  async revertSyncNode(nodeId: string, revertDto: RevertTransferSyncNodeDto, user: UserView | null = null) {
+    await this.ensureTransferSyncSchema();
+    const normalizedNodeId = this.normalizeSyncNodeId(nodeId);
+    const rows = await this.prisma.$queryRawUnsafe<SyncNodeHistoryRow[]>(
+      `
+        select "Id", "NodeId", "Accion", "Antes", "Despues", "Usuario", "Forzado", "CreatedAt"
+        from dbo."SYNC_NODES_HISTORIAL"
+        where "Id" = $1 and upper("NodeId") = upper($2)
+      `,
+      BigInt(revertDto.historialId),
+      normalizedNodeId,
+    );
+    const entry = rows[0];
+    if (!entry) {
+      throw new NotFoundException(`No existe el cambio ${revertDto.historialId} en el historial del nodo ${normalizedNodeId}.`);
+    }
+    if (!entry.Antes) {
+      throw new ConflictException(
+        "Ese cambio fue el alta del nodo: no hay un estado anterior al cual volver. Si el nodo sobra, darlo de baja a mano.",
+      );
+    }
+
+    const forzar = revertDto.forzar === true;
+    const previous = entry.Antes;
+    const validated = await this.validateSyncNodeRegistration(
+      {
+        nodeId: normalizedNodeId,
+        sucursalCodigo: previous.sucursalCodigo,
+        tipo: previous.tipo ?? undefined,
+        apiUrl: previous.apiUrl ?? undefined,
+      },
+      forzar,
+    );
+
+    return this.writeSyncNode(
+      {
+        nodeId: normalizedNodeId,
+        sucursalCodigo: previous.sucursalCodigo,
+        nombre: previous.nombre || previous.sucursalCodigo,
+        tipo: validated.tipo,
+        apiUrl: validated.apiUrl,
+      },
+      { usuario: user?.codUsuario ?? null, forzado: forzar, accion: "REVERSION" },
+    );
+  }
+
+  private async writeSyncNode(
+    node: SyncNodeSnapshot,
+    meta: { usuario: string | null; forzado: boolean; accion: "REVERSION" | null },
+  ) {
+    await this.ensureLocations(this.prisma, [node.sucursalCodigo]);
+
+    await this.prisma.$transaction(async (tx) => {
+      const antes = await this.getSyncNodeSnapshot(tx, node.nodeId);
+      await tx.$executeRawUnsafe(
+        `
+          insert into dbo."SYNC_NODES"
+            ("NodeId", "SucursalCodigo", "Nombre", "Tipo", "ApiUrl", "CreatedAt", "UpdatedAt", "LastSeenAt")
+          values ($1, $2, $3, $4, $5, now(), now(), now())
+          on conflict ("NodeId") do update set
+            "SucursalCodigo" = excluded."SucursalCodigo",
+            "Nombre" = excluded."Nombre",
+            "Tipo" = excluded."Tipo",
+            "ApiUrl" = excluded."ApiUrl",
+            "UpdatedAt" = now(),
+            "LastSeenAt" = now()
+        `,
+        node.nodeId,
+        node.sucursalCodigo,
+        node.nombre,
+        node.tipo,
+        node.apiUrl,
+      );
+      const despues = await this.getSyncNodeSnapshot(tx, node.nodeId);
+
+      if (!this.sameSyncNodeSnapshot(antes, despues)) {
+        await this.recordSyncNodeHistory(tx, {
+          nodeId: node.nodeId,
+          accion: meta.accion ?? (antes ? "CAMBIO" : "ALTA"),
+          antes,
+          despues,
+          usuario: meta.usuario,
+          forzado: meta.forzado,
+        });
+      }
+    });
+
+    return {
+      node: await this.getTransferSyncNodeById(node.nodeId),
+    };
+  }
+
+  private async validateSyncNodeRegistration(
+    input: { nodeId: string; sucursalCodigo: string; tipo?: string; apiUrl?: string },
+    forzar: boolean,
+  ) {
+    const problems: string[] = [];
+    const nodeId = input.nodeId;
+    const sucursalCodigo = input.sucursalCodigo;
+    let tipo = String(input.tipo || "").trim().toUpperCase();
+
+    if (!/^[A-Z][A-Z0-9_-]{1,39}$/.test(nodeId)) {
+      problems.push(`El NodeId "${nodeId}" no es valido (ej. TIENDA008, BODEGA004).`);
+    }
+
+    // Nodos estandar: NodeId, sucursal, tipo y ruta tienen que coincidir entre si; asi un
+    // "TIENDA008" con sucursal "009" o URL "/tienda009" no llega a guardarse.
+    const descriptor = /^(ORIGEN|BODEGA\d{3}|TIENDA\d{3})$/.test(nodeId) ? describeNode(nodeId) : null;
+    if (descriptor) {
+      if (sucursalCodigo !== descriptor.sucursalCodigo) {
+        problems.push(`El nodo ${nodeId} debe tener sucursal "${descriptor.sucursalCodigo}", no "${sucursalCodigo}".`);
+      }
+      if (tipo && tipo !== descriptor.tipo) {
+        problems.push(`El nodo ${nodeId} es de tipo ${descriptor.tipo}, no ${tipo}.`);
+      }
+      tipo = descriptor.tipo;
+    }
+    if (!tipo) {
+      tipo = "SUCURSAL";
+    }
+
+    let apiUrl: string | null = null;
+    let parsedUrl: URL | null = null;
+    const rawApiUrl = String(input.apiUrl || "").trim();
+    if (!rawApiUrl) {
+      problems.push("Debes indicar la URL del nodo (ej. http://68.183.105.135/tienda008).");
+    } else {
+      try {
+        apiUrl = this.normalizeRequiredApiUrl(rawApiUrl);
+        parsedUrl = new URL(apiUrl);
+      } catch (error) {
+        problems.push(error instanceof Error ? error.message : "La URL del nodo no es valida.");
+      }
+    }
+
+    if (parsedUrl) {
+      if (parsedUrl.search || parsedUrl.hash) {
+        problems.push("La URL del nodo no debe llevar parametros (?...) ni fragmentos (#...).");
+      }
+
+      const allowedHosts = this.getSyncNodeAllowedHosts();
+      if (!allowedHosts.includes(parsedUrl.hostname.toLowerCase())) {
+        problems.push(
+          `El host "${parsedUrl.hostname}" no esta permitido para nodos (${allowedHosts.join(", ")}). ` +
+            "Si es correcto, agregalo a NODE_REGISTRY_ALLOWED_HOSTS.",
+        );
+      }
+
+      const isLocalhost = ["localhost", "127.0.0.1"].includes(parsedUrl.hostname.toLowerCase());
+      const path = parsedUrl.pathname.replace(/\/+$/, "");
+      if (descriptor && !isLocalhost && path !== descriptor.remotePath) {
+        problems.push(
+          `La URL de ${nodeId} debe terminar en "${descriptor.remotePath || "/"}", no en "${path || "/"}".`,
+        );
+      }
+    }
+
+    const sameSucursal = await this.prisma.$queryRawUnsafe<Array<{ NodeId: string }>>(
+      `select "NodeId" from dbo."SYNC_NODES" where upper("SucursalCodigo") = upper($1) and upper("NodeId") <> upper($2)`,
+      sucursalCodigo,
+      nodeId,
+    );
+    if (sameSucursal[0]) {
+      problems.push(`La sucursal ${sucursalCodigo} ya esta asignada al nodo ${sameSucursal[0].NodeId}.`);
+    }
+
+    if (problems.length === 0 && apiUrl && !forzar) {
+      const healthProblem = await this.checkSyncNodeHealth(apiUrl, descriptor?.nodeId ?? null);
+      if (healthProblem) {
+        problems.push(`${healthProblem} Si el nodo todavia no esta encendido, repite con "forzar": true.`);
+      }
+    }
+
+    if (problems.length > 0) {
+      throw new BadRequestException(`No se registro el nodo ${nodeId}: ${problems.join(" ")}`);
+    }
+
+    return { tipo, apiUrl };
+  }
+
+  // Devuelve null si la URL responde como el nodo esperado, o el motivo si no.
+  private async checkSyncNodeHealth(apiUrl: string, expectedNodeId: string | null) {
+    let body: {
+      status?: string;
+      app?: string;
+      database?: { database?: string };
+      node?: { nodeId?: string | null };
+    };
+    try {
+      const response = await fetchWithTimeout(`${apiUrl}/api/health`, { method: "GET" }, SYNC_NODE_HEALTH_TIMEOUT_MS);
+      if (!response.ok) {
+        return `${apiUrl}/api/health respondio HTTP ${response.status}.`;
+      }
+      body = (await response.json()) as typeof body;
+    } catch (error) {
+      return `No se pudo consultar ${apiUrl}/api/health: ${error instanceof Error ? error.message : String(error)}.`;
+    }
+
+    if (body?.status !== "ok" || body?.app !== "rocky-maxx-api") {
+      return `${apiUrl} no responde como un API de Rocky Maxx.`;
+    }
+
+    if (!expectedNodeId) {
+      return null;
+    }
+
+    // Preferir la identidad que el propio nodo declara; si es una version vieja sin ese
+    // campo, deducirla del nombre de su base.
+    const reported = describeNode(body.node?.nodeId)?.nodeId
+      ?? inferNodeFromDatabaseName(String(body.database?.database || "")).descriptor?.nodeId
+      ?? null;
+    if (reported && reported !== expectedNodeId) {
+      return `${apiUrl} responde como ${reported}, no como ${expectedNodeId}.`;
+    }
+
+    return null;
+  }
+
+  private getSyncNodeAllowedHosts() {
+    const configured = String(this.configService.get<string>("NODE_REGISTRY_ALLOWED_HOSTS", "") || "")
+      .split(",")
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean);
+    return configured.length > 0 ? configured : DEFAULT_SYNC_NODE_ALLOWED_HOSTS;
+  }
+
+  private async getSyncNodeSnapshot(
+    client: PrismaService | TransferTransactionClient,
+    nodeId: string,
+  ): Promise<SyncNodeSnapshot | null> {
+    const rows = await client.$queryRawUnsafe<TransferSyncNodeRow[]>(
+      `
+        select "NodeId", "SucursalCodigo", "Nombre", "Tipo", "ApiUrl", "CreatedAt", "UpdatedAt", "LastSeenAt"
+        from dbo."SYNC_NODES"
+        where upper("NodeId") = upper($1)
+        limit 1
+      `,
+      nodeId,
+    );
+    const row = rows[0];
+    return row
+      ? {
+          nodeId: row.NodeId,
+          sucursalCodigo: row.SucursalCodigo,
+          nombre: row.Nombre,
+          tipo: row.Tipo,
+          apiUrl: row.ApiUrl,
+        }
+      : null;
+  }
+
+  private sameSyncNodeSnapshot(a: SyncNodeSnapshot | null, b: SyncNodeSnapshot | null) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  private async recordSyncNodeHistory(
+    client: PrismaService | TransferTransactionClient,
+    entry: {
+      nodeId: string;
+      accion: "ALTA" | "CAMBIO" | "REVERSION" | "SEMILLA";
+      antes: SyncNodeSnapshot | null;
+      despues: SyncNodeSnapshot | null;
+      usuario: string | null;
+      forzado: boolean;
+    },
+  ) {
+    await client.$executeRawUnsafe(
+      `
+        insert into dbo."SYNC_NODES_HISTORIAL"
+          ("NodeId", "Accion", "Antes", "Despues", "Usuario", "Forzado", "CreatedAt")
+        values ($1, $2, $3::jsonb, $4::jsonb, $5, $6, now())
+      `,
+      entry.nodeId,
+      entry.accion,
+      entry.antes ? JSON.stringify(entry.antes) : null,
+      entry.despues ? JSON.stringify(entry.despues) : null,
+      entry.usuario,
+      entry.forzado,
+    );
+  }
+
+  // Corre en cada arranque, solo en instancias Central/ORIGEN (NODE_ROLE=central, o bases
+  // rocky_maxx/rocky_sync_central; nunca por puerto).
   // Rellena en SYNC_NODES cualquier tienda/bodega conocida que falte -- nunca toca ni
   // sobrescribe un nodo que ya exista (on conflict do nothing), para no pisar un ApiUrl u
   // otro dato que un admin haya cambiado a mano. Pensado para el caso real: una PC Central
   // instalada/restaurada antes de que existiera un nodo nuevo, que nunca recibio el alta
   // manual despues (ej. Bodega 003 faltando en la PC de oficina, 2026-10-06).
   private async ensureKnownSyncNodesSeed() {
-    if (this.inferTransferSyncRemotePathFromDatabaseUrl() !== "") {
+    if (!this.nodeIdentity.isCentral()) {
       // No es Central/ORIGEN (es una tienda/bodega o una base no reconocida): esta instancia
       // no necesita conocer el directorio completo de nodos.
       return;
@@ -621,7 +966,17 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
         node.tipo,
         node.apiUrl,
       );
-      seeded += Number(result) > 0 ? 1 : 0;
+      if (Number(result) > 0) {
+        seeded += 1;
+        await this.recordSyncNodeHistory(this.prisma, {
+          nodeId: node.nodeId,
+          accion: "SEMILLA",
+          antes: null,
+          despues: await this.getSyncNodeSnapshot(this.prisma, node.nodeId),
+          usuario: null,
+          forzado: false,
+        });
+      }
     }
 
     if (seeded > 0) {
@@ -1208,8 +1563,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     }
 
     await this.ensureInventoryBulkSchema();
-    const apiPort = Number(this.configService.get<string | number>("API_PORT", 3000));
-    if (apiPort !== 3000) {
+    if (!this.nodeIdentity.isCentral()) {
       throw new ConflictException("La transferencia masiva solo puede ejecutarse desde la bodega central.");
     }
     const requestedIds = Array.isArray(body.destinationNodeIds)
@@ -1408,25 +1762,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   }
 
   private resolveInventoryBulkNodeApiUrl(node: TransferSyncNodeRow) {
-    const configuredBase = this.normalizeOptionalApiUrl(
-      this.configService.get<string>("TRANSFER_SYNC_REMOTE_API_URL", "") ||
-        this.configService.get<string>("MIRROR_SYNC_REMOTE_API_URL", ""),
-    );
-    if (configuredBase) {
-      const parsed = new URL(configuredBase);
-      parsed.pathname = parsed.pathname.replace(/\/(?:tienda|bodega)\d{3}\/?$/i, "").replace(/\/$/, "");
-      const root = parsed.toString().replace(/\/$/, "");
-      const nodeId = this.normalizeSyncNodeId(node.NodeId);
-      const tienda = nodeId.match(/^TIENDA(\d+)$/);
-      if (tienda) {
-        return `${root}/tienda${tienda[1].padStart(3, "0")}`;
-      }
-      const bodega = nodeId.match(/^BODEGA(\d+)$/);
-      if (bodega) {
-        return `${root}/bodega${bodega[1].padStart(3, "0")}`;
-      }
-    }
-    return this.normalizeOptionalApiUrl(node.ApiUrl);
+    return this.nodeIdentity.resolvePeerApiUrl(node.NodeId, node.ApiUrl);
   }
 
   private async postInventoryBulkBatch(apiUrl: string, jobId: string, items: unknown[]) {
@@ -1557,10 +1893,15 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
           );
         }
       }
-      syncHealthRegistry.recordSuccess(
-        "transfers",
-        `push=${pushSync.processed} pull=${pullSync.processed}`,
-      );
+      const identityConflict = this.nodeIdentity.get().conflict;
+      if (identityConflict) {
+        syncHealthRegistry.recordError("transfers", `Identidad del nodo en conflicto: ${identityConflict}`);
+      } else {
+        syncHealthRegistry.recordSuccess(
+          "transfers",
+          `push=${pushSync.processed} pull=${pullSync.processed}`,
+        );
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       syncHealthRegistry.recordError("transfers", message);
@@ -1646,6 +1987,24 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     await client.$executeRawUnsafe(`
       alter table dbo."SYNC_NODES"
       add column if not exists "ApiUrl" varchar(200)
+    `);
+
+    await client.$executeRawUnsafe(`
+      create table if not exists dbo."SYNC_NODES_HISTORIAL" (
+        "Id" bigserial primary key,
+        "NodeId" text not null,
+        "Accion" varchar(20) not null,
+        "Antes" jsonb,
+        "Despues" jsonb,
+        "Usuario" varchar(30),
+        "Forzado" boolean not null default false,
+        "CreatedAt" timestamptz not null default now()
+      )
+    `);
+
+    await client.$executeRawUnsafe(`
+      create index if not exists "IX_SYNC_NODES_HISTORIAL_NodeId"
+      on dbo."SYNC_NODES_HISTORIAL" ("NodeId", "CreatedAt")
     `);
 
     await client.$executeRawUnsafe(`
@@ -1954,37 +2313,10 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  // La URL se arma con la raiz de ESTE lado + la ruta del nodo (ver node-identity.ts); la
+  // guardada en SYNC_NODES solo se usa para nodos no estandar o sin raiz configurada.
   private resolveTransferSyncDestinationApiUrl(node: TransferSyncNodeRow) {
-    const configuredBase = this.normalizeOptionalApiUrl(
-      this.configService.get<string>("TRANSFER_SYNC_REMOTE_API_URL", "") ||
-        this.configService.get<string>("MIRROR_SYNC_REMOTE_API_URL", ""),
-    );
-    if (!configuredBase) {
-      return this.normalizeOptionalApiUrl(node.ApiUrl);
-    }
-
-    const parsed = new URL(configuredBase);
-    parsed.pathname = parsed.pathname.replace(/\/(?:tienda|bodega)\d{3}\/?$/i, "").replace(/\/$/, "");
-    parsed.search = "";
-    parsed.hash = "";
-    const root = parsed.toString().replace(/\/$/, "");
-    const nodeId = this.normalizeSyncNodeId(node.NodeId);
-
-    if (nodeId === DEFAULT_ORIGIN_CODE || nodeId === "BODEGA001") {
-      return root;
-    }
-
-    const tienda = nodeId.match(/^TIENDA(\d+)$/);
-    if (tienda) {
-      return `${root}/tienda${tienda[1].padStart(3, "0")}`;
-    }
-
-    const bodega = nodeId.match(/^BODEGA(\d+)$/);
-    if (bodega) {
-      return `${root}/bodega${bodega[1].padStart(3, "0")}`;
-    }
-
-    return this.normalizeOptionalApiUrl(node.ApiUrl);
+    return this.nodeIdentity.resolvePeerApiUrl(node.NodeId, node.ApiUrl);
   }
 
   private async postTransferSyncPackage(apiUrl: string, payload: unknown) {
@@ -4531,10 +4863,22 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async inferTransferSyncRemotePathFromLocalNode() {
-    const databasePath = this.inferTransferSyncRemotePathFromDatabaseUrl();
-    if (databasePath !== null) {
-      return databasePath;
+    const identity = this.nodeIdentity.get();
+    if (identity.conflict) {
+      // Falla cerrado: con identidad contradictoria no se descarga de ninguna ruta.
+      return null;
     }
+    if (identity.remotePath !== null) {
+      return identity.remotePath;
+    }
+    if (identity.source !== "ninguna") {
+      return null;
+    }
+
+    // Ultimo recurso para bases con nombre no reconocido y sin NODE_ID: buscar la fila con
+    // la que este mismo nodo se autorregistra (siempre localhost:<API_PORT>). Las filas de
+    // OTROS nodos (sembradas o del registro) tienen URL publica y nunca cuentan, para que
+    // llenar SYNC_NODES no haga que el nodo se confunda con otro.
 
     const rows = await this.prisma.$queryRawUnsafe<TransferSyncNodeRow[]>(
       `
@@ -4552,23 +4896,14 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
       `,
     );
 
-    if (rows.length === 0) {
+    const apiPort = this.readPositiveIntegerConfig("API_PORT", 0);
+    const selfRows = rows.filter(
+      (row) => this.isLocalhostApiUrl(row.ApiUrl) && this.apiUrlMatchesPort(row.ApiUrl, apiPort),
+    );
+    if (selfRows.length !== 1) {
       return null;
     }
-
-    let localRow: TransferSyncNodeRow | undefined;
-    if (rows.length === 1) {
-      localRow = rows[0];
-    } else {
-      const apiPort = this.readPositiveIntegerConfig("API_PORT", 0);
-      if (apiPort > 0) {
-        localRow = rows.find((row) => this.apiUrlMatchesPort(row.ApiUrl, apiPort));
-      }
-    }
-
-    if (!localRow) {
-      return null;
-    }
+    const localRow = selfRows[0];
 
     const normalizedNodeId = this.normalizeSyncNodeId(localRow.NodeId);
     if (normalizedNodeId === DEFAULT_ORIGIN_CODE) {
@@ -4588,35 +4923,17 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     return null;
   }
 
-  private inferTransferSyncRemotePathFromDatabaseUrl() {
-    const databaseUrl = String(this.configService.get<string>("DATABASE_URL", "") || "").trim();
-    const databaseMatch = databaseUrl.match(/\/([^/?]+)(?:\?|$)/);
-    const databaseName = String(databaseMatch?.[1] || "").trim().toLowerCase();
-    if (!databaseName) {
-      return null;
+  private isLocalhostApiUrl(apiUrl: string | null | undefined) {
+    if (!apiUrl) {
+      return false;
     }
 
-    if (databaseName === "rocky_maxx" || databaseName === "rocky_sync_central") {
-      return "";
+    try {
+      const { hostname } = new URL(this.normalizeRequiredApiUrl(apiUrl));
+      return hostname === "localhost" || hostname === "127.0.0.1";
+    } catch {
+      return false;
     }
-
-    const tienda = databaseName.match(/^rocky_tienda_(\d+)(?:_vps)?$/);
-    if (tienda) {
-      return `/tienda${tienda[1].padStart(3, "0")}`;
-    }
-
-    const bodega = databaseName.match(/^rocky_bodega_(\d+)(?:_vps)?$/);
-    if (bodega) {
-      return `/bodega${bodega[1].padStart(3, "0")}`;
-    }
-
-    const testNodePaths: Record<string, string> = {
-      rocky_prueba_sistemas_tienda: "/prueba-sistemas-tienda",
-      rocky_prueba_sistemas_bodega: "/prueba-sistemas-bodega",
-      rocky_prueba_analista_tienda: "/prueba-analista-tienda",
-      rocky_prueba_analista_bodega: "/prueba-analista-bodega",
-    };
-    return testNodePaths[databaseName] ?? null;
   }
 
   private apiUrlMatchesPort(apiUrl: string | null | undefined, port: number) {

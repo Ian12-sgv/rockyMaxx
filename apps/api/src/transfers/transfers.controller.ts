@@ -8,7 +8,12 @@ import { UserView } from "../users/user-view.util";
 import { ApproveTransferDto } from "./dto/approve-transfer.dto";
 import { CreateTransferDto } from "./dto/create-transfer.dto";
 import { FindTransfersDto } from "./dto/find-transfers.dto";
-import { FindTransferSyncOutboxDto, PushTransferSyncDto, RegisterTransferSyncNodeDto } from "./dto/transfer-sync.dto";
+import {
+  FindTransferSyncOutboxDto,
+  PushTransferSyncDto,
+  RegisterTransferSyncNodeDto,
+  RevertTransferSyncNodeDto,
+} from "./dto/transfer-sync.dto";
 import { UpdateTransferDto } from "./dto/update-transfer.dto";
 import { TransfersService } from "./transfers.service";
 
@@ -33,9 +38,29 @@ export class TransfersController {
     return this.transfersService.listTransferSyncNodes();
   }
 
+  // Alta/cambio de nodos: solo "sistema", porque un dato malo en Central se reparte a todos.
+  @RequireGroups("sistema")
   @Post("sync/nodes")
-  async registerSyncNode(@Body() registerTransferSyncNodeDto: RegisterTransferSyncNodeDto) {
-    return this.transfersService.registerTransferSyncNode(registerTransferSyncNodeDto);
+  async registerSyncNode(
+    @Body() registerTransferSyncNodeDto: RegisterTransferSyncNodeDto,
+    @CurrentUser() user: UserView,
+  ) {
+    return this.transfersService.registerTransferSyncNode(registerTransferSyncNodeDto, user);
+  }
+
+  @Get("sync/nodes/:nodeId/historial")
+  async listSyncNodeHistory(@Param("nodeId") nodeId: string) {
+    return this.transfersService.listSyncNodeHistory(nodeId);
+  }
+
+  @RequireGroups("sistema")
+  @Post("sync/nodes/:nodeId/revertir")
+  async revertSyncNode(
+    @Param("nodeId") nodeId: string,
+    @Body() revertDto: RevertTransferSyncNodeDto,
+    @CurrentUser() user: UserView,
+  ) {
+    return this.transfersService.revertSyncNode(nodeId, revertDto, user);
   }
 
   @RequireGroups("sistema")
