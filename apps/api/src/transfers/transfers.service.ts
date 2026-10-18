@@ -77,7 +77,7 @@ const KNOWN_SYNC_NODES: ReadonlyArray<{
   { nodeId: "TIENDA004", sucursalCodigo: "004", nombre: "Tienda 004 - RockyMaxxMcbo", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda004" },
   { nodeId: "TIENDA005", sucursalCodigo: "005", nombre: "Tienda 005 - Titan", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda005" },
   { nodeId: "TIENDA006", sucursalCodigo: "006", nombre: "Tienda 006 - Top shop bqto", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda006" },
-  { nodeId: "TIENDA007", sucursalCodigo: "007", nombre: "Tienda 007 - Rockymaxx CabomasCentro", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda007" },
+  { nodeId: "TIENDA007", sucursalCodigo: "007", nombre: "Tienda 007 - Rockymaxx CabimasCentro", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda007" },
   { nodeId: "BODEGA002", sucursalCodigo: "B002", nombre: "Bodega 002 - galpon barquisimeto", tipo: "BODEGA", apiUrl: "http://68.183.105.135/bodega002" },
   { nodeId: "BODEGA003", sucursalCodigo: "B003", nombre: "Bodega Rockymaxx", tipo: "BODEGA", apiUrl: "http://68.183.105.135/bodega003" },
 ];
@@ -370,6 +370,7 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     await this.ensureInventoryBulkSchema();
     await this.ensureKnownSyncNodesSeed();
+    await this.fixKnownNodeNameTypos();
     this.startTransferSyncAutoRetry();
     this.startInventoryBulkRetry();
   }
@@ -989,6 +990,53 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
 
     if (seeded > 0) {
       this.logger.log(`SYNC_NODES: se sembraron ${seeded} nodo(s) conocido(s) que faltaban al arrancar.`);
+    }
+  }
+
+  // Corrige erratas conocidas en nombres de nodos ya grabados, en cualquier nodo (Central,
+  // tienda o bodega, local o VPS): la tienda 007 se dio de alta como "CabomasCentro" y es
+  // "CabimasCentro" (2026-10-17). Solo reemplaza el texto equivocado, nunca otro nombre que
+  // un admin haya puesto, y deja constancia en SYNC_NODES_HISTORIAL.
+  private async fixKnownNodeNameTypos() {
+    const fixes = [{ sucursalCodigo: "007", nodeId: "TIENDA007", wrong: "Cabomas", right: "Cabimas" }];
+
+    try {
+      await this.ensureTransferSyncSchema();
+
+      for (const fix of fixes) {
+        const sucursal = await this.prisma.sucursales.findUnique({ where: { Codigo: fix.sucursalCodigo } });
+        if (sucursal?.Nombre?.includes(fix.wrong)) {
+          const nombre = sucursal.Nombre.split(fix.wrong).join(fix.right);
+          await this.prisma.sucursales.update({ where: { Codigo: fix.sucursalCodigo }, data: { Nombre: nombre } });
+          this.logger.log(`Sucursal ${fix.sucursalCodigo}: nombre corregido a "${nombre}".`);
+        }
+
+        const antes = await this.getSyncNodeSnapshot(this.prisma, fix.nodeId);
+        const updated = await this.prisma.$executeRawUnsafe(
+          `
+            update dbo."SYNC_NODES"
+            set "Nombre" = replace("Nombre", $2, $3), "UpdatedAt" = now()
+            where upper("NodeId") = upper($1) and "Nombre" like '%' || $2 || '%'
+          `,
+          fix.nodeId,
+          fix.wrong,
+          fix.right,
+        );
+        if (Number(updated) > 0) {
+          await this.recordSyncNodeHistory(this.prisma, {
+            nodeId: fix.nodeId,
+            accion: "CAMBIO",
+            antes,
+            despues: await this.getSyncNodeSnapshot(this.prisma, fix.nodeId),
+            usuario: null,
+            forzado: false,
+          });
+          this.logger.log(`SYNC_NODES ${fix.nodeId}: nombre corregido ("${fix.wrong}" -> "${fix.right}").`);
+        }
+      }
+    } catch (error) {
+      // Un nombre mal escrito no debe impedir que el nodo arranque.
+      this.logger.warn(`No se pudieron corregir nombres de nodos: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

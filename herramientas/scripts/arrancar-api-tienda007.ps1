@@ -11,7 +11,7 @@ $apiDir = (Resolve-Path (Join-Path $repoRoot "apps\\api")).Path
 $envFile = Join-Path $apiDir ".env.tienda007"
 
 if (-not (Test-Path $envFile)) {
-  throw "No existe el archivo de entorno para Tienda 007 - Rockymaxx CabomasCentro: $envFile"
+  throw "No existe el archivo de entorno para Tienda 007 - Rockymaxx CabimasCentro: $envFile"
 }
 
 Get-Content $envFile | ForEach-Object {
@@ -32,7 +32,7 @@ Get-Content $envFile | ForEach-Object {
 
 Push-Location $repoRoot
 try {
-  Write-Host "[rocky-maxx] Arrancando API Tienda 007 - Rockymaxx CabomasCentro en puerto $env:API_PORT..."
+  Write-Host "[rocky-maxx] Arrancando API Tienda 007 - Rockymaxx CabimasCentro en puerto $env:API_PORT..."
   & "C:\Program Files\nodejs\node.exe" "apps/api/dist/main.js"
   exit $LASTEXITCODE
 }
