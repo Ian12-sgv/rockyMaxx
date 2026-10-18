@@ -244,7 +244,8 @@ hace falta.
 nodo `ORIGEN` (local → `http://68.183.105.135`, gemela → `http://localhost:3000`) y el suyo
 propio. Las sucursales de otros nodos se crean solas al llegar una transferencia
 (`ensureLocations`). Normalmente **solo falta el lado de Central**: `rocky_sync_central` (VPS) y
-`rocky_maxx` (PC de oficina). Patrón validado: un `.mjs` que valida que la base sea Central, hace
+`rocky_maxx` (PC de oficina). Las bodegas con Servicio Local >= 4.0.9 se siembran solas al
+arrancar (ver `KNOWN_SYNC_NODES` abajo); con versiones anteriores hay que darles el alta a mano. Patrón validado: un `.mjs` que valida que la base sea Central, hace
 login con `sistema`, crea la sucursal y el nodo solo si faltan, y verifica; el usuario lo corre
 con un wrapper que pide la clave oculta (`read -s` / `Read-Host -AsSecureString`).
 
@@ -270,9 +271,10 @@ Ediciones de codigo, directas (no privilegiadas, se hacen con Edit normal):
 
 1. **`apps/api/src/transfers/transfers.service.ts`**, constante `KNOWN_SYNC_NODES`
    (buscar ese nombre): agregar una entrada para el nodo nuevo. Esto hace que **cualquier
-   instancia Central que arranque** (incluida una PC de oficina vieja que nunca se
-   actualizo) se auto-repare sola y registre el nodo si le faltaba — ver
-   `project_rocky_maxx_bodega_rockymaxx_node`-style fix del 2026-10-06/07 para el porque.
+   instancia Central o bodega (B002, B003...) que arranque** (incluida una PC vieja que
+   nunca se actualizo) se auto-repare sola: crea la Sucursal con su nombre real y la fila
+   en `SYNC_NODES` si le faltaban. Las tiendas no se siembran. Ver el fix del 2026-10-06/07
+   (Central) y del 2026-10-17 (tienda 007 ausente del selector en B002/B003).
 
 2. **`apps/desktop-installer/main.js`**, arreglo `REMOTE_NODES` (buscar ese nombre):
    agregar una entrada igual, para que el selector "Base remota" del Instalador pueda

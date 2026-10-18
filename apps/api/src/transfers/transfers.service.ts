@@ -934,17 +934,20 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  // Corre en cada arranque, solo en instancias Central/ORIGEN (NODE_ROLE=central, o bases
-  // rocky_maxx/rocky_sync_central; nunca por puerto).
-  // Rellena en SYNC_NODES cualquier tienda/bodega conocida que falte -- nunca toca ni
-  // sobrescribe un nodo que ya exista (on conflict do nothing), para no pisar un ApiUrl u
-  // otro dato que un admin haya cambiado a mano. Pensado para el caso real: una PC Central
-  // instalada/restaurada antes de que existiera un nodo nuevo, que nunca recibio el alta
-  // manual despues (ej. Bodega 003 faltando en la PC de oficina, 2026-10-06).
+  // Corre en cada arranque, en instancias Central/ORIGEN (NODE_ROLE=central, o bases
+  // rocky_maxx/rocky_sync_central; nunca por puerto) y en las bodegas (B002, B003...),
+  // que tambien despachan mercancia a las tiendas.
+  // Rellena en Sucursales y SYNC_NODES cualquier tienda/bodega conocida que falte -- nunca
+  // toca ni sobrescribe una fila que ya exista (on conflict do nothing), para no pisar un
+  // ApiUrl u otro dato que un admin haya cambiado a mano. Pensado para el caso real: un nodo
+  // instalado/restaurado antes de que existiera otro nodo nuevo, que nunca recibio el alta
+  // manual despues (ej. Bodega 003 faltando en la PC de oficina, 2026-10-06; tienda 007
+  // ausente del selector de Sucursal en B002 y B003, 2026-10-17).
   private async ensureKnownSyncNodesSeed() {
-    if (!this.nodeIdentity.isCentral()) {
-      // No es Central/ORIGEN (es una tienda/bodega o una base no reconocida): esta instancia
-      // no necesita conocer el directorio completo de nodos.
+    const identity = this.nodeIdentity.get();
+    const isWarehouse = identity.role === "bodega" && !identity.conflict;
+    if (!this.nodeIdentity.isCentral() && !isWarehouse) {
+      // Tienda o base no reconocida: no despacha a otros nodos, no necesita el directorio.
       return;
     }
 
@@ -952,7 +955,12 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
 
     let seeded = 0;
     for (const node of KNOWN_SYNC_NODES) {
-      await this.ensureLocations(this.prisma, [node.sucursalCodigo]);
+      if (isWarehouse && node.nodeId === identity.nodeId) {
+        // La bodega ya se autorregistra con su URL local; no agregarla con la publica.
+        continue;
+      }
+
+      await this.ensureKnownLocation(node.sucursalCodigo, node.nombre);
       const result = await this.prisma.$executeRawUnsafe(
         `
           insert into dbo."SYNC_NODES"
@@ -982,6 +990,26 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
     if (seeded > 0) {
       this.logger.log(`SYNC_NODES: se sembraron ${seeded} nodo(s) conocido(s) que faltaban al arrancar.`);
     }
+  }
+
+  // Como ensureLocations, pero con el nombre real del nodo para que el selector de Sucursal
+  // muestre "Tienda 007 - ..." y no solo "007". Nunca renombra una sucursal existente.
+  private async ensureKnownLocation(codigo: string, nombre: string) {
+    const existing = await this.prisma.sucursales.findUnique({ where: { Codigo: codigo } });
+    if (existing) {
+      return;
+    }
+
+    await this.prisma.sucursales.create({
+      data: {
+        Codigo: codigo,
+        Nombre: nombre,
+        Direccion: "",
+        Telefono: "",
+        Status: 1,
+        PorcentajeDeRedondeo: ZERO,
+      },
+    });
   }
 
   async listTransferSyncOutbox(findTransferSyncOutboxDto: FindTransferSyncOutboxDto) {
