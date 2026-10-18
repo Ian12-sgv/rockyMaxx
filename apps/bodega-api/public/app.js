@@ -591,6 +591,13 @@ function sumarFilasVisibles(rows) {
   return total;
 }
 
+// Bodegas (B001/B002/B003): no facturan; el servidor solo las manda en
+// inventario (tipo "BODEGA"), nunca en ventas/desempeno.
+function esBodega(codigo) {
+  const fila = (state.inventario || []).find((row) => row.codigo_legacy === codigo);
+  return fila ? fila.tipo === "BODEGA" : /^B\d+$/i.test(String(codigo || ""));
+}
+
 function getStoreOptions() {
   const codes = new Set();
   (state.inventario || []).forEach((row) => {
@@ -972,13 +979,17 @@ function renderControlsBar() {
         <span class="sr-only">Tienda</span>
         <select data-tienda-filtro>
           <option value="">${state.grupoFiltro ? `Todas del grupo ${state.grupoFiltro}` : "Todas las tiendas"}</option>
-          ${storeOptions
-            .map(
-              (codigo) => `
-                <option value="${escapeHtml(codigo)}" ${state.tiendaFiltro === codigo ? "selected" : ""}>${escapeHtml(getNombreTienda(codigo))}</option>
-              `,
-            )
-            .join("")}
+          ${(() => {
+            const opcion = (codigo) => `
+              <option value="${escapeHtml(codigo)}" ${state.tiendaFiltro === codigo ? "selected" : ""}>${escapeHtml(getNombreTienda(codigo))}</option>
+            `;
+            const tiendas = storeOptions.filter((codigo) => !esBodega(codigo));
+            const bodegas = storeOptions.filter((codigo) => esBodega(codigo));
+            return (
+              tiendas.map(opcion).join("") +
+              (bodegas.length ? `<optgroup label="Bodegas (solo inventario)">${bodegas.map(opcion).join("")}</optgroup>` : "")
+            );
+          })()}
         </select>
       </label>
 
@@ -1284,6 +1295,7 @@ function renderInventarioRow(row, totalValor, isTotal) {
             ? `<strong>${state.grupoFiltro ? `TOTAL GRUPO ${state.grupoFiltro}` : "TOTAL"}</strong>`
             : `<div class="bodega-inv-tienda-cell">
                 <span>${escapeHtml(row.nombre || row.codigo_legacy || "-")}</span>
+                ${row.tipo === "BODEGA" ? `<span class="bodega-tipo-badge" title="Bodega: no factura, solo inventario">Bodega</span>` : ""}
                 <button type="button" class="bodega-inv-detalle-toggle ${abierto ? "is-open" : ""}" data-inv-detalle-toggle="${escapeHtml(row.codigo_legacy)}">
                   ${abierto ? "Ocultar articulos &#9652;" : "Ver articulos &#9662;"}
                 </button>

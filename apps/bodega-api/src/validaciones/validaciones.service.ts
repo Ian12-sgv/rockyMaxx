@@ -29,8 +29,21 @@ import { PrismaService } from "../prisma/prisma.service";
 // Cuando otra tienda active bodega-export directo en su propia PC, sumar su
 // codigo_legacy aqui (verificar primero en ETL_SYNC_RUNS que este
 // insertando algo reciente, no solo que el registro exista).
-const CODIGOS_TIENDA_ACTIVOS_PANEL = ["001", "002", "003", "004", "005", "006"];
+// 007: exportando directo desde su PC desde el 15/10/2026 (ETL_SYNC_RUNS sin
+// errores), agregada el 17/10/2026.
+const CODIGOS_TIENDA_ACTIVOS_PANEL = ["001", "002", "003", "004", "005", "006", "007"];
 const FILTRO_TIENDAS_PANEL = Prisma.sql`t."codigo_legacy" IN (${Prisma.join(CODIGOS_TIENDA_ACTIVOS_PANEL)})`;
+
+// Bodegas: no facturan, asi que en el panel SOLO aportan inventario (tabla
+// "Inventario actual" y tarjeta "Inventario a costo"); nunca entran en ventas,
+// desempeno, horarios ni serie diaria. B001 (Bodega Central, base rocky_maxx)
+// queda listada aunque hoy no exporta: aparece sola cuando tenga fila en
+// DIM_TIENDAS y empiece a enviar inventario.
+const CODIGOS_BODEGA_PANEL = ["B001", "B002", "B003"];
+const FILTRO_INVENTARIO_PANEL = Prisma.sql`t."codigo_legacy" IN (${Prisma.join([
+  ...CODIGOS_TIENDA_ACTIVOS_PANEL,
+  ...CODIGOS_BODEGA_PANEL,
+])})`;
 
 // Grupo B = tiendas cuyo nombre contiene "rocky" (mismo criterio que
 // getGrupoTienda() en public/app.js). Un usuario del grupo B solo recibe
@@ -39,6 +52,11 @@ const FILTRO_GRUPO_B = Prisma.sql`t."nombre" ILIKE '%rocky%'`;
 
 function filtroTiendasAlcance(alcance: AlcancePanel) {
   return alcance.grupo === "B" ? Prisma.sql`${FILTRO_TIENDAS_PANEL} AND ${FILTRO_GRUPO_B}` : FILTRO_TIENDAS_PANEL;
+}
+
+// Igual que filtroTiendasAlcance pero incluyendo bodegas (solo para inventario).
+function filtroInventarioAlcance(alcance: AlcancePanel) {
+  return alcance.grupo === "B" ? Prisma.sql`${FILTRO_INVENTARIO_PANEL} AND ${FILTRO_GRUPO_B}` : FILTRO_INVENTARIO_PANEL;
 }
 
 @Injectable()
@@ -219,6 +237,7 @@ export class ValidacionesService {
   // "TOTAL".
   async panelResumen(desde: string, hasta: string, alcance: AlcancePanel) {
     const filtro = filtroTiendasAlcance(alcance);
+    const filtroInventario = filtroInventarioAlcance(alcance);
     const tasaCambio = await this.tasaCambioActual(hasta);
     const tasaValor = tasaCambio?.tasa ? Number(tasaCambio.tasa) : 1;
     const { desde: desdeAnterior, hasta: hastaAnterior } = this.calcularRangoAnterior(desde, hasta);
@@ -227,7 +246,7 @@ export class ValidacionesService {
     const [ventas, ventasAnterior, inventario, serieDiaria, horarios] = await Promise.all([
       this.ventasResumenPorRango(desde, hasta, tasaValor, filtro),
       this.ventasResumenPorRango(desdeAnterior, hastaAnterior, tasaValor, filtro),
-      this.inventarioResumen(filtro),
+      this.inventarioResumen(filtroInventario),
       this.ventasSerieDiaria(hasta, diasSerie, tasaValor, filtro),
       this.horariosPorTienda(desde, hasta, filtro),
     ]);
@@ -540,11 +559,20 @@ export class ValidacionesService {
   // campo.
   private async inventarioResumen(filtro: Prisma.Sql) {
     return this.prisma.$queryRaw<
-      Array<{ codigo_legacy: string; nombre: string | null; articulos: string; unidades: string; valor_costo_usd: string }>
+      Array<{
+        codigo_legacy: string;
+        nombre: string | null;
+        tipo: string | null;
+        articulos: string;
+        unidades: string;
+        valor_costo_usd: string;
+      }>
     >(Prisma.sql`
       SELECT
         COALESCE(t."codigo_legacy", 'TOTAL') AS codigo_legacy,
         CASE WHEN GROUPING(t."codigo_legacy") = 1 THEN NULL ELSE MAX(t."nombre") END AS nombre,
+        -- "TIENDA" | "BODEGA": el panel marca las bodegas (solo inventario).
+        CASE WHEN GROUPING(t."codigo_legacy") = 1 THEN NULL ELSE MAX(t."tipo") END AS tipo,
         COUNT(*)::text AS articulos,
         COALESCE(SUM((v."payload_json" ->> 'Existencia')::numeric), 0)::text AS unidades,
         COALESCE(

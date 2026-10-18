@@ -2426,6 +2426,17 @@ button {
   flex-wrap: wrap;
 }
 
+.bodega-tipo-badge {
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #62748a;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+
 .bodega-inv-detalle-toggle {
   border: 1px solid #d9e1ec;
   border-radius: 999px;
