@@ -77,7 +77,7 @@ const KNOWN_SYNC_NODES: ReadonlyArray<{
   { nodeId: "TIENDA004", sucursalCodigo: "004", nombre: "Tienda 004 - RockyMaxxMcbo", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda004" },
   { nodeId: "TIENDA005", sucursalCodigo: "005", nombre: "Tienda 005 - Titan", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda005" },
   { nodeId: "TIENDA006", sucursalCodigo: "006", nombre: "Tienda 006 - Top shop bqto", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda006" },
-  { nodeId: "TIENDA007", sucursalCodigo: "007", nombre: "Tienda 007 - Rockymaxx CabimasCentro", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda007" },
+  { nodeId: "TIENDA007", sucursalCodigo: "007", nombre: "Tienda 007 - Rockymaxx Cabimas", tipo: "TIENDA", apiUrl: "http://68.183.105.135/tienda007" },
   { nodeId: "BODEGA002", sucursalCodigo: "B002", nombre: "Bodega 002 - galpon barquisimeto", tipo: "BODEGA", apiUrl: "http://68.183.105.135/bodega002" },
   { nodeId: "BODEGA003", sucursalCodigo: "B003", nombre: "Bodega Rockymaxx", tipo: "BODEGA", apiUrl: "http://68.183.105.135/bodega003" },
 ];
@@ -994,11 +994,16 @@ export class TransfersService implements OnModuleInit, OnModuleDestroy {
   }
 
   // Corrige erratas conocidas en nombres de nodos ya grabados, en cualquier nodo (Central,
-  // tienda o bodega, local o VPS): la tienda 007 se dio de alta como "CabomasCentro" y es
-  // "CabimasCentro" (2026-10-17). Solo reemplaza el texto equivocado, nunca otro nombre que
-  // un admin haya puesto, y deja constancia en SYNC_NODES_HISTORIAL.
+  // tienda o bodega, local o VPS): la tienda 007 se dio de alta como "CabomasCentro", se
+  // corrigio a "CabimasCentro" (2026-10-17) y se renombro a "Rockymaxx Cabimas" (2026-10-20).
+  // Las reglas se aplican en orden, asi un nodo que aun tenga "Cabomas" llega al nombre final.
+  // Solo reemplaza el texto equivocado, nunca otro nombre que un admin haya puesto, y deja
+  // constancia en SYNC_NODES_HISTORIAL.
   private async fixKnownNodeNameTypos() {
-    const fixes = [{ sucursalCodigo: "007", nodeId: "TIENDA007", wrong: "Cabomas", right: "Cabimas" }];
+    const fixes = [
+      { sucursalCodigo: "007", nodeId: "TIENDA007", wrong: "Cabomas", right: "Cabimas" },
+      { sucursalCodigo: "007", nodeId: "TIENDA007", wrong: "Rockymaxx CabimasCentro", right: "Rockymaxx Cabimas" },
+    ];
 
     try {
       await this.ensureTransferSyncSchema();
