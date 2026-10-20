@@ -23046,8 +23046,8 @@ function buildTransferReportHtml(transfer) {
         <th>Descripcion</th>
         <th class="num">Caja</th>
         <th class="num">Cantidad</th>
-        <th class="num">Costo unit. ($)</th>
-        <th class="num">Subtotal ($)</th>
+        <th class="num">Costo unit. (Bs)</th>
+        <th class="num">Subtotal (Bs)</th>
       </tr>
     </thead>
     <tbody>
@@ -23059,7 +23059,7 @@ function buildTransferReportHtml(transfer) {
         <td></td>
         <td class="num">${escapeHtml(formatTransferQuantity(totalCantidad))}</td>
         <td></td>
-        <td class="num">$ ${escapeHtml(formatTransferAmount(totalValor))}</td>
+        <td class="num">Bs ${escapeHtml(formatTransferAmount(totalValor))}</td>
       </tr>
     </tfoot>
   </table>
