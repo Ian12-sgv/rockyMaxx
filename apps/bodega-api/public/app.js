@@ -1085,7 +1085,9 @@ function renderSummaryCards() {
     {
       label: "Gastos generales",
       value: formatMontoSinConvertir(gastosGenerales.total),
-      meta: `${gastosGenerales.cantidad} egreso(s) operativos compartidos entre tiendas`,
+      meta: state.tiendaFiltro
+        ? `${gastosGenerales.deTiendas} gasto(s) de ${escapeHtml(getNombreTienda(state.tiendaFiltro))}`
+        : `${gastosGenerales.deTiendas} gasto(s) de tiendas &middot; ${gastosGenerales.compartidos} compartido(s)`,
       tone: "red",
       delta: null,
       puntos: [],
@@ -1500,15 +1502,36 @@ function getGastosTienda(codigo) {
 
 // Con filtro de tienda/grupo, entra el gasto general que incluya alguna
 // tienda visible.
+// Tarjeta "Gastos generales" (pedido del usuario, 19/10/2026): TODOS los gastos
+// de las tiendas visibles = gastos propios de cada tienda (pantalla Gastos +
+// egresos operativos de Balance de una sola tienda, igual que la columna
+// Gastos) + egresos de Balance compartidos entre varias tiendas. Con una
+// tienda elegida en el selector, SOLO los de esa tienda (sin compartidos), o
+// sea el mismo valor que su columna Gastos. Cada gasto se cuenta una vez.
 function getGastosGenerales() {
-  const lista = getEgresos()
-    .filter((mov) => !esGastoDeUnaTienda(mov))
-    .filter(
-      (mov) =>
-        (!state.tiendaFiltro && !state.grupoFiltro) ||
-        (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.some((codigo) => tiendaVisible(codigo))),
-    );
-  return { total: lista.reduce((acc, mov) => acc + montoEnMonedaActual(mov), 0), cantidad: lista.length };
+  const gastosTiendas = (Array.isArray(state.gastosTiendas) ? state.gastosTiendas : []).filter((fila) =>
+    tiendaVisible(fila.codigo_legacy),
+  );
+  const deBalanceUnaTienda = getEgresos().filter(
+    (mov) => esGastoDeUnaTienda(mov) && tiendaVisible(mov.codigos_tienda[0]),
+  );
+  const compartidos = state.tiendaFiltro
+    ? []
+    : getEgresos()
+        .filter((mov) => !esGastoDeUnaTienda(mov))
+        .filter(
+          (mov) =>
+            !state.grupoFiltro ||
+            (Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.some((codigo) => tiendaVisible(codigo))),
+        );
+
+  const total =
+    gastosTiendas.reduce((acc, fila) => acc + montoEnMonedaActual({ monto: fila.monto, moneda: fila.moneda }), 0) +
+    deBalanceUnaTienda.reduce((acc, mov) => acc + montoEnMonedaActual(mov), 0) +
+    compartidos.reduce((acc, mov) => acc + montoEnMonedaActual(mov), 0);
+  const deTiendas =
+    gastosTiendas.reduce((acc, fila) => acc + toFiniteNumber(fila.cantidad), 0) + deBalanceUnaTienda.length;
+  return { total, deTiendas, compartidos: compartidos.length };
 }
 
 function formatMontoSinConvertir(valor) {
