@@ -181,6 +181,7 @@ export class ValidacionesService {
           talla: string | null;
           existencia: string;
           costo_promedio_usd: string;
+          costo_usd: string;
           valor_costo_usd: string;
         }>
       >(Prisma.sql`
@@ -191,6 +192,9 @@ export class ValidacionesService {
           (v."payload_json" ->> 'Talla') AS talla,
           COALESCE((v."payload_json" ->> 'Existencia')::numeric, 0)::text AS existencia,
           COALESCE((v."payload_json" ->> 'CostoPromedio')::numeric, 0)::text AS costo_promedio_usd,
+          -- "Costo" de la ficha del articulo (INVENTARIO.CostoDolar), el mismo
+          -- que usan las transferencias y "Costo de mercancia" del panel.
+          COALESCE((v."payload_json" ->> 'CostoDolar')::numeric, 0)::text AS costo_usd,
           COALESCE(
             (v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric,
             0

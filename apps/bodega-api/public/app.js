@@ -1353,13 +1353,10 @@ function renderInventarioDetalle() {
                   <table class="data-table">
                     <thead>
                       <tr>
-                        <th>Codigo</th>
                         <th>Referencia</th>
-                        <th>Nombre</th>
-                        <th>Talla</th>
+                        <th>Descripcion</th>
                         <th>Existencia</th>
-                        <th>Costo prom.</th>
-                        <th>Valor a costo</th>
+                        <th title="Costo del articulo (el mismo campo Costo de la ficha del articulo)">Costo</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1369,18 +1366,15 @@ function renderInventarioDetalle() {
                               .map(
                                 (fila) => `
                                   <tr>
-                                    <td>${escapeHtml(fila.codigo_barra || "-")}</td>
                                     <td>${escapeHtml(fila.referencia || "-")}</td>
                                     <td>${escapeHtml(fila.nombre || "-")}</td>
-                                    <td>${escapeHtml(fila.talla || "-")}</td>
                                     <td>${escapeHtml(formatCantidad(fila.existencia))}</td>
-                                    <td>${escapeHtml(formatMonedaDesdeUsd(fila.costo_promedio_usd))}</td>
-                                    <td>${escapeHtml(formatMonedaDesdeUsd(fila.valor_costo_usd))}</td>
+                                    <td>${escapeHtml(formatMonedaDesdeUsd(fila.costo_usd))}</td>
                                   </tr>
                                 `,
                               )
                               .join("")
-                          : `<tr><td colspan="7"><div class="empty-state"><p>${det.busqueda ? "Ningun articulo coincide con la busqueda." : "Sin articulos."}</p></div></td></tr>`
+                          : `<tr><td colspan="4"><div class="empty-state"><p>${det.busqueda ? "Ningun articulo coincide con la busqueda." : "Sin articulos."}</p></div></td></tr>`
                       }
                     </tbody>
                   </table>
