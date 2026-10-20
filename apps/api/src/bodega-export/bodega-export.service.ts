@@ -318,8 +318,22 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // BODEGA_SYNC_SOLO_GASTOS=true: esta instancia SOLO envia GASTOS. Pensado
+  // para la gemela del VPS de una tienda cuya PC ya exporta directo sus
+  // ventas/inventario con una version sin GASTOS (ej. tienda 007): la gemela
+  // recibe GASTOS por MirrorSync y los manda, sin duplicar el resto.
+  private isSoloGastos() {
+    return String(this.configService.get<string>("BODEGA_SYNC_SOLO_GASTOS", "") || "").trim().toLowerCase() === "true";
+  }
+
   private async buildEnvios(): Promise<Envio[]> {
     const envios: Envio[] = [];
+
+    if (this.isSoloGastos()) {
+      const gastos = await this.buildGastosBatch();
+      if (gastos) envios.push({ tablas: [gastos.batch], onSuccess: gastos.onSuccess });
+      return envios;
+    }
 
     const inventario = await this.buildInventarioBatches();
     if (inventario) {
