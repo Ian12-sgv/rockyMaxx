@@ -19,8 +19,9 @@
   del Servicio Local instalado (no hay claves escritas en este script).
 
 .PARAMETER Tienda
-  Codigo del nodo. Tienda: 007 -> base rocky_tienda_007. Bodega: B002 -> base
-  rocky_bodega_002 (vale igual para B003, etc.). Se corre en la PC de ese nodo.
+  Opcional. Sin el, usa el perfil que el Servicio Local de ESTA PC tiene
+  configurado (service-config.json junto a su .exe). Con el, verifica que
+  coincida: tienda 007 -> base rocky_tienda_007; bodega B002 -> rocky_bodega_002.
 
 .PARAMETER EnvFile
   Ruta del .env a usar, si no se quiere la busqueda automatica.
@@ -33,12 +34,12 @@
   enviar nada. Sirve para revisar que se va a mandar.
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File .\subir-inventario-tienda-a-vps.ps1 -Tienda 007 -SoloContar
-  powershell -ExecutionPolicy Bypass -File .\subir-inventario-tienda-a-vps.ps1 -Tienda 007
+  powershell -ExecutionPolicy Bypass -File .\subir-inventario-tienda-a-vps.ps1 -SoloContar
+  powershell -ExecutionPolicy Bypass -File .\subir-inventario-tienda-a-vps.ps1
   powershell -ExecutionPolicy Bypass -File .\subir-inventario-tienda-a-vps.ps1 -Tienda B002 -SoloContar
 #>
 param(
-  [string]$Tienda = "007",
+  [string]$Tienda = "",
   [string]$EnvFile = "",
   [switch]$SoloContar,
   [string]$GuardarEn = "",
@@ -47,18 +48,6 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Tienda = $Tienda.Trim().ToUpper()
-if ($Tienda -match "^B(\d+)$") {
-  # Bodega: B002 -> rocky_bodega_002
-  $numero = $Matches[1].PadLeft(3, "0")
-  $Tienda = "B$numero"
-  $baseEsperada = "rocky_bodega_$numero"
-} elseif ($Tienda -match "^\d+$") {
-  $Tienda = $Tienda.PadLeft(3, "0")
-  $baseEsperada = "rocky_tienda_$Tienda"
-} else {
-  throw "Codigo '$Tienda' invalido. Usa el numero de la tienda (ej. 007) o B + numero de bodega (ej. B002)."
-}
 
 function Read-EnvFile([string]$path) {
   $vars = @{}
@@ -82,34 +71,80 @@ function Get-DatabaseName([string]$url) {
   return ""
 }
 
-# ---- 1. Perfil .env de la tienda --------------------------------------------
+# Codigo pedido -> base esperada. 007 -> rocky_tienda_007; B002 -> rocky_bodega_002.
+function Resolve-BaseEsperada([string]$codigo) {
+  $c = $codigo.Trim().ToUpper()
+  if ($c -match "^B(\d+)$") { return "rocky_bodega_" + $Matches[1].PadLeft(3, "0") }
+  if ($c -match "^\d+$") { return "rocky_tienda_" + $c.PadLeft(3, "0") }
+  throw "Codigo '$codigo' invalido. Usa el numero de la tienda (ej. 007) o B + numero de bodega (ej. B002)."
+}
+
+# Base -> codigo corto para mostrar y para nombres de archivo.
+function Get-CodigoNodo([string]$base) {
+  if ($base -match "^rocky_tienda_0*(\d+)$") { return $Matches[1].PadLeft(3, "0") }
+  if ($base -match "^rocky_bodega_0*(\d+)$") { return "B" + $Matches[1].PadLeft(3, "0") }
+  return $base
+}
+
+# ---- 1. Perfil .env ----------------------------------------------------------
+# El Servicio Local trae los perfiles de TODOS los nodos, pero solo uno es el
+# de esta PC: el que guardo en service-config.json (junto a su .exe) al
+# configurarlo. Ese es el que se usa por defecto.
+$serviceDir = Join-Path $env:LOCALAPPDATA "Programs\@sistema-arabedesktop-service"
+$runtimeDir = Join-Path $serviceDir "resources\api"
+$serviceConfig = $null
+foreach ($cfgPath in @((Join-Path $serviceDir "service-config.json"), (Join-Path $env:APPDATA "@sistema-arabe\desktop-service\service-config.json"))) {
+  if (Test-Path $cfgPath) {
+    try { $serviceConfig = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json; break } catch { }
+  }
+}
+$perfilServicio = ""
+if ($serviceConfig -and $serviceConfig.profileId -and (Test-Path (Join-Path $runtimeDir $serviceConfig.profileId))) {
+  $perfilServicio = Join-Path $runtimeDir $serviceConfig.profileId
+}
+$usaPerfilServicio = $false
+
 if (-not $EnvFile) {
-  $runtimeDir = Join-Path $env:LOCALAPPDATA "Programs\@sistema-arabedesktop-service\resources\api"
-  if (-not (Test-Path $runtimeDir)) {
-    throw "No se encontro el Servicio Local instalado en $runtimeDir. Indica el perfil con -EnvFile."
-  }
-  $candidatos = Get-ChildItem -Path $runtimeDir -Force -File -Filter ".env*" |
-    Where-Object { $_.Name -notlike "*.example" -and $_.Name -notlike "*.bak*" } |
-    Where-Object {
-      $vars = Read-EnvFile $_.FullName
-      (Get-DatabaseName $vars["DATABASE_URL"]) -eq $baseEsperada
+  if ($perfilServicio) {
+    $baseServicio = Get-DatabaseName (Read-EnvFile $perfilServicio)["DATABASE_URL"]
+    if ($Tienda -and (Resolve-BaseEsperada $Tienda) -ne $baseServicio) {
+      throw ("El Servicio Local de esta PC esta configurado con el perfil '$($serviceConfig.profileId)' (base $baseServicio, " +
+        "nodo $(Get-CodigoNodo $baseServicio)), no con $($Tienda.ToUpper()). Corre el script SIN -Tienda para usar el de esta PC, " +
+        "o correlo en la PC de $($Tienda.ToUpper()).")
     }
-  if (@($candidatos).Count -eq 0) {
-    throw "Ningun perfil en $runtimeDir usa la base $baseEsperada. Indica el perfil con -EnvFile."
+    $EnvFile = $perfilServicio
+    $usaPerfilServicio = $true
+  } elseif ($Tienda) {
+    if (-not (Test-Path $runtimeDir)) {
+      throw "No se encontro el Servicio Local instalado en $runtimeDir. Indica el perfil con -EnvFile."
+    }
+    $buscada = Resolve-BaseEsperada $Tienda
+    $candidatos = Get-ChildItem -Path $runtimeDir -Force -File -Filter ".env*" |
+      Where-Object { $_.Name -notlike "*.example" -and $_.Name -notlike "*.bak*" } |
+      Where-Object { (Get-DatabaseName (Read-EnvFile $_.FullName)["DATABASE_URL"]) -eq $buscada }
+    if (@($candidatos).Count -eq 0) {
+      throw "Ningun perfil en $runtimeDir usa la base $buscada. Indica el perfil con -EnvFile."
+    }
+    $EnvFile = @($candidatos)[0].FullName
+  } else {
+    throw "No se encontro el perfil configurado del Servicio Local. Indica el nodo con -Tienda (ej. 007 o B002) o el perfil con -EnvFile."
   }
-  $EnvFile = @($candidatos)[0].FullName
 }
 
 $envVars = Read-EnvFile $EnvFile
 $databaseUrl = $envVars["DATABASE_URL"]
-$remoteUrl = ($envVars["MIRROR_SYNC_REMOTE_API_URL"]).TrimEnd("/")
+$remoteUrl = [string]$envVars["MIRROR_SYNC_REMOTE_API_URL"]
+# Si el servicio se configuro con otra URL del VPS, manda esa (es la que usa MirrorSync).
+if ($usaPerfilServicio -and $serviceConfig.mirrorSyncRemoteApiUrl) {
+  $remoteUrl = [string]$serviceConfig.mirrorSyncRemoteApiUrl
+}
+$remoteUrl = $remoteUrl.Trim().TrimEnd("/")
+if ($remoteUrl.ToLower().EndsWith("/api")) { $remoteUrl = $remoteUrl.Substring(0, $remoteUrl.Length - 4) }
 $usuario = $envVars["MIRROR_SYNC_USERNAME"]
 $password = $envVars["MIRROR_SYNC_PASSWORD"]
 $baseDatos = Get-DatabaseName $databaseUrl
+$Tienda = Get-CodigoNodo $baseDatos
 
-if ($baseDatos -ne $baseEsperada) {
-  throw "El perfil $EnvFile usa la base '$baseDatos', no '$baseEsperada'."
-}
 if ($baseDatos -like "*_vps") {
   throw "La base '$baseDatos' es una gemela del VPS: este script se corre en la PC de la tienda o bodega."
 }
@@ -221,6 +256,12 @@ $sqlFile = Join-Path $env:TEMP "subir-inventario-$Tienda.sql"
 $env:PGCLIENTENCODING = "UTF8"
 $filas = & $psql $psqlUrl -X -q -At -F "`t" -v ON_ERROR_STOP=1 -f $sqlFile
 if ($LASTEXITCODE -ne 0) {
+  # Ayuda: que bases rocky_* existen de verdad en esta PC.
+  $listaFile = Join-Path $env:TEMP "subir-inventario-bases.sql"
+  [System.IO.File]::WriteAllText($listaFile, "SELECT datname FROM pg_database WHERE datname LIKE 'rocky%' ORDER BY 1;", (New-Object System.Text.UTF8Encoding($false)))
+  $bases = & $psql ($psqlUrl -replace "/[^/]+$", "/postgres") -X -q -At -f $listaFile 2>$null
+  Remove-Item $listaFile -ErrorAction SilentlyContinue
+  if ($bases) { Write-Warning ("Bases rocky_* en esta PC: " + (@($bases) -join ", ")) }
   throw "No se pudo leer el inventario de $baseDatos (psql salio con codigo $LASTEXITCODE)."
 }
 Remove-Item $sqlFile -ErrorAction SilentlyContinue
