@@ -335,8 +335,8 @@ $fallidos = New-Object System.Collections.Generic.List[string]
 
 for ($i = 0; $i -lt $paquetes.Count; $i += $Lote) {
   $fin = [Math]::Min($i + $Lote, $paquetes.Count) - 1
-  $lote = $paquetes.GetRange($i, $fin - $i + 1).ToArray()
-  $body = '{"items":[' + ($lote -join ",") + ']}'
+  $grupo = $paquetes.GetRange($i, $fin - $i + 1).ToArray()
+  $body = '{"items":[' + ($grupo -join ",") + ']}'
   $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
 
   $ok = $false
@@ -350,7 +350,7 @@ for ($i = 0; $i -lt $paquetes.Count; $i += $Lote) {
       $mensaje = $_.Exception.Message
       if ($mensaje -match "401") { $token = Get-Token }
       if ($intento -eq 3) {
-        $codigos = ($lote | ForEach-Object { ($_ | ConvertFrom-Json).entityKey }) -join ","
+        $codigos = ($grupo | ForEach-Object { ($_ | ConvertFrom-Json).entityKey }) -join ","
         $fallidos.Add("articulos $($i + 1)-$($fin + 1) [$codigos]: $mensaje")
         "FALLO $($i + 1)-$($fin + 1): $mensaje" | Out-File $logFile -Append -Encoding utf8
       } else {
