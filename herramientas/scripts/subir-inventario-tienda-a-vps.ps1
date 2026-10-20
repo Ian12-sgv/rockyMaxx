@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Sube TODO el inventario de una tienda a su respaldo (gemela) en el VPS.
+  Sube TODO el inventario de una tienda o bodega a su respaldo (gemela) en el VPS.
 
 .DESCRIPTION
   Para cuando se cambiaron existencias (u otros datos de INVENTARIO) con una
@@ -19,7 +19,8 @@
   del Servicio Local instalado (no hay claves escritas en este script).
 
 .PARAMETER Tienda
-  Codigo de la tienda (ej. 007). Busca el perfil cuya base sea rocky_tienda_<Tienda>.
+  Codigo del nodo. Tienda: 007 -> base rocky_tienda_007. Bodega: B002 -> base
+  rocky_bodega_002 (vale igual para B003, etc.). Se corre en la PC de ese nodo.
 
 .PARAMETER EnvFile
   Ruta del .env a usar, si no se quiere la busqueda automatica.
@@ -34,6 +35,7 @@
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\subir-inventario-tienda-a-vps.ps1 -Tienda 007 -SoloContar
   powershell -ExecutionPolicy Bypass -File .\subir-inventario-tienda-a-vps.ps1 -Tienda 007
+  powershell -ExecutionPolicy Bypass -File .\subir-inventario-tienda-a-vps.ps1 -Tienda B002 -SoloContar
 #>
 param(
   [string]$Tienda = "007",
@@ -45,8 +47,18 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Tienda = $Tienda.Trim().PadLeft(3, "0")
-$baseEsperada = "rocky_tienda_$Tienda"
+$Tienda = $Tienda.Trim().ToUpper()
+if ($Tienda -match "^B(\d+)$") {
+  # Bodega: B002 -> rocky_bodega_002
+  $numero = $Matches[1].PadLeft(3, "0")
+  $Tienda = "B$numero"
+  $baseEsperada = "rocky_bodega_$numero"
+} elseif ($Tienda -match "^\d+$") {
+  $Tienda = $Tienda.PadLeft(3, "0")
+  $baseEsperada = "rocky_tienda_$Tienda"
+} else {
+  throw "Codigo '$Tienda' invalido. Usa el numero de la tienda (ej. 007) o B + numero de bodega (ej. B002)."
+}
 
 function Read-EnvFile([string]$path) {
   $vars = @{}
@@ -99,7 +111,7 @@ if ($baseDatos -ne $baseEsperada) {
   throw "El perfil $EnvFile usa la base '$baseDatos', no '$baseEsperada'."
 }
 if ($baseDatos -like "*_vps") {
-  throw "La base '$baseDatos' es una gemela del VPS: este script se corre en la PC de la tienda."
+  throw "La base '$baseDatos' es una gemela del VPS: este script se corre en la PC de la tienda o bodega."
 }
 if (-not $remoteUrl -or -not $usuario -or -not $password) {
   throw "Al perfil $EnvFile le falta MIRROR_SYNC_REMOTE_API_URL, MIRROR_SYNC_USERNAME o MIRROR_SYNC_PASSWORD."
