@@ -102,4 +102,7 @@ export const HASH_WHITELIST: Record<EntidadDestino, readonly string[]> = {
     "ReporteZTexto",
     "Acumulado",
   ],
+  // CreadoEn/ActualizadoEn quedan fuera a proposito: solo cambian cuando
+  // cambia algo de esta lista (o al anular, que cambia Status).
+  HECH_GASTOS_HIST: ["Fecha", "Categoria", "Descripcion", "Moneda", "Monto", "Referencia", "Usuario", "Status"],
 };

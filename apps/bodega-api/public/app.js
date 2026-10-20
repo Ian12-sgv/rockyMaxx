@@ -41,6 +41,7 @@ const state = {
   inventario: [],
   serieDiaria: [],
   horarios: [], // primera/ultima factura por tienda (ver horariosPorTienda en bodega-api)
+  gastosTiendas: [], // GASTOS de cada tienda: { codigo_legacy, moneda, monto, cantidad } (ver gastosPorTienda)
   tasaCambio: null,
   lastUpdated: null,
 };
@@ -248,6 +249,7 @@ function limpiarDatosSesion() {
   state.inventario = [];
   state.serieDiaria = [];
   state.horarios = [];
+  state.gastosTiendas = [];
   state.balanceMovimientos = [];
   state.inventarioDetalle = null;
   state.tiendaFiltro = "";
@@ -1162,7 +1164,7 @@ function renderDesempenoTable() {
               <th>Costo</th>
               <th>Ganancia</th>
               <th>Margen</th>
-              <th title="Egresos operativos de Balance asignados solo a esta tienda">Gastos</th>
+              <th title="Gastos registrados en la tienda (pantalla Gastos) mas egresos operativos de Balance asignados solo a esta tienda">Gastos</th>
               <th title="Ganancia menos los gastos de la tienda">Total</th>
             </tr>
           </thead>
@@ -1482,10 +1484,18 @@ function esGastoDeUnaTienda(mov) {
   return Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.length === 1;
 }
 
+// Gasto de UNA tienda = lo que la tienda registro en su pantalla Gastos
+// (tabla GASTOS, llega por bodega-export como las ventas; el servidor ya lo
+// manda sumado por moneda y solo activos) + los egresos operativos de Balance
+// asignados solo a ella.
 function getGastosTienda(codigo) {
-  return getEgresos()
+  const deBalance = getEgresos()
     .filter((mov) => esGastoDeUnaTienda(mov) && mov.codigos_tienda[0] === codigo)
     .reduce((acc, mov) => acc + montoEnMonedaActual(mov), 0);
+  const deTienda = (Array.isArray(state.gastosTiendas) ? state.gastosTiendas : [])
+    .filter((fila) => fila.codigo_legacy === codigo)
+    .reduce((acc, fila) => acc + montoEnMonedaActual({ monto: fila.monto, moneda: fila.moneda }), 0);
+  return deBalance + deTienda;
 }
 
 // Con filtro de tienda/grupo, entra el gasto general que incluya alguna
@@ -1585,6 +1595,7 @@ async function loadPanel(options) {
   state.inventario = Array.isArray(data.inventario) ? data.inventario : [];
   state.serieDiaria = Array.isArray(data.serieDiaria) ? data.serieDiaria : [];
   state.horarios = Array.isArray(data.horarios) ? data.horarios : [];
+  state.gastosTiendas = Array.isArray(data.gastos) ? data.gastos : [];
   state.tasaCambio = data.tasaCambio || null;
   state.lastUpdated = new Date();
   try {

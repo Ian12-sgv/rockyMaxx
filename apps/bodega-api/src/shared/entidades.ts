@@ -6,6 +6,7 @@ export const ENTIDADES_DESTINO = [
   "HECH_VENTAS_DETALLE_HIST",
   "HECH_PAGOS_HIST",
   "HECH_CAJAS_HIST",
+  "HECH_GASTOS_HIST",
 ] as const;
 
 export type EntidadDestino = (typeof ENTIDADES_DESTINO)[number];
@@ -25,6 +26,7 @@ export const ENTIDAD_TABLA_ORIGEN: Record<EntidadDestino, string> = {
   HECH_VENTAS_DETALLE_HIST: "MOVVENTAS",
   HECH_PAGOS_HIST: "PAGOSVENTA",
   HECH_CAJAS_HIST: "DIARIOCAJA",
+  HECH_GASTOS_HIST: "GASTOS",
 };
 
 export const OPERACIONES_VALIDAS = ["SNAPSHOT", "INSERT", "UPDATE", "DELETE"] as const;

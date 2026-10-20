@@ -345,6 +345,9 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
     const cajas = await this.buildCajasBatch(windowDays);
     if (cajas) envios.push({ tablas: [cajas.batch], onSuccess: cajas.onSuccess });
 
+    const gastos = await this.buildGastosBatch();
+    if (gastos) envios.push({ tablas: [gastos.batch], onSuccess: gastos.onSuccess });
+
     return envios;
   }
 
@@ -978,6 +981,66 @@ export class BodegaExportService implements OnModuleInit, OnModuleDestroy {
 
     return {
       batch: { entidadDestino: "HECH_PAGOS_HIST", tablaOrigen: "PAGOSVENTA", registros },
+      onSuccess: async () => {
+        await this.setCursor(cursorKey, JSON.stringify(nextCursor));
+      },
+    };
+  }
+
+  // GASTOS (pantalla Gastos de la tienda) -> HECH_GASTOS_HIST. Mismo patron
+  // que INVENTARIO: cursor compuesto (ActualizadoEn, ID), porque la tienda
+  // nunca borra gastos -- editar o anular (Status=0) actualiza ActualizadoEn,
+  // asi que el cursor tambien reenvia esas versiones nuevas y bodega-api
+  // guarda la ultima por hash_registro. Sin ventana de dias: la primera vez
+  // manda todo el historial (es una tabla chica, unos pocos por dia).
+  private async buildGastosBatch(): Promise<{ batch: TablaBatch; onSuccess: () => Promise<void> } | null> {
+    const cursorKey = "GASTOS";
+    const cursorRaw = await this.getCursor(cursorKey);
+    let cursor: { fecha: string; id: string } | null = null;
+    if (cursorRaw) {
+      try {
+        const parsed = JSON.parse(cursorRaw);
+        if (parsed && typeof parsed.fecha === "string" && typeof parsed.id === "string") {
+          cursor = parsed;
+        }
+      } catch {
+        // Cursor ilegible: se rearma desde cero (idempotente en bodega-api).
+      }
+    }
+
+    const where: Prisma.GastosWhereInput | undefined = cursor
+      ? {
+          OR: [
+            { ActualizadoEn: { gt: new Date(cursor.fecha) } },
+            { ActualizadoEn: new Date(cursor.fecha), ID: { gt: BigInt(cursor.id) } },
+          ],
+        }
+      : undefined;
+
+    const rows = await this.prisma.gastos.findMany({
+      where,
+      orderBy: [{ ActualizadoEn: "asc" }, { ID: "asc" }],
+      take: BATCH_LIMIT,
+    });
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const now = new Date();
+    const operacion: Operacion = cursor ? "UPDATE" : "SNAPSHOT";
+    const registros = rows.map((row) => ({
+      pkOrigen: serializePkOrigen([row.ID]),
+      operacion,
+      payload: buildPayload(row as unknown as Record<string, unknown>, ["ID"]),
+      fechaExtraida: now.toISOString(),
+    }));
+
+    const lastRow = rows[rows.length - 1];
+    const nextCursor = { fecha: lastRow.ActualizadoEn.toISOString(), id: lastRow.ID.toString() };
+
+    return {
+      batch: { entidadDestino: "HECH_GASTOS_HIST", tablaOrigen: "GASTOS", registros },
       onSuccess: async () => {
         await this.setCursor(cursorKey, JSON.stringify(nextCursor));
       },

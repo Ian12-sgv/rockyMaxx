@@ -282,6 +282,7 @@ const state = {
     inventario: [],
     serieDiaria: [],
     horarios: [], // primera/ultima factura por tienda (ver horariosPorTienda en bodega-api)
+    gastosTiendas: [], // GASTOS de cada tienda sumados por moneda (ver gastosPorTienda en bodega-api)
     tasaCambio: null,
     lastUpdated: null,
   },
@@ -11012,7 +11013,7 @@ function bodegaPanelRenderDesempenoTable(panel) {
               <th>Costo</th>
               <th>Ganancia</th>
               <th>Margen</th>
-              <th title="Egresos operativos de Balance asignados solo a esta tienda">Gastos</th>
+              <th title="Gastos registrados en la tienda (pantalla Gastos) mas egresos operativos de Balance asignados solo a esta tienda">Gastos</th>
               <th title="Ganancia menos los gastos de la tienda">Total</th>
             </tr>
           </thead>
@@ -11235,10 +11236,17 @@ function bodegaPanelEsGastoDeUnaTienda(mov) {
   return Array.isArray(mov.codigos_tienda) && mov.codigos_tienda.length === 1;
 }
 
+// Mismo criterio que apps/bodega-api/public/app.js#getGastosTienda: GASTOS de
+// la tienda (llegan por bodega-export) + egresos operativos de Balance de solo
+// esa tienda.
 function bodegaPanelGetGastosTienda(panel, codigo) {
-  return bodegaPanelGetEgresos(panel)
+  const deBalance = bodegaPanelGetEgresos(panel)
     .filter((mov) => bodegaPanelEsGastoDeUnaTienda(mov) && mov.codigos_tienda[0] === codigo)
     .reduce((acc, mov) => acc + bodegaPanelMontoEnMonedaActual(panel, mov), 0);
+  const deTienda = (Array.isArray(panel.gastosTiendas) ? panel.gastosTiendas : [])
+    .filter((fila) => fila.codigo_legacy === codigo)
+    .reduce((acc, fila) => acc + bodegaPanelMontoEnMonedaActual(panel, { monto: fila.monto, moneda: fila.moneda }), 0);
+  return deBalance + deTienda;
 }
 
 function bodegaPanelGetGastosGenerales(panel) {
@@ -20645,6 +20653,7 @@ async function loadBodegaPanelResumen(options = {}) {
     state.bodegaPanel.inventario = Array.isArray(response.inventario) ? response.inventario : [];
     state.bodegaPanel.serieDiaria = Array.isArray(response.serieDiaria) ? response.serieDiaria : [];
     state.bodegaPanel.horarios = Array.isArray(response.horarios) ? response.horarios : [];
+    state.bodegaPanel.gastosTiendas = Array.isArray(response.gastos) ? response.gastos : [];
     state.bodegaPanel.tasaCambio = response.tasaCambio || null;
     state.bodegaPanel.lastUpdated = new Date();
   } catch (error) {

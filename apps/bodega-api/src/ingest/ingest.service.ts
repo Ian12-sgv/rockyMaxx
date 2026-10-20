@@ -231,6 +231,8 @@ export class IngestService {
         return tx.hechPagosHist;
       case "HECH_CAJAS_HIST":
         return tx.hechCajasHist;
+      case "HECH_GASTOS_HIST":
+        return tx.hechGastosHist;
       default:
         throw new BadRequestException(`entidadDestino desconocida: ${entidadDestino}`);
     }

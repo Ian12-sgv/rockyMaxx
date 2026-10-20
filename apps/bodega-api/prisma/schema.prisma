@@ -26,16 +26,17 @@ model DimTiendas {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  articulosHist     DimArticulosHist[]
-  clientesHist      DimClientesHist[]
-  inventarioHist    HechInventarioHist[]
-  ventasHist        HechVentasHist[]
-  ventasDetalleHist HechVentasDetalleHist[]
-  pagosHist         HechPagosHist[]
-  cajasHist         HechCajasHist[]
-  syncRuns          EtlSyncRuns[]
-  syncErrors        EtlSyncErrors[]
-  watermarks        EtlWatermarks[]
+  articulosHist      DimArticulosHist[]
+  clientesHist       DimClientesHist[]
+  inventarioHist     HechInventarioHist[]
+  ventasHist         HechVentasHist[]
+  ventasDetalleHist  HechVentasDetalleHist[]
+  pagosHist          HechPagosHist[]
+  cajasHist          HechCajasHist[]
+  gastosHist         HechGastosHist[]
+  syncRuns           EtlSyncRuns[]
+  syncErrors         EtlSyncErrors[]
+  watermarks         EtlWatermarks[]
   balanceMovimientos BalanceMovimientoTienda[]
   diagnostico        NodoDiagnostico?
 
@@ -226,6 +227,34 @@ model HechCajasHist {
   @@map("HECH_CAJAS_HIST")
 }
 
+// GASTOS de cada tienda (apps/api, tabla dbo."GASTOS"). Mismo patron que las
+// demas HECH_*_HIST: una fila por version (hash_registro), es_actual marca la
+// vigente. pk_origen = ID del gasto en la tienda. Un gasto anulado llega como
+// una version nueva con Status=0 (la tienda nunca borra filas de GASTOS).
+model HechGastosHist {
+  id                 String    @id @default(uuid()) @db.Uuid
+  dimTiendaId        String    @map("dim_tienda_id") @db.Uuid
+  codigoTiendaLegacy String    @map("codigo_tienda_legacy") @db.VarChar(20)
+  tablaOrigen        String    @map("tabla_origen") @db.VarChar(60)
+  pkOrigen           String    @map("pk_origen") @db.VarChar(200)
+  operacion          String    @map("operacion") @db.VarChar(20)
+  hashRegistro       String    @map("hash_registro") @db.VarChar(64)
+  payloadJson        Json      @map("payload_json")
+  esActual           Boolean   @default(true) @map("es_actual")
+  validoDesde        DateTime  @default(now()) @map("valido_desde") @db.Timestamptz(6)
+  validoHasta        DateTime? @map("valido_hasta") @db.Timestamptz(6)
+  syncRunId          String    @map("sync_run_id") @db.Uuid
+  fechaExtraida      DateTime  @map("fecha_extraida") @db.Timestamptz(6)
+  fechaCargada       DateTime  @default(now()) @map("fecha_cargada") @db.Timestamptz(6)
+
+  dimTienda DimTiendas  @relation(fields: [dimTiendaId], references: [id])
+  syncRun   EtlSyncRuns @relation(fields: [syncRunId], references: [id])
+
+  @@unique([dimTiendaId, tablaOrigen, pkOrigen, hashRegistro], map: "uq_hech_gastos_hist_identidad")
+  @@index([dimTiendaId, tablaOrigen, pkOrigen, esActual], map: "ix_hech_gastos_hist_actual")
+  @@map("HECH_GASTOS_HIST")
+}
+
 model EtlSyncRuns {
   id                    String    @id @default(uuid()) @db.Uuid
   dimTiendaId           String    @map("dim_tienda_id") @db.Uuid
@@ -249,6 +278,7 @@ model EtlSyncRuns {
   ventasDetalleHist HechVentasDetalleHist[]
   pagosHist         HechPagosHist[]
   cajasHist         HechCajasHist[]
+  gastosHist        HechGastosHist[]
   errores           EtlSyncErrors[]
 
   @@index([dimTiendaId, startedAt], map: "ix_etl_sync_runs_tienda_started")

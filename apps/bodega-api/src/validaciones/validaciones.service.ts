@@ -243,15 +243,40 @@ export class ValidacionesService {
     const { desde: desdeAnterior, hasta: hastaAnterior } = this.calcularRangoAnterior(desde, hasta);
     const diasSerie = Math.min(this.contarDias(desde, hasta), 60);
 
-    const [ventas, ventasAnterior, inventario, serieDiaria, horarios] = await Promise.all([
+    const [ventas, ventasAnterior, inventario, serieDiaria, horarios, gastos] = await Promise.all([
       this.ventasResumenPorRango(desde, hasta, tasaValor, filtro),
       this.ventasResumenPorRango(desdeAnterior, hastaAnterior, tasaValor, filtro),
       this.inventarioResumen(filtroInventario),
       this.ventasSerieDiaria(hasta, diasSerie, tasaValor, filtro),
       this.horariosPorTienda(desde, hasta, filtro),
+      this.gastosPorTienda(desde, hasta, filtro),
     ]);
 
-    return { ventas, ventasAnterior, inventario, serieDiaria, horarios, tasaCambio, rango: { desde, hasta } };
+    return { ventas, ventasAnterior, inventario, serieDiaria, horarios, gastos, tasaCambio, rango: { desde, hasta } };
+  }
+
+  // Gastos registrados en cada tienda (pantalla Gastos de apps/api, tabla
+  // GASTOS), llegados por bodega-export igual que las ventas. Solo activos
+  // (Status=1; anular deja Status=0). Se devuelven sumados por tienda y
+  // MONEDA ORIGINAL, sin convertir: el frontend los pasa a la moneda que se
+  // esta viendo con la tasa, igual que los egresos de Balance.
+  private async gastosPorTienda(desde: string, hasta: string, filtro: Prisma.Sql) {
+    return this.prisma.$queryRaw<Array<{ codigo_legacy: string; moneda: string; monto: string; cantidad: string }>>(
+      Prisma.sql`
+        SELECT
+          t."codigo_legacy" AS codigo_legacy,
+          UPPER(COALESCE(NULLIF(v."payload_json" ->> 'Moneda', ''), 'BS')) AS moneda,
+          COALESCE(SUM((v."payload_json" ->> 'Monto')::numeric), 0)::text AS monto,
+          COUNT(*)::text AS cantidad
+        FROM "VW_HECH_GASTOS_ACTUAL" v
+        JOIN "DIM_TIENDAS" t ON t."id" = v."dim_tienda_id"
+        WHERE (v."payload_json" ->> 'Fecha')::date BETWEEN ${desde}::date AND ${hasta}::date
+          AND COALESCE((v."payload_json" ->> 'Status')::int, 1) = 1
+          AND ${filtro}
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+      `,
+    );
   }
 
   // Hora de "apertura" y "cierre" de cada tienda = primera y ultima factura
