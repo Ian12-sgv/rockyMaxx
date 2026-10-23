@@ -50,6 +50,13 @@ const FILTRO_INVENTARIO_PANEL = Prisma.sql`t."codigo_legacy" IN (${Prisma.join([
 // esas tiendas: el filtro va en el SQL, no en el frontend.
 const FILTRO_GRUPO_B = Prisma.sql`t."nombre" ILIKE '%rocky%'`;
 
+// Valor a costo de un articulo = Existencia x Costo (INVENTARIO.CostoDolar,
+// el campo "Costo" de la ficha del articulo). Pedido del usuario 23/10/2026:
+// "Inventario a costo" NO debe salir del costo promedio. Se usa igual en la
+// tarjeta, la tabla de inventario y el detalle "Ver articulos" para que
+// cuadren entre si. Costo vacio cuenta como 0.
+const VALOR_COSTO_ARTICULO = Prisma.sql`(v."payload_json" ->> 'Existencia')::numeric * COALESCE((v."payload_json" ->> 'CostoDolar')::numeric, 0)`;
+
 function filtroTiendasAlcance(alcance: AlcancePanel) {
   return alcance.grupo === "B" ? Prisma.sql`${FILTRO_TIENDAS_PANEL} AND ${FILTRO_GRUPO_B}` : FILTRO_TIENDAS_PANEL;
 }
@@ -156,7 +163,7 @@ export class ValidacionesService {
   // Detalle de articulos del inventario actual de UNA tienda (el "Ver
   // articulos" de la seccion Inventario del panel). Paginado en el servidor
   // porque cada tienda tiene ~7000 articulos. valor_costo_usd usa la MISMA
-  // formula que inventarioResumen() (Existencia * CostoPromedio), asi que la
+  // formula que inventarioResumen() (VALOR_COSTO_ARTICULO), asi que la
   // suma de todas las paginas cuadra con el total de la tienda en el panel.
   // Busqueda opcional por codigo de barra, referencia o nombre.
   async inventarioDetalle(codigoTienda: string, busqueda: string, pagina: number, limite: number, alcance: AlcancePanel) {
@@ -196,7 +203,7 @@ export class ValidacionesService {
           -- que usan las transferencias y "Costo de mercancia" del panel.
           COALESCE((v."payload_json" ->> 'CostoDolar')::numeric, 0)::text AS costo_usd,
           COALESCE(
-            (v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric,
+            ${VALOR_COSTO_ARTICULO},
             0
           )::text AS valor_costo_usd
         FROM "VW_HECH_INVENTARIO_ACTUAL" v
@@ -204,7 +211,7 @@ export class ValidacionesService {
         WHERE t."codigo_legacy" = ${codigoTienda} ${filtroAlcance} ${filtroBusqueda}
         ORDER BY
           COALESCE(
-            (v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric,
+            ${VALOR_COSTO_ARTICULO},
             0
           ) DESC,
           v."pk_origen" ASC
@@ -214,7 +221,7 @@ export class ValidacionesService {
         SELECT
           COUNT(*)::text AS articulos,
           COALESCE(
-            SUM((v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric),
+            SUM(${VALOR_COSTO_ARTICULO}),
             0
           )::text AS valor_costo_usd
         FROM "VW_HECH_INVENTARIO_ACTUAL" v
@@ -579,7 +586,7 @@ export class ValidacionesService {
     `);
   }
 
-  // CostoPromedio en INVENTARIO esta en dolares, igual que TotalCosto en
+  // CostoDolar (via VALOR_COSTO_ARTICULO) esta en dolares, igual que TotalCosto en
   // VENTAS -- pero a diferencia de una venta, una fila de inventario no
   // lleva una tasa de cambio propia (es un costo "vivo", no un hecho
   // historico con su tasa del momento). Convertir a bolivares aqui
@@ -605,7 +612,7 @@ export class ValidacionesService {
         COUNT(*)::text AS articulos,
         COALESCE(SUM((v."payload_json" ->> 'Existencia')::numeric), 0)::text AS unidades,
         COALESCE(
-          SUM((v."payload_json" ->> 'Existencia')::numeric * (v."payload_json" ->> 'CostoPromedio')::numeric),
+          SUM(${VALOR_COSTO_ARTICULO}),
           0
         )::text AS valor_costo_usd
       FROM "VW_HECH_INVENTARIO_ACTUAL" v
