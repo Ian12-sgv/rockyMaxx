@@ -59,6 +59,9 @@ const LARGE_TRANSACTION_OPTIONS = {
   maxWait: 15_000,
   timeout: 60_000,
 };
+// En Serializable, PostgreSQL aborta una de dos transacciones que se cruzan (40001), por
+// ejemplo "Cargar" mientras el ciclo automatico baja paquetes. Se reintenta entera.
+const SERIALIZATION_RETRIES = 4;
 
 type DevRapidaTransactionClient = Prisma.TransactionClient;
 type DbClient = PrismaService | DevRapidaTransactionClient;
@@ -312,7 +315,7 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
     const origen = this.assertCanRegisterHere();
     const codigoTienda = this.normalizeStoreCode(createDto.codigoTienda);
 
-    const devolucion = await this.prisma.$transaction(
+    const devolucion = await this.runSerializable(
       async (tx) => {
         const lines = await this.normalizeLines(tx, createDto.items);
         const numero = await this.getNextNumber(tx);
@@ -336,7 +339,6 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
 
         return this.findDetailOrThrow(tx, numero);
       },
-      LARGE_TRANSACTION_OPTIONS,
     );
 
     return { devolucion };
@@ -346,7 +348,7 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
     this.assertCanRegisterHere();
     const codigoTienda = this.normalizeStoreCode(updateDto.codigoTienda);
 
-    const devolucion = await this.prisma.$transaction(
+    const devolucion = await this.runSerializable(
       async (tx) => {
         const existing = await this.findHeaderOrThrow(tx, numero);
         if (existing.Status !== DEVRAPIDA_STATUS_PENDIENTE) {
@@ -372,14 +374,13 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
 
         return this.findDetailOrThrow(tx, numero);
       },
-      LARGE_TRANSACTION_OPTIONS,
     );
 
     return { devolucion };
   }
 
   async remove(numero: number) {
-    await this.prisma.$transaction(
+    await this.runSerializable(
       async (tx) => {
         const existing = await this.findHeaderOrThrow(tx, numero);
         if (existing.Status !== DEVRAPIDA_STATUS_PENDIENTE) {
@@ -389,7 +390,6 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
         await tx.$executeRawUnsafe(`delete from dbo."MOVDEVRAPIDA" where "Numero" = $1`, numero);
         await tx.$executeRawUnsafe(`delete from dbo."DEVRAPIDA" where "Numero" = $1`, numero);
       },
-      LARGE_TRANSACTION_OPTIONS,
     );
 
     return { deleted: true, numero };
@@ -398,7 +398,7 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
   async approve(numero: number) {
     this.assertCanRegisterHere();
 
-    const devolucion = await this.prisma.$transaction(
+    const devolucion = await this.runSerializable(
       async (tx) => {
         const existing = await this.findHeaderOrThrow(tx, numero);
         if (existing.Status !== DEVRAPIDA_STATUS_PENDIENTE) {
@@ -440,7 +440,6 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
         await this.recordRegisteredOutbox(tx, numero);
         return this.findDetailOrThrow(tx, numero);
       },
-      LARGE_TRANSACTION_OPTIONS,
     );
 
     const sync = await this.pushOutboxSafely({ numero, eventType: DEVRAPIDA_EVENT_REGISTERED });
@@ -452,7 +451,7 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
   }
 
   async requeue(numero: number) {
-    await this.prisma.$transaction(
+    await this.runSerializable(
       async (tx) => {
         const existing = await this.findHeaderOrThrow(tx, numero);
         if (existing.Status !== DEVRAPIDA_STATUS_ENVIADA) {
@@ -461,7 +460,6 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
 
         await this.recordRegisteredOutbox(tx, numero);
       },
-      LARGE_TRANSACTION_OPTIONS,
     );
 
     const sync = await this.pushOutboxSafely({ numero, eventType: DEVRAPIDA_EVENT_REGISTERED });
@@ -532,7 +530,7 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
   async loadInbound(rawGlobalId: string, user: UserView | null) {
     const globalId = this.normalizeGlobalId(rawGlobalId);
 
-    const result = await this.prisma.$transaction(
+    const result = await this.runSerializable(
       async (tx) => {
         const inbox = await this.getInboxRow(tx, globalId);
         if (!inbox || inbox.EventType !== DEVRAPIDA_EVENT_REGISTERED) {
@@ -625,7 +623,6 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
           message: "Devolucion rapida cargada: la mercancia se desconto del inventario de la tienda.",
         };
       },
-      LARGE_TRANSACTION_OPTIONS,
     );
 
     const [sync] = await Promise.all([
@@ -913,7 +910,7 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
     const payload = this.parseConfirmedPayload(this.parseRawJson(row.Payload));
     this.assertPayloadIsForThisWarehouse(payload.devolucion.codigoBodega);
 
-    await this.prisma.$transaction(
+    await this.runSerializable(
       async (tx) => {
         const header = await this.findHeader(tx, payload.devolucion.numero);
         if (!header || header.CodigoBodega.toUpperCase() !== payload.devolucion.codigoBodega.toUpperCase()) {
@@ -973,8 +970,30 @@ export class DevolucionesRapidasService implements OnModuleInit, OnModuleDestroy
         await this.markInboxApplied(tx, row.GlobalId, payload.devolucion.usuarioCarga.slice(0, 15));
         await this.mirrorSyncService.enqueueInventorySnapshotsTx(tx, quantities.keys());
       },
-      LARGE_TRANSACTION_OPTIONS,
     );
+  }
+
+  private async runSerializable<T>(fn: (tx: DevRapidaTransactionClient) => Promise<T>): Promise<T> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(fn, LARGE_TRANSACTION_OPTIONS);
+      } catch (error) {
+        if (attempt >= SERIALIZATION_RETRIES || !this.isSerializationFailure(error)) {
+          throw error;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 150 * attempt));
+      }
+    }
+  }
+
+  private isSerializationFailure(error: unknown) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      return true;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    return /40001|could not serialize|no se pudo serializar/i.test(message);
   }
 
   private async markInboxApplied(tx: DevRapidaTransactionClient, globalId: string, usuario: string | null) {
