@@ -141,6 +141,30 @@ const state = {
       activeIndex: -1,
     },
   },
+  devRapida: {
+    loadingMetadata: false,
+    loadingList: false,
+    loadingDetail: false,
+    saving: false,
+    approving: false,
+    deleting: false,
+    requeueing: false,
+    metadata: null,
+    items: [],
+    draft: createEmptyDevRapidaDraft(),
+    lineLookup: createClosedDevRapidaLineLookup(),
+    inbound: {
+      loading: false,
+      loadingDetail: false,
+      applying: false,
+      items: [],
+      search: {
+        buscar: "",
+        status: "0",
+      },
+      detail: null,
+    },
+  },
   devReturns: {
     loadingMetadata: false,
     loadingDetail: false,
@@ -1305,6 +1329,7 @@ function renderShellView() {
       ${renderPriceChangeLineLookupModal()}
       ${renderTransferLookupModal()}
       ${renderTransferLineLookupModal()}
+      ${renderDevRapidaLineLookupModal()}
       ${renderInventoryBulkTransferModal()}
       ${renderDevReturnLookupModal()}
       ${renderDevReturnLineLookupModal()}
@@ -1445,6 +1470,14 @@ function renderDesktopWorkspace() {
 
   if (state.currentView === "cargar-transferencia") {
     return renderLoadTransferWorkspace();
+  }
+
+  if (state.currentView === "registro-devolucion-rapida") {
+    return renderDevRapidaWorkspace();
+  }
+
+  if (state.currentView === "cargar-devolucion-rapida") {
+    return renderLoadDevRapidaWorkspace();
   }
 
   if (state.currentView === "ajuste-inventario") {
@@ -1695,6 +1728,8 @@ function renderDesktopProcesosMenu() {
 
   const transfersOpen =
     state.navigation.openSubmenu === "transferencias-procesos";
+  const devRapidaOpen =
+    state.navigation.openSubmenu === "devolucion-rapida-procesos";
 
   return `
     <div class="modern-mega-menu">
@@ -1719,6 +1754,16 @@ function renderDesktopProcesosMenu() {
           <span>Transferencias</span>
           <span class="modern-dropdown-link-arrow">&rsaquo;</span>
         </button>
+        <button
+          class="modern-dropdown-link modern-dropdown-link-with-arrow ${devRapidaOpen ? "modern-dropdown-link-open" : ""}"
+          type="button"
+          data-submenu="devolucion-rapida-procesos"
+          data-submenu-owner="procesos"
+          aria-expanded="${devRapidaOpen ? "true" : "false"}"
+        >
+          <span>Devolucion rapida</span>
+          <span class="modern-dropdown-link-arrow">&rsaquo;</span>
+        </button>
       </div>
       ${
         transfersOpen
@@ -1728,6 +1773,16 @@ function renderDesktopProcesosMenu() {
               ${renderDesktopMenuLink("registro-devoluciones", "Registro de devoluciones")}
               ${renderDesktopMenuLink("cargar-transferencia", "Carga de transferencias")}
               ${renderDesktopMenuLink("cargar-devoluciones", "Carga de devoluciones")}
+            </div>
+          `
+          : ""
+      }
+      ${
+        devRapidaOpen
+          ? `
+            <div class="modern-archive-submenu modern-process-submenu dev-rapida-submenu">
+              ${renderDesktopMenuLink("registro-devolucion-rapida", "Registro de devolucion rapida")}
+              ${renderDesktopMenuLink("cargar-devolucion-rapida", "Carga de devolucion rapida")}
             </div>
           `
           : ""
@@ -4482,6 +4537,1338 @@ function renderTransferStatusBadge(status) {
   const numericStatus = Number(status || 0);
   const label = numericStatus === 1 ? "Aprobada" : "No aprobada";
   return `<span class="modern-chip">${escapeHtml(label)}</span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Devolucion rapida (backend: apps/api/src/devoluciones-rapidas).
+// La bodega registra lo que una tienda le devuelve y lo aprueba; viaja por el
+// VPS igual que una transferencia. La tienda la carga y se le RESTA la
+// mercancia; la bodega la SUMA cuando le llega esa confirmacion.
+// ---------------------------------------------------------------------------
+
+function createEmptyDevRapidaDraft() {
+  return {
+    numero: null,
+    fecha: null,
+    fechaAprobacion: null,
+    fechaConfirmacion: null,
+    usuarioConfirma: "",
+    status: 0,
+    syncStatus: "",
+    syncError: "",
+    codigoTienda: "",
+    observacion: "",
+    items: [createEmptyDevRapidaLine()],
+  };
+}
+
+function createEmptyDevRapidaLine() {
+  return {
+    codigoBarra: "",
+    referencia: "",
+    nombre: "",
+    existencia: "",
+    cantidad: "1",
+  };
+}
+
+function createClosedDevRapidaLineLookup() {
+  return {
+    open: false,
+    lineIndex: -1,
+    search: "",
+    items: [],
+    activeIndex: -1,
+  };
+}
+
+function devRapidaToDraft(devolucion) {
+  const items = Array.isArray(devolucion?.items) ? devolucion.items : [];
+  return {
+    numero: devolucion?.numero ?? null,
+    fecha: devolucion?.fecha || null,
+    fechaAprobacion: devolucion?.fechaAprobacion || null,
+    fechaConfirmacion: devolucion?.fechaConfirmacion || null,
+    usuarioConfirma: devolucion?.usuarioConfirma || "",
+    status: Number(devolucion?.status ?? 0),
+    syncStatus: devolucion?.syncStatus || "",
+    syncError: devolucion?.syncError || "",
+    codigoTienda: devolucion?.codigoTienda || "",
+    observacion: devolucion?.observacion || "",
+    items: items.length
+      ? items.map((item) => ({
+          codigoBarra: item.codigoBarra || "",
+          referencia: item.referencia || "",
+          nombre: item.nombre || "",
+          existencia: toInputValue(item.existenciaBodega ?? ""),
+          cantidad: toInputValue(item.cantidad),
+        }))
+      : [createEmptyDevRapidaLine()],
+  };
+}
+
+function devRapidaStatusLabel(status) {
+  const numericStatus = Number(status || 0);
+  if (numericStatus === 2) {
+    return "Confirmada por la tienda";
+  }
+  if (numericStatus === 1) {
+    return "Enviada a la tienda";
+  }
+  return "Pendiente";
+}
+
+function devRapidaSyncLabel(item) {
+  const numericStatus = Number(item?.status || 0);
+  if (numericStatus === 0) {
+    return "-";
+  }
+  if (numericStatus === 2) {
+    return "Sumada en bodega";
+  }
+
+  const syncStatus = String(item?.syncStatus || "").toUpperCase();
+  if (syncStatus === "SENT") {
+    return "Esperando carga de la tienda";
+  }
+  if (syncStatus === "ERROR") {
+    return "Error de envio";
+  }
+  if (syncStatus === "PENDING") {
+    return "Pendiente de envio";
+  }
+  return "-";
+}
+
+function renderDevRapidaWorkspace() {
+  const devRapida = state.devRapida;
+  const metadata = devRapida.metadata;
+  const draft = devRapida.draft || createEmptyDevRapidaDraft();
+  const isBusy =
+    devRapida.saving || devRapida.approving || devRapida.deleting || devRapida.requeueing || devRapida.loadingDetail;
+  const isLocked = Number(draft.status) !== 0;
+  const syncStatus = String(draft.syncStatus || "").toUpperCase();
+  const canRequeue = Number(draft.status) === 1 && (syncStatus === "ERROR" || syncStatus === "PENDING");
+  const tiendas = Array.isArray(metadata?.tiendas) ? metadata.tiendas : [];
+  const quantityTotal = (draft.items || []).reduce((total, item) => {
+    const quantity = Number(item?.cantidad || 0);
+    return total + (Number.isFinite(quantity) && item?.codigoBarra ? quantity : 0);
+  }, 0);
+  const lineCount = (draft.items || []).filter((item) => String(item?.codigoBarra || "").trim()).length;
+
+  if (!metadata) {
+    return `
+      <div class="modern-page">
+        ${renderDesktopBreadcrumb(["Procesos", "Devolucion rapida", "Registro de devolucion rapida"])}
+        ${renderLoadingState(devRapida.loadingMetadata ? "Cargando devolucion rapida..." : "Sin datos de devolucion rapida.")}
+      </div>
+    `;
+  }
+
+  if (!metadata.puedeRegistrar) {
+    return `
+      <div class="modern-page">
+        ${renderDesktopBreadcrumb(["Procesos", "Devolucion rapida", "Registro de devolucion rapida"])}
+        <div class="modern-page-header">
+          <div>
+            <h1>Registro de devolucion rapida</h1>
+          </div>
+        </div>
+        <section class="modern-card catalog-import-card">
+          <div class="empty-state">
+            <h3>Solo se registra desde la bodega</h3>
+            <p>
+              La devolucion rapida la registra la PC de la bodega que recibe la mercancia.
+              En esta sede usa "Carga de devolucion rapida" para descontar lo que la bodega te envie.
+            </p>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="modern-page transfer-register-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Devolucion rapida", "Registro de devolucion rapida"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Registro de devolucion rapida</h1>
+          <p>
+            Registra la mercancia que una tienda devuelve a esta bodega. Al aprobarla viaja a la tienda;
+            cuando la tienda la carga se le descuenta y aqui se suma automaticamente.
+          </p>
+        </div>
+      </div>
+
+      <section class="transfer-register-shell">
+        <form id="devrapida-form" class="transfer-register-form">
+          <div class="transfer-command-bar" role="toolbar" aria-label="Acciones de devolucion rapida">
+            <button class="transfer-command-button" type="button" data-devrapida-new ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">+</span>
+              Crear
+            </button>
+            <button class="transfer-command-button transfer-command-primary" type="submit" ${isLocked || isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">G</span>
+              ${devRapida.saving ? "Guardando" : "Guardar"}
+            </button>
+            <button
+              class="transfer-command-button transfer-command-primary"
+              type="button"
+              data-devrapida-approve
+              ${draft.numero && Number(draft.status) === 0 && !isBusy ? "" : "disabled"}
+            >
+              <span class="transfer-command-icon">A</span>
+              ${devRapida.approving ? "Aprobando" : "Aprobar"}
+            </button>
+            <button
+              class="transfer-command-button"
+              type="button"
+              data-devrapida-delete
+              ${draft.numero && Number(draft.status) === 0 && !isBusy ? "" : "disabled"}
+            >
+              <span class="transfer-command-icon">E</span>
+              ${devRapida.deleting ? "Eliminando" : "Eliminar"}
+            </button>
+            ${
+              canRequeue
+                ? `
+                  <button class="transfer-command-button" type="button" data-devrapida-requeue ${isBusy ? "disabled" : ""}>
+                    <span class="transfer-command-icon">R</span>
+                    ${devRapida.requeueing ? "Reenviando" : "Reenviar"}
+                  </button>
+                `
+                : ""
+            }
+            <button class="transfer-command-button" type="button" data-devrapida-exit ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">S</span>
+              Salir
+            </button>
+          </div>
+
+          <div class="transfer-header-panel">
+            <label class="transfer-field transfer-number-field">
+              <span>Numero</span>
+              <input type="text" value="${escapeHtml(draft.numero ? String(draft.numero) : "0")}" readonly />
+            </label>
+            <label class="transfer-field">
+              <span>Fecha registro</span>
+              <input type="text" value="${escapeHtml(draft.fecha ? formatDateDisplay(draft.fecha) : "Nueva")}" readonly />
+            </label>
+            <label class="transfer-field">
+              <span>Fecha aprobacion</span>
+              <input type="text" value="${escapeHtml(draft.fechaAprobacion ? formatDateDisplay(draft.fechaAprobacion) : "Pendiente")}" readonly />
+            </label>
+            <span></span>
+
+            <label class="transfer-field transfer-wide-field">
+              <span>Tienda que devuelve</span>
+              <select name="codigoTienda" ${isLocked ? "disabled" : ""}>
+                ${renderTransferLocationOptions(tiendas, String(draft.codigoTienda || ""))}
+              </select>
+            </label>
+            <label class="transfer-field transfer-wide-field">
+              <span>Estado</span>
+              <input type="text" value="${escapeHtml(devRapidaStatusLabel(draft.status))}" readonly />
+            </label>
+
+            <label class="transfer-field transfer-full-field">
+              <span>Observacion</span>
+              <input name="observacion" maxlength="100" value="${escapeHtml(toInputValue(draft.observacion))}" ${isLocked ? "disabled" : ""} />
+            </label>
+
+            ${
+              draft.fechaConfirmacion
+                ? `
+                  <label class="transfer-field transfer-wide-field">
+                    <span>Confirmada</span>
+                    <input
+                      type="text"
+                      value="${escapeHtml(
+                        `${formatDateDisplay(draft.fechaConfirmacion)}${draft.usuarioConfirma ? ` (${draft.usuarioConfirma})` : ""}`,
+                      )}"
+                      readonly
+                    />
+                  </label>
+                `
+                : ""
+            }
+          </div>
+
+          ${
+            draft.syncError && Number(draft.status) === 1
+              ? `<p class="dev-rapida-sync-error"><strong>Envio:</strong> ${escapeHtml(draft.syncError)}</p>`
+              : ""
+          }
+
+          <div class="transfer-lines-panel">
+            <div class="transfer-grid-actions">
+              <button class="button button-ghost" type="button" data-devrapida-add-line ${isLocked || isBusy ? "disabled" : ""}>
+                Agregar linea
+              </button>
+            </div>
+            ${renderDevRapidaLinesEditor(draft, isLocked)}
+          </div>
+
+          <div class="transfer-summary-row">
+            <strong>Enter en el codigo busca el articulo</strong>
+            <label>
+              <span>Renglones</span>
+              <input type="text" value="${escapeHtml(String(lineCount))}" readonly />
+            </label>
+            <label>
+              <span>Cantidad</span>
+              <input type="text" value="${escapeHtml(formatTransferQuantity(quantityTotal))}" readonly />
+            </label>
+          </div>
+        </form>
+      </section>
+
+      <section class="modern-card catalog-import-card">
+        <div class="modern-card-head">
+          <div>
+            <h2>Devoluciones rapidas registradas</h2>
+            <p>${escapeHtml(String(devRapida.items.length || 0))} documento(s) visibles.</p>
+          </div>
+          <button class="button button-ghost" type="button" data-devrapida-refresh ${devRapida.loadingList ? "disabled" : ""}>
+            ${devRapida.loadingList ? "Actualizando..." : "Actualizar"}
+          </button>
+        </div>
+        ${devRapida.loadingList && !devRapida.items.length ? renderLoadingState("Buscando devoluciones rapidas...") : renderDevRapidaTable()}
+      </section>
+    </div>
+  `;
+}
+
+function renderDevRapidaLinesEditor(draft, isLocked) {
+  const lines = Array.isArray(draft.items) && draft.items.length ? draft.items : [createEmptyDevRapidaLine()];
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Codigo barra</th>
+            <th>Referencia</th>
+            <th>Nombre</th>
+            <th>Existencia bodega</th>
+            <th>Cantidad</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lines
+            .map(
+              (line, index) => `
+                <tr data-devrapida-line-row="${index}">
+                  <td>${index + 1}</td>
+                  <td>
+                    <input
+                      type="text"
+                      name="codigoBarra"
+                      data-devrapida-barcode-input="${index}"
+                      value="${escapeHtml(toInputValue(line.codigoBarra))}"
+                      maxlength="30"
+                      placeholder="Codigo o referencia"
+                      ${isLocked ? "disabled" : ""}
+                    />
+                  </td>
+                  <td>${escapeHtml(line.referencia || "-")}</td>
+                  <td>${escapeHtml(line.nombre || "Pendiente")}</td>
+                  <td>${escapeHtml(toInputValue(line.existencia))}</td>
+                  <td>
+                    <input
+                      type="number"
+                      name="cantidad"
+                      min="0.01"
+                      step="0.01"
+                      value="${escapeHtml(toInputValue(line.cantidad || "1"))}"
+                      ${isLocked ? "disabled" : ""}
+                    />
+                  </td>
+                  <td>
+                    <button class="button button-danger" type="button" data-devrapida-remove-line="${index}" ${isLocked ? "disabled" : ""}>
+                      Quitar
+                    </button>
+                  </td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDevRapidaTable() {
+  const items = Array.isArray(state.devRapida.items) ? state.devRapida.items : [];
+  if (!items.length) {
+    return `
+      <div class="empty-state">
+        <h3>Sin devoluciones rapidas</h3>
+        <p>Todavia no hay devoluciones rapidas registradas en esta bodega.</p>
+      </div>
+    `;
+  }
+
+  const selectedNumero = Number(state.devRapida.draft?.numero || 0);
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Numero</th>
+            <th>Fecha</th>
+            <th>Tienda</th>
+            <th>Renglones</th>
+            <th>Cantidad</th>
+            <th>Estado</th>
+            <th>Seguimiento</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map(
+              (item) => `
+                <tr class="${selectedNumero === Number(item.numero || 0) ? "is-selected-row" : ""}">
+                  <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+                  <td>${escapeHtml(formatDateDisplay(item.fecha))}</td>
+                  <td>${escapeHtml(item.nombreTienda || item.codigoTienda || "-")}</td>
+                  <td>${escapeHtml(String(item.lineas ?? 0))}</td>
+                  <td>${escapeHtml(formatTransferQuantity(item.cantidadTotal))}</td>
+                  <td><span class="modern-chip">${escapeHtml(devRapidaStatusLabel(item.status))}</span></td>
+                  <td title="${escapeHtml(item.syncError || "")}">${escapeHtml(devRapidaSyncLabel(item))}</td>
+                  <td>
+                    <button class="button button-ghost" type="button" data-devrapida-open="${escapeHtml(String(item.numero || ""))}">
+                      Abrir
+                    </button>
+                  </td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderLoadDevRapidaWorkspace() {
+  const inbound = state.devRapida.inbound;
+  if (inbound.detail) {
+    return renderDevRapidaInboundDetail(inbound.detail);
+  }
+
+  const search = inbound.search || { buscar: "", status: "0" };
+  const items = Array.isArray(inbound.items) ? inbound.items : [];
+
+  return `
+    <div class="modern-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Devolucion rapida", "Carga de devolucion rapida"])}
+
+      <div class="modern-page-header">
+        <div>
+          <h1>Carga de devolucion rapida</h1>
+          <p>Devoluciones que la bodega registro para esta tienda. Al cargarlas se descuenta la mercancia del inventario.</p>
+        </div>
+      </div>
+
+      <section class="modern-card catalog-import-card">
+        <form id="devrapida-inbound-search-form" class="catalog-import-form">
+          <div class="catalog-manual-grid">
+            <label class="field">
+              <span>Buscar</span>
+              <input type="text" name="buscar" value="${escapeHtml(toInputValue(search.buscar))}" maxlength="30" placeholder="Numero o bodega" />
+            </label>
+            <label class="field">
+              <span>Estado</span>
+              <select name="status">
+                <option value="0" ${String(search.status) === "0" ? "selected" : ""}>Pendientes de cargar</option>
+                <option value="1" ${String(search.status) === "1" ? "selected" : ""}>Cargadas</option>
+                <option value="" ${String(search.status) === "" ? "selected" : ""}>Todas</option>
+              </select>
+            </label>
+          </div>
+          <div class="catalog-import-actions">
+            <button class="button button-primary" type="submit" ${inbound.loading ? "disabled" : ""}>
+              ${inbound.loading ? "Buscando..." : "Buscar"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section class="modern-card catalog-import-card">
+        <div class="modern-card-head">
+          <div>
+            <h2>Resultados</h2>
+            <p>${escapeHtml(String(items.length))} documento(s) visibles.</p>
+          </div>
+          <div class="modern-chip">${inbound.loading ? "Buscando" : "Listas"}</div>
+        </div>
+        ${
+          inbound.loading && !items.length
+            ? renderLoadingState("Buscando devoluciones rapidas...")
+            : items.length
+              ? `
+                <div class="table-wrap">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Numero</th>
+                        <th>Bodega</th>
+                        <th>Aprobada</th>
+                        <th>Renglones</th>
+                        <th>Cantidad</th>
+                        <th>Estado</th>
+                        <th>Accion</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${items
+                        .map(
+                          (item) => `
+                            <tr>
+                              <td><strong>${escapeHtml(String(item.numero || "-"))}</strong></td>
+                              <td>${escapeHtml(item.nombreBodega || item.codigoBodega || "-")}</td>
+                              <td>${escapeHtml(formatDateDisplay(item.fechaAprobacion))}</td>
+                              <td>${escapeHtml(String(item.lineas ?? 0))}</td>
+                              <td>${escapeHtml(formatTransferQuantity(item.cantidadTotal))}</td>
+                              <td><span class="modern-chip">${item.cargada ? "Cargada" : "Pendiente de carga"}</span></td>
+                              <td>
+                                <button class="button button-ghost" type="button" data-devrapida-inbound-open="${escapeHtml(item.globalId)}">
+                                  Ver detalle
+                                </button>
+                              </td>
+                            </tr>
+                          `,
+                        )
+                        .join("")}
+                    </tbody>
+                  </table>
+                </div>
+              `
+              : `
+                <div class="empty-state">
+                  <h3>Sin devoluciones rapidas</h3>
+                  <p>No hay devoluciones rapidas para esta tienda con ese filtro.</p>
+                </div>
+              `
+        }
+      </section>
+    </div>
+  `;
+}
+
+function describeDevRapidaInboundLine(line, cargada) {
+  if (cargada) {
+    return "Descontado";
+  }
+  if (!line.existeEnTienda) {
+    return "No existe en la tienda";
+  }
+  if (!line.identidadCoincide) {
+    return "Referencia o marca distinta";
+  }
+  if (Number(line.existenciaTienda || 0) < Number(line.cantidad || 0)) {
+    return "Existencia insuficiente";
+  }
+  return "OK";
+}
+
+function renderDevRapidaInboundDetail(detail) {
+  const inbound = state.devRapida.inbound;
+  const items = Array.isArray(detail.items) ? detail.items : [];
+  const isBusy = inbound.applying || inbound.loadingDetail;
+  const blocked = !detail.cargada && items.some((line) => describeDevRapidaInboundLine(line, false) !== "OK");
+
+  return `
+    <div class="modern-page transfer-import-detail-page">
+      ${renderDesktopBreadcrumb(["Procesos", "Devolucion rapida", "Carga de devolucion rapida", "Detalle"])}
+      <div class="modern-page-header">
+        <div>
+          <h1>Devolucion rapida ${escapeHtml(String(detail.numero || ""))}</h1>
+          <p>
+            Al cargarla se descuenta esta mercancia del inventario de la tienda y se le confirma a la bodega,
+            que la suma en el suyo.
+          </p>
+        </div>
+      </div>
+
+      <section class="transfer-register-shell transfer-import-window">
+        <div class="transfer-register-form transfer-import-form">
+          <div class="transfer-command-bar transfer-import-command-bar" role="toolbar" aria-label="Acciones de carga de devolucion rapida">
+            <button
+              class="transfer-command-button transfer-command-primary"
+              type="button"
+              data-devrapida-inbound-load="${escapeHtml(detail.globalId)}"
+              ${detail.cargada || isBusy || blocked ? "disabled" : ""}
+            >
+              <span class="transfer-command-icon">C</span>
+              ${detail.cargada ? "Carga aplicada" : inbound.applying ? "Cargando" : "Cargar"}
+            </button>
+            <button class="transfer-command-button" type="button" data-devrapida-inbound-back ${isBusy ? "disabled" : ""}>
+              <span class="transfer-command-icon">S</span>
+              Salir
+            </button>
+            <span class="transfer-import-load-state">${detail.cargada ? "Cargada" : "Pendiente de carga"}</span>
+          </div>
+
+          <div class="transfer-header-panel transfer-import-header">
+            <label class="transfer-field transfer-number-field">
+              <span>Numero</span>
+              <input type="text" value="${escapeHtml(toDisplayValue(detail.numero))}" readonly />
+            </label>
+            <strong class="transfer-import-status">${detail.cargada ? "CARGADA" : "PENDIENTE"}</strong>
+            <label class="transfer-field">
+              <span>Aprobada</span>
+              <input type="text" value="${escapeHtml(formatDateDisplay(detail.fechaAprobacion))}" readonly />
+            </label>
+            <label class="transfer-field">
+              <span>Fecha carga</span>
+              <input
+                type="text"
+                value="${escapeHtml(
+                  detail.cargada
+                    ? `${formatDateDisplay(detail.fechaCarga)}${detail.usuarioCarga ? ` (${detail.usuarioCarga})` : ""}`
+                    : "-",
+                )}"
+                readonly
+              />
+            </label>
+            <label class="transfer-field transfer-import-origin">
+              <span>Bodega</span>
+              <input type="text" value="${escapeHtml(detail.nombreBodega || detail.codigoBodega || "-")}" readonly />
+            </label>
+            <label class="transfer-field transfer-import-status-field">
+              <span>Estado carga</span>
+              <input type="text" value="${detail.cargada ? "Cargada" : "Pendiente de carga"}" readonly />
+            </label>
+            <label class="transfer-field transfer-full-field">
+              <span>Observacion</span>
+              <input type="text" value="${escapeHtml(toInputValue(detail.observacion))}" readonly />
+            </label>
+          </div>
+
+          <div class="transfer-lines-panel transfer-import-lines-panel">
+            <div class="table-wrap">
+              <table class="data-table transfer-import-lines-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Codigo barra</th>
+                    <th>Referencia</th>
+                    <th>Nombre</th>
+                    <th>A devolver</th>
+                    <th>Existencia tienda</th>
+                    <th>Revision</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${items
+                    .map(
+                      (line, index) => `
+                        <tr>
+                          <td>${index + 1}</td>
+                          <td><strong>${escapeHtml(line.codigoBarra || "-")}</strong></td>
+                          <td>${escapeHtml(line.referencia || "-")}</td>
+                          <td>${escapeHtml(line.nombre || "-")}</td>
+                          <td>${escapeHtml(formatTransferQuantity(line.cantidad))}</td>
+                          <td>${escapeHtml(line.existenciaTienda === null || line.existenciaTienda === undefined ? "-" : formatTransferQuantity(line.existenciaTienda))}</td>
+                          <td>${escapeHtml(describeDevRapidaInboundLine(line, Boolean(detail.cargada)))}</td>
+                        </tr>
+                      `,
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="transfer-summary-row transfer-import-summary">
+            <strong>
+              ${
+                detail.cargada
+                  ? "Devolucion descontada del inventario"
+                  : blocked
+                    ? "Corrige los articulos marcados antes de cargar"
+                    : "Devolucion lista para cargar"
+              }
+            </strong>
+            <label>
+              Renglones:
+              <input type="text" value="${escapeHtml(String(items.length))}" readonly />
+            </label>
+            <label>
+              Cantidad:
+              <input type="text" value="${escapeHtml(formatTransferQuantity(detail.cantidadTotal))}" readonly />
+            </label>
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderDevRapidaLineLookupModal() {
+  const lookup = state.devRapida?.lineLookup;
+  if (!lookup?.open) {
+    return "";
+  }
+
+  const items = Array.isArray(lookup.items) ? lookup.items : [];
+  const activeIndex = Number.isInteger(lookup.activeIndex) ? lookup.activeIndex : -1;
+
+  return `
+    <div class="article-lookup-overlay transfer-line-lookup-overlay">
+      <button class="article-lookup-backdrop" type="button" data-devrapida-lookup-close aria-label="Cerrar buscador"></button>
+      <section class="article-lookup-dialog transfer-line-lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="devrapida-line-lookup-title" tabindex="-1" data-devrapida-lookup-dialog>
+        <div class="article-lookup-header">
+          <div class="article-lookup-header-copy">
+            <p class="eyebrow">Articulos</p>
+            <h3 id="devrapida-line-lookup-title">Coincidencias (${escapeHtml(String(items.length))} Registros)</h3>
+            <p>Selecciona el articulo correcto para esta linea de la devolucion rapida.</p>
+          </div>
+          <div class="article-lookup-header-actions">
+            <button class="article-command-button" type="button" data-devrapida-lookup-close>
+              Cerrar
+            </button>
+          </div>
+        </div>
+        <div class="table-wrap article-lookup-table-wrap transfer-line-lookup-table-wrap">
+          <table class="data-table article-lookup-table transfer-line-lookup-table">
+            <thead>
+              <tr>
+                <th>Codigo Barra</th>
+                <th>Referencia</th>
+                <th>Marca</th>
+                <th>Nombre</th>
+                <th>Existencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items
+                .map(
+                  (item, index) => `
+                    <tr
+                      class="article-lookup-row ${index === activeIndex ? "article-lookup-row-active" : ""}"
+                      data-devrapida-lookup-select="${escapeHtml(String(index))}"
+                      tabindex="0"
+                      aria-selected="${index === activeIndex ? "true" : "false"}"
+                    >
+                      <td><strong>${escapeHtml(item.codigoBarra || "-")}</strong></td>
+                      <td>${escapeHtml(item.referencia || "-")}</td>
+                      <td>${escapeHtml(item.general?.marca?.nombre || item.general?.marca?.codigo || "-")}</td>
+                      <td>${escapeHtml(item.general?.nombre || item.nombre || "-")}</td>
+                      <td>${escapeHtml(toInputValue(item.inventario?.existenciaActual ?? ""))}</td>
+                    </tr>
+                  `,
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function bindDevRapidaEvents() {
+  const form = document.getElementById("devrapida-form");
+  if (form) {
+    form.addEventListener("input", () => {
+      captureDevRapidaDraft();
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureDevRapidaDraft();
+      await saveDevRapida();
+    });
+  }
+
+  document.querySelector("[data-devrapida-new]")?.addEventListener("click", () => {
+    state.devRapida.draft = createEmptyDevRapidaDraft();
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-devrapida-exit]")?.addEventListener("click", () => {
+    state.currentView = "desktop";
+    state.navigation.openMenu = "";
+    state.navigation.openSubmenu = "";
+    state.navigation.menuPinned = false;
+    clearFlash();
+    render();
+  });
+
+  document.querySelector("[data-devrapida-refresh]")?.addEventListener("click", async () => {
+    await loadDevRapidaList();
+  });
+
+  document.querySelector("[data-devrapida-add-line]")?.addEventListener("click", () => {
+    captureDevRapidaDraft();
+    state.devRapida.draft.items = [...state.devRapida.draft.items, createEmptyDevRapidaLine()];
+    render();
+    focusDevRapidaLineInput(state.devRapida.draft.items.length - 1);
+  });
+
+  document.querySelectorAll("[data-devrapida-remove-line]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number.parseInt(button.getAttribute("data-devrapida-remove-line") || "-1", 10);
+      if (index < 0) {
+        return;
+      }
+
+      captureDevRapidaDraft();
+      const items = state.devRapida.draft.items.filter((_, currentIndex) => currentIndex !== index);
+      state.devRapida.draft.items = items.length ? items : [createEmptyDevRapidaLine()];
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-devrapida-barcode-input]").forEach((input) => {
+    input.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      const index = Number.parseInt(input.getAttribute("data-devrapida-barcode-input") || "-1", 10);
+      if (index >= 0) {
+        await resolveDevRapidaLineFromField(index, input.value);
+      }
+    });
+  });
+
+  document.querySelector("[data-devrapida-approve]")?.addEventListener("click", async () => {
+    await approveDevRapida();
+  });
+
+  document.querySelector("[data-devrapida-delete]")?.addEventListener("click", async () => {
+    await deleteDevRapida();
+  });
+
+  document.querySelector("[data-devrapida-requeue]")?.addEventListener("click", async () => {
+    await requeueDevRapida();
+  });
+
+  document.querySelectorAll("[data-devrapida-open]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const numero = Number.parseInt(button.getAttribute("data-devrapida-open") || "", 10);
+      if (Number.isInteger(numero)) {
+        await openDevRapida(numero);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-devrapida-lookup-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.devRapida.lineLookup = createClosedDevRapidaLineLookup();
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-devrapida-lookup-select]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const selectedIndex = Number.parseInt(row.getAttribute("data-devrapida-lookup-select") || "", 10);
+      selectDevRapidaLookupItem(selectedIndex);
+    });
+  });
+
+  const lookupDialog = document.querySelector("[data-devrapida-lookup-dialog]");
+  if (lookupDialog instanceof HTMLElement) {
+    queueMicrotask(() => {
+      lookupDialog.focus();
+    });
+
+    lookupDialog.addEventListener("keydown", (event) => {
+      const lookup = state.devRapida.lineLookup;
+      const items = Array.isArray(lookup?.items) ? lookup.items : [];
+      if (!lookup?.open || !items.length) {
+        return;
+      }
+
+      const currentIndex = Number.isInteger(lookup.activeIndex) && lookup.activeIndex >= 0 ? lookup.activeIndex : 0;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        state.devRapida.lineLookup = {
+          ...lookup,
+          activeIndex: (currentIndex + delta + items.length) % items.length,
+        };
+        render();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        selectDevRapidaLookupItem(currentIndex);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        state.devRapida.lineLookup = createClosedDevRapidaLineLookup();
+        render();
+      }
+    });
+  }
+
+  const inboundSearchForm = document.getElementById("devrapida-inbound-search-form");
+  if (inboundSearchForm) {
+    inboundSearchForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      state.devRapida.inbound.search = {
+        buscar: readFormFieldValue(inboundSearchForm, "buscar", ""),
+        status: readFormFieldValue(inboundSearchForm, "status", "0"),
+      };
+      await loadDevRapidaInbound();
+    });
+  }
+
+  document.querySelectorAll("[data-devrapida-inbound-open]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await openDevRapidaInbound(button.getAttribute("data-devrapida-inbound-open") || "");
+    });
+  });
+
+  document.querySelector("[data-devrapida-inbound-back]")?.addEventListener("click", async () => {
+    state.devRapida.inbound.detail = null;
+    clearFlash();
+    await loadDevRapidaInbound();
+  });
+
+  document.querySelector("[data-devrapida-inbound-load]")?.addEventListener("click", async (event) => {
+    await applyDevRapidaInbound(event.currentTarget.getAttribute("data-devrapida-inbound-load") || "");
+  });
+}
+
+function captureDevRapidaDraft() {
+  const form = document.getElementById("devrapida-form");
+  if (!form) {
+    return;
+  }
+
+  const current = state.devRapida.draft || createEmptyDevRapidaDraft();
+  const rows = Array.from(form.querySelectorAll("[data-devrapida-line-row]"));
+  const items = rows.map((row) => {
+    const index = Number.parseInt(row.getAttribute("data-devrapida-line-row") || "-1", 10);
+    const previous = current.items[index] || createEmptyDevRapidaLine();
+    const codigoBarra = readRowFieldValue(row, "codigoBarra", previous.codigoBarra).trim().toUpperCase();
+    // Si cambiaron el codigo a mano sin buscarlo, los datos del articulo anterior ya no aplican.
+    const sameArticle = codigoBarra === String(previous.codigoBarra || "").trim().toUpperCase();
+    return {
+      codigoBarra,
+      referencia: sameArticle ? previous.referencia : "",
+      nombre: sameArticle ? previous.nombre : "",
+      existencia: sameArticle ? previous.existencia : "",
+      cantidad: readRowFieldValue(row, "cantidad", previous.cantidad),
+    };
+  });
+
+  state.devRapida.draft = {
+    ...current,
+    codigoTienda: readFormFieldValue(form, "codigoTienda", current.codigoTienda),
+    observacion: readFormFieldValue(form, "observacion", current.observacion),
+    items: items.length ? items : [createEmptyDevRapidaLine()],
+  };
+}
+
+function focusDevRapidaLineInput(index) {
+  queueMicrotask(() => {
+    const target = document.querySelector(`[data-devrapida-barcode-input="${index}"]`);
+    if (target instanceof HTMLInputElement) {
+      target.focus();
+      target.select?.();
+    }
+  });
+}
+
+function applyArticleToDevRapidaLine(index, article) {
+  const draft = state.devRapida.draft || createEmptyDevRapidaDraft();
+  const items = [...draft.items];
+  const current = items[index] || createEmptyDevRapidaLine();
+  items[index] = {
+    ...current,
+    codigoBarra: String(article.codigoBarra || "").trim().toUpperCase(),
+    referencia: article.referencia || "",
+    nombre: article.general?.nombre || article.nombre || "",
+    existencia: toInputValue(article.inventario?.existenciaActual ?? ""),
+  };
+
+  if (index === items.length - 1) {
+    items.push(createEmptyDevRapidaLine());
+  }
+
+  state.devRapida.draft = { ...draft, items };
+  state.devRapida.lineLookup = createClosedDevRapidaLineLookup();
+  clearFlash();
+  render();
+  focusDevRapidaLineInput(index + 1);
+}
+
+function selectDevRapidaLookupItem(selectedIndex) {
+  const lookup = state.devRapida.lineLookup;
+  const selected = (lookup.items || [])[selectedIndex];
+  if (!selected || lookup.lineIndex < 0) {
+    return;
+  }
+
+  applyArticleToDevRapidaLine(lookup.lineIndex, selected);
+}
+
+async function resolveDevRapidaLineFromField(index, rawSearchValue) {
+  const searchValue = String(rawSearchValue || "").trim();
+  if (!searchValue) {
+    return;
+  }
+
+  captureDevRapidaDraft();
+
+  try {
+    const params = new URLSearchParams({ buscar: searchValue, limit: "25" });
+    const response = await apiFetch(`/inventory?${params.toString()}`);
+    const itemsFound = Array.isArray(response.data) ? response.data : [];
+    const normalizedSearch = searchValue.toUpperCase();
+    const exactMatch = itemsFound.find(
+      (item) =>
+        String(item.codigoBarra || "").trim().toUpperCase() === normalizedSearch ||
+        String(item.referencia || "").trim().toUpperCase() === normalizedSearch,
+    );
+
+    if (exactMatch || itemsFound.length === 1) {
+      applyArticleToDevRapidaLine(index, exactMatch || itemsFound[0]);
+      return;
+    }
+
+    if (!itemsFound.length) {
+      setFlash(`No se encontro un articulo para ${searchValue}.`, "error");
+      render();
+      return;
+    }
+
+    state.devRapida.lineLookup = {
+      open: true,
+      lineIndex: index,
+      search: searchValue,
+      items: itemsFound,
+      activeIndex: 0,
+    };
+    clearFlash();
+    render();
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo buscar el articulo ${searchValue}: ${extractErrorMessage(error)}`, "error");
+    render();
+  }
+}
+
+async function loadDevRapidaModule() {
+  state.devRapida.loadingMetadata = true;
+  render();
+
+  try {
+    state.devRapida.metadata = await apiFetch("/devoluciones-rapidas/metadata");
+    if (state.devRapida.metadata?.puedeRegistrar) {
+      await loadDevRapidaList({ renderAfter: false });
+    }
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo cargar la devolucion rapida: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devRapida.loadingMetadata = false;
+    render();
+  }
+}
+
+async function loadDevRapidaList(options = {}) {
+  const { renderAfter = true } = options;
+  state.devRapida.loadingList = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const response = await apiFetch("/devoluciones-rapidas?limit=50");
+    state.devRapida.items = Array.isArray(response.items) ? response.items : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar las devoluciones rapidas: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devRapida.loadingList = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function openDevRapida(numero) {
+  state.devRapida.loadingDetail = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/devoluciones-rapidas/${encodeURIComponent(numero)}`);
+    state.devRapida.draft = devRapidaToDraft(response.devolucion);
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo abrir la devolucion rapida ${numero}: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    state.devRapida.loadingDetail = false;
+    render();
+  }
+}
+
+function validateDevRapidaDraft(draft) {
+  if (!String(draft.codigoTienda || "").trim()) {
+    return "Selecciona la tienda que devuelve la mercancia.";
+  }
+
+  const lines = (draft.items || []).filter((item) => String(item.codigoBarra || "").trim());
+  if (!lines.length) {
+    return "Agrega al menos un articulo a la devolucion rapida.";
+  }
+
+  for (const line of lines) {
+    const cantidad = Number(line.cantidad || 0);
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      return `La cantidad del articulo ${line.codigoBarra} debe ser mayor a cero.`;
+    }
+  }
+
+  return "";
+}
+
+async function saveDevRapida() {
+  const draft = state.devRapida.draft || createEmptyDevRapidaDraft();
+  const validationMessage = validateDevRapidaDraft(draft);
+  if (validationMessage) {
+    setFlash(validationMessage, "error");
+    render();
+    return;
+  }
+
+  state.devRapida.saving = true;
+  clearFlash();
+  render();
+
+  try {
+    const payload = {
+      codigoTienda: String(draft.codigoTienda || "").trim().toUpperCase(),
+      observacion: String(draft.observacion || "").trim() || undefined,
+      items: draft.items
+        .filter((item) => String(item.codigoBarra || "").trim())
+        .map((item) => ({
+          codigoBarra: String(item.codigoBarra || "").trim().toUpperCase(),
+          referencia: String(item.referencia || "").trim().toUpperCase() || undefined,
+          cantidad: String(item.cantidad || "").trim(),
+        })),
+    };
+    const response = draft.numero
+      ? await apiFetch(`/devoluciones-rapidas/${encodeURIComponent(draft.numero)}`, { method: "PATCH", body: payload })
+      : await apiFetch("/devoluciones-rapidas", { method: "POST", body: payload });
+
+    state.devRapida.draft = devRapidaToDraft(response.devolucion);
+    await loadDevRapidaList({ renderAfter: false });
+    setFlash(
+      `Devolucion rapida ${response.devolucion?.numero || ""} guardada. Apruebala para enviarla a la tienda.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.devRapida.saving = false;
+    render();
+  }
+}
+
+async function approveDevRapida() {
+  const draft = state.devRapida.draft;
+  const numero = Number.parseInt(String(draft?.numero || ""), 10);
+  if (!Number.isInteger(numero)) {
+    return;
+  }
+
+  const tienda = (state.devRapida.metadata?.tiendas || []).find((item) => item.codigo === draft.codigoTienda);
+  const confirmed = window.confirm(
+    `Se aprobara la devolucion rapida ${numero} y se enviara a ${tienda?.nombre || draft.codigoTienda}. ` +
+      "La tienda la descontara al cargarla y esta bodega sumara la mercancia cuando reciba la confirmacion. Deseas continuar?",
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  state.devRapida.approving = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/devoluciones-rapidas/${encodeURIComponent(numero)}/approve`, { method: "POST" });
+    state.devRapida.draft = devRapidaToDraft(response.devolucion);
+    await loadDevRapidaList({ renderAfter: false });
+
+    const sent = (response.sync?.results || []).some((item) => item.status === "SENT");
+    setFlash(
+      sent
+        ? `Devolucion rapida ${numero} aprobada y enviada a la tienda.`
+        : `Devolucion rapida ${numero} aprobada. No se pudo enviar todavia; se reintenta automaticamente.`,
+      sent ? "success" : "info",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.devRapida.approving = false;
+    render();
+  }
+}
+
+async function deleteDevRapida() {
+  const numero = Number.parseInt(String(state.devRapida.draft?.numero || ""), 10);
+  if (!Number.isInteger(numero)) {
+    return;
+  }
+
+  if (!window.confirm(`Se eliminara la devolucion rapida pendiente ${numero}. Deseas continuar?`)) {
+    return;
+  }
+
+  state.devRapida.deleting = true;
+  clearFlash();
+  render();
+
+  try {
+    await apiFetch(`/devoluciones-rapidas/${encodeURIComponent(numero)}`, { method: "DELETE" });
+    state.devRapida.draft = createEmptyDevRapidaDraft();
+    await loadDevRapidaList({ renderAfter: false });
+    setFlash(`Devolucion rapida ${numero} eliminada.`, "success");
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.devRapida.deleting = false;
+    render();
+  }
+}
+
+async function requeueDevRapida() {
+  const numero = Number.parseInt(String(state.devRapida.draft?.numero || ""), 10);
+  if (!Number.isInteger(numero)) {
+    return;
+  }
+
+  state.devRapida.requeueing = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/devoluciones-rapidas/${encodeURIComponent(numero)}/sync/requeue`, { method: "POST" });
+    state.devRapida.draft = devRapidaToDraft(response.devolucion);
+    await loadDevRapidaList({ renderAfter: false });
+    const sent = (response.sync?.results || []).some((item) => item.status === "SENT");
+    setFlash(
+      sent ? `Devolucion rapida ${numero} reenviada a la tienda.` : `No se pudo reenviar todavia; se reintenta automaticamente.`,
+      sent ? "success" : "info",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    state.devRapida.requeueing = false;
+    render();
+  }
+}
+
+async function loadDevRapidaInbound(options = {}) {
+  const { renderAfter = true } = options;
+  const inbound = state.devRapida.inbound;
+  inbound.loading = true;
+  if (renderAfter) {
+    render();
+  }
+
+  try {
+    const params = new URLSearchParams({ limit: "50" });
+    if (inbound.search?.buscar) {
+      params.set("buscar", inbound.search.buscar);
+    }
+    if (inbound.search?.status !== "" && inbound.search?.status !== undefined) {
+      params.set("status", inbound.search.status);
+    }
+
+    const response = await apiFetch(`/devoluciones-rapidas/inbound?${params.toString()}`);
+    inbound.items = Array.isArray(response.items) ? response.items : [];
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudieron cargar las devoluciones rapidas: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    inbound.loading = false;
+    if (renderAfter) {
+      render();
+    }
+  }
+}
+
+async function openDevRapidaInbound(globalId) {
+  if (!globalId) {
+    return;
+  }
+
+  const inbound = state.devRapida.inbound;
+  inbound.loadingDetail = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/devoluciones-rapidas/inbound/${encodeURIComponent(globalId)}`);
+    inbound.detail = response.devolucion || null;
+  } catch (error) {
+    console.error(error);
+    setFlash(`No se pudo abrir la devolucion rapida: ${extractErrorMessage(error)}`, "error");
+  } finally {
+    inbound.loadingDetail = false;
+    render();
+  }
+}
+
+async function applyDevRapidaInbound(globalId) {
+  const inbound = state.devRapida.inbound;
+  if (!globalId || !inbound.detail) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Se descontara del inventario de esta tienda la mercancia de la devolucion rapida ${inbound.detail.numero}. Deseas continuar?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  inbound.applying = true;
+  clearFlash();
+  render();
+
+  try {
+    const response = await apiFetch(`/devoluciones-rapidas/inbound/${encodeURIComponent(globalId)}/load`, { method: "POST" });
+    inbound.detail = response.devolucion || inbound.detail;
+    await loadDevRapidaInbound({ renderAfter: false });
+    setFlash(
+      response.alreadyLoaded
+        ? `La devolucion rapida ${inbound.detail.numero} ya estaba cargada.`
+        : `Devolucion rapida ${inbound.detail.numero} cargada: la mercancia se desconto del inventario.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    setFlash(extractErrorMessage(error), "error");
+  } finally {
+    inbound.applying = false;
+    render();
+  }
 }
 
 function renderFacturacionWorkspace() {
@@ -11487,6 +12874,14 @@ function getDesktopBreadcrumb(view) {
     return ["Procesos", "Transferencias", "Carga de transferencias"];
   }
 
+  if (view === "registro-devolucion-rapida") {
+    return ["Procesos", "Devolucion rapida", "Registro de devolucion rapida"];
+  }
+
+  if (view === "cargar-devolucion-rapida") {
+    return ["Procesos", "Devolucion rapida", "Carga de devolucion rapida"];
+  }
+
   if (view === "ajuste-inventario") {
     return ["Procesos", "Ajuste de inventario"];
   }
@@ -11557,6 +12952,8 @@ function getDesktopViewLabelV2(view) {
     transferencias: "Transferencias",
     "registro-transferencia": "Registro de transferencias",
     "cargar-transferencia": "Carga de transferencias",
+    "registro-devolucion-rapida": "Registro de devolucion rapida",
+    "cargar-devolucion-rapida": "Carga de devolucion rapida",
     "ajuste-inventario": "Ajuste de inventario",
     "cambio-precio": "Cambio de precio",
     facturacion: "Facturacion",
@@ -13151,6 +14548,17 @@ function bindShellEvents() {
         return;
       }
 
+      if (nextView === "registro-devolucion-rapida") {
+        await loadDevRapidaModule();
+        return;
+      }
+
+      if (nextView === "cargar-devolucion-rapida") {
+        state.devRapida.inbound.detail = null;
+        await loadDevRapidaInbound();
+        return;
+      }
+
       if (nextView === "devolucion-factura") {
         resetInvoiceReturnState();
         await loadInvoiceReturnOpenSales();
@@ -13494,6 +14902,7 @@ function bindShellEvents() {
   bindArticleEvents();
   bindInventoryExistenceEvents();
   bindTransferEvents();
+  bindDevRapidaEvents();
   bindDevReturnEvents();
   bindAdjustmentEvents();
   bindPriceChangeEvents();
@@ -29334,6 +30743,8 @@ const BASICA_RESTRICTED_VIEWS = [
   "registro-devoluciones",
   "cargar-transferencia",
   "cargar-devoluciones",
+  "registro-devolucion-rapida",
+  "cargar-devolucion-rapida",
 ];
 
 function userCanAccessView(view) {

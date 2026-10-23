@@ -3120,6 +3120,24 @@ button {
   background: #ffffff;
 }
 
+.dev-rapida-submenu {
+  min-width: 270px;
+}
+
+.dev-rapida-submenu .modern-dropdown-link {
+  white-space: nowrap;
+}
+
+.dev-rapida-sync-error {
+  margin: 0;
+  padding: 8px 12px;
+  color: #893226;
+  background: rgba(171, 63, 47, 0.12);
+  border: 1px solid rgba(171, 63, 47, 0.18);
+  border-radius: 2px;
+  font-size: 0.86rem;
+}
+
 .transfer-summary-row {
   display: grid;
   grid-template-columns: 1fr auto auto;

@@ -1,6 +1,6 @@
 {
   "name": "@sistema-arabe/desktop-service",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "private": true,
   "description": "Servicio local Rocky Maxx para la PC principal.",
   "author": "OpenAI Codex",
